@@ -24,11 +24,12 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { Card, CardContent } from '../components/ui/card';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { EmptyState, LoadingState } from '../features/shared/FeatureStates';
-import { formatCurrency, formatDate } from '../features/shared/format';
+import { formatCurrency, formatDate, maskEmail } from '../features/shared/format';
 import { useFeatureQuery, usePaginatedFeatureQuery, useResponsiveViewMode } from '../features/shared/hooks';
 import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
@@ -188,24 +189,61 @@ export default function RepeatOrders() {
   const handleCreateRepeatOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!repeatingOrder) return;
-    if (quantity <= 0) { toast.error('Quantity must be greater than zero'); return; }
-    if (!deliveryAddress.trim()) { toast.error('Delivery Address is required'); return; }
-    if (!expectedDelivery) { toast.error('Expected Delivery Date is required'); return; }
+    if (quantity < 1) {
+      toast.error('Please enter a valid quantity');
+      return;
+    }
+    if (!expectedDelivery) {
+      toast.error('Please select an expected delivery date');
+      return;
+    }
 
     setSubmitting(true);
     try {
-      await api.post(`/api/purchase-orders/${repeatingOrder.id}/repeat`, {
-        quantity,
-        deliveryAddress: deliveryAddress.trim(),
-        expectedDelivery: new Date(expectedDelivery).toISOString()
-      });
-      toast.success('Repeat purchase order placed successfully!');
+      const payload: Record<string, any> = {
+        title: repeatingOrder.title,
+        sellerId: repeatingOrder.sellerId,
+        buyerId: repeatingOrder.buyerId,
+        expectedDelivery: new Date(expectedDelivery).toISOString(),
+        deliveryAddress: deliveryAddress || repeatingOrder.deliveryAddress || undefined,
+        paymentTerms: repeatingOrder.paymentTerms || undefined,
+        deliveryType: (repeatingOrder as any).deliveryType || undefined,
+        incoterms: (repeatingOrder as any).incoterms || undefined,
+        notes: `Repeat order created from PO #${repeatingOrder.poNumber}`,
+        items: (repeatingOrder.items && repeatingOrder.items.length > 0)
+          ? repeatingOrder.items.map((item: any, idx: number) => ({
+            itemName: item.itemName,
+            itemDescription: item.itemDescription || undefined,
+            quantity: idx === 0 ? quantity : Number(item.quantity || 1),
+            unit: item.unit || 'unit',
+            unitPrice: Number(item.unitPrice || 0),
+            totalPrice: (idx === 0 ? quantity : Number(item.quantity || 1)) * Number(item.unitPrice || 0),
+            specifications: item.specifications || undefined
+          }))
+          : [{
+            itemName: repeatingOrder.title,
+            quantity: quantity,
+            unit: 'unit',
+            unitPrice: Number(repeatingOrder.amount || repeatingOrder.totalValue || 0),
+            totalPrice: quantity * Number(repeatingOrder.amount || repeatingOrder.totalValue || 0)
+          }]
+      };
+
+      const res = await api.post('/api/purchase-orders', payload);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to create repeat order');
+      }
+
+      toast.success('Repeat Purchase Order created successfully!');
       setRepeatingOrder(null);
-      await Promise.all([reload(), reloadAll()]);
-      router.push('/orders');
+      reload();
+      reloadAll();
+      if (data.id) {
+        router.push(`/purchase-orders`);
+      }
     } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message || 'Failed to place repeat purchase order');
+      toast.error(err.message || 'Failed to create repeat order');
     } finally {
       setSubmitting(false);
     }
@@ -218,8 +256,10 @@ export default function RepeatOrders() {
   // Sort header helper
   const toggleSort = (key: string) => {
     if (key === 'value') setSortBy(sortBy === 'value_low' ? 'value_high' : 'value_low');
+    else if (key === 'po') setSortBy(sortBy === 'po_asc' ? 'po_desc' : 'po_asc');
     else if (key === 'title') setSortBy(sortBy === 'title_asc' ? 'title_desc' : 'title_asc');
     else if (key === 'party') setSortBy(sortBy === 'party_asc' ? 'party_desc' : 'party_asc');
+    else if (key === 'qty') setSortBy(sortBy === 'qty_asc' ? 'qty_desc' : 'qty_asc');
     else if (key === 'updated') setSortBy(sortBy === 'updated_asc' ? 'updated_desc' : 'updated_asc');
   };
 
@@ -227,8 +267,10 @@ export default function RepeatOrders() {
     let isActive = false;
     let isAsc = true;
     if (columnKey === 'value') { isActive = sortBy === 'value_low' || sortBy === 'value_high'; isAsc = sortBy === 'value_low'; }
+    else if (columnKey === 'po') { isActive = sortBy === 'po_asc' || sortBy === 'po_desc'; isAsc = sortBy === 'po_asc'; }
     else if (columnKey === 'title') { isActive = sortBy === 'title_asc' || sortBy === 'title_desc'; isAsc = sortBy === 'title_asc'; }
     else if (columnKey === 'party') { isActive = sortBy === 'party_asc' || sortBy === 'party_desc'; isAsc = sortBy === 'party_asc'; }
+    else if (columnKey === 'qty') { isActive = sortBy === 'qty_asc' || sortBy === 'qty_desc'; isAsc = sortBy === 'qty_asc'; }
     else if (columnKey === 'updated') { isActive = sortBy === 'updated_asc' || sortBy === 'updated_desc'; isAsc = sortBy === 'updated_asc'; }
     return (
       <button type="button" onClick={() => toggleSort(columnKey)} className={cn("inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#12335f] transition-colors", isActive && "text-[#12335f]", className)}>
@@ -239,8 +281,11 @@ export default function RepeatOrders() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Transparent Header */}
+    <div className="space-y-4">
+      {/* Tricolor Header Accent */}
+      <div className="brand-tricolor-strip rounded-full" />
+
+      {/* Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
           <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">Procurement Fulfilment</span>
@@ -337,32 +382,12 @@ export default function RepeatOrders() {
             <option value="party_asc">Supplier A-Z</option>
           </select>
 
-          {/* Delivered / All tab filter commented out as requested
-          <div className="flex min-w-0 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
-            {(['Delivered', 'All'] as const).map(tab => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-[10px] font-black uppercase transition-all duration-200',
-                  activeTab === tab
-                    ? 'bg-[#12335f] text-white shadow-sm shadow-[#12335f]/15'
-                    : 'text-slate-600 hover:text-[#12335f] hover:bg-slate-50'
-                )}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-          */}
-
           <ViewModeToggle value={viewMode} onChange={setViewMode} className="ml-auto sm:ml-0" />
         </div>
       </div>
 
       {/* Content */}
-      {loading && pagedOrders.length === 0 ? (
+      {loading && filteredOrders.length === 0 ? (
         <div className="rounded-2xl border border-slate-200/85 bg-white p-6 shadow-sm">
           <div className="space-y-4">
             <div className="h-5 w-48 rounded bg-slate-100 animate-pulse" />
@@ -379,20 +404,27 @@ export default function RepeatOrders() {
         </div>
       ) : filteredOrders.length === 0 ? (
         <EmptyState
-          title="No Completed Orders Found"
-          description={searchTerm ? 'No orders match your search.' : "You don't have any delivered purchase orders to repeat yet."}
+          title="No repeat orders available"
+          description={
+            searchTerm
+              ? 'No orders match your search criteria. Try a different query.'
+              : 'You do not have any completed or delivered purchase orders yet. Orders can be repeated once they are fulfilled.'
+          }
         />
       ) : viewMode === 'grid' ? (
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredOrders.map((order, index) => {
               const rowIndex = (page - 1) * pageSize + index + 1;
-              const item = order.items?.[0] || { itemName: order.title, quantity: 1 };
+              const item: any = order.items?.[0] || { itemName: order.title, quantity: 1 };
+              const itemCount = order.items?.length || 1;
+              const totalAmount = Number(order.amount || order.totalValue || 0);
               const procurementName = order.title || (order as any).tender?.title || item.itemName || 'Procurement Order';
+
               return (
                 <div
                   key={order.id}
-                  className="group rounded-2xl border border-slate-200/85 bg-white p-4 shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
+                  className="group rounded-2xl border border-slate-200/85 bg-white p-5 shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-3">
@@ -404,27 +436,52 @@ export default function RepeatOrders() {
                           <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
                         </div>
                         <h3 className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{procurementName}</h3>
-                        {item.itemName && item.itemName !== procurementName && (
-                          <p className="text-[11px] font-semibold text-slate-500 mt-0.5">Item: {item.itemName}</p>
-                        )}
                       </div>
-                      <span className="inline-flex rounded-lg border border-green-200 bg-green-50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-green-700">Delivered</span>
+                      <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-700 border border-emerald-200">
+                        <CheckCircle2 className="h-3 w-3" /> Repeatable
+                      </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 pt-1">
-                      <InfoTile label="Supplier" value={order.seller?.name || `Seller #${order.sellerId || '-'}`} />
-                      <InfoTile label="Value" value={formatCurrency(order.amount || order.totalValue)} />
-                      <InfoTile label="Quantity" value={String(Number(item.quantity || 0).toLocaleString())} />
-                      <InfoTile label="Delivered" value={formatDate(order.updatedAt)} />
+                      <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
+                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Supplier</span>
+                        <span className="font-bold text-slate-800 truncate block mt-0.5" title={order.seller?.name || maskEmail(order.seller?.email)}>
+                          {order.seller?.name || maskEmail(order.seller?.email) || `Seller #${order.sellerId || '-'}`}
+                        </span>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
+                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Past Value</span>
+                        <span className="font-bold text-[#12335f] block mt-0.5">{formatCurrency(totalAmount)}</span>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
+                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Items / Qty</span>
+                        <span className="font-bold text-slate-700 block mt-0.5">{itemCount} item{itemCount !== 1 ? 's' : ''} ({item.quantity || 1} {item.unit || 'unit'})</span>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
+                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Delivered</span>
+                        <span className="font-bold text-slate-700 block mt-0.5">{formatDate(order.updatedAt || order.createdAt)}</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex gap-2 border-t border-slate-100 pt-3 mt-4">
-                    <Button variant="outline" onClick={() => setViewingOrder(order)} className="h-8 flex-1 text-[10px] font-black uppercase rounded-lg">
-                      <Eye className="mr-1.5 h-3.5 w-3.5 text-[#12335f]" /> View
+                  <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setViewingOrder(order)}
+                      className="h-8 rounded-lg text-xs font-bold border-slate-200 hover:bg-slate-50"
+                    >
+                      <Eye className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
+                      View PO
                     </Button>
-                    <Button onClick={() => handleOpenRepeatModal(order)} className="h-8 flex-1 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg shadow-sm">
-                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Repeat
+
+                    <Button
+                      size="sm"
+                      onClick={() => handleOpenRepeatModal(order)}
+                      className="h-8 rounded-lg bg-[#12335f] text-xs font-black text-white hover:bg-[#0e274a] shadow-sm"
+                    >
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                      Repeat Order
                     </Button>
                   </div>
                 </div>
@@ -435,15 +492,15 @@ export default function RepeatOrders() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs">
+          <div className="overflow-x-auto w-full max-w-full">
+            <table className="w-full min-w-[860px] border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75">
                   <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
                   <th className="p-3"><SortHeader label="PO Number" columnKey="title" /></th>
                   <th className="p-3"><SortHeader label="PROCUREMENT NAME" columnKey="title" /></th>
                   <th className="p-3"><SortHeader label="Supplier" columnKey="party" /></th>
-                  <th className="p-3">Qty</th>
+                  <th className="p-3"><SortHeader label="Qty" columnKey="qty" /></th>
                   <th className="p-3"><SortHeader label="Amount" columnKey="value" /></th>
                   <th className="p-3"><SortHeader label="Delivered On" columnKey="updated" /></th>
                   <th className="p-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>
@@ -506,7 +563,7 @@ export default function RepeatOrders() {
               </Button>
             </div>
             <div className="p-5 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                 <InfoTile label="Title" value={viewingOrder.title || '-'} />
                 <InfoTile label="Status" value={String(viewingOrder.status || '-').replace(/_/g, ' ')} />
                 <InfoTile label="Supplier" value={viewingOrder.seller?.name || `Seller #${viewingOrder.sellerId || '-'}`} />
@@ -520,8 +577,8 @@ export default function RepeatOrders() {
               {viewingOrder.items && viewingOrder.items.length > 0 && (
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">Line Items</p>
-                  <div className="rounded-xl border border-slate-200 overflow-hidden">
-                    <table className="w-full text-xs">
+                  <div className="rounded-xl border border-slate-200 overflow-x-auto">
+                    <table className="w-full text-xs min-w-[500px]">
                       <thead><tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-500">
                         <th className="p-2 text-left">Item</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Unit Price</th><th className="p-2 text-right">Total</th>
                       </tr></thead>

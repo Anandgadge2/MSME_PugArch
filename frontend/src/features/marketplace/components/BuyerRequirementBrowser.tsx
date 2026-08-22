@@ -32,10 +32,54 @@ interface Props {
     requirements?: BuyerRequirement[];
 }
 
+const BUYER_LOGO_MAPPINGS: Record<string, string> = {
+    'thakur prasad': '/org-logos/thakur-prasad-sao.svg',
+    'tps': '/org-logos/thakur-prasad-sao.svg',
+    'jai hanuman': '/org-logos/jai-hanuman-udyog.svg',
+    'seven star': '/org-logos/seven-star-steels.svg',
+    'ln metallics': '/org-logos/ln-metallics.svg',
+    'l n metallics': '/org-logos/ln-metallics.svg',
+    'ultratech': '/org-logos/ultratech-cement-jharsuguda.svg',
+    'orissa metaliks': '/org-logos/orissa-metaliks.svg',
+    'smc power': '/org-logos/smc-power-generation.svg',
+    'trl krosaki': '/org-logos/trl-krosaki-refractories.svg',
+    'vedanta': '/org-logos/vedanta-jharsuguda.svg',
+    'jsw energy': '/org-logos/jsw-energy-utkal.svg',
+    'kainsara': '/org-logos/kainsara-infraprojects.svg',
+    'abhinav': '/org-logos/abhinav-distributors.svg',
+    'atom engineering': '/org-logos/atom-engineering-products.svg',
+    'divine trends': '/org-logos/divine-trends.svg',
+    'indian chain': '/org-logos/indian-chain-mill-stores.svg',
+    'jharsuguda broom': '/org-logos/jharsuguda-broom.svg',
+    'jharsuguda pipes': '/org-logos/jharsuguda-pipes-saniteries.svg',
+    'kalpana traders': '/org-logos/kalpana-traders-jharsuguda.svg',
+    'konark enterprises': '/org-logos/konark-enterprises.svg',
+    'krishna electricals': '/org-logos/krishna-electricals-industrial.svg',
+    'laxmi sales': '/org-logos/laxmi-sales-agency.svg',
+    'pavan enterprises': '/org-logos/pavan-enterprises-jsg.svg',
+    'rl industrial': '/org-logos/rl-industrial-corporation.svg',
+    'royal engineering': '/org-logos/royal-engineering.svg',
+    'siddhivinayak': '/org-logos/siddhivinayak-engineering.svg',
+    'skf stores': '/org-logos/skf-stores-spares.svg',
+    'swastik engicom': '/org-logos/swastik-engicom.svg',
+    'swastik enterprise': '/org-logos/swastik-enterprise.svg',
+    'trade industrial': '/org-logos/trade-industrial-syndicate.svg',
+    'utkal innovatives': '/org-logos/utkal-innovatives.svg',
+};
+
 function organizationLogo(org?: Partial<MarketplaceOrganization> | null) {
     const profile = org?.profile || {};
     const rawLogo = org?.logoUrl || org?.logoFile?.url || profile.logoUrl || profile.logo || profile.organizationLogoUrl || profile.organizationLogo || null;
-    return resolveMediaUrl(rawLogo);
+    const resolved = resolveMediaUrl(rawLogo);
+    if (resolved) return resolved;
+
+    const name = (org?.organizationName || (org as any)?.name || '').toLowerCase();
+    for (const [key, path] of Object.entries(BUYER_LOGO_MAPPINGS)) {
+        if (name.includes(key)) {
+            return path;
+        }
+    }
+    return null;
 }
 
 function initials(name: string) {
@@ -160,7 +204,7 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
     const selectedBuyer = selectedBuyerId === 'all' ? null : buyerSummaries.find(buyer => buyer.id === selectedBuyerId) || null;
 
     return (
-        <section className="mt-2 border-b border-slate-100 bg-white" aria-labelledby="buyer-browser-heading">
+        <section id="verified-buyers" className="mt-2 border-b border-slate-100 bg-white scroll-mt-16" aria-labelledby="buyer-browser-heading">
             <div className="mx-auto max-w-[1680px] px-4 pt-8 pb-3 sm:px-6 sm:pt-10 sm:pb-4 2xl:px-8">
                 <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                     <div>

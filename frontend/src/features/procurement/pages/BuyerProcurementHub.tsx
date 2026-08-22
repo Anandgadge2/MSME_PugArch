@@ -36,6 +36,7 @@ import {
 import { Card, CardContent } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Skeleton } from '../../../components/ui/skeleton';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useQuery } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
@@ -47,6 +48,10 @@ import {
   MethodBadge,
   SectionCard
 } from '../../procurementWizard/components/SourcingWizardComponents';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { Pagination } from '../../shared/Pagination';
+import { usePagination } from '../../shared/hooks';
+import { KpiCard } from '../../shared/KpiCard';
 
 interface NormalizedProcurement {
   id: number;
@@ -355,6 +360,76 @@ export default function BuyerProcurementHub() {
     setSearchQuery('');
   };
 
+  type HubSortKey = 'referenceNumber' | 'title' | 'method' | 'buyerType' | 'category' | 'estimatedValue' | 'status' | 'createdAt' | 'endDate' | 'responsesCount' | 'statusGroup';
+  const [sortKey, setSortKey] = useState<HubSortKey>('createdAt');
+  const [sortDir, setSortDir] = useState<SortDirection>('desc');
+
+  const handleSort = (key: HubSortKey) => {
+    setSortDir(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+    setSortKey(key);
+    setPage(1);
+  };
+
+  const sortedProcurements = useMemo(() => {
+    return [...filteredProcurements].sort((a, b) => {
+      let va: any = '';
+      let vb: any = '';
+      if (sortKey === 'referenceNumber') {
+        va = a.referenceNumber || `REF-${a.id}`;
+        vb = b.referenceNumber || `REF-${b.id}`;
+      } else if (sortKey === 'title') {
+        va = a.title || '';
+        vb = b.title || '';
+      } else if (sortKey === 'method') {
+        va = a.methodLabel || a.method || '';
+        vb = b.methodLabel || b.method || '';
+      } else if (sortKey === 'buyerType') {
+        va = a.typeLabel || a.type || '';
+        vb = b.typeLabel || b.type || '';
+      } else if (sortKey === 'category') {
+        va = a.category || '';
+        vb = b.category || '';
+      } else if (sortKey === 'estimatedValue') {
+        va = Number(a.estimatedValue || 0);
+        vb = Number(b.estimatedValue || 0);
+      } else if (sortKey === 'status') {
+        va = a.status || '';
+        vb = b.status || '';
+      } else if (sortKey === 'createdAt') {
+        va = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        vb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      } else if (sortKey === 'endDate') {
+        const dateA = a.endDate || a.startDate;
+        const dateB = b.endDate || b.startDate;
+        va = dateA ? new Date(dateA).getTime() : 0;
+        vb = dateB ? new Date(dateB).getTime() : 0;
+      } else if (sortKey === 'responsesCount') {
+        va = Number(a.responsesCount || 0);
+        vb = Number(b.responsesCount || 0);
+      } else if (sortKey === 'statusGroup') {
+        va = a.statusGroup || '';
+        vb = b.statusGroup || '';
+      }
+
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return sortDir === 'asc' ? va - vb : vb - va;
+      }
+      const strA = String(va || '').toLowerCase();
+      const strB = String(vb || '').toLowerCase();
+      const res = strA.localeCompare(strB);
+      return sortDir === 'asc' ? res : -res;
+    });
+  }, [filteredProcurements, sortDir, sortKey]);
+
+  const {
+    page,
+    pageSize,
+    pageItems: pagedProcurements,
+    total,
+    setPage,
+    setPageSize
+  } = usePagination(sortedProcurements, 10);
+
   const handleRefresh = () => {
     refetchSummary();
     refetchList();
@@ -362,8 +437,13 @@ export default function BuyerProcurementHub() {
 
   // KPI calculations
   const kpis = useMemo(() => {
+    const totalCount = listResponse?.kpis?.totalProcurements ?? allProcurements.length;
+    const activeCount = listResponse?.kpis?.active ?? allProcurements.filter(p => String(p.statusGroup).toLowerCase() === 'active').length;
+
+    // Dynamic Awarded Value calculation
     const awardedProcurements = allProcurements.filter(p => 
       String(p.status).toUpperCase() === 'AWARDED' || 
+      String(p.statusGroup).toLowerCase() === 'completed' ||
       String(p.statusGroup).toLowerCase() === 'awarded'
     );
     const awardedCount = awardedProcurements.length;
@@ -380,13 +460,15 @@ export default function BuyerProcurementHub() {
       return `Rs. ${val.toLocaleString('en-IN')}`;
     };
 
+    const pendingActions = (summary?.pendingApprovalsCount || 0) + (summary?.grnsToApproveCount || 0) + (listResponse?.kpis?.pendingApproval || 0);
+
     return [
-      { label: 'Total Procurements', value: summary?.myTendersCount || 0, change: '+12% this month', icon: FolderOpen, color: 'text-indigo-600 bg-indigo-50 border-indigo-150' },
+      { label: 'Total Procurements', value: totalCount, change: `${activeCount} live in progress`, icon: FolderOpen, color: 'text-indigo-600 bg-indigo-50 border-indigo-150' },
       { label: 'Awarded Value', value: formatAwardedValue(awardedSum), change: `${awardedCount} award${awardedCount === 1 ? '' : 's'} granted`, icon: Award, color: 'text-emerald-600 bg-emerald-50 border-emerald-150' },
-      { label: 'Pending Actions', value: (summary?.pendingApprovalsCount || 0) + (summary?.grnsToApproveCount || 0), change: 'Approvals & GRNs pending', icon: CheckSquare, color: 'text-amber-600 bg-amber-50 border-amber-150' },
+      { label: 'Pending Actions', value: pendingActions, change: 'Approvals & reviews pending', icon: CheckSquare, color: 'text-amber-600 bg-amber-50 border-amber-150' },
       { label: 'Active Purchase Orders', value: summary?.myActivePOsCount || 0, change: 'Sent to sellers', icon: ShoppingCart, color: 'text-sky-600 bg-sky-50 border-sky-150' },
     ];
-  }, [allProcurements, summary]);
+  }, [allProcurements, listResponse?.kpis, summary]);
 
   // Sourcing Hub Stages / Phases list
   const sourcingPhases = useMemo(() => [
@@ -537,9 +619,9 @@ export default function BuyerProcurementHub() {
           </Link>
         </div>
       </div>
- 
+
       {/* KPI Cards Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi, idx) => {
           const Icon = kpi.icon;
           const bottomStripeColor =
@@ -885,8 +967,9 @@ export default function BuyerProcurementHub() {
             }}
           />
         ) : (
-          <div className="overflow-x-auto rounded-[20px] bg-slate-50/70 p-2">
-            <table className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-xs">
+          <div className="space-y-4">
+            <div className="overflow-x-auto rounded-[20px] bg-slate-50/70 p-2">
+              <table className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-xs">
               <thead>
                 <tr>
                   <th className="px-4 py-2 font-black uppercase text-slate-500">Procurement Number</th>
@@ -909,63 +992,74 @@ export default function BuyerProcurementHub() {
                   const isDraft = p.statusGroup === 'draft' || p.status.toLowerCase().includes('draft');
                   const finalActionUrl = resolveProcurementActionUrl(p);
 
-                  return (
-                    <tr key={`${p.type}-${p.id}`} className="group bg-white shadow-3xs transition hover:shadow-sm">
-                      <td className="max-w-[120px] truncate rounded-l-2xl px-4 py-3.5 font-bold text-slate-900">
-                        {p.referenceNumber || `REF-${p.id}`}
-                      </td>
-                      <td className="px-4 py-3.5 font-bold text-slate-900 max-w-[200px]">
-                        <span className="line-clamp-1 truncate block">{p.title}</span>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <MethodBadge method={p.methodLabel || p.method} />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <BuyerTypeBadge buyerType={isRowGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER'} />
-                      </td>
-                      <td className="px-4 py-3.5 truncate max-w-[120px] text-slate-500">
-                        {p.category || '—'}
-                      </td>
-                      <td className="px-4 py-3.5 font-bold text-slate-950 tabular-nums">
-                        {formatCurrency(p.estimatedValue)}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <ProcurementStatusBadge status={p.status} />
-                      </td>
-                      <td className="px-4 py-3.5 text-slate-500">
-                        {formatDateTime(p.createdAt)}
-                      </td>
-                      <td className="px-4 py-3.5 text-slate-500">
-                        {formatDateTime(p.endDate || p.startDate)}
-                      </td>
-                      <td className="px-4 py-3.5 text-slate-950 font-bold tabular-nums text-center">
-                        {p.responsesCount ?? 0}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-[9px] uppercase font-bold border",
-                          p.statusGroup === 'draft' ? "bg-slate-100 border-slate-200 text-slate-700" :
-                          p.statusGroup === 'pending_approval' ? "bg-amber-100 border-amber-250 text-amber-800" :
-                          "bg-emerald-100 border-emerald-200 text-emerald-800"
-                        )}>
-                          {p.statusGroup.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                      <td className="shrink-0 rounded-r-2xl px-4 py-3.5 text-right">
-                        <Link href={finalActionUrl}>
-                          <Button
-                            size="sm"
-                            className="h-7 rounded-full bg-[#12335f] px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-[#0f2a4f]"
-                          >
-                            <Eye className="h-3 w-3 mr-1" /> {isDraft ? 'Resume' : 'View'}
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    return (
+                      <tr key={`${p.type}-${p.id}`} className="group bg-white shadow-3xs transition hover:shadow-sm">
+                        <td className="max-w-[120px] truncate rounded-l-2xl px-4 py-3.5 font-bold text-slate-900">
+                          {p.referenceNumber || `REF-${p.id}`}
+                        </td>
+                        <td className="px-4 py-3.5 font-bold text-slate-900 max-w-[200px]">
+                          <span className="line-clamp-1 truncate block">{p.title}</span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <MethodBadge method={p.methodLabel || p.method} />
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <BuyerTypeBadge buyerType={isRowGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER'} />
+                        </td>
+                        <td className="px-4 py-3.5 truncate max-w-[120px] text-slate-500">
+                          {p.category || '—'}
+                        </td>
+                        <td className="px-4 py-3.5 font-bold text-slate-950 tabular-nums">
+                          {formatCurrency(p.estimatedValue)}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <ProcurementStatusBadge status={p.status} />
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-500">
+                          {formatDateTime(p.createdAt)}
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-500">
+                          {formatDateTime(p.endDate || p.startDate)}
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-950 font-bold tabular-nums text-center">
+                          {p.responsesCount ?? 0}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded text-[9px] uppercase font-bold border",
+                            p.statusGroup === 'draft' ? "bg-slate-100 border-slate-200 text-slate-700" :
+                            p.statusGroup === 'pending_approval' ? "bg-amber-100 border-amber-250 text-amber-800" :
+                            "bg-emerald-100 border-emerald-200 text-emerald-800"
+                          )}>
+                            {p.statusGroup.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td className="shrink-0 rounded-r-2xl px-4 py-3.5 text-right">
+                          <Link href={finalActionUrl}>
+                            <Button
+                              size="sm"
+                              className="h-7 rounded-full bg-[#12335f] px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-[#0f2a4f]"
+                            >
+                              <Eye className="h-3 w-3 mr-1" /> {isDraft ? 'Resume' : 'View'}
+                            </Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                label="procurements"
+              />
+            </div>
           </div>
         )}
       </SectionCard>

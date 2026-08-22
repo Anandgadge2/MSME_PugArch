@@ -158,7 +158,7 @@ export function BidCard({ bid, viewHref, participationHref, participationLabel =
     <article className="group flex h-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:shadow-xl">
       <div className="h-1 bg-gradient-to-r from-[#0b2447] via-[#1f6feb] to-[#c86413]" />
       <div className="flex flex-1 flex-col gap-4 p-4">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-2.5 sm:gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{bid.id}</p>
             <h2 className="mt-1 text-sm font-black leading-snug text-slate-900">{bid.title}</h2>
@@ -230,7 +230,8 @@ export function ResultsTable({ rows }: { rows: BidResultRow[] }) {
   return (
     <div className="table-shell">
       <div className="table-shell-scroller">
-        <table className="min-w-[860px] w-full text-xs">
+        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="min-w-[860px] w-full text-xs">
           <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
             <tr>
               {['Sr. No.', 'Seller name', 'Seller type', 'Offered item', 'Total price', 'Rank', 'Status'].map(head => <th key={head} className="px-4 py-3 font-black">{head}</th>)}
@@ -250,6 +251,7 @@ export function ResultsTable({ rows }: { rows: BidResultRow[] }) {
             ))}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

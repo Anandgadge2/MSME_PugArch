@@ -105,13 +105,13 @@ export function TrustBanner() {
                     {/* Subtle ambient light gradient */}
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-blue-50/20 via-transparent to-emerald-50/20" />
 
-                    <div className="relative flex items-center overflow-x-auto no-scrollbar py-2 px-2 xl:grid xl:grid-cols-6 xl:divide-x xl:divide-slate-100 xl:px-0">
+                    <div className="relative flex items-center overflow-x-auto no-scrollbar py-2 px-2 snap-x snap-mandatory scroll-padding-2 xl:grid xl:grid-cols-6 xl:divide-x xl:divide-slate-100 xl:px-0">
                         {BADGES.map((b, i) => {
                             const Icon = b.icon;
                             return (
                                 <div
                                     key={b.title}
-                                    className="group relative flex shrink-0 cursor-default items-center gap-3.5 rounded-xl px-4 py-2.5 transition-all duration-300 hover:bg-slate-50/90 hover:shadow-sm xl:justify-center"
+                                    className="group relative flex w-[85vw] max-w-[280px] sm:w-auto shrink-0 snap-start cursor-default items-center gap-3.5 rounded-xl px-4 py-2.5 transition-all duration-300 hover:bg-slate-50/90 hover:shadow-sm xl:justify-center"
                                     style={{
                                         opacity: visible ? 1 : 0,
                                         transform: visible ? 'translateY(0)' : 'translateY(10px)',

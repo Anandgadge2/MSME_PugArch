@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-    Search, Filter, SlidersHorizontal, MapPin, Package,
+    Search, Filter, MapPin, Package,
     Wrench, Clock, Flame, CheckCircle, Landmark,
     BadgeCheck, Eye, X, Grid2X2, List, Send,
     ArrowUp, ArrowDown, ArrowUpDown
@@ -16,16 +16,17 @@ import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type BuyerRequirement } from '../api';
 import { resolveMediaUrl } from '../../../lib/api';
 import { BidDetailModal } from './BidDetailModal';
-import { 
-    formatBudgetRange, 
-    formatDateIN, 
-    getDeadlineLabel, 
-    getProcurementStatus, 
-    getStatusBadgeClass 
+import {
+    formatBudgetRange,
+    formatDateIN,
+    getDeadlineLabel,
+    getProcurementStatus,
+    getStatusBadgeClass
 } from '../utils/procurementDisplay';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { cn } from '../../../lib/utils';
 
 // Helper labels
@@ -44,6 +45,81 @@ function initials(name: string) {
         .slice(0, 2)
         .map(part => part[0]?.toUpperCase())
         .join('') || 'B';
+}
+
+const BUYER_LOGO_MAPPINGS: Record<string, string> = {
+    'thakur prasad': '/org-logos/thakur-prasad-sao.svg',
+    'tps': '/org-logos/thakur-prasad-sao.svg',
+    'jai hanuman': '/org-logos/jai-hanuman-udyog.svg',
+    'seven star': '/org-logos/seven-star-steels.svg',
+    'ln metallics': '/org-logos/ln-metallics.svg',
+    'l n metallics': '/org-logos/ln-metallics.svg',
+    'ultratech': '/org-logos/ultratech-cement-jharsuguda.svg',
+    'orissa metaliks': '/org-logos/orissa-metaliks.svg',
+    'smc power': '/org-logos/smc-power-generation.svg',
+    'trl krosaki': '/org-logos/trl-krosaki-refractories.svg',
+    'vedanta': '/org-logos/vedanta-jharsuguda.svg',
+    'jsw energy': '/org-logos/jsw-energy-utkal.svg',
+    'kainsara': '/org-logos/kainsara-infraprojects.svg',
+    'abhinav': '/org-logos/abhinav-distributors.svg',
+    'atom engineering': '/org-logos/atom-engineering-products.svg',
+    'divine trends': '/org-logos/divine-trends.svg',
+    'indian chain': '/org-logos/indian-chain-mill-stores.svg',
+    'jharsuguda broom': '/org-logos/jharsuguda-broom.svg',
+    'jharsuguda pipes': '/org-logos/jharsuguda-pipes-saniteries.svg',
+    'kalpana traders': '/org-logos/kalpana-traders-jharsuguda.svg',
+    'konark enterprises': '/org-logos/konark-enterprises.svg',
+    'krishna electricals': '/org-logos/krishna-electricals-industrial.svg',
+    'laxmi sales': '/org-logos/laxmi-sales-agency.svg',
+    'pavan enterprises': '/org-logos/pavan-enterprises-jsg.svg',
+    'rl industrial': '/org-logos/rl-industrial-corporation.svg',
+    'royal engineering': '/org-logos/royal-engineering.svg',
+    'siddhivinayak': '/org-logos/siddhivinayak-engineering.svg',
+    'skf stores': '/org-logos/skf-stores-spares.svg',
+    'swastik engicom': '/org-logos/swastik-engicom.svg',
+    'swastik enterprise': '/org-logos/swastik-enterprise.svg',
+    'trade industrial': '/org-logos/trade-industrial-syndicate.svg',
+    'utkal innovatives': '/org-logos/utkal-innovatives.svg',
+};
+
+function resolveBuyerLogo(buyer?: { organizationName?: string; logoUrl?: string | null } | null) {
+    if (buyer?.logoUrl) {
+        const resolved = resolveMediaUrl(buyer.logoUrl);
+        if (resolved) return resolved;
+    }
+    const name = (buyer?.organizationName || '').toLowerCase();
+    for (const [key, path] of Object.entries(BUYER_LOGO_MAPPINGS)) {
+        if (name.includes(key)) {
+            return path;
+        }
+    }
+    return null;
+}
+
+function BuyerLogo({ buyer, className }: { buyer?: { organizationName?: string; logoUrl?: string | null } | null; className?: string }) {
+    const [imgErr, setImgErr] = useState(false);
+    const logoSrc = resolveBuyerLogo(buyer);
+    const name = buyer?.organizationName || 'Verified Buyer';
+
+    if (logoSrc && !imgErr) {
+        return (
+            <div className={cn("flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-1 border border-slate-200/90 shadow-2xs group-hover:border-blue-300 transition-all", className)}>
+                <img
+                    src={logoSrc}
+                    alt={`${name} logo`}
+                    onError={() => setImgErr(true)}
+                    className="h-full w-full object-contain rounded-full"
+                    loading="lazy"
+                />
+            </div>
+        );
+    }
+
+    return (
+        <div className={cn("flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#0b2447] to-[#12335f] text-xs font-black text-white shadow-2xs border border-slate-200/90", className)}>
+            {initials(name)}
+        </div>
+    );
 }
 
 function statusBadge(req: BuyerRequirement) {
@@ -108,7 +184,6 @@ export function BuyerRequirementsList({
     const [location, setLocation] = useState('');
     const [minBudget, setMinBudget] = useState('');
     const [maxBudget, setMaxBudget] = useState('');
-    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(limit || 10);
     const [viewMode, setViewMode] = useResponsiveViewMode('marketplace:requirements:view-mode');
@@ -337,75 +412,63 @@ export function BuyerRequirementsList({
 
                 {/* ── Search + filter bar ── */}
                 {showSearch && (
-                    <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm">
-                        <div className="flex gap-3 flex-col sm:flex-row">
-                            {/* Search */}
-                            <form
-                                onSubmit={e => { e.preventDefault(); }}
-                                className="flex flex-1 items-center h-10 rounded-lg border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] overflow-hidden"
-                            >
-                                <Search className="h-4 w-4 text-slate-400 ml-3 shrink-0" />
-                                <input
-                                    value={query}
-                                    onChange={e => setQuery(e.target.value)}
-                                    placeholder="Search requirements by title, description, location…"
-                                    className="flex-1 h-full bg-transparent text-sm pl-2 pr-1 outline-none"
-                                />
-                                {query && (
-                                    <button type="button" onClick={() => setQuery('')} className="px-2 hover:bg-slate-100 rounded-md">
-                                        <X className="h-3.5 w-3.5 text-slate-400" />
-                                    </button>
-                                )}
-                            </form>
-
-                            {/* Sort */}
-                            <select
-                                value={sort}
-                                onChange={e => setSort(e.target.value)}
-                                className="h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 sm:w-48 text-slate-700 cursor-pointer"
-                            >
-                                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
-
-                            {/* Advanced filter toggle */}
-                            {showFilters && (
-                                <button
-                                    onClick={() => setShowAdvancedFilters(v => !v)}
-                                    className={cn(
-                                        "inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg border text-xs font-bold transition-all shadow-sm",
-                                        showAdvancedFilters 
-                                            ? 'bg-[#0b2447] text-white border-[#0b2447]' 
-                                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                                    )}
+                    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <ResponsiveFilterBar
+                            className="border-none"
+                            activeFilterCount={activeFilters}
+                            searchInput={
+                                <form
+                                    onSubmit={e => { e.preventDefault(); }}
+                                    className="flex flex-1 items-center h-10 rounded-lg border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] overflow-hidden min-w-0"
                                 >
-                                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                                    Filters {activeFilters > 0 && <span className="w-4 h-4 rounded-full bg-orange-500 text-white text-[9px] flex items-center justify-center font-bold">{activeFilters}</span>}
-                                </button>
-                            )}
-                        </div>
+                                    <Search className="h-4 w-4 text-slate-400 ml-3 shrink-0" />
+                                    <input
+                                        value={query}
+                                        onChange={e => setQuery(e.target.value)}
+                                        placeholder="Search requirements by title, description, location…"
+                                        className="flex-1 h-full bg-transparent text-sm pl-2 pr-1 outline-none min-w-0"
+                                    />
+                                    {query && (
+                                        <button type="button" onClick={() => setQuery('')} className="px-2 hover:bg-slate-100 rounded-md">
+                                            <X className="h-3.5 w-3.5 text-slate-400" />
+                                        </button>
+                                    )}
+                                </form>
+                            }
+                            filters={
+                                <>
+                                    <select
+                                        value={sort}
+                                        onChange={e => setSort(e.target.value)}
+                                        className="h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 sm:w-48 text-slate-700 cursor-pointer min-w-0 w-full sm:w-auto"
+                                    >
+                                        {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    </select>
 
-                        {/* Advanced filters panel */}
-                        {showAdvancedFilters && showFilters && (
-                            <div className="grid sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
-                                <div>
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Location</label>
-                                    <input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Jharsuguda" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Min Budget (₹)</label>
-                                    <input type="number" value={minBudget} onChange={e => setMinBudget(e.target.value)} placeholder="0" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Max Budget (₹)</label>
-                                    <input type="number" value={maxBudget} onChange={e => setMaxBudget(e.target.value)} placeholder="Any" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
-                                </div>
-                                {activeFilters > 0 && (
-                                    <button onClick={() => { setLocation(''); setMinBudget(''); setMaxBudget(''); }} className="text-xs font-bold text-red-600 hover:underline self-end pb-2">
-                                        Clear Filters
-                                    </button>
-                                )}
-                            </div>
-                        )}
+                                    {showFilters && (
+                                        <>
+                                            <div>
+                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Location</label>
+                                                <input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Jharsuguda" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Min Budget (₹)</label>
+                                                <input type="number" value={minBudget} onChange={e => setMinBudget(e.target.value)} placeholder="0" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Max Budget (₹)</label>
+                                                <input type="number" value={maxBudget} onChange={e => setMaxBudget(e.target.value)} placeholder="Any" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
+                                            </div>
+                                            {activeFilters > 0 && (
+                                                <button onClick={() => { setLocation(''); setMinBudget(''); setMaxBudget(''); }} className="text-xs font-bold text-red-600 hover:underline self-end pb-2">
+                                                    Clear Filters
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                </>
+                            }
+                        />
                     </div>
                 )}
 
@@ -481,18 +544,18 @@ export function BuyerRequirementsList({
                         )}
                     </div>
                 ) : viewMode === 'list' ? (
-                    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                        <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
+                    <div className="overflow-x-auto rounded-3xl border border-slate-200/80 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.03)] w-full">
+                        <table data-ux-wrapped="true" className="w-full text-left text-sm table-auto border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-black uppercase tracking-wider text-slate-500">
                                     {[
-                                        { label: 'Buyer / Organization', key: 'buyer' },
-                                        { label: 'Requirement Details', key: 'title' },
-                                        { label: 'Type', key: 'type' },
-                                        { label: 'Quantity', key: 'quantity' },
-                                        { label: 'Location', key: 'location' },
-                                        { label: 'Timeline', key: 'timeline' },
-                                        { label: 'Status', key: 'status' },
+                                        { label: 'Buyer / Organization', key: 'buyer', className: 'w-[28%]' },
+                                        { label: 'Requirement Details', key: 'title', className: 'w-[30%]' },
+                                        { label: 'Type', key: 'type', className: 'w-[6%]' },
+                                        { label: 'Quantity', key: 'quantity', className: 'w-[7%]' },
+                                        { label: 'Location', key: 'location', className: 'w-[13%]' },
+                                        { label: 'Timeline', key: 'timeline', className: 'w-[8%]' },
+                                        { label: 'Status', key: 'status', className: 'w-[8%]' },
                                     ].map(col => {
                                         const isSorted = sort === col.key;
                                         return (
@@ -500,7 +563,8 @@ export function BuyerRequirementsList({
                                                 key={col.key}
                                                 onClick={() => handleSortHeader(col.key)}
                                                 className={cn(
-                                                    "px-5 py-4 cursor-pointer select-none transition-colors group",
+                                                    "px-4 py-3.5 sm:px-5 sm:py-4 cursor-pointer select-none transition-colors group",
+                                                    col.className,
                                                     isSorted ? 'text-[#0b2447] bg-slate-100/80 font-black' : 'hover:bg-slate-100/50 hover:text-slate-900'
                                                 )}
                                                 title={`Sort by ${col.label} (${isSorted ? (sortDir === 'asc' ? 'Ascending' : 'Descending') : 'Click to sort'})`}
@@ -520,7 +584,7 @@ export function BuyerRequirementsList({
                                             </th>
                                         );
                                     })}
-                                    <th className="px-5 py-4 text-right">Actions</th>
+                                    <th className="px-4 py-3.5 sm:px-5 sm:py-4 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -533,46 +597,40 @@ export function BuyerRequirementsList({
 
                                     return (
                                         <tr key={`${req.sourceModel || 'buyer'}-${req.id}`} className="group hover:bg-slate-50/80 transition-all duration-200 border-b border-slate-100 last:border-0">
-                                            <td className="px-5 py-4">
+                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4">
                                                 <div className="flex items-center gap-3">
-                                                    <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white text-xs font-black text-[#0b2447] border border-slate-200/80 shadow-2xs group-hover:border-blue-200 transition-colors">
-                                                        {buyer?.logoUrl ? (
-                                                            <img src={resolveMediaUrl(buyer.logoUrl) || ''} alt={`${buyer.organizationName} logo`} className="h-full w-full object-contain p-1" />
-                                                        ) : (
-                                                            initials(buyer?.organizationName || 'Verified Buyer')
-                                                        )}
-                                                    </span>
-                                                    <div className="min-w-0">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="truncate font-black text-slate-900 text-xs sm:text-sm group-hover:text-[#0b2447] transition-colors">{buyer?.organizationName || 'Verified Buyer'}</span>
+                                                    <BuyerLogo buyer={buyer} />
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                            <p className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug group-hover:text-[#0b2447] transition-colors">{buyer?.organizationName || 'Verified Buyer'}</p>
                                                             {buyer?.verificationStatus === 'VERIFIED' && (
                                                                 <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-600" />
                                                             )}
                                                         </div>
-                                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mt-0.5">
                                                             {buyerTypeLabel(buyer?.organizationType)}
                                                         </span>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-5 py-4">
-                                                <div className="max-w-[300px]">
-                                                    <p className="truncate text-xs sm:text-sm font-black text-slate-900 group-hover:text-[#0b2447] transition-colors" title={req.title}>
+                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4">
+                                                <div className="space-y-1">
+                                                    <p className="font-extrabold text-xs sm:text-sm text-slate-900 leading-snug group-hover:text-[#0b2447] transition-colors">
                                                         {req.title}
                                                     </p>
-                                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                                        <span className="inline-block text-[10px] font-mono font-bold text-slate-700 bg-slate-100/90 px-2 py-0.5 rounded border border-slate-200/70 whitespace-nowrap shadow-2xs">
+                                                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                                        <span className="inline-block text-[10px] font-mono font-bold text-slate-700 bg-slate-100/90 px-1.5 py-0.5 rounded border border-slate-200/80 shadow-2xs">
                                                             {req.requirementNumber || `REQ-${req.id}`}
                                                         </span>
-                                                        <span className="text-[10px] font-bold text-slate-500 truncate">
+                                                        <span className="text-[10px] font-bold text-slate-500">
                                                             {req.category?.name || 'General Category'}
                                                         </span>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-5 py-4">
+                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 whitespace-nowrap">
                                                 <span className={cn(
-                                                    "inline-flex items-center rounded-md px-2.5 py-1 text-[9px] font-black uppercase tracking-wider border shadow-2xs",
+                                                    "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider border shadow-2xs",
                                                     req.requirementType === 'PRODUCT' 
                                                         ? 'bg-blue-50 text-blue-700 border-blue-200/80' 
                                                         : 'bg-purple-50 text-purple-700 border-purple-200/80'
@@ -580,38 +638,38 @@ export function BuyerRequirementsList({
                                                     {req.requirementType}
                                                 </span>
                                             </td>
-                                            <td className="px-5 py-4 text-slate-900 font-black text-xs sm:text-sm whitespace-nowrap">
+                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-900 font-extrabold text-xs sm:text-sm whitespace-nowrap">
                                                 {req.quantity || 'Estimated'} {req.unit || ''}
                                             </td>
-                                            <td className="px-5 py-4 text-slate-600 font-semibold text-xs whitespace-nowrap">
-                                                <div className="flex items-center gap-1.5">
-                                                    <MapPin className="h-3.5 w-3.5 text-[#8a6a2f] shrink-0" />
-                                                    <span className="truncate max-w-[160px]">
-                                                        {req.location || buyer?.district || buyer?.city || buyer?.state || 'Not specified'}
+                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-600 font-semibold text-xs">
+                                                <div className="flex items-start gap-1">
+                                                    <MapPin className="h-3.5 w-3.5 text-[#8a6a2f] shrink-0 mt-0.5" />
+                                                    <span className="leading-snug">
+                                                        {req.location || buyer?.district || buyer?.city || buyer?.state || 'Jharsuguda, Odisha'}
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td className="px-5 py-4 text-slate-800 text-xs whitespace-nowrap">
+                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-800 text-xs whitespace-nowrap">
                                                 <div className="space-y-0.5">
-                                                    <p className="font-black text-slate-900">{new Date(req.lastDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                                                    <p className="font-extrabold text-slate-900">{new Date(req.lastDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                                                     <span className={cn(
-                                                        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                                                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
                                                         daysRemaining <= 3 ? 'bg-rose-50 text-rose-700 border-rose-200' : daysRemaining <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-[#0b2447] border-slate-200'
                                                     )}>
                                                         {daysRemaining <= 0 ? 'Closed' : `${daysRemaining}D REMAINING`}
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td className="px-5 py-4">
-                                                <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider whitespace-nowrap shadow-2xs", badge.cls)}>
+                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 whitespace-nowrap">
+                                                <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider shadow-2xs", badge.cls)}>
                                                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
                                                     {badge.label}
                                                 </span>
                                             </td>
-                                            <td className="px-5 py-4 text-right whitespace-nowrap">
+                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-right whitespace-nowrap">
                                                 <button 
                                                     onClick={() => handleViewDetails(req)} 
-                                                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#0b2447] px-3.5 text-xs font-extrabold text-white hover:bg-[#12335f] hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-sm"
+                                                    className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-[#0b2447] px-3.5 text-xs font-black text-white hover:bg-[#12335f] hover:shadow-md active:scale-95 transition-all duration-200 shadow-sm"
                                                 >
                                                     View Details
                                                 </button>
@@ -634,19 +692,19 @@ export function BuyerRequirementsList({
                             return (
                                 <article
                                     key={`${req.sourceModel || 'buyer'}-${req.id}`}
-                                    className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:shadow-lg h-full"
+                                    className="group flex flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all duration-300 hover:-translate-y-0.5 hover:border-[#0b2447]/30 hover:shadow-lg h-full"
                                 >
-                                    <div className={cn("h-1 w-full", req.requirementType === 'SERVICE' ? 'bg-teal-500' : 'bg-[#0b2447]')} />
-                                    <div className="flex flex-1 flex-col gap-3 p-4">
+                                    <div className={cn("h-1.5 w-full", req.requirementType === 'SERVICE' ? 'bg-teal-500' : 'bg-[#0b2447]')} />
+                                    <div className="flex flex-1 flex-col gap-2.5 sm:gap-3 p-4">
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="flex min-w-0 items-start gap-2">
                                                 <div className={cn(
-                                                    "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                                                    "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
                                                     req.requirementType === 'SERVICE' ? 'bg-teal-50 text-teal-700' : 'bg-blue-50 text-blue-700'
                                                 )}>
                                                     {req.requirementType === 'SERVICE' ? <Wrench className="h-4 w-4" /> : <Package className="h-4 w-4" />}
                                                 </div>
-                                                <h3 className="line-clamp-2 text-xs font-black leading-snug text-slate-800 transition group-hover:text-[#0b2447]">
+                                                <h3 className="text-xs font-black leading-snug text-slate-900 transition group-hover:text-[#0b2447]">
                                                     {req.title}
                                                 </h3>
                                             </div>
@@ -657,12 +715,10 @@ export function BuyerRequirementsList({
                                         </div>
 
                                         {buyer && (
-                                            <div className="flex items-center gap-1.5">
-                                                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100">
-                                                    <Landmark className="h-3 w-3 text-slate-500" />
-                                                </div>
-                                                <p className="truncate text-[10px] font-bold text-slate-600">{buyer.organizationName}</p>
-                                                {buyer.verificationStatus === 'VERIFIED' && <BadgeCheck className="h-3 w-3 shrink-0 text-emerald-600" />}
+                                            <div className="flex items-center gap-2">
+                                                <BuyerLogo buyer={buyer} className="h-7 w-7 sm:h-7 sm:w-7 rounded-lg text-[9px]" />
+                                                <p className="font-bold text-[11px] text-slate-800 leading-tight flex-1">{buyer.organizationName}</p>
+                                                {buyer.verificationStatus === 'VERIFIED' && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />}
                                             </div>
                                         )}
 
@@ -734,7 +790,8 @@ export function BuyerRequirementsList({
 function TableSkeleton() {
     return (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm animate-pulse">
-            <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
+            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-sm">
                 <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-400">
                         <th className="px-5 py-4">Buyer / Org</th>
@@ -762,6 +819,7 @@ function TableSkeleton() {
                     ))}
                 </tbody>
             </table>
+</div>
         </div>
     );
 }

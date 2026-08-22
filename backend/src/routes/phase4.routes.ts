@@ -2649,11 +2649,15 @@ router.get('/public/files/:id/signed-url', asyncRoute(async (req: AuthRequest, r
   });
 }));
 
-router.get('/files/:id/view', authenticate, asyncRoute(async (req: AuthRequest, res) => {
+router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {
   const { id } = parse(idParams, req.params);
-  if (!req.user) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+  let actor: any = req.user;
+  if (!actor) {
+    actor = (await getPublicFileActor(id)) || undefined;
+  }
+  if (!actor) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
 
-  const file = await getFileContent(id, req.user, {
+  const file = await getFileContent(id, actor, {
     ipAddress: req.ip,
     userAgent: req.headers['user-agent']
   });
@@ -2662,7 +2666,7 @@ router.get('/files/:id/view', authenticate, asyncRoute(async (req: AuthRequest, 
   res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
-  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Cache-Control', req.user ? 'private, no-store' : 'public, max-age=3600');
   return res.end(file.buffer);
 }));
 
@@ -8509,7 +8513,23 @@ router.get('/admin/organizations', authenticate, authorizeAdmin, asyncRoute(asyn
     };
   });
 
-  ok(res, { organizations: orgsWithFeatures, total });
+  const [totalAll, verifiedCount, pendingCount, suspendedCount] = await Promise.all([
+    db.organization.count({ where: organizationCompanyIdFilter ? { companyId: organizationCompanyIdFilter } : {} }),
+    db.organization.count({ where: { verificationStatus: 'VERIFIED', ...(organizationCompanyIdFilter ? { companyId: organizationCompanyIdFilter } : {}) } }),
+    db.organization.count({ where: { verificationStatus: 'PENDING', ...(organizationCompanyIdFilter ? { companyId: organizationCompanyIdFilter } : {}) } }),
+    db.organization.count({ where: { OR: [{ isBlacklisted: true }, { verificationStatus: 'SUSPENDED' }], ...(organizationCompanyIdFilter ? { companyId: organizationCompanyIdFilter } : {}) } }),
+  ]);
+
+  ok(res, {
+    organizations: orgsWithFeatures,
+    total,
+    stats: {
+      total: totalAll,
+      verified: verifiedCount,
+      pending: pendingCount,
+      suspended: suspendedCount
+    }
+  });
 }));
 
 router.get('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {

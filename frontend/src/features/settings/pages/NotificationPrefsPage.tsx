@@ -25,6 +25,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
+import { KpiCard } from '../../shared/KpiCard';
 import { InlineError, LoadingState } from '../../shared/FeatureStates';
 import { runWithToast } from '../../../lib/toast';
 import { fetchNotificationPreferences, updateNotificationPreferences, type NotificationPreferenceDto } from '../api';
@@ -189,10 +190,12 @@ export default function NotificationPrefsPage() {
                 </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
-                <MetricCard icon={MonitorSmartphone} label="Active channels" value={`${activeDeliveryCount}/${filteredDeliveryMethods.length}`} description="Delivery methods enabled" />
-                <MetricCard icon={ClipboardList} label="Active categories" value={`${activeCategoryCount}/2`} description="Event groups enabled" />
-                <MetricCard icon={CheckCircle2} label="Preference state" value={hasChanges ? 'Draft' : 'Synced'} description={hasChanges ? `${Object.keys(draft).length} pending change${Object.keys(draft).length === 1 ? '' : 's'}` : 'Current settings saved'} />
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3">
+                <KpiCard icon={MonitorSmartphone} label="Active channels" value={`${activeDeliveryCount}/${filteredDeliveryMethods.length}`} subtext="Delivery methods enabled" tone="blue" />
+                <KpiCard icon={ClipboardList} label="Active categories" value={`${activeCategoryCount}/2`} subtext="Event groups enabled" tone="indigo" />
+                <div className="col-span-2 sm:col-span-1">
+                    <KpiCard icon={CheckCircle2} label="Preference state" value={hasChanges ? 'Draft' : 'Synced'} subtext={hasChanges ? `${Object.keys(draft).length} pending changes` : 'Current settings saved'} tone={hasChanges ? 'amber' : 'green'} />
+                </div>
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -382,22 +385,7 @@ function Switch({ value, onChange, theme, label, disabled }: { value: boolean; o
     );
 }
 
-function MetricCard({ icon: Icon, label, value, description }: { icon: any; label: string; value: string; description: string }) {
-    return (
-        <Card className="border-slate-200 bg-white shadow-sm">
-            <CardContent className="flex items-center justify-between gap-4 p-4">
-                <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-                    <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">{description}</p>
-                </div>
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-[#12335f]/10 text-[#12335f]">
-                    <Icon className="h-5 w-5" />
-                </div>
-            </CardContent>
-        </Card>
-    );
-}
+
 
 function PolicyLine({ title, description }: { title: string; description: string }) {
     return (

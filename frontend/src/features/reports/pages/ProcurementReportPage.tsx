@@ -4,7 +4,7 @@
  * Route: /admin/reports/procurement
  */
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ClipboardCheck, FileText, RefreshCw, ShoppingCart, Truck, AlertTriangle, BarChart3, TrendingDown } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { Button } from '../../../components/ui/button';
@@ -12,6 +12,8 @@ import { Card, CardContent } from '../../../components/ui/card';
 import { InlineError } from '../../shared/FeatureStates';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { KpiCard } from '../../shared/KpiCard';
 import { getApi } from '../../shared/apiClient';
 import { fetchMethodWiseReports, fetchExceptionReport, fetchReverseAuctionSavings, fetchRateContractUtilization } from '../../audit/api';
 import { CANONICAL_METHOD_LABELS } from '../../../types/enums';
@@ -58,6 +60,31 @@ export default function ProcurementReportPage() {
         enabled: activeTab === 'rate-contracts',
     });
 
+    type ExceptionSortKey = 'bidNumber' | 'title' | 'canonicalMethod' | 'buyerOrganizationName' | 'estimatedValue' | 'status';
+    const [excSortKey, setExcSortKey] = useState<ExceptionSortKey>('bidNumber');
+    const [excSortDirection, setExcSortDirection] = useState<SortDirection>('asc');
+
+    const toggleExcSort = (key: ExceptionSortKey) => {
+        setExcSortDirection(prev => excSortKey === key && prev === 'asc' ? 'desc' : 'asc');
+        setExcSortKey(key);
+        setExceptionsPage(1);
+    };
+
+    const sortedExceptions = useMemo(() => {
+        const raw = (exceptions.data as any[]) || [];
+        return [...raw].sort((a, b) => {
+            let valA = a[excSortKey];
+            let valB = b[excSortKey];
+            if (excSortKey === 'estimatedValue') {
+                return excSortDirection === 'asc' ? Number(valA || 0) - Number(valB || 0) : Number(valB || 0) - Number(valA || 0);
+            }
+            const strA = String(valA || '').toLowerCase();
+            const strB = String(valB || '').toLowerCase();
+            const res = strA.localeCompare(strB);
+            return excSortDirection === 'asc' ? res : -res;
+        });
+    }, [exceptions.data, excSortDirection, excSortKey]);
+
     const {
         page: exceptionsPage,
         pageSize: exceptionsPageSize,
@@ -65,7 +92,32 @@ export default function ProcurementReportPage() {
         total: totalExceptions,
         setPage: setExceptionsPage,
         setPageSize: setExceptionsPageSize
-    } = usePagination((exceptions.data as any[]) || [], 10);
+    } = usePagination(sortedExceptions, 10);
+
+    type RaSortKey = 'bidNumber' | 'title' | 'estimatedValue' | 'awardedAmount' | 'savings' | 'savingsPercent';
+    const [raSortKey, setRaSortKey] = useState<RaSortKey>('bidNumber');
+    const [raSortDirection, setRaSortDirection] = useState<SortDirection>('asc');
+
+    const toggleRaSort = (key: RaSortKey) => {
+        setRaSortDirection(prev => raSortKey === key && prev === 'asc' ? 'desc' : 'asc');
+        setRaSortKey(key);
+        setRaPage(1);
+    };
+
+    const sortedRaSavings = useMemo(() => {
+        const raw = raSavings.data || [];
+        return [...raw].sort((a, b) => {
+            let valA = a[raSortKey];
+            let valB = b[raSortKey];
+            if (['estimatedValue', 'awardedAmount', 'savings', 'savingsPercent'].includes(raSortKey)) {
+                return raSortDirection === 'asc' ? Number(valA || 0) - Number(valB || 0) : Number(valB || 0) - Number(valA || 0);
+            }
+            const strA = String(valA || '').toLowerCase();
+            const strB = String(valB || '').toLowerCase();
+            const res = strA.localeCompare(strB);
+            return raSortDirection === 'asc' ? res : -res;
+        });
+    }, [raSavings.data, raSortDirection, raSortKey]);
 
     const {
         page: raPage,
@@ -74,7 +126,7 @@ export default function ProcurementReportPage() {
         total: totalRaSavings,
         setPage: setRaPage,
         setPageSize: setRaPageSize
-    } = usePagination(raSavings.data || [], 10);
+    } = usePagination(sortedRaSavings, 10);
 
     const TABS: { id: ReportTab; label: string }[] = [
         { id: 'overview', label: 'Overview' },
@@ -125,12 +177,12 @@ export default function ProcurementReportPage() {
                         {/* Overview Tab — existing stats + tender comparison */}
                         {activeTab === 'overview' && data && (
                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-                                    <StatCard label="Requirements" value={data.requirements} icon={ClipboardCheck} color="amber" />
-                                    <StatCard label="Tenders" value={data.tenders} icon={FileText} color="blue" />
-                                    <StatCard label="Direct Purchases" value={data.directPurchases} icon={ShoppingCart} color="emerald" />
-                                    <StatCard label="Quote Requests" value={data.quoteRequests} icon={FileText} color="purple" />
-                                    <StatCard label="Purchase Orders" value={data.purchaseOrders} icon={Truck} color="indigo" />
+                                <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-5">
+                                    <KpiCard label="Requirements" value={data.requirements} icon={ClipboardCheck} tone="amber" />
+                                    <KpiCard label="Tenders" value={data.tenders} icon={FileText} tone="blue" />
+                                    <KpiCard label="Direct Purchases" value={data.directPurchases} icon={ShoppingCart} tone="emerald" />
+                                    <KpiCard label="Quote Requests" value={data.quoteRequests} icon={FileText} tone="purple" />
+                                    <KpiCard label="Purchase Orders" value={data.purchaseOrders} icon={Truck} tone="indigo" />
                                 </div>
                                 {methodWise.data?.tenderComparison && (
                                     <Card>
@@ -189,8 +241,12 @@ export default function ProcurementReportPage() {
                                             <div className="overflow-x-auto">
                                                 <table className="w-full text-[11px]">
                                                     <thead><tr className="border-b text-left text-[9px] font-black uppercase text-slate-400">
-                                                        <th className="p-2">Bid #</th><th className="p-2">Title</th><th className="p-2">Method</th>
-                                                        <th className="p-2">Org</th><th className="p-2 text-right">Value</th><th className="p-2">Status</th>
+                                                        <th className="p-2"><SortableHeader label="Bid #" field="bidNumber" activeField={excSortKey} direction={excSortDirection} onSort={toggleExcSort} /></th>
+                                                        <th className="p-2"><SortableHeader label="Title" field="title" activeField={excSortKey} direction={excSortDirection} onSort={toggleExcSort} /></th>
+                                                        <th className="p-2"><SortableHeader label="Method" field="canonicalMethod" activeField={excSortKey} direction={excSortDirection} onSort={toggleExcSort} /></th>
+                                                        <th className="p-2"><SortableHeader label="Org" field="buyerOrganizationName" activeField={excSortKey} direction={excSortDirection} onSort={toggleExcSort} /></th>
+                                                        <th className="p-2 text-right"><SortableHeader label="Value" field="estimatedValue" activeField={excSortKey} direction={excSortDirection} onSort={toggleExcSort} className="justify-end" /></th>
+                                                        <th className="p-2"><SortableHeader label="Status" field="status" activeField={excSortKey} direction={excSortDirection} onSort={toggleExcSort} /></th>
                                                     </tr></thead>
                                                     <tbody>
                                                         {pagedExceptions.map((row: any) => (
@@ -234,12 +290,15 @@ export default function ProcurementReportPage() {
                                             <div className="overflow-x-auto">
                                                 <table className="w-full text-[11px]">
                                                     <thead><tr className="border-b text-left text-[9px] font-black uppercase text-slate-400">
-                                                        <th className="p-2">Bid #</th><th className="p-2">Title</th>
-                                                        <th className="p-2 text-right">Estimated</th><th className="p-2 text-right">Awarded</th>
-                                                        <th className="p-2 text-right">Savings</th><th className="p-2 text-right">%</th>
+                                                        <th className="p-2"><SortableHeader label="Bid #" field="bidNumber" activeField={raSortKey} direction={raSortDirection} onSort={toggleRaSort} /></th>
+                                                        <th className="p-2"><SortableHeader label="Title" field="title" activeField={raSortKey} direction={raSortDirection} onSort={toggleRaSort} /></th>
+                                                        <th className="p-2 text-right"><SortableHeader label="Estimated" field="estimatedValue" activeField={raSortKey} direction={raSortDirection} onSort={toggleRaSort} className="justify-end" /></th>
+                                                        <th className="p-2 text-right"><SortableHeader label="Awarded" field="awardedAmount" activeField={raSortKey} direction={raSortDirection} onSort={toggleRaSort} className="justify-end" /></th>
+                                                        <th className="p-2 text-right"><SortableHeader label="Savings" field="savings" activeField={raSortKey} direction={raSortDirection} onSort={toggleRaSort} className="justify-end" /></th>
+                                                        <th className="p-2 text-right"><SortableHeader label="%" field="savingsPercent" activeField={raSortKey} direction={raSortDirection} onSort={toggleRaSort} className="justify-end" /></th>
                                                     </tr></thead>
                                                     <tbody>
-                                                        {pagedRaSavings.map(row => (
+                                                        {pagedRaSavings.map((row: any) => (
                                                             <tr key={row.id} className="border-b border-slate-100">
                                                                 <td className="p-2 font-bold text-blue-700">{row.bidNumber}</td>
                                                                 <td className="p-2 max-w-[200px] truncate">{row.title}</td>
@@ -271,11 +330,11 @@ export default function ProcurementReportPage() {
                         {/* Rate Contracts */}
                         {activeTab === 'rate-contracts' && (
                             rateContracts.isLoading ? <Loading /> : rateContracts.data ? (
-                                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                                    <StatCard label="Total Rate Contracts" value={rateContracts.data.total} icon={FileText} color="blue" />
-                                    <StatCard label="Active" value={rateContracts.data.active} icon={ClipboardCheck} color="emerald" />
-                                    <StatCard label="Expired" value={rateContracts.data.expired} icon={FileText} color="amber" />
-                                    <StatCard label="Orders Against RC" value={rateContracts.data.ordersAgainstContracts} icon={Truck} color="purple" />
+                                <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
+                                    <KpiCard label="Total Rate Contracts" value={rateContracts.data.total} icon={FileText} tone="blue" />
+                                    <KpiCard label="Active" value={rateContracts.data.active} icon={ClipboardCheck} tone="emerald" />
+                                    <KpiCard label="Expired" value={rateContracts.data.expired} icon={FileText} tone="amber" />
+                                    <KpiCard label="Orders Against RC" value={rateContracts.data.ordersAgainstContracts} icon={Truck} tone="purple" />
                                 </div>
                             ) : null
                         )}
@@ -293,25 +352,7 @@ export default function ProcurementReportPage() {
     );
 }
 
-const COLORS = {
-    amber: 'bg-amber-50 border-amber-200 text-amber-800',
-    blue: 'bg-blue-50 border-blue-200 text-blue-800',
-    emerald: 'bg-emerald-50 border-emerald-200 text-emerald-800',
-    purple: 'bg-purple-50 border-purple-200 text-purple-800',
-    indigo: 'bg-indigo-50 border-indigo-200 text-indigo-800'
-};
 
-function StatCard({ label, value, icon: Icon, color, onClick }: { label: string; value: number; icon: any; color: keyof typeof COLORS; onClick?: () => void }) {
-    return (
-        <button type="button" onClick={onClick} className={`w-full text-left rounded-xl border p-4 transition-all hover:scale-[1.02] cursor-pointer hover:shadow-md ${COLORS[color]}`}>
-            <div className="flex items-center justify-between">
-                <p className="text-[9px] font-black uppercase tracking-widest opacity-70">{label}</p>
-                <Icon className="h-4 w-4 opacity-70" />
-            </div>
-            <p className="mt-1 text-2xl font-black">{value.toLocaleString('en-IN')}</p>
-        </button>
-    );
-}
 
 function Loading() {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-[#12335f]" /></div>;

@@ -18,11 +18,13 @@ import { cn } from '../../../lib/utils';
 import { api } from '../../../lib/api';
 import { compressImage } from '../../../lib/compress';
 import { Button } from '../../../components/ui/button';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { Card, CardContent, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../../components/ui/card';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { formatCurrency, formatDate, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import {
@@ -245,25 +247,53 @@ export default function SellerDeliveryManagementPage() {
         return true;
     });
 
+    type DeliverySortKey = 'id' | 'poNumber' | 'buyer' | 'amount' | 'status' | 'carrier' | 'eta' | 'createdAt';
+    const [sortKey, setSortKey] = useState<DeliverySortKey>('createdAt');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+    const toggleSort = (key: DeliverySortKey) => {
+        setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+        setSortKey(key);
+        setPage(1);
+    };
+
     // Apply sorting
     const sortedItems = [...filteredItems].sort((a, b) => {
-        if (sortBy === 'newest') {
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        let valA: any = '';
+        let valB: any = '';
+        if (sortKey === 'id') {
+            valA = a.id;
+            valB = b.id;
+        } else if (sortKey === 'poNumber') {
+            valA = a.purchaseOrder?.poNumber || '';
+            valB = b.purchaseOrder?.poNumber || '';
+        } else if (sortKey === 'buyer') {
+            valA = a.purchaseOrder?.buyer?.name || '';
+            valB = b.purchaseOrder?.buyer?.name || '';
+        } else if (sortKey === 'amount') {
+            valA = Number(a.purchaseOrder?.amount || 0);
+            valB = Number(b.purchaseOrder?.amount || 0);
+        } else if (sortKey === 'status') {
+            valA = String(a.status || '');
+            valB = String(b.status || '');
+        } else if (sortKey === 'carrier') {
+            valA = a.carrierName || '';
+            valB = b.carrierName || '';
+        } else if (sortKey === 'eta') {
+            valA = a.expectedDelivery ? new Date(a.expectedDelivery).getTime() : 0;
+            valB = b.expectedDelivery ? new Date(b.expectedDelivery).getTime() : 0;
+        } else if (sortKey === 'createdAt') {
+            valA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            valB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         }
-        if (sortBy === 'oldest') {
-            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+            return sortDirection === 'asc' ? valA - valB : valB - valA;
         }
-        if (sortBy === 'value-desc') {
-            const valA = Number(a.purchaseOrder?.amount || 0);
-            const valB = Number(b.purchaseOrder?.amount || 0);
-            return valB - valA;
-        }
-        if (sortBy === 'value-asc') {
-            const valA = Number(a.purchaseOrder?.amount || 0);
-            const valB = Number(b.purchaseOrder?.amount || 0);
-            return valA - valB;
-        }
-        return 0;
+        const strA = String(valA || '').toLowerCase();
+        const strB = String(valB || '').toLowerCase();
+        const res = strA.localeCompare(strB);
+        return sortDirection === 'asc' ? res : -res;
     });
 
     const isFiltered = searchQuery.trim() !== '' || statusFilter !== 'ALL';
@@ -334,41 +364,46 @@ export default function SellerDeliveryManagementPage() {
             </div>
 
             {/* Filter Bar */}
-            <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-                <div className="relative min-w-0 flex-1 max-w-md">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search by delivery #, PO #, buyer, tracking..."
-                        className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                    />
-                </div>
+            <ResponsiveFilterBar
+                activeFilterCount={(statusFilter ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0)}
+                searchInput={
+                    <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search by delivery #, PO #, buyer, tracking..."
+                            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                        />
+                    </div>
+                }
+                filters={
+                    <>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                        >
+                            {STATUS_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                </option>
+                            ))}
+                        </select>
 
-                <div className="flex flex-wrap items-center gap-3">
-                    <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                    >
-                        {STATUS_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                            </option>
-                        ))}
-                    </select>
-
-                    <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                    >
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
-                        <option value="value-desc">Value: High to Low</option>
-                        <option value="value-asc">Value: Low to High</option>
-                    </select>
-
+                        <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value)}
+                            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                        >
+                            <option value="newest">Newest First</option>
+                            <option value="oldest">Oldest First</option>
+                            <option value="value-desc">Value: High to Low</option>
+                            <option value="value-asc">Value: Low to High</option>
+                        </select>
+                    </>
+                }
+                endContent={
                     <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
                         <button
                             type="button"
@@ -397,8 +432,8 @@ export default function SellerDeliveryManagementPage() {
                             <Grid3x3 className="h-3.5 w-3.5" />
                         </button>
                     </div>
-                </div>
-            </div>
+                }
+            />
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => refetch()} /> :
                 isLoading ? <LoadingState label="Loading deliveries..." /> :
@@ -424,13 +459,13 @@ export default function SellerDeliveryManagementPage() {
                                             <TableHeader>
                                                 <TableRow className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
                                                     <TableHead className="w-16 p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Sr. No</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Delivery ID</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Purchase Order</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Buyer</TableHead>
-                                                    <TableHead className="text-right p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Value</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Status</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Carrier & Tracking</TableHead>
-                                                    <TableHead className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">ETA / Expected</TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="Delivery ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="Purchase Order" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="Buyer" field="buyer" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
+                                                    <TableHead className="text-right p-3"><SortableHeader label="Value" field="amount" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="Carrier & Tracking" field="carrier" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
+                                                    <TableHead className="p-3"><SortableHeader label="ETA / Expected" field="eta" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
                                                     <TableHead className="text-right w-[200px] p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</TableHead>
                                                 </TableRow>
                                             </TableHeader>
@@ -618,7 +653,7 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
     return (
         <div className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
             <div className="w-full space-y-3">
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-2.5 sm:gap-3">
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                             <EntityIdLink label={`DLV-${delivery.id}`} id={delivery.id} size="sm" to={`/delivery/${delivery.id}`} />

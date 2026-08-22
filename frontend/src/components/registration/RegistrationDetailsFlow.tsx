@@ -1558,7 +1558,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         {buyerDocOptions.map((doc) => {
                           const isSelected = selectedDocs.includes(doc.id);
                           return (
-                            <label key={doc.id} className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                            <label key={doc.id} className="flex items-start gap-2.5 sm:gap-3 cursor-pointer p-3 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-colors">
                               <input
                                 type="checkbox"
                                 checked={isSelected}
@@ -1697,7 +1697,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           )}
 
                           {mobileAlreadyRegistered && (
-                            <div className="flex flex-col gap-3 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex flex-col gap-2.5 sm:gap-3 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700 sm:flex-row sm:items-center sm:justify-between">
                               <span className="font-semibold">This Aadhaar-linked mobile number already exists in the database.</span>
                               <button
                                 type="button"
@@ -1712,7 +1712,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           {!isAadhaarVerified && (
                             <>
                               <div className="space-y-5">
-                                <label className="flex items-start gap-3 text-xs leading-relaxed text-slate-700">
+                                <label className="flex items-start gap-2.5 sm:gap-3 text-xs leading-relaxed text-slate-700">
                                   <input
                                     type="checkbox"
                                     checked={aadhaarConsent}
@@ -1763,8 +1763,8 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                 />
                               </div>
 
-                              <div className="flex items-center justify-between gap-3 text-slate-800">
-                                <div className="flex items-center gap-3">
+                              <div className="flex items-center justify-between gap-2.5 sm:gap-3 text-slate-800">
+                                <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                                   <CheckCircle2 className="h-5 w-5 rounded-full fill-green-600 text-green-600" />
                                   <p className="text-xs font-bold">Aadhaar Details Verified Successfully.</p>
                                 </div>
@@ -1863,7 +1863,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           </div>
                           {isPanVerified && (
                             <div className="space-y-5">
-                              <div className="flex items-center gap-3 text-green-700">
+                              <div className="flex items-center gap-2.5 sm:gap-3 text-green-700">
                                 <CheckCircle2 className="h-5 w-5 fill-green-600 text-green-600" />
                                 <p className="text-xs font-bold">PAN Details Verified Successfully.</p>
                               </div>
@@ -2012,7 +2012,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           </div>
 
                           {mobileAlreadyRegistered && (
-                            <div className="flex flex-col gap-3 rounded border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex flex-col gap-2.5 sm:gap-3 rounded border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between">
                               <span className="font-semibold">This Aadhaar-linked mobile number already exists in the database.</span>
                               <button
                                 type="button"
@@ -2026,7 +2026,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
                           {!isAadhaarVerified && (
                             <>
-                              <label className="flex items-start gap-3 text-sm leading-relaxed text-slate-700">
+                              <label className="flex items-start gap-2.5 sm:gap-3 text-sm leading-relaxed text-slate-700">
                                 <input
                                   type="checkbox"
                                   checked={aadhaarConsent}
@@ -2064,8 +2064,8 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
                           {isAadhaarVerified && (
                             <div className="space-y-5">
-                              <div className="flex items-center justify-between gap-3 text-green-700">
-                                <div className="flex items-center gap-3">
+                              <div className="flex items-center justify-between gap-2.5 sm:gap-3 text-green-700">
+                                <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                                   <CheckCircle2 className="h-5 w-5 fill-green-600 text-green-600" />
                                   <p className="text-sm font-bold">Identity verified through DigiLocker/MeriPehchaan</p>
                                 </div>
@@ -2167,7 +2167,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           </div>
                           {isPanVerified && (
                             <div className="space-y-5">
-                              <div className="flex items-center gap-3 text-green-700">
+                              <div className="flex items-center gap-2.5 sm:gap-3 text-green-700">
                                 <CheckCircle2 className="h-5 w-5 fill-green-600 text-green-600" />
                                 <p className="text-sm font-bold">PAN Details Verified Successfully.</p>
                               </div>
@@ -2192,12 +2192,12 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                   {/* Email Verification Card */}
                   <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Official Email ID *</p>
                         <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                           <div className={cn(
-                            "flex items-center gap-3 px-3.5 h-10 rounded-md border transition-colors w-full sm:w-80",
+                            "flex items-center gap-2.5 sm:gap-3 px-3.5 h-10 rounded-md border transition-colors w-full sm:w-80",
                             otpSent || isEmailVerified ? "bg-slate-50 border-slate-200 text-slate-600" : "bg-white border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/20"
                           )}>
                             <Mail className="h-4 w-4 text-slate-400 flex-shrink-0" />
@@ -2261,7 +2261,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                     </div>
 
                     {otpSent && !isEmailVerified && (
-                      <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -2293,7 +2293,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
                   {/* Mobile Verification Card */}
                   <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Mobile Verification *</p>
                         <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -2353,7 +2353,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                       </div>
                     </div>
                     {mobileOtpSent && !isMobileOtpVerified && (
-                      <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -2509,7 +2509,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
                       <div className="rounded bg-slate-50 p-4 sm:p-6 md:rounded">
                         <h4 className="text-[10px] font-bold  text-slate-400 mb-4  ">Password Security Checklist</h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                           <ValidationItem label="12+ Characters" valid={formData.password.length >= 12 && formData.password.length <= 128} />
                           <ValidationItem label=" Letter" valid={/[A-Z]/.test(formData.password)} />
                           <ValidationItem label="Lowercase Letter" valid={/[a-z]/.test(formData.password)} />
@@ -2657,7 +2657,7 @@ function SellerRoleDetails({
 
 function CredentialRule({ label, valid }: { label: string, valid: boolean }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
       <span className={cn("h-3.5 w-3.5 rounded-full", valid ? "bg-green-500" : "bg-slate-300")} />
       <span className={cn("text-xs", valid ? "text-green-700" : "text-slate-400")}>{label}</span>
     </div>

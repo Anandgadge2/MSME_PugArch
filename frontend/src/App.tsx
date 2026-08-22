@@ -381,11 +381,18 @@ function LegacyNoticePage({ title, target = '/buyer/procurement/create' }: { tit
   );
 }
 
+let globalInitialLoadComplete = false;
+
 export default function App() {
   const { user, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '/';
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(globalInitialLoadComplete);
+
+  const completeInitialLoad = () => {
+    globalInitialLoadComplete = true;
+    setInitialLoadComplete(true);
+  };
   const [isPageMounted, setIsPageMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
@@ -414,9 +421,9 @@ export default function App() {
   }, []);
 
   const isDataSettled = isFetchingQueries === 0 || safetyTimeoutPassed;
-  const isInitialReady = !loading && isPageMounted && isDataSettled;
-  const isAuthTransitionReady = isPageMounted && !loading && isDataSettled;
-  const isLogoutReady = isPageMounted && isDataSettled;
+  const isInitialReady = !loading && isPageMounted;
+  const isAuthTransitionReady = isPageMounted && !loading;
+  const isLogoutReady = isPageMounted;
 
   const [hasCookie, setHasCookie] = useState(false);
 
@@ -861,13 +868,15 @@ export default function App() {
   return (
     <>
       {!initialLoadComplete && (
+        (() => { console.log('[APP LOADER] reason: INITIALIZATION'); return true; })() && 
         <PremiumLoader
           mode="initial"
           isReady={isInitialReady}
-          onComplete={() => setInitialLoadComplete(true)}
+          onComplete={completeInitialLoad}
         />
       )}
       {isLoggingIn && (
+        (() => { console.log('[APP LOADER] reason: LOGIN'); return true; })() && 
         <PremiumLoader
           mode="login"
           isReady={isAuthTransitionReady}
@@ -875,6 +884,7 @@ export default function App() {
         />
       )}
       {isLoggingOut && (
+        (() => { console.log('[APP LOADER] reason: LOGOUT'); return true; })() && 
         <PremiumLoader
           mode="logout"
           isReady={isLogoutReady}

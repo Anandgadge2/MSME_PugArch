@@ -37,6 +37,9 @@ export const createApp = () => {
     res.end(faviconBuffer);
   });
 
+  // Static uploads directory
+  app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
+
   // Unified API Routing layer
   app.use('/api', apiRouter);
 

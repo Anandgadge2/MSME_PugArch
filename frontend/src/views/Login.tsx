@@ -159,7 +159,7 @@ export default function Login() {
           </p>
 
           {/* Trust badges */}
-          <div className="mt-6 grid grid-cols-3 gap-3 w-full max-w-sm">
+          <div className="mt-6 grid grid-cols-3 gap-2.5 sm:gap-3 w-full max-w-sm">
             {[
               { icon: ShieldCheck, label: 'AES-256 Encrypted' },
               { icon: CheckCircle2, label: 'Govt. Verified' },
@@ -230,7 +230,7 @@ export default function Login() {
         <div className="relative z-10 w-full max-w-md animate-in fade-in slide-in-from-right-4 duration-700">
           {/* Header */}
           <div className="mb-7">
-            <div className="hidden lg:flex items-center gap-3 mb-5">
+            <div className="hidden lg:flex items-center gap-2.5 sm:gap-3 mb-5">
               <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0b2447] to-[#12335f] flex items-center justify-center shadow-md">
                 <ShieldCheck className="h-5 w-5 text-[#c8a45c]" />
               </div>
@@ -359,7 +359,7 @@ export default function Login() {
             </div>
 
             {/* Divider */}
-            <div className="flex items-center gap-3 py-1">
+            <div className="flex items-center gap-2.5 sm:gap-3 py-1">
               <div className="flex-1 h-px bg-slate-200" />
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">or</span>
               <div className="flex-1 h-px bg-slate-200" />

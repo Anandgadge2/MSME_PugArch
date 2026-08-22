@@ -317,7 +317,7 @@ export default function BidComparisonPage() {
           
           {/* Header Bar */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-            <div className="flex items-center gap-3">
+            <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 shadow-xs">
                 <BarChart3 className="h-6 w-6" />
               </div>
@@ -414,7 +414,8 @@ export default function BidComparisonPage() {
 
           {/* Comparison Matrix Table */}
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="w-full min-w-[900px] border-collapse text-left text-xs">
+            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[900px] border-collapse text-left text-xs">
               
               {/* Header Columns per Supplier */}
               <thead>
@@ -731,10 +732,11 @@ export default function BidComparisonPage() {
 
               </tbody>
             </table>
+</div>
           </div>
 
           {/* Sticky Bottom Helper Bar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100 pt-4 text-xs">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3 border-t border-slate-100 pt-4 text-xs">
             <p className="text-slate-500 font-semibold text-[11px]">
               Select 2 to 4 seller quotations to evaluate detailed line-item rates, commercial terms, and L1 savings.
             </p>

@@ -171,7 +171,7 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
                   <FileText className="h-4 w-4 text-[#12335f]" />
                   <span>Official Platform Policy PDF Library</span>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-left">
+                <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3 text-left">
                   {[
                     { label: 'General Terms & Conditions', file: 'Terms_and_Conditions.pdf' },
                     { label: 'Privacy Policy', file: 'Privacy_Policy_JSG_Smile.pdf' },
@@ -218,7 +218,7 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
 
         {/* Ultra-Smooth Theme-Aligned Acceptance Bar */}
         <div className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between bg-slate-50/90 p-5 rounded-2xl border border-slate-200/80">
-          <label className="flex cursor-pointer items-start gap-3.5 text-slate-800 group">
+          <label className="flex cursor-pointer items-start gap-2.5 sm:gap-3.5 text-slate-800 group">
             <div className="relative flex items-center mt-0.5">
               <input
                 type="checkbox"
@@ -239,7 +239,7 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
             </div>
           </label>
 
-          <div className="flex items-center gap-3 shrink-0 justify-end">
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 justify-end">
             <button
               type="button"
               onClick={handleBack}
@@ -308,7 +308,7 @@ function PdfToolbar({
   const pdfUrl = `/docs/${currentDoc.file}`;
 
   return (
-    <div className="flex h-12 items-center justify-between gap-3 bg-[#12335f] px-4 text-white sm:px-6">
+    <div className="flex h-12 items-center justify-between gap-2.5 sm:gap-3 bg-[#12335f] px-4 text-white sm:px-6">
       <div className="flex items-center gap-2.5 min-w-0">
         <FileText className="h-4 w-4 shrink-0 text-blue-300" />
         <span className="truncate text-xs font-bold tracking-tight text-white">

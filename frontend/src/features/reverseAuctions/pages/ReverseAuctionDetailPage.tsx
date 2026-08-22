@@ -13,6 +13,7 @@ import { procurementBidApi } from '../../procurementBid/api';
 import { marketplaceApi, type MarketplaceSeller } from '../../marketplace/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
+import { KpiCard } from '../../shared/KpiCard';
 
 export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   const qc = useQueryClient();
@@ -180,7 +181,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
         {/* guest notice banner */}
         {!user && (
           <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+            <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-blue-800 text-lg">
                 ℹ️
               </span>
@@ -215,7 +216,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
             {user && user.role === 'seller' && (
               hasJoined ? (
                 <Link href={`/reverse-auctions/${id}/live`} className="shrink-0">
-                  <Button type="button" className="h-10 rounded-xl bg-[#12335f] px-5 text-xs font-black uppercase text-white hover:bg-[#0b2445] shadow-sm transition-all flex items-center gap-2">
+                  <Button type="button" className="h-9 sm:h-10 rounded-xl bg-[#12335f] px-3 sm:px-5 text-xs font-black uppercase text-white hover:bg-[#0b2445] shadow-sm transition-all flex items-center gap-2">
                     <Play className="h-4 w-4 fill-white" /> Live Bid Console
                   </Button>
                 </Link>
@@ -239,7 +240,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
 
         {/* Bidding Alert Warning */}
         <div className="rounded-3xl border border-amber-200 bg-amber-50/40 p-5 shadow-2xs">
-          <div className="flex gap-3.5">
+          <div className="flex gap-2.5 sm:gap-3.5">
             <ShieldAlert className="h-5 w-5 shrink-0 text-amber-700 mt-0.5" />
             <div>
               <p className="text-xs font-black text-amber-800">Dynamic Commercial Bidding Active</p>
@@ -353,7 +354,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
             </h2>
             {participants.length === 0 ? (
               isPublicAuction ? (
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-4 flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs font-semibold text-slate-600">
                     This is an open reverse auction. Join to place bids in the live console.
                   </p>
@@ -416,7 +417,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   return (
     <div className="mx-auto max-w-[1600px] px-4 md:px-8 space-y-4 pb-12">
       {/* Detail Header */}
-      <div className="flex flex-col gap-3 border-b border-slate-200 bg-white p-4 rounded-lg shadow-xs border md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-2.5 sm:gap-3 border-b border-slate-200 bg-white p-4 rounded-lg shadow-xs border md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             {/* <button type="button" onClick={goBack} className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2.5 text-xs font-black text-slate-600 hover:border-[#12335f] hover:text-[#12335f]">
@@ -468,16 +469,16 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
               <h2 className="text-sm font-black uppercase text-[#12335f] tracking-wider flex items-center gap-2 border-b pb-2">
                 <FileText className="h-4 w-4" /> 1. Auction Overview
               </h2>
-              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-                <MetricCard label="Procurement Method" value={auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'Bid with Reverse Auction' : 'Reverse Auction'} icon={Scale} />
-                <MetricCard label="Buyer Organization" value={auction.data.buyerOrganizationName || (auction.data.buyerOrgId ? `Buyer Org #${auction.data.buyerOrgId}` : 'Verified Buyer')} icon={Building2} />
-                <MetricCard label="Category" value={auction.data.category || 'Not specified'} icon={Tag} />
-                <MetricCard label="Auction Type" value={auction.data.auctionType || 'ENGLISH_REVERSE'} icon={Settings} />
-                <MetricCard label="Auction Mode" value={auction.data.auctionMode || 'ONLINE'} icon={Activity} />
-                <MetricCard label="Minimum Qualified Bidders" value={String(auction.data.minimumQualifiedBidders || 2)} icon={Users} />
-                <MetricCard label="Start Time" value={formatDateTime(auction.data.startTime)} icon={Clock} />
-                <MetricCard label="End Time" value={formatDateTime(auction.data.endTime)} icon={Clock} />
-                <MetricCard label="Calculated Duration" value={`${durationMin} mins`} icon={Clock} />
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 md:grid-cols-3">
+                <KpiCard label="Procurement Method" value={auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'Bid with Reverse Auction' : 'Reverse Auction'} icon={Scale} tone="blue" />
+                <KpiCard label="Buyer Organization" value={auction.data.buyerOrganizationName || (auction.data.buyerOrgId ? `Buyer Org #${auction.data.buyerOrgId}` : 'Verified Buyer')} icon={Building2} tone="indigo" />
+                <KpiCard label="Category" value={auction.data.category || 'Not specified'} icon={Tag} tone="amber" />
+                <KpiCard label="Auction Type" value={auction.data.auctionType || 'ENGLISH_REVERSE'} icon={Settings} tone="slate" />
+                <KpiCard label="Auction Mode" value={auction.data.auctionMode || 'ONLINE'} icon={Activity} tone="emerald" />
+                <KpiCard label="Minimum Qualified Bidders" value={String(auction.data.minimumQualifiedBidders || 2)} icon={Users} tone="purple" />
+                <KpiCard label="Start Time" value={formatDateTime(auction.data.startTime)} icon={Clock} tone="blue" />
+                <KpiCard label="End Time" value={formatDateTime(auction.data.endTime)} icon={Clock} tone="red" />
+                <KpiCard label="Calculated Duration" value={`${durationMin} mins`} icon={Clock} tone="slate" />
               </div>
               
               <div className="rounded bg-slate-50 p-3 mt-2">
@@ -524,7 +525,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
               <h2 className="text-sm font-black uppercase text-[#12335f] tracking-wider flex items-center gap-2 border-b pb-2">
                 <Settings className="h-4 w-4" /> 2. Sourcing & Auction Rules
               </h2>
-              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+              <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-4">
                 <InfoRow label="Opening Price" value={formatCurrency(auction.data.startPrice)} />
                 <InfoRow label="Reserve Price" value={auction.data.reservePrice ? formatCurrency(auction.data.reservePrice) : 'Not configured'} />
                 <InfoRow label="Minimum Decrement" value={auction.data.minDecrementAmount ? formatCurrency(auction.data.minDecrementAmount) : `${auction.data.minDecrementPercent}%`} />
@@ -601,7 +602,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
                 <span className="flex items-center gap-2"><Activity className="h-4 w-4 text-indigo-700" /> 4. Live Sourcing Monitor</span>
                 {status === 'LIVE' && <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-600 animate-ping" />}
               </h2>
-              <div className="grid gap-3 sm:grid-cols-4">
+              <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-4">
                 <div className="bg-white border rounded p-3 text-center">
                   <p className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Current Lowest Bid</p>
                   <p className="text-base font-black text-emerald-700 mt-1">{currentLowest > 0 ? formatCurrency(currentLowest) : '-'}</p>
@@ -679,7 +680,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
                 </h2>
                 
                 {l1Participant ? (
-                  <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                  <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-4">
                     <InfoRow label="Recommended L1 Seller" value={l1Participant.sellerOrgName || `Org #${l1Participant.sellerOrgId}`} />
                     <InfoRow label="Final Commercial Bid" value={l1Participant.lastBidAmount ? formatCurrency(l1Participant.lastBidAmount) : '-'} />
                     <InfoRow label="Savings Relative to Start" value={`${savingsPercent.toFixed(1)}%`} />
@@ -745,19 +746,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   );
 }
 
-function MetricCard({ label, value, icon: Icon }: { label: string; value: string; icon: any }) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-white p-3.5 shadow-sm transition hover:shadow-md hover:border-[#12335f]/25">
-      <div className="flex justify-between items-start gap-2">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
-          <p className="text-sm font-extrabold text-slate-900 leading-tight">{value}</p>
-        </div>
-        <span className="rounded-lg bg-blue-50 p-2 text-[#12335f]"><Icon className="h-4 w-4" /></span>
-      </div>
-    </div>
-  );
-}
+
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -795,7 +784,7 @@ function LinkedRequirementPanel({ requirement }: { requirement: NonNullable<impo
         )}
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 grid gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <InfoRow label="Title" value={requirement.title || '—'} />
         <InfoRow label="Category" value={requirement.category || 'Not specified'} />
         <InfoRow label="Estimated Value" value={requirement.estimatedValue ? formatCurrency(Number(requirement.estimatedValue)) : 'Not disclosed'} />
@@ -810,7 +799,8 @@ function LinkedRequirementPanel({ requirement }: { requirement: NonNullable<impo
         <div className="mt-5">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Items ({items.length})</p>
           <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full min-w-[560px] text-left text-xs">
+            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[560px] text-left text-xs">
               <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
                 <tr>
                   <th className="p-2.5">#</th>
@@ -832,6 +822,7 @@ function LinkedRequirementPanel({ requirement }: { requirement: NonNullable<impo
                 ))}
               </tbody>
             </table>
+</div>
           </div>
         </div>
       )}

@@ -125,7 +125,7 @@ function CollapsibleSection({
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+        className="flex w-full items-center justify-between gap-2.5 sm:gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
       >
         <span className="flex items-center gap-2">
           {Icon && <Icon className="h-4 w-4 text-[#0f766e]" />}
@@ -193,55 +193,64 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   const isSellerTrackingView = accessRole === 'seller';
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-sm">
-        <div className="relative overflow-hidden bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-5 py-5 text-slate-950 sm:px-6">
-          <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-300" />
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex min-w-0 items-start gap-4">
-              <span className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/80 text-[#0f766e] ring-1 ring-sky-200 sm:flex">
-                <Package className="h-6 w-6" />
-              </span>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-md bg-white/80 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-[#0f766e] ring-1 ring-sky-100">
-                    Delivery Tracking
-                  </span>
-                  <DeliveryStatusBadge status={delivery.status} />
-                </div>
-                <h1 className="mt-3 max-w-5xl break-words text-2xl font-black leading-tight tracking-tight sm:text-3xl">
-                  {po?.title || po?.poNumber || `Delivery #${delivery.id}`}
-                </h1>
-                <p className="mt-2 text-xs font-semibold text-slate-600">
-                  {po?.poNumber || `PO-${delivery.purchaseOrderId}`} - {po?.seller?.name || 'Seller'} to {po?.buyer?.name || 'Buyer'}
-                </p>
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+            <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#12335f]/5 text-[#12335f] ring-1 ring-slate-200/50 sm:flex">
+              <Package className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-1 sm:mb-2">
+                <span className="rounded-md bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-[#12335f] ring-1 ring-slate-200/60">
+                  Delivery Tracking
+                </span>
+                <DeliveryStatusBadge status={delivery.status} />
               </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={onClose || (() => window.history.back())}
-                className="h-10 rounded-lg border-sky-200 bg-white/80 px-4 text-xs font-black uppercase text-[#0f766e] hover:bg-sky-50"
-              >
-                Back
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => detailQuery.refetch()}
-                className="h-10 rounded-lg border-[#0f766e] bg-[#0f766e] px-4 text-xs font-black uppercase text-white hover:bg-[#0d665f]"
-              >
-                <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} /> Refresh
-              </Button>
+              <h1 className="text-2xl font-black tracking-tight text-slate-950 break-words sm:text-3xl">
+                {po?.title || po?.poNumber || `Delivery #${delivery.id}`}
+              </h1>
+              <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">
+                {po?.poNumber || `PO-${delivery.purchaseOrderId}`} · {po?.seller?.name || 'Seller'} → {po?.buyer?.name || 'Buyer'}
+              </p>
             </div>
           </div>
+          <div className="flex flex-wrap gap-2 mt-2 md:mt-0 md:self-end">
+            <Button
+              variant="outline"
+              onClick={onClose || (() => window.history.back())}
+              className="h-10 rounded-lg border-slate-200 bg-white px-4 text-xs font-black uppercase text-[#12335f] hover:bg-slate-50"
+            >
+              Back
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => detailQuery.refetch()}
+              className="h-10 rounded-lg border-[#12335f] bg-[#12335f] px-4 text-xs font-black uppercase text-white hover:bg-[#0b1f3b]"
+            >
+              <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} /> Refresh
+            </Button>
+          </div>
         </div>
-        <div className="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
-          <ShipmentMetric label="Tracking Number" value={delivery.trackingNumber || `DLV-${delivery.id}`} />
-          <ShipmentMetric label="Carrier" value={delivery.carrierName || delivery.logisticsPartnerName || 'Pending'} />
-          <ShipmentMetric label="Expected Delivery" value={formatDate(delivery.expectedDelivery || po?.expectedDelivery)} />
-          <ShipmentMetric label="Next Seller Update" value={nextManualStatus ? DELIVERY_STATUS_LABELS[nextManualStatus] : 'Complete'} />
+      </div>
+      <CollapsibleSection title="Delivery Overview" icon={Package} defaultOpen>
+        <div className="grid grid-cols-1 gap-2.5 sm:gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Info label="Status">
+            <DeliveryStatusBadge status={delivery.status} />
+          </Info>
+          <Info label="SLA Health">
+            <span className="font-bold">{delivery.slaStatus || 'ON_TIME'}</span>
+          </Info>
+          <Info label="Tracking #" value={delivery.trackingNumber || `DLV-${delivery.id}`} />
+          <Info label="Carrier" value={delivery.carrierName || delivery.logisticsPartnerName || 'Pending'} />
+          <Info label="Expected" value={formatDate(delivery.expectedDelivery || po?.expectedDelivery)} />
+          <Info label="Next Update" value={nextManualStatus ? DELIVERY_STATUS_LABELS[nextManualStatus] : 'Complete'} />
+          <Info label="Current Location" value={delivery.currentLocation || 'Pending'} />
+          <Info label="Address" value={po?.deliveryAddress || 'Address not set'} />
+          <Info label="PO Value" value={formatCurrency(po?.amount || po?.totalValue)} />
+          <Info label="Settlement" value={delivery.settlement?.status || 'PENDING'} />
         </div>
-      </section>
+      </CollapsibleSection>
 
       {/* Rating CTA - only when delivery is in a rate-able state. */}
       {accessRole === 'buyer' && delivery.purchaseOrderId && (
@@ -453,8 +462,8 @@ function RatingCTACard({
   return (
     <>
       <Card className="border-amber-200 bg-amber-50/40">
-        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
+        <CardContent className="flex flex-col gap-2.5 sm:gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2.5 sm:gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
               <Star className="h-4 w-4 fill-current" />
             </div>

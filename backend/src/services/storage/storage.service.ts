@@ -169,17 +169,11 @@ const providerFor = (_name?: string): StorageProvider => gcpStorageProvider;
 const isPublicCatalogueAsset = async (fileAssetId: number) => {
   const [productImage, certification] = await Promise.all([
     prisma.productImage.findFirst({
-      where: { fileAssetId, product: { status: 'ACTIVE' as any } },
+      where: { fileAssetId },
       select: { id: true }
     }).catch(() => null),
     prisma.certification.findFirst({
-      where: {
-        fileAssetId,
-        OR: [
-          { product: { status: 'ACTIVE' as any } },
-          { service: { status: 'ACTIVE' as any } }
-        ]
-      },
+      where: { fileAssetId },
       select: { id: true }
     }).catch(() => null)
   ]);
@@ -198,9 +192,10 @@ const canSellerViewBid = (sellerId: number, bid: any) => {
 };
 
 export const canAccessFileAsset = async (asset: any, user: { id: number; role: string }) => {
+  if (['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'public', 'logo'].includes(asset.entityType) || await isPublicCatalogueAsset(asset.id)) return true;
+  if (!user || !user.id) return false;
   if (user.role === 'admin' || user.role === 'master_admin') return true;
   if (asset.ownerId === user.id) return true;
-  if (['catalogue', 'catalogue_product', 'catalogue_service'].includes(asset.entityType) || await isPublicCatalogueAsset(asset.id)) return true;
 
   // Check if file asset is linked via ProcurementBidDocument (regardless of asset.entityId being null or set)
   const procurementDoc = await prisma.procurementBidDocument.findFirst({

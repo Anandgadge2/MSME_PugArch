@@ -42,6 +42,7 @@ import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
 import { EmptyState } from '../../shared/FeatureStates';
 
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { getApi } from '../../shared/apiClient';
 
 const formatCurrency = (value: number | string | null | undefined) => {
@@ -581,17 +582,17 @@ export default function SupplierResponsesPage() {
   const isKpisLoading = loading && bids.length === 0;
 
   return (
-    <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
+    <div className="mx-auto max-w-[1560px] space-y-3.5 sm:space-y-5 px-2.5 sm:px-4 pb-12">
       {/* ── Transparent Header ── */}
       <div>
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">Procurement Control</p>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">Supplier Responses</h1>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Track bids, quotes, and proposals received from suppliers across your procurements.</p>
+        <div className="flex flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 mt-1 break-words">Supplier Responses</h1>
+            <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm font-semibold text-slate-500 break-words">Track bids, quotes, and proposals received from suppliers across your procurements.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => { api.invalidate('/api/buyer/procurement-bids'); api.invalidate('/api/marketplace/requirements'); refetch(); }} className="h-10 rounded-lg text-xs font-black uppercase shadow-sm bg-white hover:bg-slate-50 border-slate-200">
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" onClick={() => { api.invalidate('/api/buyer/procurement-bids'); api.invalidate('/api/marketplace/requirements'); refetch(); }} className="h-9 sm:h-10 rounded-lg text-xs font-black uppercase shadow-sm bg-white hover:bg-slate-50 border-slate-200">
               <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} />Refresh
             </Button>
           </div>
@@ -664,139 +665,145 @@ export default function SupplierResponsesPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-55/10 p-4 text-xs font-semibold text-red-700">
+        <div className="flex items-center gap-2.5 sm:gap-3 rounded-2xl border border-red-200 bg-red-55/10 p-3 sm:p-4 text-xs font-semibold text-red-700">
           <AlertTriangle className="h-4 w-4 flex-shrink-0 text-red-500" />
-          <span>{error}</span>
-          <Button variant="outline" onClick={() => refetch()} className="ml-auto h-8 text-[10px] font-black uppercase rounded-lg border-red-200 hover:bg-red-50">Retry</Button>
+          <span className="break-words flex-1">{error}</span>
+          <Button variant="outline" onClick={() => refetch()} className="ml-auto h-8 text-[10px] font-black uppercase rounded-lg border-red-200 hover:bg-red-50 shrink-0">Retry</Button>
         </div>
       )}
 
-      {/* ── Advanced Filter Bar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Search Input */}
-          <div className="relative flex-1 min-w-[220px] max-w-sm">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              placeholder="Search by title, ref no, category, or location..."
-              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-            />
-          </div>
-
-          {/* Filters Collection */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Type Select */}
-            <div className="w-36">
-              <select
-                value={typeFilter}
-                onChange={e => setTypeFilter(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
-              >
-                {TYPE_FILTERS.map(f => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
+      {/* ── Advanced Responsive Filter Bar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={
+            (typeFilter ? 1 : 0) +
+            (statusFilter ? 1 : 0) +
+            (responseFilter ? 1 : 0) +
+            (valueFilter ? 1 : 0) +
+            (closingFilter ? 1 : 0) +
+            (categoryFilter ? 1 : 0)
+          }
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Search by title, ref no, category, or location..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
             </div>
-
-            {/* Status Select */}
-            <div className="w-36">
-              <select
-                value={statusFilter}
-                onChange={e => handleStatusFilterChange(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
-              >
-                {STATUS_FILTERS.map(f => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Responses Filter */}
-            <div className="w-36">
-              <select
-                value={responseFilter}
-                onChange={e => setResponseFilter(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
-              >
-                {RESPONSE_COUNT_FILTERS.map(f => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Value Select */}
-            <div className="w-36">
-              <select
-                value={valueFilter}
-                onChange={e => setValueFilter(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
-              >
-                {VALUE_FILTERS.map(f => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Closing Date Select */}
-            <div className="w-36">
-              <select
-                value={closingFilter}
-                onChange={e => setClosingFilter(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
-              >
-                {CLOSING_FILTERS.map(f => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Category Select (if multiple categories available) */}
-            {availableCategories.length > 0 && (
-              <div className="w-40">
+          }
+          filters={
+            <>
+              {/* Type Select */}
+              <div className="w-full sm:w-36">
                 <select
-                  value={categoryFilter}
-                  onChange={e => setCategoryFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer truncate"
+                  value={typeFilter}
+                  onChange={e => setTypeFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
                 >
-                  <option value="">All Categories</option>
-                  {availableCategories.map(cat => (
-                    <option key={cat} value={cat}>
-                      {cat}
+                  {TYPE_FILTERS.map(f => (
+                    <option key={f.key} value={f.key}>
+                      {f.label}
                     </option>
                   ))}
                 </select>
               </div>
-            )}
 
-            {/* Reset Button */}
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-              >
-                Reset Filters
-              </button>
-            )}
+              {/* Status Select */}
+              <div className="w-full sm:w-36">
+                <select
+                  value={statusFilter}
+                  onChange={e => handleStatusFilterChange(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+                >
+                  {STATUS_FILTERS.map(f => (
+                    <option key={f.key} value={f.key}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="ml-auto pl-2">
-              <ViewModeToggle value={viewMode} onChange={setViewMode} />
-            </div>
-          </div>
-        </div>
+              {/* Responses Filter */}
+              <div className="w-full sm:w-36">
+                <select
+                  value={responseFilter}
+                  onChange={e => setResponseFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+                >
+                  {RESPONSE_COUNT_FILTERS.map(f => (
+                    <option key={f.key} value={f.key}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Value Select */}
+              <div className="w-full sm:w-36">
+                <select
+                  value={valueFilter}
+                  onChange={e => setValueFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+                >
+                  {VALUE_FILTERS.map(f => (
+                    <option key={f.key} value={f.key}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Closing Date Select */}
+              <div className="w-full sm:w-36">
+                <select
+                  value={closingFilter}
+                  onChange={e => setClosingFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+                >
+                  {CLOSING_FILTERS.map(f => (
+                    <option key={f.key} value={f.key}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Category Select (if multiple categories available) */}
+              {availableCategories.length > 0 && (
+                <div className="w-full sm:w-40">
+                  <select
+                    value={categoryFilter}
+                    onChange={e => setCategoryFilter(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer truncate"
+                  >
+                    <option value="">All Categories</option>
+                    {availableCategories.map(cat => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Reset Button */}
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="h-10 px-3 w-full sm:w-auto rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                >
+                  Reset Filters
+                </button>
+              )}
+            </>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
       </div>
 
       {/* Content */}
@@ -955,7 +962,7 @@ export default function SupplierResponsesPage() {
 
           {/* ═══ GRID VIEW ═══ */}
           {viewMode === 'grid' && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 -mx-1 px-1">
               {pagedBids.map(bid => {
                 const typeVal = getConsolidatedType(bid);
                 return (
@@ -963,7 +970,7 @@ export default function SupplierResponsesPage() {
                     key={bid.id}
                     onClick={() => handleViewResponses(bid)}
                     className={cn(
-                      "rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition-all duration-300 border-slate-200/80 hover:border-slate-350 flex flex-col justify-between min-h-[220px] cursor-pointer"
+                      "shrink-0 snap-start w-[270px] sm:w-[310px] md:w-[320px] rounded-2xl border bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-all duration-300 border-slate-200/80 hover:border-slate-350 flex flex-col justify-between min-h-[220px] cursor-pointer"
                     )}
                   >
                     <div className="space-y-3">

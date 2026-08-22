@@ -192,7 +192,7 @@ textarea::-moz-placeholder {
 @media (max-width: 640px) {
   :root,
   html {
-    font-size: 13px !important;
+    font-size: 12px !important;
   }
 
   /* Prevent iOS Safari intrusive auto-zoom on input focus */
@@ -205,13 +205,25 @@ textarea::-moz-placeholder {
     font-size: 16px !important;
   }
 
+  h1 { font-size: 1.2rem; }
+  h2 { font-size: 1.05rem; }
+  h3 { font-size: 0.95rem; }
+
+  .page { gap: 0.65rem; }
+  .page-header { padding-bottom: 0.5rem; gap: 0.35rem; }
+  .soft-surface { border-radius: 1rem; }
+  .table-shell { border-radius: 1rem; }
+  .table-shell-scroller { padding: 0.25rem; }
+
+  label { font-size: 10px; }
+
   .dashboard-main {
-    padding: 0.625rem !important;
+    padding: 0.5rem !important;
   }
 
   .dashboard-main table th,
   .dashboard-main table td {
-    padding: 0.5rem 0.625rem;
+    padding: 0.4rem 0.5rem;
   }
 
   .dashboard-main .sticky.right-0 {
@@ -237,7 +249,7 @@ textarea::-moz-placeholder {
   }
 
   .dashboard-main :where(.fixed.inset-0) {
-    padding: 0.625rem !important;
+    padding: 0.5rem !important;
   }
 }
 
@@ -249,18 +261,25 @@ textarea::-moz-placeholder {
   }
 }
 
-/* Scale up comfortably on large / ultrawide monitors */
+/* Scale up comfortably on desktop and large / ultrawide monitors */
+@media (min-width: 1024px) {
+  :root,
+  html {
+    font-size: 14.5px !important;
+  }
+}
+
 @media (min-width: 1280px) {
   :root,
   html {
-    font-size: 13.6px !important;
+    font-size: 15px !important;
   }
 }
 
 @media (min-width: 1600px) {
   :root,
   html {
-    font-size: 14px !important;
+    font-size: 15.5px !important;
   }
   /* Let page containers breathe on ultrawides */
   main .max-w-6xl,
@@ -491,7 +510,22 @@ table td.align-bottom {
 .table-shell-scroller {
   overflow-x: auto;
   width: 100%;
+  max-width: 100%;
   padding: 0.5rem;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.overflow-x-auto table,
+.table-shell-scroller table,
+table[data-ux-wrapped="true"],
+.table-scrollable {
+  max-width: none;
 }
 
 /* Sticky right column helper — apply to <th> / <td> that need to remain

@@ -43,13 +43,14 @@ export default function GrnListPage() {
     const [viewMode, setViewMode] = useResponsiveViewMode('phase7:grn-list:view-mode');
     const canViewGrns = hasPermission('grn.view');
     const canCreate = hasPermission('grn.create');
-    const { data, isLoading, error, refetch, isFetching } = useGrns(filter === 'ALL' ? undefined : filter, { enabled: canViewGrns });
+    const { data, isLoading, error, refetch, isFetching } = useGrns(undefined, { enabled: canViewGrns });
 
     const grns = data || [];
 
     const visibleGrns = useMemo(() => {
         const text = search.trim().toLowerCase();
         return [...grns].filter(g => {
+            if (filter !== 'ALL' && g.status !== filter) return false;
             const haystack = [
                 g.grnNumber,
                 g.status,
@@ -111,7 +112,7 @@ export default function GrnListPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                    <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
                     <Button variant="outline" onClick={() => refetch()} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
                         <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", isFetching && "animate-spin")} /> Refresh
                     </Button>
@@ -124,19 +125,21 @@ export default function GrnListPage() {
             </div>
 
             {/* KPI Cards Grid */}
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 <KpiCard label="Total" value={counts.ALL} icon={ClipboardList} active={filter === 'ALL'} onClick={() => setFilter('ALL')} color="indigo" />
                 <KpiCard label="Draft" value={counts.DRAFT} icon={Clock} active={filter === 'DRAFT'} onClick={() => setFilter('DRAFT')} color="slate" />
                 <KpiCard label="Submitted" value={counts.SUBMITTED} icon={FileCheck2} active={filter === 'SUBMITTED'} onClick={() => setFilter('SUBMITTED')} color="amber" />
                 <KpiCard label="Approved" value={counts.APPROVED + counts.PARTIAL} icon={CheckCircle2} active={filter === 'APPROVED'} onClick={() => setFilter('APPROVED')} color="green" />
-                <KpiCard label="Rejected" value={counts.REJECTED} icon={XCircle} active={filter === 'REJECTED'} onClick={() => setFilter('REJECTED')} color="red" />
+                <div className="col-span-2 sm:col-span-1">
+                    <KpiCard label="Rejected" value={counts.REJECTED} icon={XCircle} active={filter === 'REJECTED'} onClick={() => setFilter('REJECTED')} color="red" />
+                </div>
             </div>
 
             {error && <InlineError message={(error as Error).message} onRetry={() => refetch()} />}
 
             {/* Inline Filters Bar */}
             {grns.length > 0 && (
-                <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+                <div className="flex items-center gap-2.5 sm:gap-3 md:flex-row border-y border-slate-200 bg-slate-50/50 py-3 px-1">
                     <div className="relative min-w-0 flex-1 max-w-md">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
@@ -148,7 +151,7 @@ export default function GrnListPage() {
                     </div>
                     <Button
                         variant="outline"
-                        className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm"
+                        className="h-10 shrink-0 whitespace-nowrap rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm"
                         onClick={() => { setSearch(''); setFilter('ALL'); setPage(1); }}
                     >
                         Reset
@@ -174,7 +177,7 @@ export default function GrnListPage() {
                                 className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
                             >
                                 <div className="w-full space-y-3">
-                                    <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-start justify-between gap-2.5 sm:gap-3">
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2">
                                                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
@@ -200,8 +203,8 @@ export default function GrnListPage() {
                 </div>
             ) : (
                 <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-[920px] border-collapse text-left text-xs">
+                    <div className="overflow-x-auto w-full">
+                        <table data-ux-wrapped="true" className="w-full min-w-[760px] border-collapse text-left text-xs">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
                                     <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
@@ -225,8 +228,8 @@ export default function GrnListPage() {
                                                 <EntityIdLink label={g.grnNumber} id={g.id} size="sm" onClick={() => router.push(`/grn/${g.id}`)} />
                                             </td>
                                             <td className="p-3">
-                                                <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{g.purchaseOrder?.poNumber}</p>
-                                                <p className="text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{g.purchaseOrder?.title}</p>
+                                                <p className="text-xs font-black text-slate-900 break-words">{g.purchaseOrder?.poNumber}</p>
+                                                <p className="text-[10px] font-semibold text-slate-500 break-words">{g.purchaseOrder?.title}</p>
                                                 <p className="text-[10px] text-slate-400 mt-0.5">Seller: {g.purchaseOrder?.seller?.name}</p>
                                             </td>
                                             <td className="p-3 text-xs font-semibold text-slate-700">

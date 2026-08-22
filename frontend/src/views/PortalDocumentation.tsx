@@ -20,10 +20,13 @@ import {
   Users,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { cn } from '../lib/utils';
+import { Pagination } from '../features/shared/Pagination';
+import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
 
 type RoleKey = 'admin' | 'seller' | 'buyer';
-type SortKey = 'role' | 'module' | 'permission' | 'duty';
+type SortKey = 'role' | 'module' | 'permission' | 'duty' | 'example';
 
 interface WorkflowStep {
   title: string;
@@ -254,8 +257,15 @@ export default function PortalDocumentation() {
   const [activeRole, setActiveRole] = useState<RoleKey | 'all'>('all');
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('role');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [page, setPage] = useState(1);
-  const pageSize = 5;
+  const [pageSize, setPageSize] = useState(5);
+
+  const toggleSort = (key: SortKey) => {
+    setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+    setSortKey(key);
+    setPage(1);
+  };
 
   const filteredPermissions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -265,8 +275,11 @@ export default function PortalDocumentation() {
       return matchesRole && (!normalizedQuery || searchable.includes(normalizedQuery));
     });
 
-    return [...rows].sort((a, b) => String(a[sortKey]).localeCompare(String(b[sortKey])));
-  }, [activeRole, query, sortKey]);
+    return [...rows].sort((a, b) => {
+      const res = String(a[sortKey] || '').localeCompare(String(b[sortKey] || ''));
+      return sortDirection === 'asc' ? res : -res;
+    });
+  }, [activeRole, query, sortDirection, sortKey]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPermissions.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -300,14 +313,14 @@ export default function PortalDocumentation() {
             </div>
 
           </div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+          <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3 lg:grid-cols-1">
             {roleGuides.map(({ id, title, icon: Icon, summary }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => handleFilterChange(id)}
                 className={cn(
-                  'rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md',
+                  'rounded-2xl border bg-white p-3 sm:p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md',
                   activeRole === id ? 'border-[#c8a45c] ring-2 ring-amber-100' : 'border-slate-200'
                 )}
               >
@@ -323,7 +336,7 @@ export default function PortalDocumentation() {
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {lifecycleSteps.map((step, index) => (
           <article key={step.title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-3">
+            <div className="mb-3 flex items-center gap-2.5 sm:gap-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0b2447] text-sm font-black text-white">{index + 1}</span>
               <h2 className="text-base font-black text-[#0b2447]">{step.title}</h2>
             </div>
@@ -333,7 +346,7 @@ export default function PortalDocumentation() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        <div className="flex flex-col justify-between gap-2.5 sm:gap-3 sm:flex-row sm:items-end">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c8a45c]">Role-wise walkthrough</p>
             <h2 className="text-2xl font-black text-[#0b2447]">Registration, onboarding, and daily operations</h2>
@@ -404,7 +417,7 @@ export default function PortalDocumentation() {
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <div className="mb-5 flex items-start gap-3">
+        <div className="mb-5 flex items-start gap-2.5 sm:gap-3">
           <ShoppingCart className="mt-1 h-6 w-6 text-[#c8a45c]" />
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c8a45c]">Procurement types</p>
@@ -416,7 +429,7 @@ export default function PortalDocumentation() {
             <article key={flow.type} className="rounded-2xl border border-slate-200 p-4">
               <h3 className="text-lg font-black text-[#0b2447]">{flow.type}</h3>
               <p className="mt-1 text-sm font-medium leading-6 text-slate-600"><strong>Best for:</strong> {flow.bestFor}</p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="mt-4 grid gap-2.5 sm:gap-3 sm:grid-cols-2">
                 <div className="rounded-xl bg-blue-50 p-3">
                   <p className="mb-2 text-xs font-black uppercase tracking-wide text-blue-900">Buyer workflow</p>
                   <p className="text-xs font-semibold leading-5 text-blue-900">{joinSteps(flow.buyerSteps)}</p>
@@ -439,57 +452,66 @@ export default function PortalDocumentation() {
             <h2 className="text-2xl font-black text-[#0b2447]">Duties, allowed actions, and examples</h2>
             <p className="mt-1 text-sm font-medium text-slate-600">Use search, filter, sorting, and pagination to review role responsibilities.</p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-[1fr_180px_180px] lg:min-w-[620px]">
-            <label className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={query}
-                onChange={event => handleSearchChange(event.target.value)}
-                placeholder="Search duty, module, permission..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
-              />
-            </label>
-            <label className="relative">
-              <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <select
-                value={activeRole}
-                onChange={event => handleFilterChange(event.target.value as RoleKey | 'all')}
-                className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-sm font-bold capitalize outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="all">All roles</option>
-                <option value="admin">Admin</option>
-                <option value="seller">Seller</option>
-                <option value="buyer">Buyer</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </label>
-            <label className="relative">
-              <select
-                value={sortKey}
-                onChange={event => setSortKey(event.target.value as SortKey)}
-                className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-sm font-bold outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="role">Sort by role</option>
-                <option value="module">Sort by module</option>
-                <option value="permission">Sort by permission</option>
-                <option value="duty">Sort by duty</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </label>
-          </div>
+          <ResponsiveFilterBar
+            className="border-none py-0 lg:min-w-[620px]"
+            activeFilterCount={(activeRole !== 'all' ? 1 : 0) + (sortKey !== 'role' ? 1 : 0)}
+            searchInput={
+              <div className="relative w-full">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={query}
+                  onChange={event => handleSearchChange(event.target.value)}
+                  placeholder="Search duty, module, permission..."
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+            }
+            filters={
+              <>
+                <div className="relative w-full sm:w-[180px]">
+                  <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <select
+                    value={activeRole}
+                    onChange={event => handleFilterChange(event.target.value as RoleKey | 'all')}
+                    className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-sm font-bold capitalize outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="all">All roles</option>
+                    <option value="admin">Admin</option>
+                    <option value="seller">Seller</option>
+                    <option value="buyer">Buyer</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </div>
+                <div className="relative w-full sm:w-[180px]">
+                  <select
+                    value={sortKey}
+                    onChange={event => setSortKey(event.target.value as SortKey)}
+                    className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-sm font-bold outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="role">Sort by role</option>
+                    <option value="module">Sort by module</option>
+                    <option value="permission">Sort by permission</option>
+                    <option value="duty">Sort by duty</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </div>
+              </>
+            }
+          />
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-slate-200">
           <div className="overflow-x-auto">
-            <table className="min-w-[980px] w-full text-left text-sm">
+            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="min-w-[980px] w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Sr. No.</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Module</th>
-                  <th className="px-4 py-3">Duty</th>
-                  <th className="px-4 py-3">Permission / Access</th>
-                  <th className="px-4 py-3">Live example</th>
+                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400 w-16">Sr. No.</th>
+                  <th className="px-4 py-3"><SortableHeader label="Role" field="role" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                  <th className="px-4 py-3"><SortableHeader label="Module" field="module" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                  <th className="px-4 py-3"><SortableHeader label="Duty" field="duty" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                  <th className="px-4 py-3"><SortableHeader label="Permission / Access" field="permission" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                  <th className="px-4 py-3"><SortableHeader label="Live Example" field="example" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -509,17 +531,20 @@ export default function PortalDocumentation() {
                 )}
               </tbody>
             </table>
+</div>
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm font-semibold text-slate-500">
-            Showing {paginatedPermissions.length ? (currentPage - 1) * pageSize + 1 : 0}-{Math.min(currentPage * pageSize, filteredPermissions.length)} of {filteredPermissions.length} records
-          </p>
-          <div className="flex gap-2">
-            <Button variant="outline" disabled={currentPage === 1} onClick={() => setPage(prev => Math.max(1, prev - 1))}>Previous</Button>
-            <Button variant="outline" disabled={currentPage === totalPages} onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}>Next</Button>
-          </div>
+        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <Pagination
+            page={currentPage}
+            pageSize={pageSize}
+            total={filteredPermissions.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[5, 10, 20]}
+            label="records"
+          />
         </div>
       </section>
 

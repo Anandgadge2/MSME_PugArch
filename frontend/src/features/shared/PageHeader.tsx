@@ -30,18 +30,18 @@ interface Props {
 export function PageHeader({ eyebrow, title, description, actions, tricolor = true }: Props) {
     return (
         <div>
-            {tricolor && <div className="brand-tricolor-strip mb-3 rounded-full" />}
+            {tricolor && <div className="brand-tricolor-strip mb-2 sm:mb-3 rounded-full" />}
             <div className="page-header">
                 <div className="min-w-0">
                     {eyebrow && (
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{eyebrow}</p>
+                        <p className="text-[9px] sm:text-[10px] lg:text-xs font-black uppercase tracking-widest text-[#12335f]">{eyebrow}</p>
                     )}
-                    <h1 className="text-2xl font-black tracking-tight text-slate-950 text-wrap-anywhere">{title}</h1>
+                    <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-black tracking-tight text-slate-950 text-wrap-anywhere">{title}</h1>
                     {description && (
-                        <p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500 text-wrap-anywhere">{description}</p>
+                        <p className="mt-1 max-w-3xl text-[10px] sm:text-xs lg:text-sm font-semibold text-slate-500 text-wrap-anywhere">{description}</p>
                     )}
                 </div>
-                {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+                {actions && <div className="flex flex-wrap items-center gap-2 mt-3 sm:mt-0">{actions}</div>}
             </div>
         </div>
     );

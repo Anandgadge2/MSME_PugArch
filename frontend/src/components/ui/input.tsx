@@ -11,7 +11,7 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
     return (
       <div className="w-full min-w-0 space-y-1">
         {label && (
-          <label htmlFor={id} className="block break-words text-[11px] font-bold uppercase tracking-wide text-slate-500 leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70 sm:text-xs sm:tracking-wider">
+          <label htmlFor={id} className="block break-words text-[10px] font-bold sm:font-extrabold uppercase tracking-wide sm:tracking-widest text-slate-500 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 sm:text-[11px]">
             {label}
             {required && <span className="text-red-500 ml-1 font-bold">*</span>}
           </label>
@@ -36,13 +36,13 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors focus:outline-none"
+              className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors focus:outline-none"
             >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showPassword ? <EyeOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
             </button>
           )}
         </div>
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-[10px] sm:text-xs text-red-500">{error}</p>}
       </div>
     );
   }
@@ -55,7 +55,7 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
     return (
       <div className="w-full min-w-0 space-y-1">
         {label && (
-          <label htmlFor={id} className="block break-words text-[11px] font-bold uppercase tracking-wide text-slate-500 leading-snug sm:text-xs sm:tracking-wider">
+          <label htmlFor={id} className="block break-words text-[9px] font-extrabold uppercase tracking-widest text-slate-500 leading-none sm:text-[11px] sm:tracking-wide">
             {label}
             {required && <span className="text-red-500 ml-1 font-bold">*</span>}
           </label>
@@ -74,7 +74,7 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
         >
           {children}
         </select>
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-[10px] sm:text-xs text-red-500">{error}</p>}
       </div>
     );
   }

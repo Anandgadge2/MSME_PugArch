@@ -21,11 +21,38 @@ import { CategoryCatalogueStrip } from '../components/CategoryCatalogueStrip';
 import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { cn } from '../../../lib/utils';
+import { Skeleton } from '../../../components/ui/skeleton';
+import { ProductCartLoader } from '../../../components/loaders/ProductCartLoader';
+
+function ProductCardSkeleton() {
+    return (
+        <div className="flex flex-col h-[420px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="relative mb-4 h-48 w-full shrink-0 overflow-hidden rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center">
+                <Skeleton className="h-20 w-20 rounded-full" />
+            </div>
+            <div className="flex flex-1 flex-col space-y-4">
+                <div className="space-y-2.5">
+                    <Skeleton className="h-5 w-[85%]" />
+                    <Skeleton className="h-4 w-[60%]" />
+                </div>
+                <div className="space-y-2.5 mt-auto">
+                    <Skeleton className="h-6 w-[40%]" />
+                    <Skeleton className="h-3 w-[30%]" />
+                </div>
+                <div className="mt-auto flex items-center gap-2 pt-4 border-t border-slate-100">
+                    <Skeleton className="h-9 flex-1 rounded-xl" />
+                    <Skeleton className="h-9 w-12 rounded-xl shrink-0" />
+                </div>
+            </div>
+        </div>
+    );
+}
 
 type MarketplaceSortKey = 'name' | 'seller' | 'category' | 'price' | 'status';
 
 export default function MarketplaceProductList() {
-    const { user } = useAuth();
+    const { user, loading } = useAuth();
+    const canViewPrice = Boolean(user);
     const searchParams = useSearchParams();
     const pathname = usePathname() || '';
     const isDashboardMarketplace = pathname === '/buyer/marketplace' || pathname === '/seller/marketplace';
@@ -43,9 +70,13 @@ export default function MarketplaceProductList() {
     
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(initialCategoryIds);
     const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
+    
+    // Initialize sort unconditionally to preserve URL state during auth loading
     const [sort, setSort] = useState(searchParams?.get('sort') || 'popular');
     const [statusFilter, setStatusFilter] = useState('');
-    const [priceFilter, setPriceFilter] = useState('');
+    
+    // Initialize price/discount unconditionally
+    const [priceFilter, setPriceFilter] = useState(searchParams?.get('price') || '');
     const [verificationFilter, setVerificationFilter] = useState('');
     const [conditionFilter, setConditionFilter] = useState(searchParams?.get('condition') || '');
     const [pricingModelFilter, setPricingModelFilter] = useState(searchParams?.get('pricingModel') || '');
@@ -122,6 +153,32 @@ export default function MarketplaceProductList() {
         const queryString = params.toString();
         router.replace(queryString ? `${pathname}?${queryString}` : pathname, { scroll: false });
     };
+
+    // Auto-reset protected filters if permission changes (e.g. logout) or unauthenticated
+    useEffect(() => {
+        if (loading) return; // wait until auth state is resolved
+
+        if (!canViewPrice) {
+            let changed = false;
+            let nextSort = sort;
+            if (['price_asc', 'price_desc', 'discount'].includes(sort)) {
+                setSort('popular');
+                nextSort = 'popular';
+                changed = true;
+            }
+            if (priceFilter) {
+                setPriceFilter('');
+                changed = true;
+            }
+            if (discountFilter) {
+                setDiscountFilter('');
+                changed = true;
+            }
+            if (changed) {
+                syncUrl({ sort: nextSort, price: '', discount: '' });
+            }
+        }
+    }, [canViewPrice, loading, sort, priceFilter, discountFilter]);
 
     const firstCatIdForApi = selectedCategoryIds.length === 1 ? selectedCategoryIds[0] : undefined;
 
@@ -613,29 +670,31 @@ export default function MarketplaceProductList() {
             )}
 
             {/* Price Range Filter */}
-            <div className="border-t border-slate-100 pt-4">
-                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2.5">Price Range</h4>
-                <div className="space-y-1.5 text-xs font-semibold text-slate-700">
-                    {[
-                        { label: 'All Prices', val: '' },
-                        { label: 'Under ₹1,000', val: 'UNDER_1K' },
-                        { label: '₹1,000 – ₹5,000', val: '1K_5K' },
-                        { label: '₹5,000 – ₹20,000', val: '5K_20K' },
-                        { label: 'Above ₹20,000', val: 'ABOVE_20K' }
-                    ].map(p => (
-                        <label key={p.val} className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
-                            <input
-                                type="radio"
-                                name="priceRange"
-                                checked={priceFilter === p.val}
-                                onChange={() => { setPriceFilter(p.val); setPage(1); }}
-                                className="text-blue-600 focus:ring-blue-500"
-                            />
-                            <span>{p.label}</span>
-                        </label>
-                    ))}
+            {canViewPrice && (
+                <div className="border-t border-slate-100 pt-4">
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2.5">Price Range</h4>
+                    <div className="space-y-1.5 text-xs font-semibold text-slate-700">
+                        {[
+                            { label: 'All Prices', val: '' },
+                            { label: 'Under ₹1,000', val: 'UNDER_1K' },
+                            { label: '₹1,000 – ₹5,000', val: '1K_5K' },
+                            { label: '₹5,000 – ₹20,000', val: '5K_20K' },
+                            { label: 'Above ₹20,000', val: 'ABOVE_20K' }
+                        ].map(p => (
+                            <label key={p.val} className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
+                                <input
+                                    type="radio"
+                                    name="priceRange"
+                                    checked={priceFilter === p.val}
+                                    onChange={() => { setPriceFilter(p.val); setPage(1); syncUrl({ price: p.val, page: 1 }); }}
+                                    className="text-blue-600 focus:ring-blue-500"
+                                />
+                                <span>{p.label}</span>
+                            </label>
+                        ))}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Verified Sellers & Brands (with quick search) */}
             <div className="border-t border-slate-100 pt-4">
@@ -739,23 +798,25 @@ export default function MarketplaceProductList() {
             </div>
 
             {/* Offers & Discounts */}
-            <div className="border-t border-slate-100 pt-4">
-                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2.5">Offers &amp; Deals</h4>
-                <label className="flex items-center gap-2 cursor-pointer hover:text-blue-600 text-xs font-semibold text-slate-700">
-                    <input
-                        type="checkbox"
-                        checked={discountFilter === 'active'}
-                        onChange={e => {
-                            const next = e.target.checked ? 'active' : '';
-                            setDiscountFilter(next);
-                            setPage(1);
-                            syncUrl({ discount: next, page: 1 });
-                        }}
-                        className="rounded border-slate-300 text-orange-500 focus:ring-orange-400"
-                    />
-                    <span>Active Promotional Discounts</span>
-                </label>
-            </div>
+            {canViewPrice && (
+                <div className="border-t border-slate-100 pt-4">
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2.5">Offers &amp; Deals</h4>
+                    <label className="flex items-center gap-2 cursor-pointer hover:text-blue-600 text-xs font-semibold text-slate-700">
+                        <input
+                            type="checkbox"
+                            checked={discountFilter === 'active'}
+                            onChange={e => {
+                                const next = e.target.checked ? 'active' : '';
+                                setDiscountFilter(next);
+                                setPage(1);
+                                syncUrl({ discount: next, page: 1 });
+                            }}
+                            className="rounded border-slate-300 text-orange-500 focus:ring-orange-400"
+                        />
+                        <span>Active Promotional Discounts</span>
+                    </label>
+                </div>
+            )}
         </>
     );
 
@@ -835,10 +896,10 @@ export default function MarketplaceProductList() {
                                     className="bg-transparent font-black text-[#0b2447] outline-none cursor-pointer pr-1"
                                 >
                                     <option value="popular">Popularity</option>
-                                    <option value="price_asc">Price: Low to High</option>
-                                    <option value="price_desc">Price: High to Low</option>
+                                    {canViewPrice && <option value="price_asc">Price: Low to High</option>}
+                                    {canViewPrice && <option value="price_desc">Price: High to Low</option>}
                                     <option value="rating">Customer Rating</option>
-                                    <option value="discount">Discount: High to Low</option>
+                                    {canViewPrice && <option value="discount">Discount: High to Low</option>}
                                     <option value="latest">Newest</option>
                                 </select>
                             </div>
@@ -1059,10 +1120,8 @@ export default function MarketplaceProductList() {
                             )}
                             
                             {(isLoading || !hasLoadedList) && items.length === 0 ? (
-                                <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                                        <div key={i} className="h-96 rounded-2xl bg-white border border-slate-200 p-4 animate-pulse" />
-                                    ))}
+                                <div className="flex w-full items-center justify-center py-24">
+                                    <ProductCartLoader />
                                 </div>
                             ) : sortedItems.length === 0 ? (
                                 <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm">

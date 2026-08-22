@@ -379,7 +379,8 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
                         </div>
                     </div>
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[900px] border-collapse text-left text-xs">
+                        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[900px] border-collapse text-left text-xs">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50 font-black text-slate-600 uppercase tracking-wider">
                                     <th className="p-4 w-[100px]">Rank</th>
@@ -483,6 +484,7 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
                                 })}
                             </tbody>
                         </table>
+</div>
                     </div>
                 </div>
             ) : (
@@ -496,7 +498,8 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
                 ) : (
                     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[1000px] border-collapse text-left text-xs">
+                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[1000px] border-collapse text-left text-xs">
                                 <thead>
                                     <tr className="border-b border-slate-200 bg-slate-50 font-black text-slate-600 uppercase tracking-wider">
                                         <th className="p-4 border-r border-slate-200 w-[200px]">Comparison Parameter</th>
@@ -730,6 +733,7 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
                                     )}
                                 </tbody>
                             </table>
+</div>
                         </div>
                     </div>
                 )

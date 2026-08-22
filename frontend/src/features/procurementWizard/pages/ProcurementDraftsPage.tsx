@@ -43,7 +43,9 @@ import { ProcurementDetailUnifiedView } from '../../rfq/components/ProcurementDe
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
+import { KpiCard } from '../../shared/KpiCard';
 import { formatDate } from '../../shared/format';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 
 
@@ -342,12 +344,18 @@ export default function ProcurementDraftsPage() {
       if (d.isLocal) local++;
       else server++;
 
-      const slug = d.methodSlug?.toLowerCase() || '';
-      if (slug === 'direct-purchase') {
+      const slug = (d.methodSlug || d.canonicalMethod || '').toLowerCase().replace(/_/g, '-');
+      if (slug.includes('direct') || slug.includes('cart') || slug.includes('checkout')) {
         directPurchase++;
-      } else if (slug === 'rfq' || slug === 'l1-comparison') {
+      } else if (slug === 'rfq' || slug.includes('rfq') || slug === 'l1-comparison') {
         l1Rfq++;
-      } else if (['tender', 'pac', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(slug)) {
+      } else if (
+        slug.includes('tender') ||
+        slug.includes('rfp') ||
+        slug.includes('auction') ||
+        slug.includes('rate-contract') ||
+        ['tender', 'pac', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(slug)
+      ) {
         tenderBid++;
       }
 
@@ -374,11 +382,26 @@ export default function ProcurementDraftsPage() {
       } else if (activeKpi === 'server') {
         list = list.filter(d => !d.isLocal);
       } else if (activeKpi === 'direct-purchase') {
-        list = list.filter(d => d.methodSlug === 'direct-purchase');
+        list = list.filter(d => {
+          const slug = (d.methodSlug || d.canonicalMethod || '').toLowerCase().replace(/_/g, '-');
+          return slug.includes('direct') || slug.includes('cart') || slug.includes('checkout');
+        });
       } else if (activeKpi === 'l1-rfq') {
-        list = list.filter(d => d.methodSlug === 'rfq' || d.methodSlug === 'l1-comparison');
+        list = list.filter(d => {
+          const slug = (d.methodSlug || d.canonicalMethod || '').toLowerCase().replace(/_/g, '-');
+          return slug === 'rfq' || slug.includes('rfq') || slug === 'l1-comparison';
+        });
       } else if (activeKpi === 'tender-bid') {
-        list = list.filter(d => ['tender', 'pac', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(d.methodSlug));
+        list = list.filter(d => {
+          const slug = (d.methodSlug || d.canonicalMethod || '').toLowerCase().replace(/_/g, '-');
+          return (
+            slug.includes('tender') ||
+            slug.includes('rfp') ||
+            slug.includes('auction') ||
+            slug.includes('rate-contract') ||
+            ['tender', 'pac', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(slug)
+          );
+        });
       }
     }
 
@@ -556,7 +579,7 @@ export default function ProcurementDraftsPage() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard
           label="Total Drafts"
           value={kpiData.total}
@@ -599,62 +622,66 @@ export default function ProcurementDraftsPage() {
       </div>
 
       {/* Inline Filters Bar */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs space-y-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between">
-          <div className="relative min-w-0 flex-1 max-w-md">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search drafts by title, category, item..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 justify-end">
-            <select
-              value={methodFilter}
-              onChange={e => setMethodFilter(e.target.value)}
-              className="h-10 min-w-[150px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
-            >
-              <option value="">All Types</option>
-              <option value="direct-purchase">Cart Checkout</option>
-              <option value="rfq">RFQ</option>
-              <option value="tender">OpenTender</option>
-              <option value="reverse-auction">Reverse Auction</option>
-              <option value="rate-contract">Rate Contract</option>
-              <option value="limited-tender">Limited Tender</option>
-              <option value="repeat-order">Repeat order</option>
-            </select>
-
-            <select
-              value={sourceFilter}
-              onChange={e => setSourceFilter(e.target.value)}
-              className="h-10 min-w-[130px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-2xs cursor-pointer"
-            >
-              <option value="">All Sources</option>
-              <option value="local">Local Drafts</option>
-              <option value="server">Server Drafts</option>
-            </select>
-
-            {(searchQuery || methodFilter || sourceFilter || activeKpi) && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setSearchQuery('');
-                  setMethodFilter('');
-                  setSourceFilter('');
-                  setActiveKpi(null);
-                }}
-                className="h-10 rounded-xl border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer shadow-2xs"
+      <div className="border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+        <ResponsiveFilterBar
+          activeFilterCount={(methodFilter ? 1 : 0) + (sourceFilter ? 1 : 0) + (activeKpi ? 1 : 0)}
+          searchInput={
+            <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search drafts by title, category, item..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+              />
+            </div>
+          }
+          filters={
+            <>
+              <select
+                value={methodFilter}
+                onChange={e => setMethodFilter(e.target.value)}
+                className="h-10 min-w-[160px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
               >
-                Reset Filters
-              </Button>
-            )}
-          </div>
-        </div>
+                <option value="">All Types</option>
+                <option value="direct-purchase">Cart Checkout</option>
+                <option value="rfq">RFQ</option>
+                <option value="tender">OpenTender</option>
+                <option value="reverse-auction">Reverse Auction</option>
+                <option value="rate-contract">Rate Contract</option>
+                <option value="limited-tender">Limited Tender</option>
+                <option value="repeat-order">Repeat order</option>
+              </select>
+
+              <select
+                value={sourceFilter}
+                onChange={e => setSourceFilter(e.target.value)}
+                className="h-10 min-w-[140px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
+              >
+                <option value="">All Sources</option>
+                <option value="local">Local Drafts</option>
+                <option value="server">Server Drafts</option>
+              </select>
+
+              {(searchQuery || methodFilter || sourceFilter || activeKpi) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setMethodFilter('');
+                    setSourceFilter('');
+                    setActiveKpi(null);
+                  }}
+                  className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50"
+                >
+                  Clear
+                </Button>
+              )}
+            </>
+          }
+        />
 
         {/* Active chips */}
         {(searchQuery || methodFilter || sourceFilter || activeKpi) && (
@@ -697,7 +724,8 @@ export default function ProcurementDraftsPage() {
           {viewMode === 'list' && (
             <section className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
               <div className="overflow-x-auto bg-slate-50/70 p-2">
-                <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left text-sm">
+                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+                  <table data-ux-wrapped="true" className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left text-sm">
                   <thead>
                     <tr>
                       <th className="px-4 py-3 text-[10px] font-extrabold uppercase tracking-wide text-slate-500 w-[60px] text-center">Sr. No</th>
@@ -793,6 +821,7 @@ export default function ProcurementDraftsPage() {
                     })}
                   </tbody>
                 </table>
+</div>
               </div>
             </section>
           )}
@@ -1020,7 +1049,6 @@ function DraftDetailDialog({
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
@@ -1031,7 +1059,7 @@ function DraftDetailDialog({
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-6 py-4">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-2.5 sm:gap-3 border-b border-slate-200 bg-white px-6 py-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
               {d.isLocal ? (
@@ -1096,67 +1124,6 @@ function DraftDetailDialog({
   );
 }
 
-/* ── Sub-components ── */
-
-interface KpiCardProps {
-  label: string;
-  value: string | number;
-  icon: any;
-  onClick?: () => void;
-  active?: boolean;
-  color?: 'blue' | 'green' | 'red' | 'purple' | 'amber' | 'indigo' | 'slate';
-}
-
-function KpiCard({ label, value, icon: Icon, onClick, active, color = 'slate' }: KpiCardProps) {
-  const colorMap = {
-    blue: 'border-blue-100 bg-blue-50/50 hover:bg-blue-50 text-blue-700 hover:border-blue-300 ring-blue-600/10',
-    green: 'border-green-100 bg-green-50/50 hover:bg-green-50 text-green-700 hover:border-green-300 ring-green-600/10',
-    red: 'border-red-100 bg-red-50/50 hover:bg-red-50 text-red-700 hover:border-red-300 ring-red-600/10',
-    purple: 'border-purple-100 bg-purple-50/50 hover:bg-purple-50 text-purple-700 hover:border-purple-300 ring-purple-600/10',
-    amber: 'border-amber-100 bg-amber-50/50 hover:bg-amber-50 text-amber-700 hover:border-amber-300 ring-amber-600/10',
-    indigo: 'border-indigo-100 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 hover:border-indigo-300 ring-indigo-600/10',
-    slate: 'border-slate-100 bg-slate-50/50 hover:bg-slate-50 text-slate-700 hover:border-slate-300 ring-slate-600/10',
-  };
-
-  const activeColorMap = {
-    blue: 'border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-500/20',
-    green: 'border-green-500 bg-green-50 text-green-800 ring-2 ring-green-500/20',
-    red: 'border-red-500 bg-red-50 text-red-800 ring-2 ring-red-500/20',
-    purple: 'border-purple-500 bg-purple-50 text-purple-800 ring-2 ring-purple-500/20',
-    amber: 'border-amber-500 bg-amber-50 text-amber-800 ring-2 ring-amber-500/20',
-    indigo: 'border-indigo-500 bg-indigo-50 text-indigo-800 ring-2 ring-indigo-500/20',
-    slate: 'border-slate-500 bg-slate-50 text-slate-800 ring-2 ring-slate-500/20',
-  };
-
-  const iconBgMap = {
-    blue: 'bg-blue-500 text-white',
-    green: 'bg-green-500 text-white',
-    red: 'bg-red-500 text-white',
-    purple: 'bg-purple-500 text-white',
-    amber: 'bg-amber-500 text-white',
-    indigo: 'bg-indigo-500 text-white',
-    slate: 'bg-slate-500 text-white',
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'w-full text-left rounded-2xl border p-4 shadow-sm transition-all duration-300 flex items-center justify-between',
-        active ? activeColorMap[color] : colorMap[color]
-      )}
-    >
-      <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{label}</p>
-        <p className="mt-1 text-2xl font-black tracking-tight leading-none">{value}</p>
-      </div>
-      <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm transition-transform duration-300 group-hover:scale-110', iconBgMap[color])}>
-        <Icon className="h-4.5 w-4.5" />
-      </div>
-    </button>
-  );
-}
 
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (

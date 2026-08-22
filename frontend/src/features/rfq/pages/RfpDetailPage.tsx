@@ -690,19 +690,17 @@ function MetricCard({
   icon: IconComponent;
   tone: Tone;
 }) {
-  const styles = toneStyles[tone];
+  const styles = toneStyles[tone] || toneStyles.slate;
 
   return (
-    <article className={cn('rounded-lg border p-3 shadow-xs transition-all', styles.card)}>
-      <div className="flex items-center gap-2.5">
-        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', styles.icon)}>
-          <Icon className="h-4 w-4" />
+    <article className={cn('rounded-xl border p-3.5 shadow-2xs flex flex-col justify-between transition-all hover:shadow-xs', styles.card)}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 truncate">{label}</p>
+        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-2xs', styles.icon)}>
+          <Icon className="h-3.5 w-3.5" />
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 truncate">{label}</p>
-          <div className={cn('mt-0.5 truncate text-sm font-black leading-tight', styles.text)}>{value || 'N/A'}</div>
-        </div>
       </div>
+      <div className={cn('mt-2 text-sm font-black tracking-tight break-words leading-tight', styles.text)}>{value}</div>
     </article>
   );
 }

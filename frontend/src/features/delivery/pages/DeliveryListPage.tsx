@@ -46,6 +46,7 @@ import { DELIVERY_STATUS_LABELS } from '../status';
 import { useDeliveryList, useDeliveryReport } from '../hooks';
 import type { DeliveryDetailDto, DeliveryStatus } from '../types';
 import { DeliveryDetailPage } from './DeliveryDetailPage';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import GrnListPage from '../../grn/pages/GrnListPage';
 
 const STATUS_OPTIONS = Object.keys(DELIVERY_STATUS_LABELS) as DeliveryStatus[];
@@ -297,42 +298,48 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
             />
           )}
 
-          {/* Inline Filters Bar */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-            <div className="relative min-w-0 flex-1 max-w-md">
-              <Search className="pointer-events-none absolute inset-y-0 left-3 h-full w-4 text-slate-400" />
-              <Input
-                value={search}
-                onChange={event => setSearch(event.target.value)}
-                placeholder="Search PO, vendor, tracking number..."
-                className="pl-10 bg-white"
-              />
-            </div>
+          {/* Responsive Filter Bar */}
+          <ResponsiveFilterBar
+            activeFilterCount={statusFilter !== '' ? 1 : 0}
+            searchInput={
+              <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+                <Search className="pointer-events-none absolute inset-y-0 left-3 h-full w-4 text-slate-400" />
+                <Input
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  placeholder="Search PO, vendor, tracking number..."
+                  className="pl-10 bg-white"
+                />
+              </div>
+            }
+            filters={
+              <>
+                <Select
+                  value={statusFilter}
+                  onChange={event => setStatusFilter(event.target.value as DeliveryStatus | '')}
+                  className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full sm:w-auto"
+                >
+                  <option value="">All statuses</option>
+                  {STATUS_OPTIONS.map(status => (
+                    <option key={status} value={status}>{DELIVERY_STATUS_LABELS[status]}</option>
+                  ))}
+                </Select>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Select
-                value={statusFilter}
-                onChange={event => setStatusFilter(event.target.value as DeliveryStatus | '')}
-                className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-              >
-                <option value="">All statuses</option>
-                {STATUS_OPTIONS.map(status => (
-                  <option key={status} value={status}>{DELIVERY_STATUS_LABELS[status]}</option>
-                ))}
-              </Select>
-
-              <Button
-                variant="outline"
-                className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm"
-                onClick={() => {
-                  setSearch('');
-                  setStatusFilter('');
-                }}
-              >
-                Reset
-              </Button>
-            </div>
-          </div>
+                {(search || statusFilter) && (
+                  <Button
+                    variant="outline"
+                    className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm"
+                    onClick={() => {
+                      setSearch('');
+                      setStatusFilter('');
+                    }}
+                  >
+                    Reset
+                  </Button>
+                )}
+              </>
+            }
+          />
 
           {isInitialLoading ? (
             viewMode === 'list' ? <TableSkeleton rows={6} cols={8} /> : <ListSkeleton rows={4} />
@@ -550,8 +557,8 @@ function GridView({ records, startIndex, page, pageSize, total, onSelect, onPage
             className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md justify-between"
           >
             <div className="w-full">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3 min-w-0">
+              <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+                <div className="flex items-start gap-2.5 sm:gap-3 min-w-0">
                   <span className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
                     {String(startIndex + index + 1).padStart(2, '0')}
                   </span>

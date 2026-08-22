@@ -5,6 +5,7 @@ import { api, resolveMediaUrl } from "../lib/api";
 import { formatDate, formatDateTime } from "../features/shared/format";
 import { downloadCsv } from "../features/shared/exportUtils";
 import { Button } from "../components/ui/button";
+import { ResponsiveFilterBar } from "../components/ui/ResponsiveFilterBar";
 import { Pagination } from "../features/shared/Pagination";
 import { useResponsiveViewMode } from "../features/shared/hooks";
 import { ViewModeToggle } from "../features/shared/ViewModeToggle";
@@ -275,7 +276,6 @@ export default function AdminOnboarding() {
 
   // View / Toolbar UI state
   const [viewMode, setViewMode] = useResponsiveViewMode();
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const scrutinyModalScrollRef = useRef<HTMLDivElement | null>(null);
 
   // 1. Fetch KPI stats (shares key and cache with dashboard/MISReports)
@@ -1439,13 +1439,14 @@ export default function AdminOnboarding() {
                     )}
                   </p>
 
-                  {/* Toolbar — desktop: [search 80%] [status] [progress] [sort] [reset] [view-toggle].
-                      Mobile: only [search] + [filters button]; tapping the button reveals a drawer
-                      with every filter and a Reset Filters action. */}
-                  <div className="space-y-3">
-                    {/* Desktop layout: single row with search ~80% width */}
-                    <div className="hidden md:grid items-stretch gap-2 md:grid-cols-[minmax(0,4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
-                      <div className="relative min-w-0">
+                  {/* Toolbar — search + filters share one bar. On mobile the
+                      search box and a compact "Filters" button sit side-by-side;
+                      tapping the button reveals every filter below. */}
+                  <ResponsiveFilterBar
+                    className="border-none"
+                    activeFilterCount={[statusFilter !== "all", progressFilter !== "all", sortBy !== "newest"].filter(Boolean).length}
+                    searchInput={
+                      <div className="relative min-w-0 w-full sm:flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <input
                           placeholder="Search by company, PAN, GST, state, or applicant name..."
@@ -1455,150 +1456,63 @@ export default function AdminOnboarding() {
                           aria-label="Search applications"
                         />
                       </div>
-                      <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        aria-label="Status filter"
-                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="all">All Status</option>
-                        <option value="pending">Pending / Review</option>
-                        <option value="approved">Approved</option>
-                        <option value="resubmission">Correction Required</option>
-                        <option value="rejected">Rejected</option>
-                      </select>
-                      <select
-                        value={progressFilter}
-                        onChange={(e) => setProgressFilter(e.target.value)}
-                        aria-label="Progress filter"
-                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="all">All Progress</option>
-                        <option value="not_started">0% Verified</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="complete">100% Verified</option>
-                      </select>
-                      <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        aria-label="Sort"
-                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
-                        <option value="progress">Progress High</option>
-                        <option value="entity">Entity A-Z</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearchTerm("");
-                          setStatusFilter("all");
-                          setProgressFilter("all");
-                          setSortBy("newest");
-                        }}
-                        className="h-11 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 hover:text-[#12335f] shrink-0"
-                        title="Reset filters"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        <span className="hidden lg:inline">Reset</span>
-                      </button>
-                      {/* List / Grid view toggle sits to the RIGHT of Reset on desktop */}
-                      <div className="inline-flex shrink-0">
-                        <ViewModeToggle value={viewMode} onChange={setViewMode} />
-                      </div>
-                    </div>
-
-                    {/* Mobile layout: search on top, single Filters button below */}
-                    <div className="md:hidden space-y-2">
-                      <div className="relative min-w-0">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <input
-                          placeholder="Search applications..."
-                          className="w-full pl-10 pr-4 h-11 rounded-xl border border-slate-200 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          aria-label="Search applications"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowMobileFilters((v) => !v)}
-                        aria-expanded={showMobileFilters}
-                        aria-controls="admin-onboarding-mobile-filters"
-                        className={cn(
-                          "h-11 w-full inline-flex items-center justify-center gap-2 rounded-xl border bg-white px-3 text-[11px] font-black uppercase tracking-wide transition",
-                          showMobileFilters
-                            ? "border-[#12335f] text-[#12335f]"
-                            : "border-slate-200 text-slate-600 hover:border-[#12335f]/40 hover:text-[#12335f]"
-                        )}
-                      >
-                        <Filter className="h-3.5 w-3.5" />
-                        Filters
-                        {(statusFilter !== "all" || progressFilter !== "all" || sortBy !== "newest") && (
-                          <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#12335f] px-1.5 text-[9px] font-black text-white">
-                            {[statusFilter !== "all", progressFilter !== "all", sortBy !== "newest"].filter(Boolean).length}
-                          </span>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Mobile filters drawer — only renders on mobile */}
-                  {showMobileFilters && (
-                    <div
-                      id="admin-onboarding-mobile-filters"
-                      className="md:hidden grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200"
-                    >
-                      <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        aria-label="Status filter"
-                        className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="all">All Status</option>
-                        <option value="pending">Pending / Review</option>
-                        <option value="approved">Approved</option>
-                        <option value="resubmission">Correction Required</option>
-                        <option value="rejected">Rejected</option>
-                      </select>
-                      <select
-                        value={progressFilter}
-                        onChange={(e) => setProgressFilter(e.target.value)}
-                        aria-label="Progress filter"
-                        className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="all">All Progress</option>
-                        <option value="not_started">0% Verified</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="complete">100% Verified</option>
-                      </select>
-                      <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        aria-label="Sort"
-                        className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
-                        <option value="progress">Progress High</option>
-                        <option value="entity">Entity A-Z</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearchTerm("");
-                          setStatusFilter("all");
-                          setProgressFilter("all");
-                          setSortBy("newest");
-                          setShowMobileFilters(false);
-                        }}
-                        className="h-11 inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" /> Reset Filters
-                      </button>
-                    </div>
-                  )}
+                    }
+                    filters={
+                      <>
+                        <select
+                          value={statusFilter}
+                          onChange={(e) => setStatusFilter(e.target.value)}
+                          aria-label="Status filter"
+                          className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
+                        >
+                          <option value="all">All Status</option>
+                          <option value="pending">Pending / Review</option>
+                          <option value="approved">Approved</option>
+                          <option value="resubmission">Correction Required</option>
+                          <option value="rejected">Rejected</option>
+                        </select>
+                        <select
+                          value={progressFilter}
+                          onChange={(e) => setProgressFilter(e.target.value)}
+                          aria-label="Progress filter"
+                          className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
+                        >
+                          <option value="all">All Progress</option>
+                          <option value="not_started">0% Verified</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="complete">100% Verified</option>
+                        </select>
+                        <select
+                          value={sortBy}
+                          onChange={(e) => setSortBy(e.target.value)}
+                          aria-label="Sort"
+                          className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
+                        >
+                          <option value="newest">Newest First</option>
+                          <option value="oldest">Oldest First</option>
+                          <option value="progress">Progress High</option>
+                          <option value="entity">Entity A-Z</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchTerm("");
+                            setStatusFilter("all");
+                            setProgressFilter("all");
+                            setSortBy("newest");
+                          }}
+                          className="h-11 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 hover:text-[#12335f] shrink-0"
+                          title="Reset filters"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          <span className="hidden lg:inline">Reset</span>
+                        </button>
+                      </>
+                    }
+                    endContent={
+                      <ViewModeToggle className="flex justify-end" value={viewMode} onChange={setViewMode} />
+                    }
+                  />
 
                   {adminView !== "applications" && (
                     <div className="flex flex-wrap gap-2">
@@ -1611,7 +1525,7 @@ export default function AdminOnboarding() {
 
                 {isLoading ? (
                   <div className="p-8 space-y-4">
-                    <div className="flex items-center justify-center gap-3 py-6 bg-slate-50/80 rounded-xl border border-slate-100 shadow-2xs">
+                    <div className="flex items-center justify-center gap-2.5 sm:gap-3 py-6 bg-slate-50/80 rounded-xl border border-slate-100 shadow-2xs">
                       <Loader2 className="h-5 w-5 animate-spin text-[#12335f]" />
                       <span className="text-xs font-black text-[#12335f] uppercase tracking-wider">
                         Loading {activeTab === "shg" ? "SHG" : activeTab} onboarding records...
@@ -1634,12 +1548,12 @@ export default function AdminOnboarding() {
                   </div>
                 ) : (
                   <>
-                    {/* Responsive Table for Desktop (List view) */}
+                    {/* Responsive Table (List view) */}
                     <div className={cn(
-                      "overflow-x-auto no-scrollbar",
-                      viewMode === "list" ? "hidden md:block" : "hidden"
+                      "overflow-x-auto no-scrollbar w-full max-w-full",
+                      viewMode === "list" ? "block" : "hidden"
                     )}>
-                      <Table>
+                      <Table className="min-w-[850px]">
                         <TableHeader className="bg-slate-50/80 border-y border-slate-100">
                           <TableRow className="hover:bg-transparent">
                             <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-6 py-4">
@@ -1802,7 +1716,7 @@ export default function AdminOnboarding() {
                                 </div>
 
                                 {/* Identity - Avatar & Names */}
-                                <div className="flex items-center gap-3 min-w-0">
+                                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                                   <div className={cn(
                                     "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-md text-sm font-extrabold text-white transition-all duration-300 group-hover:scale-105",
                                     getAvatarGradient(item.onboardingStatus)
@@ -1909,143 +1823,145 @@ export default function AdminOnboarding() {
                     )}
 
                     {/* Responsive Card Grid for Mobile */}
-                    <div className="md:hidden grid grid-cols-1 gap-4 p-4">
-                      {pagedCurrentData.map((item, index) => {
-                        const getAvatarGradient = (status: string) => {
-                          switch (status) {
-                            case "approved_for_procurement":
-                              return "bg-gradient-to-br from-emerald-600 to-green-500 shadow-emerald-500/10";
-                            case "rejected":
-                              return "bg-gradient-to-br from-red-600 to-rose-500 shadow-red-500/10";
-                            case "resubmission_required":
-                              return "bg-gradient-to-br from-amber-500 to-orange-400 shadow-amber-500/10";
-                            default:
-                              return "bg-gradient-to-br from-[#12335f] to-[#25528c] shadow-[#12335f]/10";
-                          }
-                        };
+                    {viewMode === "grid" && (
+                      <div className="md:hidden grid grid-cols-1 gap-4 p-4">
+                        {pagedCurrentData.map((item, index) => {
+                          const getAvatarGradient = (status: string) => {
+                            switch (status) {
+                              case "approved_for_procurement":
+                                return "bg-gradient-to-br from-emerald-600 to-green-500 shadow-emerald-500/10";
+                              case "rejected":
+                                return "bg-gradient-to-br from-red-600 to-rose-500 shadow-red-500/10";
+                              case "resubmission_required":
+                                return "bg-gradient-to-br from-amber-500 to-orange-400 shadow-amber-500/10";
+                              default:
+                                return "bg-gradient-to-br from-[#12335f] to-[#25528c] shadow-[#12335f]/10";
+                            }
+                          };
 
-                        return (
-                          <div
-                            key={item._id}
-                            onClick={() => void openItemForReview(item)}
-                            className="group cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md active:bg-slate-50 transition-all flex flex-col justify-between min-w-0"
-                          >
-                            <div>
-                              {/* Top Row - Meta & Badge */}
-                              <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5 mb-2.5">
-                                <div className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400">
-                                  {getRoleLabel(item)}
-                                  {" · #"}
-                                  {String((currentPage - 1) * pageSize + index + 1).padStart(2, "0")}
+                          return (
+                            <div
+                              key={item._id}
+                              onClick={() => void openItemForReview(item)}
+                              className="group cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm active:bg-slate-50 transition-all flex flex-col justify-between min-w-0"
+                            >
+                              <div>
+                                {/* Top Row - Meta & Badge */}
+                                <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5 mb-2.5">
+                                  <div className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400">
+                                    {getRoleLabel(item)}
+                                    {" · #"}
+                                    {String((currentPage - 1) * pageSize + index + 1).padStart(2, "0")}
+                                  </div>
+                                  <div className="shrink-0 scale-90 origin-right">
+                                    {getStatusBadge(item.onboardingStatus)}
+                                  </div>
                                 </div>
-                                <div className="shrink-0 scale-90 origin-right">
-                                  {getStatusBadge(item.onboardingStatus)}
+
+                                {/* Identity - Avatar & Names */}
+                                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                                  <div className={cn(
+                                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-md text-xs font-extrabold text-white",
+                                    getAvatarGradient(item.onboardingStatus)
+                                  )}>
+                                    {String(item.name || "?").charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-bold text-slate-800 text-xs tracking-tight line-clamp-2">
+                                      {item.name}
+                                    </div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-slate-500 line-clamp-2" title={getEntityName(item) || undefined}>
+                                      {getEntityName(item) || (
+                                        <span className="font-medium italic text-slate-400">Onboarding in progress</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Metadata Grid */}
+                                <div className="mt-3 grid grid-cols-2 gap-x-2.5 gap-y-1.5 border-t border-slate-100 pt-2.5">
+                                  <div className="flex items-start gap-1.5 min-w-0">
+                                    <MapPin className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
+                                    <div className="min-w-0">
+                                      <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Location</p>
+                                      <p className="text-[10px] font-semibold text-slate-700 truncate" title={getEntityLocation(item) || undefined}>
+                                        {getEntityLocation(item) || "—"}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-start gap-1.5 min-w-0">
+                                    <Briefcase className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
+                                    <div className="min-w-0">
+                                      <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Category</p>
+                                      <p className="text-[10px] font-semibold text-slate-700 truncate" title={item.role === "buyer" ? getDisplayText(item.profile?.annualBudget, "Budget pending") : getPrimaryCategory(item)}>
+                                        {item.role === "buyer"
+                                          ? getDisplayText(item.profile?.annualBudget, "Budget pending")
+                                          : getPrimaryCategory(item)}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-start gap-1.5 min-w-0">
+                                    <Clock className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
+                                    <div className="min-w-0">
+                                      <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Submitted</p>
+                                      <p className="text-[10px] font-semibold text-slate-700 font-mono">
+                                        {formatDateTime(item.createdAt)}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-start gap-1.5 min-w-0">
+                                    <ShieldCheck className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
+                                    <div className="min-w-0">
+                                      <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Verified</p>
+                                      <p className="text-[10px] font-bold text-[#12335f]">
+                                        {getProgress(item)}%
+                                      </p>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
 
-                              {/* Identity - Avatar & Names */}
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className={cn(
-                                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-md text-xs font-extrabold text-white",
-                                  getAvatarGradient(item.onboardingStatus)
-                                )}>
-                                  {String(item.name || "?").charAt(0).toUpperCase()}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="font-bold text-slate-800 text-xs tracking-tight line-clamp-2">
-                                    {item.name}
-                                  </div>
-                                  <div className="mt-0.5 text-[11px] font-semibold text-slate-500 line-clamp-2">
-                                    {getEntityName(item) || (
-                                      <span className="font-medium italic text-slate-400">Onboarding in progress</span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Metadata Grid */}
-                              <div className="mt-3.5 grid grid-cols-2 gap-x-2.5 gap-y-1.5 border-t border-slate-100 pt-3">
-                                <div className="flex items-start gap-1.5 min-w-0">
-                                  <MapPin className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
-                                  <div className="min-w-0">
-                                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Location</p>
-                                    <p className="text-[10px] font-semibold text-slate-700 truncate">
-                                      {getEntityLocation(item) || "—"}
-                                    </p>
-                                  </div>
+                              {/* Progress bar */}
+                              <div className="mt-3.5">
+                                <div className="h-1 overflow-hidden rounded-full bg-slate-100">
+                                  <div
+                                    className="h-full rounded-full bg-[#12335f]"
+                                    style={{ width: `${getProgress(item)}%` }}
+                                  />
                                 </div>
 
-                                <div className="flex items-start gap-1.5 min-w-0">
-                                  <Briefcase className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
-                                  <div className="min-w-0">
-                                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Category</p>
-                                    <p className="text-[10px] font-semibold text-slate-700 truncate">
-                                      {item.role === "buyer"
-                                        ? getDisplayText(item.profile?.annualBudget, "Budget pending")
-                                        : getPrimaryCategory(item)}
-                                    </p>
+                                {/* Footer - Section Dots & CTA */}
+                                <div className="mt-3 flex items-center justify-between gap-2">
+                                  <div className="flex space-x-0.5">
+                                    {getSections(item).map((section) => {
+                                      const sectionStatus = item.sectionStatus?.[section];
+                                      const statusColors = {
+                                        approved: "bg-emerald-500",
+                                        rejected: "bg-red-500",
+                                        pending: "bg-slate-200",
+                                      };
+                                      const colorClass = statusColors[sectionStatus as keyof typeof statusColors] || "bg-slate-200";
+                                      return (
+                                        <div
+                                          key={section}
+                                          className={cn("h-1 w-2.5 rounded-full", colorClass)}
+                                        />
+                                      );
+                                    })}
                                   </div>
-                                </div>
-
-                                <div className="flex items-start gap-1.5 min-w-0">
-                                  <Clock className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
-                                  <div className="min-w-0">
-                                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Submitted</p>
-                                    <p className="text-[10px] font-semibold text-slate-700 font-mono">
-                                      {formatDateTime(item.createdAt)}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-start gap-1.5 min-w-0">
-                                  <ShieldCheck className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" />
-                                  <div className="min-w-0">
-                                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Verified</p>
-                                    <p className="text-[10px] font-bold text-[#12335f]">
-                                      {getProgress(item)}%
-                                    </p>
+                                  <div className="text-[9px] font-black text-indigo-600 uppercase">
+                                    Review →
                                   </div>
                                 </div>
                               </div>
                             </div>
-
-                            {/* Progress bar */}
-                            <div className="mt-3.5">
-                              <div className="h-1 overflow-hidden rounded-full bg-slate-100">
-                                <div
-                                  className="h-full rounded-full bg-[#12335f]"
-                                  style={{ width: `${getProgress(item)}%` }}
-                                />
-                              </div>
-
-                              {/* Footer - Section Dots & CTA */}
-                              <div className="mt-3 flex items-center justify-between gap-2">
-                                <div className="flex space-x-0.5">
-                                  {getSections(item).map((section) => {
-                                    const sectionStatus = item.sectionStatus?.[section];
-                                    const statusColors = {
-                                      approved: "bg-emerald-500",
-                                      rejected: "bg-red-500",
-                                      pending: "bg-slate-200",
-                                    };
-                                    const colorClass = statusColors[sectionStatus as keyof typeof statusColors] || "bg-slate-200";
-                                    return (
-                                      <div
-                                        key={section}
-                                        className={cn("h-1 w-2.5 rounded-full", colorClass)}
-                                      />
-                                    );
-                                  })}
-                                </div>
-                                <div className="text-[9px] font-black text-indigo-600 uppercase">
-                                  Review →
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     <Pagination
                       page={currentPage}
                       pageSize={pageSize}
@@ -2089,7 +2005,7 @@ export default function AdminOnboarding() {
 
             {/* Header - government-portal styling: deep navy, gold accent, embossed feel */}
             <div className="relative border-b-2 border-[#f9a825] bg-gradient-to-r from-[#0b1f3a] via-[#12335f] to-[#0b1f3a] px-6 py-5 text-white md:px-8">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-start gap-4">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-[#f9a825]/40 bg-white/10 text-[#f9a825] shadow-inner">
                     <ShieldCheck className="h-6 w-6" />
@@ -2106,7 +2022,7 @@ export default function AdminOnboarding() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                   <div className="hidden flex-col items-end gap-0.5 border-l border-white/20 pl-4 md:flex">
                     <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-300">Application ID</p>
                     <p className="font-mono text-xs font-extrabold text-white">
@@ -2136,7 +2052,7 @@ export default function AdminOnboarding() {
               className="relative flex-1 min-h-0 space-y-8 overflow-y-auto overscroll-contain bg-slate-50 p-4 md:p-6 lg:p-8"
             >
               {isDetailLoading && (
-                <div className="flex items-center gap-3.5 rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-3 text-xs font-bold text-blue-950 shadow-xs animate-pulse">
+                <div className="flex items-center gap-2.5 sm:gap-3.5 rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-3 text-xs font-bold text-blue-950 shadow-xs animate-pulse">
                   <Loader2 className="h-4 w-4 animate-spin text-blue-600 shrink-0" />
                   <span>Loading full application record & verification documents...</span>
                 </div>
@@ -2197,7 +2113,7 @@ export default function AdminOnboarding() {
 
                   {selectedItem.organization && (
                     <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start justify-between gap-2.5 sm:gap-3">
                         <div>
                           <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">
                             Organization Status
@@ -2211,11 +2127,11 @@ export default function AdminOnboarding() {
                         </Badge>
                       </div>
                       <div className="grid gap-2 text-xs font-semibold text-emerald-900">
-                        <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-200 bg-white/70 px-3 py-2">
+                        <div className="flex items-center justify-between gap-2.5 sm:gap-3 rounded-md border border-emerald-200 bg-white/70 px-3 py-2">
                           <span>Organization ID</span>
                           <span>#{selectedItem.organization.id || selectedItem.organizationId}</span>
                         </div>
-                        <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-200 bg-white/70 px-3 py-2">
+                        <div className="flex items-center justify-between gap-2.5 sm:gap-3 rounded-md border border-emerald-200 bg-white/70 px-3 py-2">
                           <span>Onboarding</span>
                           <span>{selectedItem.organization.organizationOnboardingStatus || selectedItem.onboardingStatus}</span>
                         </div>
@@ -2717,7 +2633,7 @@ export default function AdminOnboarding() {
                                         className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2 flex flex-col justify-between"
                                       >
                                         <div>
-                                          <div className="flex items-center justify-between gap-3">
+                                          <div className="flex items-center justify-between gap-2.5 sm:gap-3">
                                             <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
                                               {label}
                                             </span>
@@ -2770,7 +2686,7 @@ export default function AdminOnboarding() {
                           </div>
                           
                           {/* Visibility & Verification Controls */}
-                          <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
                             {/* Visibility Toggle */}
                             <div className="flex items-center space-x-3 bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-xl shadow-sm">
                               <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Showcase Active:</span>

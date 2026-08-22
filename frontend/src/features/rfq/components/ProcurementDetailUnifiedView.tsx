@@ -398,8 +398,8 @@ function FieldCard({ label, value, className }: { label: string; value: any; cla
 
   return (
     <article className={cn('min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-2xs', isComplex && 'sm:col-span-2 xl:col-span-3', className)}>
-      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">{label}</p>
-      <div className="mt-1 text-xs font-semibold leading-relaxed text-slate-900">
+      <p className="text-[10px] lg:text-[11px] font-black uppercase tracking-wider text-slate-400 truncate">{label}</p>
+      <div className="mt-1 text-xs lg:text-sm font-semibold leading-relaxed text-slate-900">
         <DetailValue value={value} valueKey={label} />
       </div>
     </article>
@@ -478,7 +478,7 @@ function MetricCard({
   icon: IconComponent;
   tone: Tone;
 }) {
-  const styles = toneStyles[tone];
+  const styles = toneStyles[tone] || toneStyles.slate;
 
   return (
     <article className={cn('rounded-xl border p-3.5 shadow-2xs flex flex-col justify-between transition-all hover:shadow-xs', styles.card)}>
@@ -2126,7 +2126,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                 type="button"
                 onClick={() => setActiveTab(tab.id as any)}
                 className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all',
+                  'flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs lg:text-sm font-bold transition-all',
                   isActive
                     ? 'bg-slate-950 text-white shadow-2xs'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'

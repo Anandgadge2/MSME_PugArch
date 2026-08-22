@@ -2,9 +2,9 @@
  * PageToolbar - the search box + filters + reset row used by every list page.
  *
  * Layout rules:
- *   - Phones: search box on its own line, plus a "Filters" button. Tapping
- *     the button reveals every filter stacked below. An active-count badge
- *     sits on the button so applied filters stay visible when collapsed.
+ *   - Phones: search box and a compact "Filters" button share one row.
+ *     Tapping the button reveals every filter stacked below. An active-count
+ *     badge sits on the button so applied filters stay visible when collapsed.
  *   - Tablets: search wide, filters in a 2-column grid, all inline.
  *   - Desktops: single row using a CSS grid template generated from the
  *     filter count.
@@ -21,7 +21,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ChevronDown, Filter, RefreshCw, Search } from 'lucide-react';
+import { Filter, RefreshCw, Search } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 
@@ -70,7 +70,7 @@ export interface PageToolbarProps {
 }
 
 const inputBase =
-    'h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30';
+    'h-9 sm:h-10 min-w-0 rounded-xl border border-slate-200 bg-white text-xs lg:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all';
 
 const renderFilter = (f: ToolbarFilter, idx: number) => {
     if (f.kind === 'select') {
@@ -80,7 +80,7 @@ const renderFilter = (f: ToolbarFilter, idx: number) => {
                 value={f.value}
                 onChange={e => f.onChange(e.target.value)}
                 aria-label={f.ariaLabel || 'Filter'}
-                className={cn(inputBase, 'px-3', f.className)}
+                className={cn(inputBase, 'w-full sm:w-auto sm:min-w-[135px] px-3 shadow-xs cursor-pointer hover:border-slate-300', f.className)}
             >
                 {f.placeholder && <option value="">{f.placeholder}</option>}
                 {f.options.map(opt => (
@@ -98,7 +98,7 @@ const renderFilter = (f: ToolbarFilter, idx: number) => {
                 onChange={e => f.onChange(e.target.value)}
                 aria-label={f.ariaLabel || 'Date filter'}
                 placeholder={f.placeholder}
-                className={cn(inputBase, 'px-3', f.className)}
+                className={cn(inputBase, 'w-full sm:w-auto sm:min-w-[140px] px-3 shadow-xs', f.className)}
             />
         );
     }
@@ -126,11 +126,6 @@ export function PageToolbar({
     const hasSearch = onSearchChange !== undefined;
     const [mobileOpen, setMobileOpen] = useState(false);
 
-    // Build the grid template so search takes the lion's share, then each filter
-    // gets a fixed minmax window, and the action cluster sits on the far right.
-    const filterCount = filters.length;
-    const cols = `${hasSearch ? 'minmax(0, 1.3fr) ' : ''}${'minmax(0, 1fr) '.repeat(filterCount)}auto${actions ? ' auto' : ''}`;
-
     const appliedCount = useMemo(
         () => filters.filter(isFilterApplied).length,
         [filters]
@@ -140,6 +135,7 @@ export function PageToolbar({
         <div
             className={cn(
                 embedded ? 'space-y-3' : 'rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3',
+                'overflow-x-hidden',
                 className
             )}
         >
@@ -150,47 +146,47 @@ export function PageToolbar({
                 </div>
             )}
 
-            {/* Mobile layout: search on top, "Filters" toggle below, drawer when open.
-                Hidden once we hit `sm` because the inline grid block below takes over. */}
-            <div className="space-y-3 sm:hidden">
-                {hasSearch && (
-                    <div className="relative min-w-0">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            value={search ?? ''}
-                            onChange={e => onSearchChange?.(e.target.value)}
-                            placeholder={searchPlaceholder}
-                            aria-label="Search"
-                            className={cn(inputBase, 'pl-10 pr-3')}
-                        />
-                    </div>
-                )}
+            {/* Mobile layout: search + compact "Filters" toggle on the same row,
+                drawer below when open. Hidden once we hit `sm` because the inline
+                block below takes over. */}
+            <div className="space-y-2 sm:hidden">
+                <div className="flex items-center gap-2 min-w-0">
+                    {hasSearch && (
+                        <div className="relative min-w-0 flex-1">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                value={search ?? ''}
+                                onChange={e => onSearchChange?.(e.target.value)}
+                                placeholder={searchPlaceholder}
+                                aria-label="Search"
+                                className={cn(inputBase, 'w-full pl-10 pr-3')}
+                            />
+                        </div>
+                    )}
 
-                {(filters.length > 0 || onReset) && (
-                    <button
-                        type="button"
-                        onClick={() => setMobileOpen(prev => !prev)}
-                        aria-expanded={mobileOpen}
-                        aria-controls="page-toolbar-mobile-filters"
-                        className={cn(
-                            'flex h-10 w-full items-center justify-between rounded-lg border bg-white px-3 text-xs font-black uppercase tracking-wide transition',
-                            mobileOpen
-                                ? 'border-[#12335f] text-[#12335f]'
-                                : 'border-slate-200 text-slate-600 hover:border-[#12335f]/40 hover:text-[#12335f]'
-                        )}
-                    >
-                        <span className="inline-flex items-center gap-2">
-                            <Filter className="h-4 w-4" />
+                    {(filters.length > 0 || onReset) && (
+                        <button
+                            type="button"
+                            onClick={() => setMobileOpen(prev => !prev)}
+                            aria-expanded={mobileOpen}
+                            aria-controls="page-toolbar-mobile-filters"
+                            className={cn(
+                                'flex h-9 sm:h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-[10px] font-black tracking-wider uppercase transition-all duration-200',
+                                appliedCount > 0 || mobileOpen
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                                    : 'border-slate-200 bg-slate-50 text-slate-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.1)] active:scale-[0.98]'
+                            )}
+                        >
+                            <Filter className="h-4 w-4 shrink-0" />
                             Filters
                             {appliedCount > 0 && (
-                                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#12335f] px-1.5 text-[10px] font-black text-white">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-[10px]">
                                     {appliedCount}
                                 </span>
                             )}
-                        </span>
-                        <ChevronDown className={cn('h-4 w-4 transition-transform', mobileOpen && 'rotate-180')} />
-                    </button>
-                )}
+                        </button>
+                    )}
+                </div>
 
                 {mobileOpen && (
                     <div id="page-toolbar-mobile-filters" className="space-y-2">
@@ -198,7 +194,7 @@ export function PageToolbar({
                         {onReset && (
                             <Button
                                 variant="outline"
-                                className="h-10 w-full rounded-lg text-xs font-black uppercase"
+                                className="h-9 sm:h-10 w-full rounded-xl text-xs font-black uppercase text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100"
                                 onClick={() => {
                                     onReset();
                                     setMobileOpen(false);
@@ -214,44 +210,42 @@ export function PageToolbar({
                 {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
 
-            {/* Tablet+ layout: search + every filter inline. Hidden on phones. */}
-            <div
-                className={cn(
-                    'hidden gap-3 items-stretch sm:grid',
-                    // Tablets: search wide, filters in 2 columns
-                    'sm:grid-cols-2',
-                    // Desktops: single row using inline grid template below
-                    'lg:[grid-template-columns:var(--toolbar-cols)]'
-                )}
-                style={{ ['--toolbar-cols' as any]: cols }}
-            >
+            {/* Tablet & Desktop layout: search full-width on top, filters in flex row below */}
+            <div className="hidden sm:flex sm:flex-col gap-3">
                 {hasSearch && (
-                    <div className="relative min-w-0">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <div className="relative w-full min-w-0">
+                        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
                             value={search ?? ''}
                             onChange={e => onSearchChange?.(e.target.value)}
                             placeholder={searchPlaceholder}
                             aria-label="Search"
-                            className={cn(inputBase, 'pl-10 pr-3')}
+                            className={cn(
+                                inputBase,
+                                'w-full bg-slate-50/50 pl-10 pr-4 text-slate-800 placeholder-slate-400 focus:bg-white shadow-inner'
+                            )}
                         />
                     </div>
                 )}
 
-                {filters.map((f, idx) => renderFilter(f, idx))}
+                {(filters.length > 0 || onReset || actions) && (
+                    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+                        {filters.map((f, idx) => renderFilter(f, idx))}
 
-                {onReset && (
-                    <Button
-                        variant="outline"
-                        className="h-10 rounded-lg text-xs font-black uppercase"
-                        onClick={onReset}
-                        type="button"
-                    >
-                        <RefreshCw className="mr-2 h-3.5 w-3.5" /> Reset
-                    </Button>
+                        {onReset && (
+                            <Button
+                                variant="outline"
+                                className="h-9 sm:h-10 rounded-xl text-xs font-black uppercase px-3.5 text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 shrink-0"
+                                onClick={onReset}
+                                type="button"
+                            >
+                                <RefreshCw className="mr-2 h-3.5 w-3.5" /> Reset
+                            </Button>
+                        )}
+
+                        {actions && <div className="flex items-center gap-2 sm:ml-auto shrink-0">{actions}</div>}
+                    </div>
                 )}
-
-                {actions && <div className="flex items-center gap-2">{actions}</div>}
             </div>
         </div>
     );

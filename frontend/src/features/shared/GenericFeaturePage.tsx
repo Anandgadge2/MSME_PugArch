@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
-import { CalendarDays, CheckCircle2, ClipboardList, IndianRupee, RefreshCw, Search, SlidersHorizontal, Grid, List, Eye, Edit3, Trash2, X, XCircle, Save, FileText, Filter, Paperclip } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ClipboardList, IndianRupee, RefreshCw, Search, SlidersHorizontal, Grid, List, Eye, Edit3, Trash2, X, XCircle, Save, FileText, Paperclip } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { cn } from '../../lib/utils';
+import { ResponsiveFilterBar } from '../../components/ui/ResponsiveFilterBar';
 import { EmptyState, InlineError, LoadingState } from './FeatureStates';
 import { Pagination } from './Pagination';
 import { EntityIdLink } from './EntityIdLink';
@@ -54,7 +55,6 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [valueFilter, setValueFilter] = useState('');
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [viewMode, setViewMode] = useResponsiveViewMode(`phase7:generic:${endpoint}:view-mode`);
   const [sortKey, setSortKey] = useState<GenericSortKey>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -179,7 +179,7 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
           <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">{description}</p>
         </div>
         <div className="flex items-center gap-2">
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase"><RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />Refresh</Button>
         </div>
       </div>
@@ -193,42 +193,34 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
       {error && <InlineError message={error} onRetry={reload} />}
 
       <Card className="border-slate-200/80 shadow-sm bg-white">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row gap-2 items-center">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input value={searchTerm} onChange={event => { setSearchTerm(event.target.value); setPage(1); }} placeholder={`Search ${title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowMobileFilters(!showMobileFilters)}
-              className="lg:hidden h-10 w-full sm:w-auto gap-2 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0"
-            >
-              <Filter className="h-4 w-4 text-slate-500" />
-              <span>Filters {showMobileFilters ? '(Hide)' : '(Show)'}</span>
-            </Button>
-          </div>
-
-          <div className={cn(
-            "grid gap-3 items-center",
-            showMobileFilters ? "grid grid-cols-1 sm:grid-cols-2" : "hidden lg:grid lg:grid-cols-[190px_190px] lg:justify-end"
-          )}>
-            <div className="relative w-full">
-              <SlidersHorizontal className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <select value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setPage(1); }} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-                <option value="">All statuses</option>
-                {statusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
-            <select value={valueFilter} onChange={event => { setValueFilter(event.target.value); setPage(1); }} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full">
-              <option value="">All values</option>
-              <option value="high">Above Rs. 1 lakh</option>
-              <option value="medium">Rs. 25k to 1 lakh</option>
-              <option value="low">Below Rs. 25k</option>
-            </select>
-          </div>
+        <CardContent className="p-4">
+          <ResponsiveFilterBar
+            className="border-none"
+            activeFilterCount={(statusFilter ? 1 : 0) + (valueFilter ? 1 : 0)}
+            searchInput={
+              <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input value={searchTerm} onChange={event => { setSearchTerm(event.target.value); setPage(1); }} placeholder={`Search ${title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+              </div>
+            }
+            filters={
+              <>
+                <div className="relative w-full">
+                  <SlidersHorizontal className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <select value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setPage(1); }} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
+                    <option value="">All statuses</option>
+                    {statusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </div>
+                <select value={valueFilter} onChange={event => { setValueFilter(event.target.value); setPage(1); }} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
+                  <option value="">All values</option>
+                  <option value="high">Above Rs. 1 lakh</option>
+                  <option value="medium">Rs. 25k to 1 lakh</option>
+                  <option value="low">Below Rs. 25k</option>
+                </select>
+              </>
+            }
+          />
         </CardContent>
       </Card>
 
@@ -248,13 +240,14 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
             ))}
           </div>
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label={title.toLowerCase()} />
           </div>
         </>
       ) : (
         <div className="rounded-lg border border-slate-200 bg-white overflow-x-clip">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[760px] text-left text-sm">
               <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 <tr>
                   <th className="p-3 w-20">Sr. No.</th>
@@ -292,8 +285,9 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
                 ))}
               </tbody>
             </table>
+</div>
           </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label={title.toLowerCase()} />
         </div>
       )}
       {selectedRecord && (

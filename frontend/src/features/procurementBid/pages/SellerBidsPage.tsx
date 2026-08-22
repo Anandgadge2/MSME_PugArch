@@ -29,7 +29,9 @@ import { formatDate } from '../../shared/format';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
+import { KpiCard } from '../../shared/KpiCard';
 import { EmptyState, LoadingState } from '../../shared/FeatureStates';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 type BidTypeFilter = 'all' | 'submitted' | 'draft' | 'awarded';
 
@@ -275,6 +277,19 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       if (sortBy === 'value_high') return valB - valA;
       if (sortBy === 'value_low') return valA - valB;
       if (sortBy === 'title_asc') return (a.bid?.title || '').localeCompare(b.bid?.title || '');
+      if (sortBy === 'title_desc') return (b.bid?.title || '').localeCompare(a.bid?.title || '');
+      if (sortBy === 'id_asc') return Number(a.bid?.id || a.bidId || 0) - Number(b.bid?.id || b.bidId || 0);
+      if (sortBy === 'id_desc') return Number(b.bid?.id || b.bidId || 0) - Number(a.bid?.id || a.bidId || 0);
+      if (sortBy === 'buyer_asc') return String(a.bid?.buyerName || '').localeCompare(String(b.bid?.buyerName || ''));
+      if (sortBy === 'buyer_desc') return String(b.bid?.buyerName || '').localeCompare(String(a.bid?.buyerName || ''));
+      if (sortBy === 'budget_high') return Number(b.bid?.estimatedValue || 0) - Number(a.bid?.estimatedValue || 0);
+      if (sortBy === 'budget_low') return Number(a.bid?.estimatedValue || 0) - Number(b.bid?.estimatedValue || 0);
+      if (sortBy === 'closing_asc') return new Date(a.bid?.endDate || 0).getTime() - new Date(b.bid?.endDate || 0).getTime();
+      if (sortBy === 'closing_desc') return new Date(b.bid?.endDate || 0).getTime() - new Date(a.bid?.endDate || 0).getTime();
+      if (sortBy === 'part_asc') return String(a.status || '').localeCompare(String(b.status || ''));
+      if (sortBy === 'part_desc') return String(b.status || '').localeCompare(String(a.status || ''));
+      if (sortBy === 'stage_asc') return String(a.bid?.status || '').localeCompare(String(b.bid?.status || ''));
+      if (sortBy === 'stage_desc') return String(b.bid?.status || '').localeCompare(String(a.bid?.status || ''));
       return 0;
     });
 
@@ -286,6 +301,12 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
   const toggleSort = (key: string) => {
     if (key === 'value') setSortBy(sortBy === 'value_low' ? 'value_high' : 'value_low');
     else if (key === 'title') setSortBy(sortBy === 'title_asc' ? 'title_desc' : 'title_asc');
+    else if (key === 'id') setSortBy(sortBy === 'id_asc' ? 'id_desc' : 'id_asc');
+    else if (key === 'buyer') setSortBy(sortBy === 'buyer_asc' ? 'buyer_desc' : 'buyer_asc');
+    else if (key === 'budget') setSortBy(sortBy === 'budget_low' ? 'budget_high' : 'budget_low');
+    else if (key === 'closing') setSortBy(sortBy === 'closing_asc' ? 'closing_desc' : 'closing_asc');
+    else if (key === 'part') setSortBy(sortBy === 'part_asc' ? 'part_desc' : 'part_asc');
+    else if (key === 'stage') setSortBy(sortBy === 'stage_asc' ? 'stage_desc' : 'stage_asc');
     else if (key === 'updated') setSortBy(sortBy === 'updated_asc' ? 'updated_desc' : 'updated_asc');
   };
 
@@ -294,6 +315,12 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     let isAsc = true;
     if (columnKey === 'value') { isActive = sortBy === 'value_low' || sortBy === 'value_high'; isAsc = sortBy === 'value_low'; }
     else if (columnKey === 'title') { isActive = sortBy === 'title_asc' || sortBy === 'title_desc'; isAsc = sortBy === 'title_asc'; }
+    else if (columnKey === 'id') { isActive = sortBy === 'id_asc' || sortBy === 'id_desc'; isAsc = sortBy === 'id_asc'; }
+    else if (columnKey === 'buyer') { isActive = sortBy === 'buyer_asc' || sortBy === 'buyer_desc'; isAsc = sortBy === 'buyer_asc'; }
+    else if (columnKey === 'budget') { isActive = sortBy === 'budget_low' || sortBy === 'budget_high'; isAsc = sortBy === 'budget_low'; }
+    else if (columnKey === 'closing') { isActive = sortBy === 'closing_asc' || sortBy === 'closing_desc'; isAsc = sortBy === 'closing_asc'; }
+    else if (columnKey === 'part') { isActive = sortBy === 'part_asc' || sortBy === 'part_desc'; isAsc = sortBy === 'part_asc'; }
+    else if (columnKey === 'stage') { isActive = sortBy === 'stage_asc' || sortBy === 'stage_desc'; isAsc = sortBy === 'stage_asc'; }
     else if (columnKey === 'updated') { isActive = sortBy === 'updated_asc' || sortBy === 'updated_desc'; isAsc = sortBy === 'updated_asc'; }
     return (
       <button type="button" onClick={() => toggleSort(columnKey)} className={cn("inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#12335f] transition-colors", isActive && "text-[#12335f]", className)}>
@@ -400,30 +427,33 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       )}
 
       {error && (
-        <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700">
+        <div className="flex items-center gap-2.5 sm:gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700">
           <AlertTriangle className="h-4 w-4 flex-shrink-0" />
           <span>{error}</span>
           <Button variant="outline" onClick={() => loadData()} className="ml-auto h-8 text-[10px] font-black uppercase">Retry</Button>
         </div>
       )}
 
-      {/* Inline Filters Bar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 flex-1 max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Search by title, buyer, bid number..."
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          />
-        </div>
-
-        <div className="flex items-center gap-3 justify-end">
+      {/* Responsive Filter Bar */}
+      <ResponsiveFilterBar
+        activeFilterCount={sortBy !== 'newest' ? 1 : 0}
+        endContent={<ViewModeToggle className="flex justify-end" value={viewMode} onChange={setViewMode} />}
+        searchInput={
+          <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search by title, buyer, bid number..."
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+            />
+          </div>
+        }
+        filters={
           <select
             value={sortBy}
             onChange={e => setSortBy(e.target.value)}
-            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+            className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full sm:w-auto"
           >
             <option value="newest">Newest First</option>
             <option value="oldest">Oldest First</option>
@@ -431,10 +461,8 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
             <option value="value_low">Value: Low to High</option>
             <option value="title_asc">Title A-Z</option>
           </select>
-
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
-        </div>
-      </div>
+        }
+      />
 
       {/* Content representation */}
       {filteredItems.length === 0 ? (
@@ -499,14 +527,14 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
                       <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
-                      <th className="p-3 w-28">Bid ID</th>
+                      <th className="p-3 w-28"><SortHeader label="Bid ID" columnKey="id" /></th>
                       <th className="p-3"><SortHeader label="Title & Details" columnKey="title" /></th>
-                      <th className="p-3">Buyer</th>
+                      <th className="p-3"><SortHeader label="Buyer" columnKey="buyer" /></th>
                       <th className="p-3"><SortHeader label="Your Quote" columnKey="value" /></th>
-                      <th className="p-3 w-32">Est. Budget</th>
-                      <th className="p-3 w-32">Closing Date</th>
-                      <th className="p-3 w-32">Participation</th>
-                      <th className="p-3 w-32">Bid Stage</th>
+                      <th className="p-3 w-32"><SortHeader label="Est. Budget" columnKey="budget" /></th>
+                      <th className="p-3 w-32"><SortHeader label="Closing Date" columnKey="closing" /></th>
+                      <th className="p-3 w-32"><SortHeader label="Participation" columnKey="part" /></th>
+                      <th className="p-3 w-32"><SortHeader label="Bid Stage" columnKey="stage" /></th>
                       <th className="p-3 text-right w-24">Actions</th>
                     </tr>
                   </thead>
@@ -570,66 +598,6 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
 }
 
 // ── Sub-components ──────────────────────────────────────────────────────
-
-interface KpiCardProps {
-  label: string;
-  value: string | number;
-  icon: any;
-  onClick?: () => void;
-  active?: boolean;
-  color?: 'blue' | 'green' | 'red' | 'purple' | 'amber' | 'indigo' | 'slate';
-}
-
-function KpiCard({ label, value, icon: Icon, onClick, active, color = 'slate' }: KpiCardProps) {
-  const colorMap = {
-    blue: 'border-blue-100 bg-blue-50/50 hover:bg-blue-50 text-blue-700 hover:border-blue-300 ring-blue-600/10',
-    green: 'border-green-100 bg-green-50/50 hover:bg-green-50 text-green-700 hover:border-green-300 ring-green-600/10',
-    red: 'border-red-100 bg-red-50/50 hover:bg-red-50 text-red-700 hover:border-red-300 ring-red-600/10',
-    purple: 'border-purple-100 bg-purple-50/50 hover:bg-purple-50 text-purple-700 hover:border-purple-300 ring-purple-600/10',
-    amber: 'border-amber-100 bg-amber-50/50 hover:bg-amber-50 text-amber-700 hover:border-amber-300 ring-amber-600/10',
-    indigo: 'border-indigo-100 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 hover:border-indigo-300 ring-indigo-600/10',
-    slate: 'border-slate-100 bg-slate-50/50 hover:bg-slate-50 text-slate-700 hover:border-slate-300 ring-slate-600/10',
-  };
-
-  const activeColorMap = {
-    blue: 'border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-500/20',
-    green: 'border-green-500 bg-green-50 text-green-800 ring-2 ring-green-500/20',
-    red: 'border-red-500 bg-red-50 text-red-800 ring-2 ring-red-500/20',
-    purple: 'border-purple-500 bg-purple-50 text-purple-800 ring-2 ring-purple-500/20',
-    amber: 'border-amber-500 bg-amber-50 text-amber-800 ring-2 ring-amber-500/20',
-    indigo: 'border-indigo-500 bg-indigo-50 text-indigo-800 ring-2 ring-indigo-500/20',
-    slate: 'border-slate-500 bg-slate-50 text-slate-800 ring-2 ring-slate-500/20',
-  };
-
-  const iconBgMap = {
-    blue: 'bg-blue-500 text-white',
-    green: 'bg-green-500 text-white',
-    red: 'bg-red-500 text-white',
-    purple: 'bg-purple-500 text-white',
-    amber: 'bg-amber-500 text-white',
-    indigo: 'bg-indigo-500 text-white',
-    slate: 'bg-slate-500 text-white',
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'w-full text-left rounded-2xl border p-4 shadow-sm transition-all duration-300 flex items-center justify-between',
-        active ? activeColorMap[color] : colorMap[color]
-      )}
-    >
-      <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{label}</p>
-        <p className="mt-1 text-xl font-black tracking-tight leading-none">{value}</p>
-      </div>
-      <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm transition-transform duration-300 group-hover:scale-110', iconBgMap[color])}>
-        <Icon className="h-4.5 w-4.5" />
-      </div>
-    </button>
-  );
-}
 
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (

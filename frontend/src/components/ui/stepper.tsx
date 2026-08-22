@@ -15,11 +15,11 @@ interface StepperProps {
 
 export function Stepper({ steps, currentStep, className, onStepChange }: StepperProps) {
   return (
-    <div className={cn("mb-8 w-full overflow-hidden md:mb-12", className)}>
+    <div className={cn("mb-4 sm:mb-8 w-full overflow-hidden md:mb-12", className)}>
       <div className="mx-auto grid w-full max-w-4xl grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 lg:flex lg:items-start lg:justify-center lg:gap-3">
         {steps.map((step, idx) => (
           <React.Fragment key={step.id}>
-            <div className="flex min-w-0 flex-col items-center rounded-2xl border border-slate-100 bg-white/70 p-2 shadow-sm lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+            <div className="flex min-w-0 flex-col items-center rounded-2xl border border-slate-100 bg-white/70 p-1.5 sm:p-2 shadow-sm lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
               <button
                 type="button"
                 onClick={() => onStepChange?.(step.id)}

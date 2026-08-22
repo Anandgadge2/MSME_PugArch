@@ -187,7 +187,8 @@ export default function MonthlyRankingsAdminPage() {
               <h2 className="text-lg font-bold text-slate-950">{monthName(month, year)} rankings</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-left text-sm">
+              <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[860px] text-left text-sm">
                 <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
                   <tr>
                     <th className="p-3">Rank</th>
@@ -226,6 +227,7 @@ export default function MonthlyRankingsAdminPage() {
                   ))}
                 </tbody>
               </table>
+</div>
             </div>
             <div className="border-t border-slate-200 bg-white">
               <Pagination

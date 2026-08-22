@@ -43,6 +43,7 @@ import {
 } from '../hooks';
 import type { ConversationDto, MessageDto, MessageUserDto } from '../api';
 import MessageAttachmentView from '../components/MessageAttachmentView';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 const roleLabel = (role?: string) => (role || 'user').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 const isAdminRole = (role?: string) => role === 'admin' || role === 'master_admin';
@@ -235,30 +236,36 @@ function ConversationList({
     return (
         <Card className="border-slate-200/80 shadow-sm">
             <CardContent className="p-0">
-                <div className="space-y-3 border-b border-slate-100 p-3">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            value={query}
-                            onChange={event => setQuery(event.target.value)}
-                            placeholder="Search subject, user, tender..."
-                            className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <select value={status} onChange={event => setStatus(event.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold">
-                            <option value="active">Active</option>
-                            <option value="archived">Archived</option>
-                            <option value="all">All Status</option>
-                        </select>
-                        <select value={role} onChange={event => setRole(event.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold">
-                            <option value="all">All Roles</option>
-                            <option value="buyer">Buyer</option>
-                            <option value="seller">Seller</option>
-                            <option value="admin">Admin</option>
-                        </select>
-                    </div>
-                </div>
+                <ResponsiveFilterBar
+                    className="border-none p-0"
+                    activeFilterCount={(status !== 'active' ? 1 : 0) + (role !== 'all' ? 1 : 0)}
+                    searchInput={
+                        <div className="relative min-w-0 w-full sm:flex-1">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                value={query}
+                                onChange={event => setQuery(event.target.value)}
+                                placeholder="Search subject, user, tender..."
+                                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                            />
+                        </div>
+                    }
+                    filters={
+                        <>
+                            <select value={status} onChange={event => setStatus(event.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold">
+                                <option value="active">Active</option>
+                                <option value="archived">Archived</option>
+                                <option value="all">All Status</option>
+                            </select>
+                            <select value={role} onChange={event => setRole(event.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold">
+                                <option value="all">All Roles</option>
+                                <option value="buyer">Buyer</option>
+                                <option value="seller">Seller</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </>
+                    }
+                />
 
                 {filtered.length === 0 ? (
                     <div className="p-6">

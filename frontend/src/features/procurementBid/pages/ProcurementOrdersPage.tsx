@@ -12,6 +12,7 @@ import { procurementOrderApi } from '../orderApi';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import ProcurementLifecycleTracker from '../../procurementLifecycle/components/ProcurementLifecycleTracker';
 import { inferCurrentLifecycleStage, mapProcurementOrderToLifecycle } from '../../procurementLifecycle/statusMapper';
@@ -149,33 +150,41 @@ export default function ProcurementOrdersPage() {
             )}
             {orders.length > 0 && (
               <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-                <div className="grid gap-3 md:grid-cols-[1fr_180px_auto_auto] md:items-center">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                      value={query}
-                      onChange={event => { setQuery(event.target.value); setPage(1); }}
-                      placeholder="Search PO, buyer, seller, delivery, invoice..."
-                      className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm outline-none focus:border-[#0b2447]"
-                    />
-                  </div>
-                  <select
-                    value={statusFilter}
-                    onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
-                    className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none"
-                  >
-                    <option value="">All statuses</option>
-                    {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
-                  </select>
-                  <ViewModeToggle value={viewMode} onChange={setViewMode} />
-                  <button
-                    type="button"
-                    onClick={() => { setQuery(''); setStatusFilter(''); setPage(1); }}
-                    className="h-10 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-700"
-                  >
-                    Reset
-                  </button>
-                </div>
+                <ResponsiveFilterBar
+                  className="border-none"
+                  activeFilterCount={(statusFilter ? 1 : 0)}
+                  searchInput={
+                    <div className="relative min-w-0 w-full sm:flex-1">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        value={query}
+                        onChange={event => { setQuery(event.target.value); setPage(1); }}
+                        placeholder="Search PO, buyer, seller, delivery, invoice..."
+                        className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm outline-none focus:border-[#0b2447]"
+                      />
+                    </div>
+                  }
+                  filters={
+                    <>
+                      <select
+                        value={statusFilter}
+                        onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
+                        className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none min-w-0 w-full sm:w-auto"
+                      >
+                        <option value="">All statuses</option>
+                        {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => { setQuery(''); setStatusFilter(''); setPage(1); }}
+                        className="h-10 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 whitespace-nowrap"
+                      >
+                        Reset
+                      </button>
+                    </>
+                  }
+                  endContent={<ViewModeToggle className="flex justify-end" value={viewMode} onChange={setViewMode} />}
+                />
               </div>
             )}
             {!orders.length ? <ProcurementEmptyState title="No awarded procurement orders yet." message="Final award approved bids will appear here once PO/work order generation is complete." /> : !pageItems.length ? (
@@ -211,7 +220,8 @@ function OrderTable({
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] text-left text-sm">
+        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[980px] text-left text-sm">
           <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-4 py-3"><SortableHeader label="PO number" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={onSort} /></th>
@@ -247,6 +257,7 @@ function OrderTable({
             })}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

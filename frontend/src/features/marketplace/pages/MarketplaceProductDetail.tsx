@@ -22,6 +22,7 @@ import { CompareToggleButton } from '../components/CompareToggleButton';
 import { saveSupplier } from '../utils/savedSuppliers';
 import { buildProductDetailFields, formatCatalogueDate } from '../../catalogue/utils/catalogueDetailUtils';
 import { useQuery as useTanstackQuery } from '@tanstack/react-query';
+import { ProductCartLoader } from '../../../components/loaders/ProductCartLoader';
 
 const isImageFile = (file: any) => String(file?.mimeType || '').toLowerCase().startsWith('image/');
 
@@ -177,24 +178,8 @@ export default function MarketplaceProductDetail() {
 
     if (loading) {
         return (
-            <div className={useDashboardShell ? "min-h-full bg-slate-50 p-6 max-w-7xl mx-auto space-y-6" : "min-h-dvh bg-slate-50 flex flex-col p-6 max-w-7xl mx-auto space-y-6"}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-4 animate-pulse">
-                        <div className="h-96 w-full rounded-2xl bg-slate-200/70 border border-slate-200" />
-                        <div className="flex gap-3">
-                            <div className="h-16 w-16 rounded-xl bg-slate-200/70 border border-slate-200" />
-                            <div className="h-16 w-16 rounded-xl bg-slate-200/70 border border-slate-200" />
-                            <div className="h-16 w-16 rounded-xl bg-slate-200/70 border border-slate-200" />
-                        </div>
-                    </div>
-                    <div className="space-y-4 animate-pulse">
-                        <div className="h-4 w-32 rounded bg-slate-200/70" />
-                        <div className="h-8 w-3/4 rounded bg-slate-200/70" />
-                        <div className="h-10 w-48 rounded bg-slate-200/70" />
-                        <div className="h-24 w-full rounded-xl bg-slate-200/70" />
-                        <div className="h-12 w-full rounded-xl bg-slate-300/70" />
-                    </div>
-                </div>
+            <div className={useDashboardShell ? "min-h-full bg-slate-50 p-6 max-w-7xl mx-auto flex items-center justify-center min-h-[60vh]" : "min-h-dvh bg-slate-50 flex flex-col p-6 max-w-7xl mx-auto items-center justify-center min-h-[60vh]"}>
+                <ProductCartLoader />
             </div>
         );
     }

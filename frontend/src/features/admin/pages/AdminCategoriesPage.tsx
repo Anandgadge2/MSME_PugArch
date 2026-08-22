@@ -6,6 +6,7 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 export interface Category {
   id: number;
@@ -277,18 +278,21 @@ export default function AdminCategoriesPage() {
         </div>
 
         {/* Filter and Search Bar */}
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-slate-200/80 shadow-sm">
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search categories by name or slug..."
-              className="pl-9 h-10 border-slate-200 text-xs bg-slate-50/50 focus:bg-white"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+        <ResponsiveFilterBar
+          className="border-none"
+          activeFilterCount={typeFilter !== 'ALL' ? 1 : 0}
+          searchInput={
+            <div className="relative min-w-0 w-full sm:flex-1">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search categories by name or slug..."
+                className="pl-9 h-10 border-slate-200 text-xs bg-slate-50/50 focus:bg-white"
+              />
+            </div>
+          }
+          filters={
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
@@ -299,8 +303,8 @@ export default function AdminCategoriesPage() {
               <option value="PRODUCT">Product Only</option>
               <option value="SERVICE">Service Only</option>
             </select>
-          </div>
-        </div>
+          }
+        />
 
         {/* Categories Table */}
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">

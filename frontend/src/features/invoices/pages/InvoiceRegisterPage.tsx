@@ -4,6 +4,7 @@ import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { cn } from '../../../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
@@ -566,7 +567,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4 xl:grid-cols-6">
         <KpiCard label="Invoices" value={total} icon={FileText} active={true} color="blue" />
         <KpiCard label="Pending" value={pendingCount} icon={Clock} color="amber" />
         <KpiCard label="Approved/Paid" value={approvedCount} icon={CheckCircle2} color="green" />
@@ -577,26 +578,27 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
       {error && <InlineError message={error} onRetry={reload} />}
 
-      {/* Inline Filters Bar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 flex-1 max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={event => setSearchTerm(event.target.value)}
-            placeholder="Search invoice, PO, buyer, seller..."
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          />
-        </div>
-
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end w-full md:w-auto">
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
-
-          <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-[180px_165px_165px] md:items-center w-full md:w-auto">
+      {/* Responsive Filter Bar */}
+      <ResponsiveFilterBar
+        activeFilterCount={(statusFilter ? 1 : 0) + (acceptedPoOnly ? 1 : 0) + (invoiceScope !== 'all' ? 1 : 0)}
+        endContent={<ViewModeToggle className="flex justify-end" value={viewMode} onChange={setViewMode} />}
+        searchInput={
+          <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={searchTerm}
+              onChange={event => setSearchTerm(event.target.value)}
+              placeholder="Search invoice, PO, buyer, seller..."
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+            />
+          </div>
+        }
+        filters={
+          <>
             <select
               value={statusFilter}
               onChange={event => setStatusFilter(event.target.value)}
-              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full"
+              className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full sm:w-auto"
             >
               <option value="">All statuses</option>
               {statuses.map(status => (
@@ -606,7 +608,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               ))}
             </select>
 
-            <label className="flex items-center gap-2 h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 w-full cursor-pointer select-none">
+            <label className="flex items-center justify-center gap-2 h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 w-full sm:w-auto cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={acceptedPoOnly}
@@ -619,15 +621,15 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
             <select
               value={invoiceScope}
               onChange={event => setInvoiceScope(event.target.value as 'all' | 'interstate' | 'domestic')}
-              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full"
+              className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full sm:w-auto"
             >
               <option value="all">All invoices</option>
               <option value="interstate">Interstate only</option>
               <option value="domestic">Domestic only</option>
             </select>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {loading && pagedInvoices.length === 0 ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
@@ -659,7 +661,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       ) : viewMode === 'list' ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1140px] border-collapse text-left text-xs">
+            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full min-w-[1140px] border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
                   <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
@@ -779,110 +782,116 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                 })}
               </tbody>
             </table>
+</div>
           </div>
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="invoices" />
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {pagedInvoices.map((invoice, index) => {
-            const state = statusOf(invoice);
-            const isSubmitted = state === 'submitted';
-            const isPayable = state === 'approved' || state === 'payment_initiated';
-            const rowIndex = (page - 1) * pageSize + index + 1;
-            return (
-              <div key={invoice.id} className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
-                <div className="w-full space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
-                          {String(rowIndex).padStart(2, '0')}
-                        </span>
-                        <EntityIdLink label={invoice.invoiceNumber || `INV-${invoice.id}`} id={invoice.id} size="sm" onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }} />
+        <>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {pagedInvoices.map((invoice, index) => {
+              const state = statusOf(invoice);
+              const isSubmitted = state === 'submitted';
+              const isPayable = state === 'approved' || state === 'payment_initiated';
+              const rowIndex = (page - 1) * pageSize + index + 1;
+              return (
+                <div key={invoice.id} className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
+                  <div className="w-full space-y-3">
+                    <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
+                            {String(rowIndex).padStart(2, '0')}
+                          </span>
+                          <EntityIdLink label={invoice.invoiceNumber || `INV-${invoice.id}`} id={invoice.id} size="sm" onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }} />
+                        </div>
+                        <p className="mt-1.5 text-[10px] font-semibold text-slate-500">PO: {invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p>
                       </div>
-                      <p className="mt-1.5 text-[10px] font-semibold text-slate-500">PO: {invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p>
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${state === 'paid'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : state === 'approved'
+                          ? 'bg-blue-100 text-[#12335f]'
+                          : state === 'submitted'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                        {state.replace(/_/g, ' ')}
+                      </span>
                     </div>
-                    <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${state === 'paid'
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : state === 'approved'
-                        ? 'bg-blue-100 text-[#12335f]'
-                        : state === 'submitted'
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}>
-                      {state.replace(/_/g, ' ')}
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 border-t border-slate-100 pt-3">
-                    <InfoTile label="Party" value={role === 'seller' ? invoice.buyer?.name || '-' : invoice.seller?.name || '-'} />
-                    <InfoTile label="Total Amount" value={formatCurrency(invoice.amount || invoice.totalAmount)} />
-                    <InfoTile label="Due Date" value={formatDate(invoice.dueDate)} />
-                    <InfoTile label="Created At" value={formatDate(invoice.createdAt)} />
-                  </div>
+                    <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 border-t border-slate-100 pt-3">
+                      <InfoTile label="Party" value={role === 'seller' ? invoice.buyer?.name || '-' : invoice.seller?.name || '-'} />
+                      <InfoTile label="Total Amount" value={formatCurrency(invoice.amount || invoice.totalAmount)} />
+                      <InfoTile label="Due Date" value={formatDate(invoice.dueDate)} />
+                      <InfoTile label="Created At" value={formatDate(invoice.createdAt)} />
+                    </div>
 
-                  <div className="mt-4 flex flex-wrap items-center gap-1.5 pt-3 border-t border-slate-100">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }}
-                      className="h-8 flex-1 rounded-lg border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"
-                    >
-                      <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('track'); }}
-                      className="h-8 flex-1 rounded-lg border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"
-                    >
-                      <Clock className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
-                    </Button>
-                    {(state === 'paid' || state === 'payment_initiated') && (
+                    <div className="mt-4 flex flex-wrap items-center gap-1.5 pt-3 border-t border-slate-100">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setViewProofInvoiceId(invoice.id)}
-                        className="h-8 flex-1 rounded-lg border-blue-200 bg-blue-50/60 px-2 text-[10px] font-black uppercase tracking-wide text-blue-700 hover:bg-blue-100"
+                        onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }}
+                        className="h-8 flex-1 rounded-lg border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"
                       >
-                        <FileText className="mr-1 h-3.5 w-3.5 text-blue-600" /> Receipt
+                        <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
                       </Button>
-                    )}
-                    {role === 'buyer' && isSubmitted && (
                       <Button
                         size="sm"
-                        disabled={submitting}
-                        onClick={() => handleApproveInvoice(invoice.id)}
-                        className="h-8 flex-1 rounded-lg bg-[#12335f] text-[10px] font-black uppercase tracking-wide text-white hover:bg-slate-800"
+                        variant="outline"
+                        onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('track'); }}
+                        className="h-8 flex-1 rounded-lg border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"
                       >
-                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
+                        <Clock className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
                       </Button>
-                    )}
-                    {role === 'buyer' && isPayable && (
-                      <>
+                      {(state === 'paid' || state === 'payment_initiated') && (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setUploadProofInvoice(invoice)}
-                          className="h-8 flex-1 rounded-lg border-blue-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-[#12335f] hover:bg-blue-50"
+                          onClick={() => setViewProofInvoiceId(invoice.id)}
+                          className="h-8 flex-1 rounded-lg border-blue-200 bg-blue-50/60 px-2 text-[10px] font-black uppercase tracking-wide text-blue-700 hover:bg-blue-100"
                         >
-                          <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Slip
+                          <FileText className="mr-1 h-3.5 w-3.5 text-blue-600" /> Receipt
                         </Button>
+                      )}
+                      {role === 'buyer' && isSubmitted && (
                         <Button
                           size="sm"
-                          onClick={() => handleOpenCheckout(invoice)}
-                          className="h-8 flex-1 rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-emerald-700 shadow-xs"
+                          disabled={submitting}
+                          onClick={() => handleApproveInvoice(invoice.id)}
+                          className="h-8 flex-1 rounded-lg bg-[#12335f] text-[10px] font-black uppercase tracking-wide text-white hover:bg-slate-800"
                         >
-                          <CreditCard className="mr-1 h-3.5 w-3.5" /> Pay
+                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
                         </Button>
-                      </>
-                    )}
+                      )}
+                      {role === 'buyer' && isPayable && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setUploadProofInvoice(invoice)}
+                            className="h-8 flex-1 rounded-lg border-blue-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-[#12335f] hover:bg-blue-50"
+                          >
+                            <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Slip
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenCheckout(invoice)}
+                            className="h-8 flex-1 rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-emerald-700 shadow-xs"
+                          >
+                            <CreditCard className="mr-1 h-3.5 w-3.5" /> Pay
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="invoices" />
+          </div>
+        </>
       )}
 
       {createInvoiceModalOpen && (
@@ -1007,7 +1016,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                     className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
                   />
                 </div>
-                <div className="flex min-h-10 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="flex min-h-10 items-center gap-2.5 sm:gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                   <input
                     id="interstate-checkbox"
                     type="checkbox"
@@ -1103,7 +1112,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                   <div className="space-y-6">
                     {/* Official Government e-Invoice Header Banner */}
                     <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50 border border-slate-150 p-4 rounded-2xl">
-                      <div className="flex items-center gap-3">
+                      <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                         <div className="h-12 w-12 rounded-xl bg-[#12335f] text-white flex items-center justify-center shadow-sm">
                           {/* Government Shield Representation */}
                           <ShieldCheck className="h-7 w-7" />
@@ -1363,7 +1372,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                     </div>
 
                     {/* Government Declaration and Digitally Signed Certificate */}
-                    <div className="flex flex-col sm:flex-row items-center gap-3 p-4 bg-emerald-50/60 border border-emerald-100 rounded-2xl">
+                    <div className="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-3 p-4 bg-emerald-50/60 border border-emerald-100 rounded-2xl">
                       <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0 border border-emerald-200/50">
                         <Check className="h-5 w-5 stroke-[2.5]" />
                       </div>
@@ -1552,18 +1561,18 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               <div className="space-y-3 rounded-lg border border-white/15 bg-white/10 p-4">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Amount Payable</p>
-                  <p className="mt-1 text-2xl font-black">{formatCurrency(checkoutInvoice.amount || checkoutInvoice.totalAmount)}</p>
+                  <p className="mt-1 text-xl sm:text-2xl font-black">{formatCurrency(checkoutInvoice.amount || checkoutInvoice.totalAmount)}</p>
                 </div>
                 <div className="grid gap-2 text-xs font-semibold text-blue-50">
-                  <div className="flex justify-between gap-3">
+                  <div className="flex justify-between gap-2.5 sm:gap-3">
                     <span>Invoice</span>
                     <span className="font-mono">{checkoutInvoice.invoiceNumber || `INV-${checkoutInvoice.id}`}</span>
                   </div>
-                  <div className="flex justify-between gap-3">
+                  <div className="flex justify-between gap-2.5 sm:gap-3">
                     <span>PO</span>
                     <span className="font-mono">{checkoutInvoice.purchaseOrder?.poNumber || `PO-${checkoutInvoice.purchaseOrderId || '-'}`}</span>
                   </div>
-                  <div className="flex justify-between gap-3">
+                  <div className="flex justify-between gap-2.5 sm:gap-3">
                     <span>Payee</span>
                     <span className="text-right">{checkoutInvoice.seller?.name || `Seller #${checkoutInvoice.sellerId || '-'}`}</span>
                   </div>
@@ -1606,7 +1615,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               {/* Step 1: Selection and Forms */}
               {checkoutStep === 'tabs' && (
                 <div className="flex-1 space-y-4 overflow-y-auto p-5">
-                  <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
+                  <div className="grid gap-2.5 sm:gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
                     <CheckoutInfo label="Payee" value={checkoutInvoice.seller?.name || `Seller #${checkoutInvoice.sellerId || '-'}`} />
                     <CheckoutInfo label="Invoice" value={checkoutInvoice.invoiceNumber || `INV-${checkoutInvoice.id}`} />
                     <CheckoutInfo label="Net Payable" value={formatCurrency(checkoutInvoice.amount || checkoutInvoice.totalAmount)} strong />
@@ -1641,7 +1650,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                     {activeTab === 'razorpay' && (
                       <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
                         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-xs text-slate-700">
-                          <div className="flex items-start gap-3">
+                          <div className="flex items-start gap-2.5 sm:gap-3">
                             <ShieldCheck className="h-5 w-5 flex-shrink-0 text-emerald-600" />
                             <div>
                               <p className="font-black text-slate-900">Encrypted payment page</p>
@@ -1658,7 +1667,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           </div>
                         </div>
 
-                        <div className="grid gap-3">
+                        <div className="grid gap-2.5 sm:gap-3">
                           <div>
                             <label className="text-[10px] font-black uppercase text-slate-500">Card Number</label>
                             <input
@@ -1675,7 +1684,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                             />
                           </div>
 
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
                             <div className="col-span-2">
                               <label className="text-[10px] font-black uppercase text-slate-500">Card Holder</label>
                               <input
@@ -1705,7 +1714,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
                             <div>
                               <label className="text-[10px] font-black uppercase text-slate-500">CVV / CVC</label>
                               <input
@@ -1739,7 +1748,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           <p className="border-b border-slate-200 pb-2 text-[10px] font-black uppercase tracking-widest text-[#12335f]">
                             Escrow Virtual Bank Account Details
                           </p>
-                          <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 text-xs">
                             <BankInfo label="Beneficiary" value="PugArch Escrow Services" />
                             <BankInfo label="Bank Name" value="ICICI Bank Ltd" />
                             <BankInfo label="Virtual Account" value={`PUGARCH${checkoutInvoice.invoiceNumber?.replace(/[^a-zA-Z0-9]/g, '') || checkoutInvoice.id}`} mono />
@@ -1829,7 +1838,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 text-xs pt-1">
+                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3 text-xs pt-1">
                       <div>
                         <p className="text-[9px] font-bold text-slate-400 uppercase">ESCROW SYSTEM Vault</p>
                         <span className="flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/50 rounded-md px-1.5 py-0.5 w-max text-[10px] mt-0.5">

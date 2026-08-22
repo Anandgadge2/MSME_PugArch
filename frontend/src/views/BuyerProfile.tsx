@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { api, BASE_URL, resolveMediaUrl } from '../lib/api';
@@ -39,6 +39,8 @@ import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { MSME_TYPES } from '../constants/dropdowns';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
+import { Pagination } from '../features/shared/Pagination';
+import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
 
 const SIDEBAR_NAV = [
   { id: 'showcase_profile', label: 'Organization Showcase Profile', icon: Building2 },
@@ -97,6 +99,18 @@ export default function BuyerProfile() {
   // Image lightbox/preview
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
 
+  // Items table sorting & pagination
+  const [itemsSortKey, setItemsSortKey] = useState<string>('serialNo');
+  const [itemsSortDir, setItemsSortDir] = useState<SortDirection>('asc');
+  const [itemsPage, setItemsPage] = useState(1);
+  const [itemsPageSize, setItemsPageSize] = useState(10);
+
+  const handleItemsSort = (field: string) => {
+    setItemsSortDir(prev => itemsSortKey === field && prev === 'asc' ? 'desc' : 'asc');
+    setItemsSortKey(field);
+    setItemsPage(1);
+  };
+
   const initialProfileRef = useRef<any>(null);
   const [showcaseOtp, setShowcaseOtp] = useState('');
   const [showcaseOtpSent, setShowcaseOtpSent] = useState(false);
@@ -139,6 +153,28 @@ export default function BuyerProfile() {
       setItemsLoading(false);
     }
   };
+
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      let va = a[itemsSortKey] ?? '';
+      let vb = b[itemsSortKey] ?? '';
+      if (itemsSortKey === 'serialNo') {
+        va = Number(a.serialNo) || 0;
+        vb = Number(b.serialNo) || 0;
+      }
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return itemsSortDir === 'asc' ? va - vb : vb - va;
+      }
+      const strA = String(va).toLowerCase();
+      const strB = String(vb).toLowerCase();
+      return itemsSortDir === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+    });
+  }, [items, itemsSortKey, itemsSortDir]);
+
+  const pagedItems = useMemo(() => {
+    const start = (itemsPage - 1) * itemsPageSize;
+    return sortedItems.slice(start, start + itemsPageSize);
+  }, [sortedItems, itemsPage, itemsPageSize]);
 
   useEffect(() => {
     fetchShowcaseProfile();
@@ -1008,70 +1044,109 @@ export default function BuyerProfile() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
-      {/* Sidebar - Mobile Toggle */}
-      <div className="md:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between">
-        <h2 className="text-sm font-black uppercase tracking-widest text-slate-900 ">Account Settings</h2>
-        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-600 hover:bg-slate-50 rounded-xl">
-          {isSidebarOpen ? <X /> : <Menu />}
-        </button>
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* Full-width Account Settings Header/Navbar */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-[#12335f] flex items-center justify-center text-white shrink-0 shadow-xs">
+              <Settings className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-black uppercase tracking-wider text-slate-900 leading-tight truncate">
+                ACCOUNT SETTINGS
+              </h1>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden sm:block truncate">
+                {SIDEBAR_NAV.find(s => s.id === activeSection)?.label}
+              </p>
+            </div>
+          </div>
+
+          {/* Hamburger / Menu Button */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition shadow-xs",
+                isSidebarOpen && "bg-[#12335f] text-white border-[#12335f] hover:bg-[#12335f]"
+              )}
+              aria-label="Toggle account settings menu"
+              aria-expanded={isSidebarOpen}
+            >
+              <Menu className="h-4 w-4" />
+              <span className="text-xs font-bold hidden sm:inline">Settings Menu</span>
+            </button>
+
+            {/* Dropdown Menu */}
+            {isSidebarOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-[2px]"
+                  onClick={() => setIsSidebarOpen(false)}
+                />
+                <div className="absolute right-0 mt-2 w-72 sm:w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl z-50 p-2 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Account Settings</p>
+                    <button
+                      type="button"
+                      onClick={() => setIsSidebarOpen(false)}
+                      className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-0.5 max-h-[70vh] overflow-y-auto no-scrollbar py-1">
+                    {SIDEBAR_NAV.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          if ('path' in item && item.path) {
+                            router.push(item.path);
+                            setIsSidebarOpen(false);
+                            return;
+                          }
+                          setActiveSection(item.id);
+                          setIsSidebarOpen(false);
+                          setPersonalOtp('');
+                          setPersonalOtpSent(false);
+                          setFormErrors({});
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition text-left group",
+                          activeSection === item.id
+                            ? "bg-[#12335f] text-white shadow-xs"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                        )}
+                      >
+                        <item.icon className={cn("h-4 w-4 shrink-0", activeSection === item.id ? "text-white" : "text-slate-400 group-hover:text-slate-600")} />
+                        <span className="text-xs font-bold truncate">{item.label}</span>
+                        {activeSection === item.id && <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-80" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Sidebar Navigation */}
-      <aside className={cn(
-        "w-full md:w-72 bg-white border-r border-slate-200 shrink-0 transition-all md:static fixed inset-0 z-50 md:translate-x-0",
-        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-      )}>
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="hidden md:block text-xs font-black uppercase tracking-widest text-slate-400 ">User Profile</h2>
-          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden p-2 text-slate-400">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <nav className="p-2 space-y-0.5 max-h-[calc(100vh-80px)] overflow-y-auto no-scrollbar">
-          {SIDEBAR_NAV.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => {
-                if ('path' in item && item.path) {
-                  router.push(item.path);
-                  return;
-                }
-                setActiveSection(item.id);
-                setIsSidebarOpen(false);
-                setPersonalOtp('');
-                setPersonalOtpSent(false);
-                setFormErrors({});
-              }}
-              className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left group",
-                activeSection === item.id
-                  ? "bg-[#12335f]/5 text-[#12335f] shadow-sm border border-[#12335f]/10"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-              )}
-            >
-              <item.icon className={cn("h-4 w-4 shrink-0", activeSection === item.id ? "text-[#12335f]" : "text-slate-400 group-hover:text-slate-600")} />
-              <span className="text-xs font-bold truncate">{item.label}</span>
-              {activeSection === item.id && <ChevronRight className="ml-auto h-3 w-3 opacity-50" />}
-            </button>
-          ))}
-        </nav>
-      </aside>
-
       {/* Main Content Area */}
-      <main className="flex-1 p-4 sm:p-6 md:p-6 max-w-5xl mx-auto w-full">
-        <div className="mb-4 flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-5xl mx-auto w-full">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <p className="text-[10px] font-black text-[#12335f] uppercase tracking-[0.18em]">BUYER SETTINGS</p>
-            <h1 className="text-2xl font-black text-slate-950 tracking-tight mt-1">
+            <h2 className="text-2xl font-black text-slate-950 tracking-tight mt-1">
               {SIDEBAR_NAV.find(s => s.id === activeSection)?.label}
-            </h1>
+            </h2>
           </div>
-          <div className="flex items-center gap-3 bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-sm">
-            <div className="h-10 w-10 rounded-xl bg-[#12335f] flex items-center justify-center text-white font-black text-sm shadow-xs">
+          <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs self-start sm:self-auto">
+            <div className="h-9 w-9 rounded-xl bg-[#12335f] flex items-center justify-center text-white font-black text-xs shadow-xs">
               {user?.name?.charAt(0)}
             </div>
-            <div className="pr-4">
+            <div className="pr-3">
               <p className="text-[11px] font-black text-slate-900 leading-none">{user?.name}</p>
               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">ID: {profile?.pan || user?.id}</p>
             </div>
@@ -1515,7 +1590,7 @@ export default function BuyerProfile() {
                               <button type="button" onClick={() => setUploadErrors([])} className="text-red-400 hover:text-red-700 text-[10px] font-black uppercase tracking-wider">Dismiss</button>
                             </div>
                             <div className="overflow-x-auto rounded-xl border border-red-100 bg-white">
-                              <table className="w-full text-left text-xs">
+                              <table className="w-full min-w-[500px] text-left text-xs">
                                 <thead><tr className="border-b border-red-100 bg-red-50"><th className="p-2 pr-4 text-[10px] font-black text-red-600 uppercase tracking-wider w-24">Row #</th><th className="p-2 text-[10px] font-black text-red-600 uppercase tracking-wider">Reason</th></tr></thead>
                                 <tbody className="divide-y divide-red-50">
                                   {uploadErrors.map((err, i) => (
@@ -1531,7 +1606,7 @@ export default function BuyerProfile() {
                         {confirmReplaceWarning && (
                           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-3">
                             <div className="flex items-start gap-2"><AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" /><p className="text-xs font-bold text-amber-800">{confirmReplaceWarning}</p></div>
-                            <div className="flex gap-3">
+                            <div className="flex gap-2.5 sm:gap-3">
                               <Button onClick={() => handleItemExcelUpload(null, true)} className="bg-amber-600 hover:bg-amber-700 text-white font-black uppercase text-[10px] tracking-wider h-9 px-4 rounded-lg">Replace Current List</Button>
                               <Button onClick={() => { setConfirmReplaceWarning(null); setPendingUploadFile(null); }} className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-black uppercase text-[10px] tracking-wider h-9 px-4 rounded-lg">Cancel</Button>
                             </div>
@@ -1539,7 +1614,7 @@ export default function BuyerProfile() {
                         )}
 
                         {/* Table Header actions */}
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
                           <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">Manage Frequently Bought Items</h3>
                           <div className="flex gap-2 w-full sm:w-auto">
                             <Button onClick={() => { setEditingItem(null); setItemForm({ serialNo: '', itemDescription: '', category: '', estimatedMonthlyRequirement: '', unit: '', remarks: '' }); setIsItemModalOpen(true); }} className="flex-1 sm:flex-none bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-[10px] tracking-wider h-10 px-4 rounded-xl flex items-center gap-1">
@@ -1575,59 +1650,71 @@ export default function BuyerProfile() {
                             <p className="text-xs text-slate-400 mt-1 leading-relaxed">Download the template, fill it out, and upload it above or add items manually.</p>
                           </div>
                         ) : (
-                          <div className="overflow-x-auto rounded-2xl border border-slate-100">
-                            <table className="w-full border-collapse text-left">
-                              <thead>
-                                <tr className="bg-slate-50 border-b border-slate-100">
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-12 text-center">
-                                    <input type="checkbox" checked={selectedItemIds.length === items.length && items.length > 0} onChange={(e) => { if (e.target.checked) setSelectedItemIds(items.map(item => item.id)); else setSelectedItemIds([]); }} className="rounded border-slate-300" />
-                                  </th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-16">Sl.</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider">Item Description</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider">Category</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider">Qty/Month</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-20">Unit</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider">Remarks</th>
-                                  <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-28 text-center">Actions</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {items.map((item, idx) => {
-                                  const isHidden = item.status === 'HIDDEN';
-                                  const isDuplicate = item.remarks && item.remarks.includes('[DUPLICATE DESCRIPTION]');
-                                  return (
-                                    <tr key={item.id} className={cn('border-b border-slate-100 transition-colors', isHidden ? 'bg-slate-50 opacity-60' : 'hover:bg-slate-50/50', isDuplicate && !isHidden && 'bg-amber-50/30')}>
-                                      <td className="p-3 text-center">
-                                        <input type="checkbox" checked={selectedItemIds.includes(item.id)} onChange={(e) => { if (e.target.checked) setSelectedItemIds(prev => [...prev, item.id]); else setSelectedItemIds(prev => prev.filter(id => id !== item.id)); }} className="rounded border-slate-300" />
-                                      </td>
-                                      <td className="p-3 text-xs font-bold text-slate-500">{item.serialNo || idx + 1}</td>
-                                      <td className="p-3 text-xs font-bold text-slate-900">
-                                        <span className={cn(isHidden && 'line-through text-slate-400')}>{item.itemDescription}</span>
-                                        {isDuplicate && <span className="ml-2 inline-flex bg-amber-100 text-amber-800 text-[8px] font-black uppercase px-1 py-0.5 rounded">Duplicate</span>}
-                                        {isHidden && <span className="ml-2 inline-flex bg-slate-200 text-slate-500 text-[8px] font-black uppercase px-1 py-0.5 rounded">Hidden</span>}
-                                      </td>
-                                      <td className="p-3 text-xs font-semibold text-slate-600">{item.category || '—'}</td>
-                                      <td className="p-3 text-xs font-semibold text-slate-600">{item.estimatedMonthlyRequirement || '—'}</td>
-                                      <td className="p-3 text-xs font-semibold text-slate-600">{item.unit || '—'}</td>
-                                      <td className="p-3 text-xs font-semibold text-slate-500 max-w-[12rem] truncate" title={item.remarks}>{item.remarks || '—'}</td>
-                                      <td className="p-3 text-center">
-                                        <div className="flex items-center justify-center gap-1">
-                                          <button onClick={() => handleEditItem(item)} className="p-1.5 text-slate-500 hover:text-[#12335f] hover:bg-slate-100 rounded-md transition-colors" title="Edit Item">
-                                            <Pencil className="h-3.5 w-3.5" />
-                                          </button>
-                                          <button onClick={() => handleToggleItemVisibility(item)} className={cn('p-1.5 rounded-md transition-colors', isHidden ? 'text-emerald-600 hover:bg-emerald-50' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50')} title={isHidden ? 'Show item' : 'Hide item'}>
-                                            {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                                          </button>
-                                          <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Delete Item">
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
+                          <div className="space-y-3">
+                            <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white">
+                              <table className="w-full min-w-[600px] border-collapse text-left">
+                                <thead>
+                                  <tr className="bg-slate-50 border-b border-slate-100">
+                                    <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-12 text-center select-none">
+                                      <input type="checkbox" checked={selectedItemIds.length === items.length && items.length > 0} onChange={(e) => { if (e.target.checked) setSelectedItemIds(items.map(item => item.id)); else setSelectedItemIds([]); }} className="rounded border-slate-300" />
+                                    </th>
+                                    <th className="p-3 w-16"><SortableHeader label="Sl." field="serialNo" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3"><SortableHeader label="Item Description" field="itemDescription" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3"><SortableHeader label="Category" field="category" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3"><SortableHeader label="Qty/Month" field="estimatedMonthlyRequirement" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3 w-20"><SortableHeader label="Unit" field="unit" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3"><SortableHeader label="Remarks" field="remarks" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
+                                    <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-28 text-center select-none">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {pagedItems.map((item, idx) => {
+                                    const isHidden = item.status === 'HIDDEN';
+                                    const isDuplicate = item.remarks && item.remarks.includes('[DUPLICATE DESCRIPTION]');
+                                    return (
+                                      <tr key={item.id} className={cn('border-b border-slate-100 transition-colors', isHidden ? 'bg-slate-50 opacity-60' : 'hover:bg-slate-50/50', isDuplicate && !isHidden && 'bg-amber-50/30')}>
+                                        <td className="p-3 text-center">
+                                          <input type="checkbox" checked={selectedItemIds.includes(item.id)} onChange={(e) => { if (e.target.checked) setSelectedItemIds(prev => [...prev, item.id]); else setSelectedItemIds(prev => prev.filter(id => id !== item.id)); }} className="rounded border-slate-300" />
+                                        </td>
+                                        <td className="p-3 text-xs font-bold text-slate-500">{item.serialNo || ((itemsPage - 1) * itemsPageSize + idx + 1)}</td>
+                                        <td className="p-3 text-xs font-bold text-slate-900">
+                                          <span className={cn(isHidden && 'line-through text-slate-400')}>{item.itemDescription}</span>
+                                          {isDuplicate && <span className="ml-2 inline-flex bg-amber-100 text-amber-800 text-[8px] font-black uppercase px-1 py-0.5 rounded">Duplicate</span>}
+                                          {isHidden && <span className="ml-2 inline-flex bg-slate-200 text-slate-500 text-[8px] font-black uppercase px-1 py-0.5 rounded">Hidden</span>}
+                                        </td>
+                                        <td className="p-3 text-xs font-semibold text-slate-600">{item.category || '—'}</td>
+                                        <td className="p-3 text-xs font-semibold text-slate-600">{item.estimatedMonthlyRequirement || '—'}</td>
+                                        <td className="p-3 text-xs font-semibold text-slate-600">{item.unit || '—'}</td>
+                                        <td className="p-3 text-xs font-semibold text-slate-500 max-w-[12rem] truncate" title={item.remarks}>{item.remarks || '—'}</td>
+                                        <td className="p-3 text-center">
+                                          <div className="flex items-center justify-center gap-1">
+                                            <button onClick={() => handleEditItem(item)} className="p-1.5 text-slate-500 hover:text-[#12335f] hover:bg-slate-100 rounded-md transition-colors" title="Edit Item">
+                                              <Pencil className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button onClick={() => handleToggleItemVisibility(item)} className={cn('p-1.5 rounded-md transition-colors', isHidden ? 'text-emerald-600 hover:bg-emerald-50' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50')} title={isHidden ? 'Show item' : 'Hide item'}>
+                                              {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                                            </button>
+                                            <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Delete Item">
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                              <Pagination
+                                page={itemsPage}
+                                pageSize={itemsPageSize}
+                                total={items.length}
+                                onPageChange={setItemsPage}
+                                onPageSizeChange={setItemsPageSize}
+                                label="items"
+                              />
+                            </div>
                           </div>
                         )}
 
@@ -1801,7 +1888,7 @@ export default function BuyerProfile() {
                 </div>
 
                 <div className="bg-slate-50 rounded-3xl p-8 border border-slate-100 space-y-4">
-                  <div className="flex items-center gap-3">
+                  <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                     <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 shadow-sm">
                       <Shield className="h-5 w-5" />
                     </div>
@@ -2433,7 +2520,7 @@ export default function BuyerProfile() {
                   </div>
 
                   <div className="bg-amber-50/50 border border-amber-100 p-6 rounded-3xl space-y-6">
-                    <div className="flex items-center gap-3 text-amber-800">
+                    <div className="flex items-center gap-2.5 sm:gap-3 text-amber-800">
                       <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
                       <p className="text-xs font-bold ">To change your organisation hierarchy please click here</p>
                     </div>
@@ -2525,7 +2612,7 @@ export default function BuyerProfile() {
                   </div>
                 </div>
 
-                <div className="pt-6 border-t border-slate-50 flex flex-wrap justify-end gap-3">
+                <div className="pt-6 border-t border-slate-50 flex flex-wrap justify-end gap-2.5 sm:gap-3">
                   {emailOtpSent && (
                     <Button
                       onClick={handleSendEmailOtp}

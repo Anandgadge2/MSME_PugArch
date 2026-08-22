@@ -1,18 +1,20 @@
 import React, { memo } from 'react';
-import { Card, CardContent } from '../../components/ui/card';
 import { cn } from '../../lib/utils';
 
 export type KpiCardTone =
   | 'blue'
   | 'green'
+  | 'emerald'
   | 'amber'
+  | 'orange'
   | 'red'
+  | 'rose'
   | 'purple'
   | 'indigo'
   | 'slate'
   | 'cyan'
   | 'teal'
-  | 'rose'
+  | 'sky'
   | 'neutral'
   | 'positive'
   | 'warning'
@@ -22,10 +24,12 @@ export type KpiCardTone =
 export interface KpiCardProps {
   label: string;
   value: React.ReactNode | number | string;
-  subtext?: string;
-  hint?: string;
-  helper?: string;
-  icon?: React.ComponentType<{ className?: string }>;
+  subtext?: React.ReactNode | string;
+  hint?: React.ReactNode | string;
+  helper?: React.ReactNode | string;
+  change?: React.ReactNode | string;
+  description?: React.ReactNode | string;
+  icon?: React.ComponentType<{ className?: string }> | React.ReactNode;
   tone?: KpiCardTone | string;
   color?: string;
   loading?: boolean;
@@ -34,6 +38,9 @@ export interface KpiCardProps {
   onClick?: () => void;
   className?: string;
   ariaLabel?: string;
+  badge?: React.ReactNode | string;
+  badgeColor?: string;
+  trend?: string;
 }
 
 const TONES: Record<string, { bg: string; iconBg: string; text: string; shadow: string }> = {
@@ -43,7 +50,19 @@ const TONES: Record<string, { bg: string; iconBg: string; text: string; shadow: 
     text: 'text-[#12335f]',
     shadow: 'hover:shadow-indigo-500/10'
   },
+  sky: {
+    bg: 'from-sky-500/5 via-blue-500/5 to-transparent border-sky-200/60',
+    iconBg: 'bg-gradient-to-br from-sky-600 to-blue-700 text-white shadow-sky-500/25',
+    text: 'text-sky-700',
+    shadow: 'hover:shadow-sky-500/10'
+  },
   green: {
+    bg: 'from-emerald-500/5 via-teal-500/5 to-transparent border-emerald-200/60',
+    iconBg: 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-emerald-500/25',
+    text: 'text-emerald-700',
+    shadow: 'hover:shadow-emerald-500/10'
+  },
+  emerald: {
     bg: 'from-emerald-500/5 via-teal-500/5 to-transparent border-emerald-200/60',
     iconBg: 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-emerald-500/25',
     text: 'text-emerald-700',
@@ -60,6 +79,12 @@ const TONES: Record<string, { bg: string; iconBg: string; text: string; shadow: 
     iconBg: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-amber-500/25',
     text: 'text-amber-700',
     shadow: 'hover:shadow-amber-500/10'
+  },
+  orange: {
+    bg: 'from-orange-500/5 via-amber-500/5 to-transparent border-orange-200/60',
+    iconBg: 'bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-orange-500/25',
+    text: 'text-orange-700',
+    shadow: 'hover:shadow-orange-500/10'
   },
   warning: {
     bg: 'from-amber-500/5 via-orange-500/5 to-transparent border-amber-200/60',
@@ -135,6 +160,8 @@ function KpiCardBase({
   subtext,
   hint,
   helper,
+  change,
+  description,
   icon: Icon,
   tone,
   color,
@@ -143,13 +170,26 @@ function KpiCardBase({
   isActive,
   onClick,
   className,
-  ariaLabel
+  ariaLabel,
+  badge,
+  badgeColor
 }: KpiCardProps) {
-  const resolvedToneKey = String(tone || color || 'blue').toLowerCase();
-  const currentTone = TONES[resolvedToneKey] || TONES.blue;
+  // Normalize tone key
+  let toneKey = String(tone || color || 'blue').toLowerCase().trim();
+  if (toneKey.includes('emerald') || toneKey.includes('green')) toneKey = 'green';
+  else if (toneKey.includes('amber') || toneKey.includes('orange') || toneKey.includes('yellow')) toneKey = 'amber';
+  else if (toneKey.includes('red') || toneKey.includes('rose')) toneKey = 'red';
+  else if (toneKey.includes('purple') || toneKey.includes('violet')) toneKey = 'purple';
+  else if (toneKey.includes('indigo')) toneKey = 'indigo';
+  else if (toneKey.includes('cyan')) toneKey = 'cyan';
+  else if (toneKey.includes('teal')) toneKey = 'teal';
+  else if (toneKey.includes('sky')) toneKey = 'sky';
+  else if (toneKey.includes('slate') || toneKey.includes('gray')) toneKey = 'slate';
+
+  const currentTone = TONES[toneKey] || TONES.blue;
   const isCardActive = active ?? isActive ?? false;
   const interactive = typeof onClick === 'function';
-  const displaySubtext = subtext || hint || helper;
+  const displaySubtext = subtext || hint || helper || change || description;
 
   const formattedValue = React.useMemo(() => {
     if (loading) return '...';
@@ -161,6 +201,16 @@ function KpiCardBase({
 
   const Element: any = interactive ? 'button' : 'div';
 
+  const renderIcon = () => {
+    if (!Icon) return null;
+    if (React.isValidElement(Icon)) return Icon;
+    if (typeof Icon === 'function' || typeof Icon === 'object') {
+      const IconComponent = Icon as React.ComponentType<{ className?: string }>;
+      return <IconComponent className="h-3.5 w-3.5 sm:h-5 sm:w-5" />;
+    }
+    return null;
+  };
+
   return (
     <Element
       type={interactive ? 'button' : undefined}
@@ -168,38 +218,47 @@ function KpiCardBase({
       aria-pressed={interactive ? Boolean(isCardActive) : undefined}
       aria-label={interactive ? ariaLabel || `Filter by ${label}` : undefined}
       className={cn(
-        'group relative w-full text-left overflow-hidden rounded-2xl border bg-gradient-to-br p-3 sm:p-4.5 shadow-sm backdrop-blur-sm transition-all duration-300',
+        'group relative w-full text-left overflow-hidden rounded-xl sm:rounded-2xl border bg-gradient-to-br p-2.5 sm:p-4 shadow-sm backdrop-blur-sm transition-all duration-300',
         interactive && 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#12335f]/30',
         isCardActive
           ? 'border-[#12335f] shadow-md ring-2 ring-[#12335f]/20 bg-white'
-          : 'hover:-translate-y-1 hover:border-[#12335f]/40 hover:shadow-lg',
+          : 'hover:-translate-y-0.5 hover:border-[#12335f]/40 hover:shadow-md',
         currentTone.bg,
         currentTone.shadow,
         className
       )}
     >
-      <div className="flex items-start justify-between gap-2 sm:gap-3">
+      <div className="flex items-start justify-between gap-1.5 sm:gap-2.5">
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] min-[400px]:text-[10px] font-black uppercase tracking-wider text-slate-500 truncate">{label}</p>
-          <p className={cn('mt-1 text-xl min-[400px]:text-2xl sm:text-3xl font-black tracking-tight truncate', loading ? 'text-slate-300 animate-pulse' : 'text-slate-900')}>
+          <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+            <p className="text-[8.5px] sm:text-[10px] lg:text-xs font-black uppercase tracking-wider text-slate-500 truncate leading-tight">
+              {label}
+            </p>
+            {badge && (
+              <span className={cn('text-[7.5px] sm:text-[8px] lg:text-[10px] font-black uppercase px-1 sm:px-1.5 py-0.5 rounded', badgeColor || 'bg-blue-100 text-blue-800')}>
+                {badge}
+              </span>
+            )}
+          </div>
+          <div className={cn('mt-0.5 sm:mt-1 text-base sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight truncate', loading ? 'text-slate-300 animate-pulse' : 'text-slate-900')}>
             {formattedValue}
-          </p>
+          </div>
         </div>
         {Icon && (
           <div
             className={cn(
-              'flex h-8 w-8 min-[400px]:h-9 min-[400px]:w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg sm:rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3',
+              'flex h-7 w-7 sm:h-10 sm:w-10 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-lg sm:rounded-xl shadow-xs sm:shadow-md transition-transform duration-300 group-hover:scale-105',
               currentTone.iconBg
             )}
           >
-            <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+            {renderIcon()}
           </div>
         )}
       </div>
       {displaySubtext && (
-        <div className="mt-2.5 sm:mt-3 flex items-center gap-1 sm:gap-1.5 border-t border-slate-100/90 pt-2 sm:pt-2.5">
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400 animate-pulse" />
-          <p className="text-[10px] min-[400px]:text-[11px] font-medium text-slate-500 truncate">{displaySubtext}</p>
+        <div className="mt-1.5 sm:mt-3 flex items-center gap-1 sm:gap-1.5 border-t border-slate-100/90 pt-1.5 sm:pt-2.5">
+          <span className="h-1 w-1 sm:h-1.5 sm:w-1.5 shrink-0 rounded-full bg-slate-400 animate-pulse" />
+          <div className="text-[9px] sm:text-[11px] lg:text-xs font-semibold text-slate-500 truncate">{displaySubtext}</div>
         </div>
       )}
     </Element>

@@ -19,6 +19,7 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { usePermissions } from '../../../hooks/useOrgRole';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
+import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { formatCurrency, formatDateTime } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import { getApi } from '../../shared/apiClient';
@@ -115,6 +116,30 @@ function CriteriaTab({ tenderId }: { tenderId: number }) {
 
     const canEdit = hasPermission('tender.update') || hasPermission('bid.technical.evaluate');
 
+    type CriteriaSortKey = 'name' | 'maxScore' | 'weightage' | 'isMandatory';
+    const [sortKey, setSortKey] = useState<CriteriaSortKey>('name');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+    const toggleSort = (key: CriteriaSortKey) => {
+        setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+        setSortKey(key);
+    };
+
+    const sortedCriteria = (data || []).slice().sort((a, b) => {
+        let valA: any = a[sortKey];
+        let valB: any = b[sortKey];
+        if (sortKey === 'maxScore' || sortKey === 'weightage') {
+            return sortDirection === 'asc' ? Number(valA || 0) - Number(valB || 0) : Number(valB || 0) - Number(valA || 0);
+        }
+        if (sortKey === 'isMandatory') {
+            return sortDirection === 'asc' ? (a.isMandatory ? 1 : 0) - (b.isMandatory ? 1 : 0) : (b.isMandatory ? 1 : 0) - (a.isMandatory ? 1 : 0);
+        }
+        const strA = String(valA || '').toLowerCase();
+        const strB = String(valB || '').toLowerCase();
+        const res = strA.localeCompare(strB);
+        return sortDirection === 'asc' ? res : -res;
+    });
+
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -137,18 +162,19 @@ function CriteriaTab({ tenderId }: { tenderId: number }) {
                     ) : (
                         <Card className="border-slate-200/80">
                             <CardContent className="p-0">
-                                <table className="w-full text-sm">
-                                    <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm min-w-[500px]">
+                                        <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                         <tr>
                                             <th className="px-4 py-2.5 text-left w-12">#</th>
-                                            <th className="px-4 py-2.5 text-left">Name</th>
-                                            <th className="px-4 py-2.5 text-right w-32">Max Score</th>
-                                            <th className="px-4 py-2.5 text-right w-32">Weightage %</th>
-                                            <th className="px-4 py-2.5 text-center w-32">Mandatory</th>
+                                            <th className="px-4 py-2.5 text-left"><SortableHeader label="Name" field="name" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                            <th className="px-4 py-2.5 text-right w-32"><SortableHeader label="Max Score" field="maxScore" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
+                                            <th className="px-4 py-2.5 text-right w-32"><SortableHeader label="Weightage %" field="weightage" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
+                                            <th className="px-4 py-2.5 text-center w-32"><SortableHeader label="Mandatory" field="isMandatory" activeField={sortKey} direction={sortDirection} onSort={toggleSort} align="center" /></th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {data.map((c, idx) => (
+                                        {sortedCriteria.map((c, idx) => (
                                             <tr key={c.id}>
                                                 <td className="px-4 py-3 font-mono text-xs text-slate-400">{String(idx + 1).padStart(2, '0')}</td>
                                                 <td className="px-4 py-3">
@@ -166,6 +192,7 @@ function CriteriaTab({ tenderId }: { tenderId: number }) {
                                         ))}
                                     </tbody>
                                 </table>
+                            </div>
                             </CardContent>
                         </Card>
                     )
@@ -204,20 +231,20 @@ function AddCriterionModal({ onClose, onSubmit, pending }: { onClose: () => void
                 <div className="p-5 space-y-3">
                     <Field label="Name *">
                         <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Technical specification compliance"
-                            className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
+                            className="h-[40px] sm:h-9 w-full rounded border border-slate-200 px-3 text-[11px] sm:text-xs font-semibold" />
                     </Field>
                     <Field label="Description">
                         <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
-                            className="w-full rounded border border-slate-200 px-3 py-2 text-xs font-semibold" />
+                            className="w-full rounded border border-slate-200 px-3 py-2 text-[11px] sm:text-xs font-semibold" />
                     </Field>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
                         <Field label="Max Score *">
                             <input type="number" value={maxScore} onChange={e => setMaxScore(Number(e.target.value))} min={1}
-                                className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
+                                className="h-[40px] sm:h-9 w-full rounded border border-slate-200 px-3 text-[11px] sm:text-xs font-semibold" />
                         </Field>
                         <Field label="Weightage %">
                             <input type="number" value={weightage} onChange={e => setWeightage(e.target.value === '' ? '' : Number(e.target.value))} min={0} max={100}
-                                className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
+                                className="h-[40px] sm:h-9 w-full rounded border border-slate-200 px-3 text-[11px] sm:text-xs font-semibold" />
                         </Field>
                     </div>
                     <label className="flex items-center gap-2 text-xs font-semibold">
@@ -243,8 +270,8 @@ function AddCriterionModal({ onClose, onSubmit, pending }: { onClose: () => void
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
     return (
-        <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</label>
+        <div className="space-y-0.5 sm:space-y-1">
+            <label className="text-[9px] sm:text-[10px] font-bold sm:font-black uppercase tracking-wide sm:tracking-wider text-slate-400">{label}</label>
             {children}
         </div>
     );
@@ -256,6 +283,10 @@ function TechnicalTab({ tenderId }: { tenderId: number }) {
     const { data, isLoading, error, refetch } = useTechnicalEvaluation(tenderId);
     const submitMut = useSubmitTechnicalScores(tenderId);
     const [scoring, setScoring] = useState<{ bidId: number; scores: Record<number, number>; remarks: Record<number, string> } | null>(null);
+
+    type TechSortKey = 'bidder' | 'totalScore' | 'percent' | 'status';
+    const [sortKey, setSortKey] = useState<TechSortKey>('percent');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
     if (isLoading) return <LoadingState label="Loading technical evaluation..." />;
     if (error) return <InlineError message={(error as Error).message} onRetry={() => refetch()} />;
@@ -279,6 +310,32 @@ function TechnicalTab({ tenderId }: { tenderId: number }) {
         );
     }
 
+    const toggleSort = (key: TechSortKey) => {
+        setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
+        setSortKey(key);
+    };
+
+    const sortedBidScores = (bidScores || []).slice().sort((a, b) => {
+        if (sortKey === 'bidder') {
+            const nameA = a.bid.seller?.name || `Seller #${a.bid.sellerId}`;
+            const nameB = b.bid.seller?.name || `Seller #${b.bid.sellerId}`;
+            const res = nameA.localeCompare(nameB);
+            return sortDirection === 'asc' ? res : -res;
+        }
+        if (sortKey === 'totalScore') {
+            return sortDirection === 'asc' ? a.totalScore - b.totalScore : b.totalScore - a.totalScore;
+        }
+        if (sortKey === 'percent') {
+            return sortDirection === 'asc' ? a.percent - b.percent : b.percent - a.percent;
+        }
+        if (sortKey === 'status') {
+            const stA = !a.isFullyEvaluated ? 0 : a.qualified ? 2 : 1;
+            const stB = !b.isFullyEvaluated ? 0 : b.qualified ? 2 : 1;
+            return sortDirection === 'asc' ? stA - stB : stB - stA;
+        }
+        return 0;
+    });
+
     return (
         <div className="space-y-3">
             <p className="text-xs font-semibold text-slate-600">
@@ -291,15 +348,15 @@ function TechnicalTab({ tenderId }: { tenderId: number }) {
                         <table className="w-full text-sm">
                             <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
                                 <tr>
-                                    <th className="px-4 py-2.5 text-left">Bidder</th>
-                                    <th className="px-4 py-2.5 text-right w-32">Score</th>
-                                    <th className="px-4 py-2.5 text-right w-24">% Pass</th>
-                                    <th className="px-4 py-2.5 text-center w-32">Status</th>
+                                    <th className="px-4 py-2.5 text-left"><SortableHeader label="Bidder" field="bidder" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="px-4 py-2.5 text-right w-32"><SortableHeader label="Score" field="totalScore" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
+                                    <th className="px-4 py-2.5 text-right w-24"><SortableHeader label="% Pass" field="percent" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
+                                    <th className="px-4 py-2.5 text-center w-32"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} align="center" /></th>
                                     <th className="px-4 py-2.5 text-right w-32">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {bidScores.map(b => (
+                                {sortedBidScores.map(b => (
                                     <tr key={b.bid.id}>
                                         <td className="px-4 py-3">
                                             <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{b.bid.seller?.name || `Seller #${b.bid.sellerId}`}</p>
@@ -622,15 +679,15 @@ function ComparativeTab({ tenderId }: { tenderId: number }) {
                             <EmptyState title="No statement yet" description="Generate the comparative statement once technical and financial evaluations are complete." />
                         </CardContent></Card>
                     ) : (
-                        <Card className="border-slate-200/80">
+                        <Card className="border-slate-200/80 min-w-0">
                             <CardContent className="p-5 space-y-3">
                                 <div className="flex items-center justify-between flex-wrap gap-3">
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Comparative Statement v{data.version}</p>
                                         <p className="mt-1 text-xs font-semibold text-slate-700">Generated {formatDateTime(data.createdAt)}</p>
                                     </div>
                                     {data.recommended && (
-                                        <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase text-emerald-800">
+                                        <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase text-emerald-800 shrink-0">
                                             <Award className="mr-1 h-3 w-3" /> Recommendation Available
                                         </span>
                                     )}

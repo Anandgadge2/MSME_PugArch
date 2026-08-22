@@ -22,6 +22,7 @@ import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { postApi } from '../features/shared/apiClient';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
+import { PageToolbar } from '../features/shared/PageToolbar';
 import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
 import { useDeliveryByPO } from '../features/delivery/hooks';
@@ -205,7 +206,10 @@ export default function PurchaseOrders() {
     [allOrders]
   );
   const deliveredCount = useMemo(
-    () => allOrders.filter(order => String(order.status || '').toLowerCase() === 'delivered').length,
+    () => allOrders.filter(order => {
+      const s = String(order.status || '').toLowerCase();
+      return s === 'delivered' || s === 'completed';
+    }).length,
     [allOrders]
   );
   const openCount = useMemo(
@@ -717,7 +721,7 @@ export default function PurchaseOrders() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto w-full max-w-full">
             <table className="w-full min-w-[1000px] border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75">

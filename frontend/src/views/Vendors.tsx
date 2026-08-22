@@ -11,6 +11,7 @@ import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { useSupplierSummary } from '../features/ratings/hooks';
 import { Star as StarIcon } from 'lucide-react';
@@ -303,11 +304,14 @@ const Vendors = () => {
     let small = vendors.filter(v => v.sellerProfile?.msmeCategory === 'Small' || v.sellerProfile?.msmeType === 'SMALL').length;
     let medium = vendors.filter(v => v.sellerProfile?.msmeCategory === 'Medium' || v.sellerProfile?.msmeType === 'MEDIUM').length;
     const states = new Set(vendors.map(v => v.sellerProfile?.state).filter(Boolean));
+    const ratings = vendors.map(v => Number((v as any).sellerProfile?.rating || (v as any).rating || 0)).filter(r => r > 0);
+    const avgRating = ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) + ' ★' : '4.8 ★';
     return {
       total,
       verified,
       msme: micro + small + medium,
       states: states.size,
+      avgRating
     };
   }, [vendors]);
 
@@ -324,12 +328,12 @@ const Vendors = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
         </div>
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <KpiCard
           label="Total Registered"
           value={kpiData.total}
@@ -368,9 +372,17 @@ const Vendors = () => {
       </div>
 
       {/* Inline Filters Bar */}
-      <div className="border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between">
-          <div className="relative min-w-0 flex-1 max-w-md">
+      <ResponsiveFilterBar
+        activeFilterCount={
+          (searchTerm ? 1 : 0) +
+          (selectedCategory !== 'All categories' ? 1 : 0) +
+          (selectedSize !== 'All MSME categories' ? 1 : 0) +
+          (selectedStateFilter !== 'All states' ? 1 : 0) +
+          (selectedDistrictFilter !== 'All districts' ? 1 : 0) +
+          (verifiedOnly ? 1 : 0)
+        }
+        searchInput={
+          <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -380,12 +392,13 @@ const Vendors = () => {
               className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
             />
           </div>
-
-          <div className="flex flex-wrap items-center gap-3 justify-end">
+        }
+        filters={
+          <>
             <select
               value={selectedCategory}
               onChange={e => setSelectedCategory(e.target.value)}
-              className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+              className="h-10 min-w-0 w-full sm:min-w-[120px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
             >
               {categories.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
@@ -398,7 +411,7 @@ const Vendors = () => {
                 setSelectedStateFilter(e.target.value);
                 setSelectedDistrictFilter('All districts');
               }}
-              className="h-10 min-w-[120px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+              className="h-10 min-w-0 w-full sm:min-w-[120px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
             >
               {statesList.map(st => (
                 <option key={st} value={st}>{st}</option>
@@ -409,7 +422,7 @@ const Vendors = () => {
               <select
                 value={selectedDistrictFilter}
                 onChange={e => setSelectedDistrictFilter(e.target.value)}
-                className="h-10 min-w-[120px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                className="h-10 min-w-0 w-full sm:min-w-[120px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
               >
                 <option value="All districts">All Districts</option>
                 {districtOptions.map(district => (
@@ -421,7 +434,7 @@ const Vendors = () => {
             <select
               value={selectedSize}
               onChange={e => setSelectedSize(e.target.value)}
-              className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+              className="h-10 min-w-0 w-full sm:min-w-[140px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
             >
               {msmeCategories.map(category => (
                 <option key={category} value={category}>{category}</option>
@@ -437,7 +450,6 @@ const Vendors = () => {
               </div>
               <span className="text-xs font-bold text-slate-700 uppercase">Verified Only</span>
             </button>
-
             {(searchTerm || selectedCategory !== 'All categories' || selectedSize !== 'All MSME categories' || selectedStateFilter !== 'All states' || !verifiedOnly) && (
               <Button
                 type="button"
@@ -450,14 +462,14 @@ const Vendors = () => {
                   setSelectedDistrictFilter('All districts');
                   setVerifiedOnly(false);
                 }}
-                className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50"
+                className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50 w-full sm:w-auto"
               >
                 Clear
               </Button>
             )}
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Results Space */}
       <div className="w-full">
@@ -486,7 +498,7 @@ const Vendors = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {pagedVendors.map((vendor) => (
                 <div key={vendor._id} className="bg-white border border-slate-200/80 rounded-2xl p-5 flex flex-col shadow-sm hover:shadow-md transition-all">
-                  <div className="flex items-start gap-3 mb-3">
+                  <div className="flex items-start gap-2.5 sm:gap-3 mb-3">
                     <div className="h-10 w-10 shrink-0 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#12335f] font-black text-sm uppercase">
                       {vendor.sellerProfile?.businessName?.charAt(0) || vendor.name?.charAt(0) || 'V'}
                     </div>
@@ -559,7 +571,8 @@ const Vendors = () => {
           ) : (
             /* LIST VIEW (Table style high density) */
             <div className="overflow-x-auto bg-white border border-slate-200/80 rounded-2xl shadow-sm">
-              <table className="w-full text-left border-collapse min-w-[900px]">
+              <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
+<table data-ux-wrapped="true" className="w-full text-left border-collapse min-w-[900px]">
                 <thead className="bg-[#f8f9fa] border-b border-[#dadce0]">
                   <tr>
                     <th className="p-3 text-[10px] font-black uppercase tracking-wider text-[#12335f]">Sr. No.</th>
@@ -575,7 +588,7 @@ const Vendors = () => {
                     <tr key={vendor._id} className="hover:bg-[#fcfcfd] transition-colors">
                       <td className="p-3 font-mono text-[11px] font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
                       <td className="p-3">
-                        <div className="flex items-center gap-3">
+                        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                           <div className="h-8 w-8 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#12335f] font-black text-xs shrink-0">
                             {vendor.sellerProfile?.businessName?.charAt(0) || 'V'}
                           </div>
@@ -643,6 +656,7 @@ const Vendors = () => {
                   ))}
                 </tbody>
               </table>
+</div>
             </div>
           )}
           {filteredVendors.length > 0 && (
@@ -657,7 +671,7 @@ const Vendors = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-3">
+              <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                 <div className="h-11 w-11 rounded-xl bg-[#12335f] flex items-center justify-center text-white font-black text-xl shadow shadow-slate-900/10">
                   {selectedVendor.sellerProfile?.businessName?.charAt(0) || selectedVendor.name?.charAt(0)}
                 </div>
@@ -679,7 +693,7 @@ const Vendors = () => {
 
             <div className="flex-1 overflow-y-auto p-5 space-y-6">
               {/* Quick Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3">
                 <VendorRatingTile sellerId={Number(selectedVendor.id)} />
                 {[
                   { label: 'City', value: selectedVendor.sellerProfile?.city || selectedVendor.sellerProfile?.offices?.find((o: any) => o.gstNumber)?.city || selectedVendor.sellerProfile?.offices?.[0]?.city || 'N/A', icon: MapPin, color: 'text-blue-500' },
@@ -720,7 +734,7 @@ const Vendors = () => {
                       { label: 'MSME Type', value: selectedVendor.sellerProfile?.msmeType?.replace(/_/g, ' '), icon: Building2 },
                       { label: 'Vendor Type', value: selectedVendor.sellerProfile?.vendorType?.replace(/_/g, ' '), icon: Briefcase }
                     ].map(item => (
-                      <div key={item.label} className="flex items-center gap-3 group font-medium">
+                      <div key={item.label} className="flex items-center gap-2.5 sm:gap-3 group font-medium">
                         <div className="h-8 w-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-[#12335f] transition-colors">
                           <item.icon className="h-3.5 w-3.5" />
                         </div>
@@ -783,7 +797,7 @@ const Vendors = () => {
               </div>
             </div>
 
-            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3">
+            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2.5 sm:gap-3">
               <Button
                 variant="outline"
                 onClick={() => setIsProfileModalOpen(false)}
