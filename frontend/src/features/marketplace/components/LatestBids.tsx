@@ -12,6 +12,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import type { MarketplaceBid, MarketplaceTender } from '../api';
+import { resolveMediaUrl } from '../../../lib/api';
 import { 
     formatSingleBudget, 
     formatDateIN, 
@@ -21,6 +22,75 @@ import {
 } from '../utils/procurementDisplay';
 import { cn } from '../../../lib/utils';
 import { formatRefId } from '../../../utils/refIdUtils';
+
+const BUYER_LOGO_MAPPINGS: Record<string, string> = {
+    'thakur prasad': '/org-logos/thakur-prasad-sao.svg',
+    'tps': '/org-logos/thakur-prasad-sao.svg',
+    'jai hanuman': '/org-logos/jai-hanuman-udyog.svg',
+    'seven star': '/org-logos/seven-star-steels.svg',
+    'ln metallics': '/org-logos/ln-metallics.svg',
+    'l n metallics': '/org-logos/ln-metallics.svg',
+    'ultratech': '/org-logos/ultratech-cement-jharsuguda.svg',
+    'orissa metaliks': '/org-logos/orissa-metaliks.svg',
+    'smc power': '/org-logos/smc-power-generation.svg',
+    'trl krosaki': '/org-logos/trl-krosaki-refractories.svg',
+    'vedanta': '/org-logos/vedanta-jharsuguda.svg',
+    'jsw energy': '/org-logos/jsw-energy-utkal.svg',
+    'kainsara': '/org-logos/kainsara-infraprojects.svg',
+    'abhinav': '/org-logos/abhinav-distributors.svg',
+    'atom engineering': '/org-logos/atom-engineering-products.svg',
+    'divine trends': '/org-logos/divine-trends.svg',
+    'indian chain': '/org-logos/indian-chain-mill-stores.svg',
+    'jharsuguda broom': '/org-logos/jharsuguda-broom.svg',
+    'jharsuguda pipes': '/org-logos/jharsuguda-pipes-saniteries.svg',
+    'kalpana traders': '/org-logos/kalpana-traders-jharsuguda.svg',
+    'konark enterprises': '/org-logos/konark-enterprises.svg',
+    'krishna electricals': '/org-logos/krishna-electricals-industrial.svg',
+    'laxmi sales': '/org-logos/laxmi-sales-agency.svg',
+    'pavan enterprises': '/org-logos/pavan-enterprises-jsg.svg',
+    'rl industrial': '/org-logos/rl-industrial-corporation.svg',
+    'royal engineering': '/org-logos/royal-engineering.svg',
+    'siddhivinayak': '/org-logos/siddhivinayak-engineering.svg',
+    'skf stores': '/org-logos/skf-stores-spares.svg',
+    'swastik engicom': '/org-logos/swastik-engicom.svg',
+    'swastik enterprise': '/org-logos/swastik-enterprise.svg',
+    'trade industrial': '/org-logos/trade-industrial-syndicate.svg',
+    'utkal innovatives': '/org-logos/utkal-innovatives.svg',
+};
+
+function resolveBuyerLogoByName(name?: string | null) {
+    if (!name) return null;
+    const lower = name.toLowerCase();
+    for (const [key, path] of Object.entries(BUYER_LOGO_MAPPINGS)) {
+        if (lower.includes(key)) {
+            return path;
+        }
+    }
+    return null;
+}
+
+function BuyerLogoIcon({ name }: { name: string }) {
+    const [imgErr, setImgErr] = useState(false);
+    const logoSrc = resolveBuyerLogoByName(name);
+
+    if (logoSrc && !imgErr) {
+        return (
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-0.5 border border-slate-200 shadow-2xs">
+                <img
+                    src={logoSrc}
+                    alt={`${name} logo`}
+                    onError={() => setImgErr(true)}
+                    className="h-full w-full object-contain rounded-full"
+                    loading="lazy"
+                />
+            </span>
+        );
+    }
+
+    return (
+        <Landmark className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+    );
+}
 
 interface OpportunityData {
     id: number;
@@ -93,12 +163,11 @@ const parseDescription = (desc?: string | null) => {
 const getFormattedDescription = (desc?: string | null): string => {
     if (!desc) return 'No description provided.';
     const parsed = parseDescription(desc);
-    if (!parsed.method && !parsed.value && !parsed.urgency) {
+    if (!parsed.method && !parsed.urgency) {
         return desc;
     }
     const parts: string[] = [];
     if (parsed.method) parts.push(`Sourcing Method: ${parsed.method}`);
-    if (parsed.value) parts.push(`Value: ${parsed.value}`);
     if (parsed.urgency) parts.push(`Urgency: ${parsed.urgency}`);
     if (parsed.text) parts.push(parsed.text);
     return parts.join(' | ');
@@ -269,8 +338,8 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
                 })()}
 
                 <div className="space-y-1.5 pt-3 border-t border-slate-100 text-xs font-semibold text-slate-600">
-                    <p className="flex items-center gap-1.5 truncate">
-                        <Landmark className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <p className="flex items-center gap-2 truncate">
+                        <BuyerLogoIcon name={item.buyerName} />
                         <span className="truncate text-slate-800 font-bold">{item.buyerName}</span>
                     </p>
                     <p className="flex items-center gap-1.5 truncate">
@@ -286,34 +355,21 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
                 </div>
             </div>
 
-            <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-col gap-3">
-                <div className="flex justify-between items-end">
-                    <div>
-                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Est. Value</span>
-                        <span className="text-sm font-black text-[#0b2447]">{formatSingleBudget(item.budget)}</span>
-                    </div>
-                    <div className="text-right">
-                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Responses</span>
-                        <span className="text-xs font-black text-slate-700">{item.participantsCount} bid{item.participantsCount === 1 ? '' : 's'}</span>
-                    </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-2">
-                    <span className={cn(
-                        "inline-flex items-center gap-1 text-[11px] font-bold rounded-lg px-2 py-1",
-                        deadlineAlert ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-slate-50 text-slate-500 border border-slate-100'
-                    )}>
-                        <Clock className="h-3.5 w-3.5 shrink-0" />
-                        {item.deadlineLabel}
-                    </span>
-                    <Link 
-                        href={item.link} 
-                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#0b2447] px-3.5 text-xs font-extrabold text-white hover:bg-[#12335f] transition active:scale-95 shadow-sm"
-                    >
-                        View Details 
-                        <ArrowRight className="h-3.5 w-3.5" />
-                    </Link>
-                </div>
+            <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                <span className={cn(
+                    "inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-1 border shadow-2xs",
+                    deadlineAlert ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-50 text-slate-600 border-slate-200/80'
+                )}>
+                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                    {item.deadlineLabel}
+                </span>
+                <Link 
+                    href={item.link} 
+                    className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-[#0b2447] px-3.5 text-xs font-black text-white hover:bg-[#12335f] active:scale-95 transition-all shadow-sm"
+                >
+                    View Details 
+                    <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
             </div>
         </article>
     );
@@ -325,25 +381,25 @@ function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: numbe
 
     return (
         <tr className="group hover:bg-slate-50/80 transition-all duration-200 border-b border-slate-100 last:border-0">
-            <td className="px-5 py-4 font-black text-slate-400 text-xs group-hover:text-slate-600 transition-colors">{srNo}</td>
-            <td className="px-5 py-4">
+            <td className="px-4 py-3.5 sm:px-5 sm:py-4 font-black text-slate-400 text-xs group-hover:text-slate-600 transition-colors">{srNo}</td>
+            <td className="px-4 py-3.5 sm:px-5 sm:py-4">
                 <span className="inline-block text-[11px] font-mono font-bold text-slate-700 bg-slate-100/90 px-2.5 py-1 rounded-md border border-slate-200/70 whitespace-nowrap shadow-2xs group-hover:border-blue-200 group-hover:bg-blue-50/40 transition-colors">
                     {item.displayId}
                 </span>
             </td>
-            <td className="px-5 py-4">
-                <div className="max-w-[320px]">
-                    <p className="font-black text-slate-900 text-xs sm:text-sm mb-1 line-clamp-1 group-hover:text-[#0b2447] transition-colors" title={item.title}>
+            <td className="px-4 py-3.5 sm:px-5 sm:py-4">
+                <div className="space-y-1">
+                    <p className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug group-hover:text-[#0b2447] transition-colors">
                         {item.title}
                     </p>
-                     {(() => {
+                    {(() => {
                         const parsed = parseDescription(item.rawDescription || item.description);
                         const showUrgency = parsed.urgency && !parsed.urgency.toLowerCase().includes('normal');
                         const hasBadges = parsed.method || showUrgency;
                         return (
-                            <>
+                            <div className="space-y-1">
                                 {hasBadges && (
-                                    <div className="flex flex-wrap gap-1.5 mb-1">
+                                    <div className="flex flex-wrap gap-1.5">
                                         {parsed.method && (
                                             <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/80 whitespace-nowrap shadow-2xs">
                                                 {parsed.method}
@@ -362,35 +418,38 @@ function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: numbe
                                     </div>
                                 )}
                                 {parsed.text ? (
-                                    <p className="line-clamp-1 text-[11px] text-slate-500 font-medium leading-relaxed" title={parsed.text}>
+                                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
                                         {parsed.text}
                                     </p>
-                                ) : !hasBadges ? (
-                                    <p className="line-clamp-1 text-[11px] text-slate-500 font-medium leading-relaxed" title={item.description}>
+                                ) : !hasBadges && item.description ? (
+                                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
                                         {item.description}
                                     </p>
                                 ) : null}
-                            </>
+                            </div>
                         );
                     })()}
                 </div>
             </td>
-            <td className="px-5 py-4 text-slate-800 text-xs sm:text-sm font-bold">
-                <span className="line-clamp-2 leading-snug">{item.buyerName}</span>
+            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-800 text-xs sm:text-sm font-bold">
+                <div className="flex items-center gap-2.5">
+                    <BuyerLogoIcon name={item.buyerName} />
+                    <span className="font-extrabold text-xs sm:text-sm text-slate-900 leading-snug">{item.buyerName}</span>
+                </div>
             </td>
-            <td className="px-5 py-4 text-slate-600 text-xs font-semibold">
-                <span className="inline-block max-w-[180px] truncate bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200/60 text-slate-600">
+            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-600 text-xs font-semibold">
+                <span className="inline-block bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200/60 text-slate-600 leading-snug">
                     {item.category}
                 </span>
             </td>
-            <td className="px-5 py-4 text-slate-600 text-xs font-semibold whitespace-nowrap">
+            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-600 text-xs font-semibold whitespace-nowrap">
                 {item.startDate ? new Date(item.startDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
             </td>
-            <td className="px-5 py-4 text-slate-800 text-xs whitespace-nowrap">
+            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-800 text-xs whitespace-nowrap">
                 <div className="space-y-0.5">
-                    <p className="font-black text-slate-900">{item.endDate ? new Date(item.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
+                    <p className="font-extrabold text-slate-900">{item.endDate ? new Date(item.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
                     <span className={cn(
-                        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
                         deadlineAlert
                             ? 'bg-rose-50 text-rose-700 border-rose-200'
                             : 'bg-slate-100 text-[#0b2447] border-slate-200'
@@ -399,22 +458,22 @@ function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: numbe
                     </span>
                 </div>
             </td>
-            <td className="px-5 py-4">
+            <td className="px-4 py-3.5 sm:px-5 sm:py-4 whitespace-nowrap">
                 <span className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider whitespace-nowrap shadow-2xs",
+                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider shadow-2xs",
                     badgeColor
                 )}>
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
                     {item.statusLabel}
                 </span>
             </td>
-            <td className="px-5 py-4 text-right whitespace-nowrap">
+            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-right whitespace-nowrap">
                 <Link 
                     href={item.link} 
-                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#0b2447] px-3.5 text-xs font-extrabold text-white hover:bg-[#12335f] hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-sm"
+                    className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-[#0b2447] px-3.5 text-xs font-black text-white hover:bg-[#12335f] active:scale-95 transition-all duration-200 shadow-sm"
                 >
                     View Details 
-                    <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                    <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
             </td>
         </tr>
@@ -667,19 +726,19 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                             ))}
                         </div>
                     ) : (
-                        <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-                            <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
+                        <div className="overflow-x-auto rounded-3xl border border-slate-200/80 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.03)] w-full">
+                            <table data-ux-wrapped="true" className="w-full text-left text-sm table-auto border-collapse">
                                 <thead>
                                     <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                                        <th className="px-5 py-4 w-12">#</th>
-                                        <th className="px-5 py-4 w-32">Ref ID</th>
-                                        <th className="px-5 py-4">Title / Description</th>
-                                        <th className="px-5 py-4">Buyer Organization</th>
-                                        <th className="px-5 py-4">Category</th>
-                                        <th className="px-5 py-4">Published Date</th>
-                                        <th className="px-5 py-4">Closes / Timeline</th>
-                                        <th className="px-5 py-4">Status</th>
-                                        <th className="px-5 py-4 text-right">Action</th>
+                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-10">#</th>
+                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-28">Ref ID</th>
+                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-[32%]">Title / Description</th>
+                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-[24%]">Buyer Organization</th>
+                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-[16%]">Category</th>
+                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-28">Published Date</th>
+                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-28">Closes / Timeline</th>
+                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-24">Status</th>
+                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 text-right">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
