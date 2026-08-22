@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import {
-    Search, ShoppingCart, User, Store, Building2, ChevronDown,
-    HelpCircle, LogIn, Menu, X, ArrowRight
+    Search, ShoppingCart, User, Phone, Mail,
+    HelpCircle, LogIn, Store, Building2, ChevronDown,
+    Menu, X, ArrowRight, ShieldCheck, Layers, ClipboardList, Briefcase, Users, FileText, ShoppingBag
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
@@ -104,7 +105,9 @@ export function MarketplaceHeader({ user }: Props) {
     };
 
     return (
-        <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-xl border-b border-slate-200/80 shadow-[0_2px_15px_-3px_rgba(15,23,42,0.04)]">
+        <header className="sticky top-0 z-50 w-full bg-white/90 backdrop-blur-xl border-b border-slate-200/80 shadow-[0_2px_15px_-3px_rgba(15,23,42,0.04)] back">
+
+
             {/* ════════════════════════════════════════════════════════════════════
                 MAIN NAVBAR
             ════════════════════════════════════════════════════════════════════ */}
@@ -223,20 +226,6 @@ export function MarketplaceHeader({ user }: Props) {
 
                     {/* Mobile Controls (Cart + Menu Toggle) */}
                     <div className="flex items-center gap-1.5 sm:hidden shrink-0">
-                        {/* Mobile Cart Button */}
-                        <button
-                            onClick={() => router.push(user ? '/cart' : '/marketplace/cart')}
-                            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm active:scale-95 transition-all"
-                            aria-label="Cart"
-                        >
-                            <ShoppingCart className="h-4 w-4" />
-                            {cartCount > 0 && (
-                                <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-black text-white ring-2 ring-white">
-                                    {cartCount}
-                                </span>
-                            )}
-                        </button>
-
                         {/* Hamburger Menu Toggle */}
                         <button
                             onClick={() => setMobileMenuOpen(v => !v)}
@@ -250,39 +239,12 @@ export function MarketplaceHeader({ user }: Props) {
             </nav>
 
             {/* ════════════════════════════════════════════════════════════════════
-                MOBILE SLIDE-OVER DRAWER MENU
+                MOBILE FULL-WIDTH DROPDOWN MENU
             ════════════════════════════════════════════════════════════════════ */}
             {mobileMenuOpen && (
-                <div 
-                    className="fixed inset-0 z-50 flex flex-col bg-slate-950/60 backdrop-blur-sm sm:hidden animate-in fade-in duration-200"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget) setMobileMenuOpen(false);
-                    }}
-                >
-                    <div className="ml-auto w-full max-w-[300px] h-full bg-white shadow-2xl flex flex-col overflow-y-auto pb-safe animate-in slide-in-from-right duration-300">
-                        
-                        {/* Drawer Header */}
-                        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-[#07172e] to-[#0b2447] text-white">
-                            <div className="flex items-center gap-2.5">
-                                <div className="h-8 w-8 rounded-lg bg-white p-1 flex items-center justify-center shadow-sm">
-                                    <img src="/logoo.png" alt="Logo" className="h-full w-full object-contain" />
-                                </div>
-                                <div>
-                                    <span className="font-extrabold text-sm block leading-tight text-white">JsgSMILE</span>
-                                    <span className="text-[9px] font-bold text-[#c8a45c] uppercase tracking-wider block">MSME Portal</span>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setMobileMenuOpen(false)}
-                                className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
-                                aria-label="Close menu"
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-
-                        {/* Drawer Search */}
-                        <div className="p-3.5 bg-slate-50 border-b border-slate-100">
+                <div className="absolute top-full left-0 w-full max-h-[calc(100dvh-64px)] overflow-y-auto bg-white shadow-2xl border-t border-slate-200 sm:hidden z-40 animate-in slide-in-from-top-2 flex flex-col pb-safe">
+                    {/* Drawer Search */}
+                    <div className="p-3.5 bg-slate-50 border-b border-slate-100">
                             <form onSubmit={handleSearch} className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-3 shadow-inner focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all">
                                 <Search className="h-4 w-4 text-slate-400 mr-2 shrink-0" />
                                 <input
@@ -349,12 +311,22 @@ export function MarketplaceHeader({ user }: Props) {
                             <div className="space-y-1.5 pt-3 border-t border-slate-100">
                                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">Quick Links</p>
                                 <Link
+                                    href="/marketplace/categories"
+                                    onClick={() => setMobileMenuOpen(false)}
+                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Layers className="h-4 w-4 text-[#0b2447]" /> All Categories
+                                    </span>
+                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                </Link>
+                                <Link
                                     href="/marketplace/products"
                                     onClick={() => setMobileMenuOpen(false)}
                                     className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
                                 >
                                     <span className="flex items-center gap-2">
-                                        <Store className="h-4 w-4 text-[#0b2447]" /> Browse Products
+                                        <ShoppingBag className="h-4 w-4 text-[#0b2447]" /> Browse Products
                                     </span>
                                     <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
                                 </Link>
@@ -369,12 +341,32 @@ export function MarketplaceHeader({ user }: Props) {
                                     <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
                                 </Link>
                                 <Link
-                                    href="/help"
+                                    href="/marketplace/sellers"
                                     onClick={() => setMobileMenuOpen(false)}
                                     className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
                                 >
                                     <span className="flex items-center gap-2">
-                                        <HelpCircle className="h-4 w-4 text-[#0b2447]" /> Help & Support
+                                        <Store className="h-4 w-4 text-[#0b2447]" /> Top Sellers
+                                    </span>
+                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                </Link>
+                                <Link
+                                    href="/marketplace/buyers"
+                                    onClick={() => setMobileMenuOpen(false)}
+                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Briefcase className="h-4 w-4 text-[#0b2447]" /> Top Buyers
+                                    </span>
+                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                                </Link>
+                                <Link
+                                    href="/marketplace/requirements"
+                                    onClick={() => setMobileMenuOpen(false)}
+                                    className="flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <FileText className="h-4 w-4 text-[#0b2447]" /> Active Requirements
                                     </span>
                                     <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
                                 </Link>
@@ -382,10 +374,9 @@ export function MarketplaceHeader({ user }: Props) {
                         </div>
 
                         {/* Drawer Footer */}
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-400 text-center">
+                        <div className="p-4 border-t border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-400 text-center shrink-0">
                             Official MSME Portal · Jharsuguda District
                         </div>
-                    </div>
                 </div>
             )}
         </header>

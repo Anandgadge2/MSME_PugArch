@@ -71,7 +71,7 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     );
 
     const containerClassName = cn(
-        'group flex flex-col items-center justify-start w-[100px] sm:w-[120px] md:w-[135px] shrink-0 p-1.5 rounded-2xl transition-all duration-200 text-center cursor-pointer',
+        'group flex flex-col items-center justify-start w-[100px] sm:w-[120px] md:w-[135px] shrink-0 p-1.5 rounded-2xl transition-all duration-200 text-center cursor-pointer snap-start',
         selected
             ? 'bg-white shadow-sm ring-1 ring-blue-200'
             : 'hover:bg-white/70'
@@ -168,7 +168,7 @@ export function CategoryCatalogueStrip({
                     {/* Scrollable Track */}
                     <div
                         ref={scrollRef}
-                        className="flex gap-2 sm:gap-3 md:gap-4 overflow-x-auto pb-2 pt-1 px-1 no-scrollbar lg:px-2 scroll-smooth"
+                        className="flex gap-2 sm:gap-3 md:gap-4 overflow-x-auto pb-2 pt-1 px-1 no-scrollbar snap-x snap-mandatory lg:px-2 scroll-smooth"
                     >
                         {categories.map((category) => {
                             const selected = String(selectedCategoryId || '') === String(category.id);
