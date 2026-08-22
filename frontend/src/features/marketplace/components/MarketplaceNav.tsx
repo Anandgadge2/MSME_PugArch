@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { 
     ChevronDown, 
@@ -9,12 +9,105 @@ import {
     Users, 
     Layers, 
     ClipboardList,
-    Award,
-    TrendingUp,
     Store,
     Building2
 } from 'lucide-react';
 import type { MarketplaceCategory } from '../api';
+
+const CATEGORY_GROUPING: Record<string, string[]> = {
+    'Electrical & Electronics': [
+        'IT & Computer Equipment',
+        'Electrical Cables & Power Equipment',
+        'Telecom & Communication Equipment',
+        'Power & Energy Equipment'
+    ],
+    'Mechanical & Engineering': [
+        'Industrial Machinery & Spare Parts',
+        'Automation & Robotics',
+        'Bearings & Mechanical Components',
+        'Tools & Industrial Hardware',
+        'Conveyor & Material Handling Equipment',
+        'Pumps, Motors & Hydraulics',
+        'Industrial Seals & Gaskets',
+        'Welding & Cutting Equipment',
+        'Industrial Fasteners & Components',
+        'Hydraulics & Pneumatics'
+    ],
+    'Construction & Building Materials': [
+        'Cement & Concrete Products',
+        'Pipes, Tiles & Hardware',
+        'Construction & Civil Work Services',
+        'Furniture & Interior Supplies'
+    ],
+    'Industrial Chemicals': [
+        'Refractories',
+        'Polymer & Plastic Products',
+        'Laboratory Equipment & Chemicals',
+        'Gas Equipment & Cylinders'
+    ],
+    'Automobile Parts & Services': [
+        'Tyres & Rubber Products',
+        'Fuel, Oil & Gas'
+    ],
+    'Trading & Distribution': [
+        'Logistics & Supply Services',
+        'Retail & Commercial Supply',
+        'FMCG & Daily Utility Supply',
+        'Textile & Garments Supply'
+    ],
+    'General Industrial Supplier': [
+        'Medical & Healthcare Supplies',
+        'Safety Equipment & Industrial Safety',
+        'Office Equipment & Stationery',
+        'Agriculture & Nursery',
+        'Steel & Metal Products',
+        'Industrial Consumables',
+        'Packaging & Printing',
+        'Engineering Consultancy Services',
+        'Industrial Maintenance Services',
+        'Environmental & Waste Management',
+        'Mining & Coal Equipment',
+        'OEM / Manufacturing Vendor',
+        'Repair & Service Provider',
+        'Multi-category Industrial Vendor',
+        'Fabrication & Welding Services'
+    ]
+};
+
+const buildMegaMenu = (categories: MarketplaceCategory[]) => {
+    const assignedIds = new Set<number>();
+    const groups: { parent: MarketplaceCategory; children: MarketplaceCategory[] }[] = [];
+    
+    Object.entries(CATEGORY_GROUPING).forEach(([parentName, childNames]) => {
+        const parent = categories.find(c => c.name === parentName);
+        if (!parent) return;
+        assignedIds.add(parent.id);
+        
+        const children = childNames
+            .map(name => categories.find(c => c.name === name))
+            .filter((c): c is MarketplaceCategory => c !== undefined);
+            
+        children.forEach(c => assignedIds.add(c.id));
+        groups.push({ parent, children });
+    });
+    
+    const unassigned = categories.filter(c => !assignedIds.has(c.id));
+    if (unassigned.length > 0) {
+        groups.push({
+            parent: { id: 0, name: 'More Categories', slug: 'more', type: 'OTHER' } as MarketplaceCategory,
+            children: unassigned
+        });
+    }
+    
+    const columns: typeof groups[] = [[], [], [], [], []];
+    let colIndex = 0;
+    groups.forEach(group => {
+        columns[colIndex].push(group);
+        colIndex = (colIndex + 1) % 5;
+    });
+    
+    return columns;
+};
 
 interface MarketplaceNavProps {
     categories: MarketplaceCategory[];
@@ -44,10 +137,22 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
         setMobileMenuOpen(false);
     };
 
-    const topCategories = categories.slice(0, 12);
+    const handleAnchorClick = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
+        handleLinkClick();
+        if (typeof window !== 'undefined' && window.location.pathname === '/') {
+            const el = document.getElementById(targetId);
+            if (el) {
+                e.preventDefault();
+                el.scrollIntoView({ behavior: 'smooth' });
+                window.history.pushState(null, '', `/#${targetId}`);
+            }
+        }
+    };
+
+    const megaMenuColumns = useMemo(() => buildMegaMenu(categories), [categories]);
 
     return (
-        <div ref={navRef} className="relative z-40 w-full bg-white border-b border-slate-200/80 shadow-[0_2px_15px_-3px_rgba(15,23,42,0.04)]">
+        <div ref={navRef} className="hidden md:block relative z-40 w-full bg-white border-b border-slate-200/80 shadow-[0_2px_15px_-3px_rgba(15,23,42,0.04)]">
             {/* Desktop Navigation */}
             <div className="hidden md:flex mx-auto max-w-[1680px] h-12 items-center px-3 sm:px-6 2xl:px-8 gap-6">
                 
@@ -71,7 +176,7 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                             <Link href="/marketplace/requirements" onClick={handleLinkClick} className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0b2447] transition-colors">
                                 <ClipboardList className="h-4 w-4 text-slate-400" /> Active Procurement
                             </Link>
-                            <Link href="/marketplace/buyers" onClick={handleLinkClick} className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0b2447] transition-colors">
+                            <Link href="/#verified-buyers" onClick={(e) => handleAnchorClick(e, 'verified-buyers')} className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0b2447] transition-colors">
                                 <Building2 className="h-4 w-4 text-slate-400" />Verified Buyers
                             </Link>
                               <Link href="/marketplace/buyers" onClick={handleLinkClick} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0b2447] transition-colors">
@@ -101,7 +206,7 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                             <Link href="/marketplace/categories" onClick={handleLinkClick} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0b2447] transition-colors">
                                 <Layers className="h-4 w-4 text-slate-400" /> Categories
                             </Link>
-                            <Link href="/" onClick={handleLinkClick} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0b2447] transition-colors">
+                            <Link href="/#verified-sellers" onClick={(e) => handleAnchorClick(e, 'verified-sellers')} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0b2447] transition-colors">
                                 <Users className="h-4 w-4 text-slate-400" /> Verified Partners
                             </Link>
                           
@@ -111,7 +216,7 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
 
                 {/* CATEGORIES MEGA MENU */}
                 <div 
-                    className="relative h-full flex items-center group"
+                    className="static h-full flex items-center group"
                     onMouseEnter={() => setActiveDropdown('categories')}
                     onMouseLeave={() => setActiveDropdown(null)}
                 >
@@ -125,24 +230,47 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                     </button>
                     
                     {activeDropdown === 'categories' && (
-                        <div className="absolute top-full left-0 mt-0 w-[600px] rounded-xl border border-slate-200 bg-white shadow-xl p-5 animate-in fade-in slide-in-from-top-2">
-                            <div className="grid grid-cols-3 gap-x-4 gap-y-3">
-                                {topCategories.map(cat => (
-                                    <Link 
-                                        key={cat.id} 
-                                        href={`/marketplace/products?categoryId=${cat.id}`}
-                                        onClick={handleLinkClick}
-                                        className="flex items-center text-xs font-semibold text-slate-600 hover:text-[#0b2447] truncate transition-colors hover:bg-slate-50 p-2 rounded-lg"
-                                    >
-                                        <span className="truncate">{cat.name}</span>
-                                    </Link>
+                        <div className="absolute top-full left-4 right-4 mt-0 rounded-b-xl border border-t-0 border-slate-200 bg-white shadow-2xl p-6 animate-in fade-in slide-in-from-top-2 z-50">
+                            <div className="grid grid-cols-5 gap-6">
+                                {megaMenuColumns.map((col, colIdx) => (
+                                    <div key={colIdx} className="flex flex-col gap-8">
+                                        {col.map((group, groupIdx) => (
+                                            <div key={groupIdx} className="flex flex-col">
+                                                {group.parent.id === 0 ? (
+                                                    <span className="text-[13px] font-black text-[#0b2447] mb-2.5 uppercase tracking-wider">
+                                                        {group.parent.name}
+                                                    </span>
+                                                ) : (
+                                                    <Link 
+                                                        href={`/marketplace/products?categoryId=${group.parent.id}`}
+                                                        onClick={handleLinkClick}
+                                                        className="text-[13px] font-black text-[#0b2447] mb-2.5 hover:text-blue-600 transition-colors uppercase tracking-wider"
+                                                    >
+                                                        {group.parent.name}
+                                                    </Link>
+                                                )}
+                                                <div className="flex flex-col gap-2">
+                                                    {group.children.map(child => (
+                                                        <Link
+                                                            key={child.id}
+                                                            href={`/marketplace/products?categoryId=${child.id}`}
+                                                            onClick={handleLinkClick}
+                                                            className="text-[13px] font-medium text-slate-500 hover:text-[#0b2447] hover:underline transition-colors truncate"
+                                                        >
+                                                            {child.name}
+                                                        </Link>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 ))}
                             </div>
-                            <div className="mt-5 pt-4 border-t border-slate-100 flex justify-end">
+                            <div className="mt-8 pt-4 border-t border-slate-100 flex justify-end">
                                 <Link 
                                     href="/marketplace/categories" 
                                     onClick={handleLinkClick}
-                                    className="text-xs font-black text-[#0b2447] hover:underline"
+                                    className="text-xs font-black text-[#0b2447] hover:underline flex items-center gap-1"
                                 >
                                     View All Categories &rarr;
                                 </Link>
@@ -175,56 +303,6 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                     </Link>
                 </div>
             </div>
-
-            {/* Mobile Navigation Toggle */}
-            <div className="md:hidden flex items-center justify-between px-3 h-12 bg-slate-50 border-b border-slate-100">
-                <span className="text-xs font-black text-[#0b2447] tracking-tight uppercase">Marketplace Menu</span>
-                <button 
-                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                    className="flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg bg-white border border-slate-200 text-[#0b2447] text-[10px] font-black uppercase tracking-wider shadow-sm transition active:scale-95"
-                >
-                    <Menu className="h-3.5 w-3.5" />
-                    <span>Menu</span>
-                </button>
-            </div>
-
-            {/* Mobile Dropdown Menu */}
-            {mobileMenuOpen && (
-                <div className="md:hidden absolute top-full left-0 w-full bg-white border-b border-slate-200 shadow-xl overflow-hidden animate-in slide-in-from-top-2">
-                    <div className="flex flex-col p-2 space-y-1 max-h-[70vh] overflow-y-auto">
-                        
-                        <div className="p-2 bg-slate-50 rounded-lg">
-                            <p className="text-[10px] font-black uppercase text-slate-400 mb-2 px-2">Seller</p>
-                            <Link href="/tenders" onClick={handleLinkClick} className="block px-3 py-2 text-xs font-bold text-slate-700 hover:bg-white rounded-md">
-                                Active Tenders
-                            </Link>
-                            <Link href="/marketplace/buyers" onClick={handleLinkClick} className="block px-3 py-2 text-xs font-bold text-slate-700 hover:bg-white rounded-md">
-                                Buyers
-                            </Link>
-                        </div>
-
-                        <div className="p-2">
-                            <p className="text-[10px] font-black uppercase text-slate-400 mb-2 px-2">Buyer</p>
-                            <Link href="/marketplace/categories" onClick={handleLinkClick} className="block px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 rounded-md">
-                                Categories
-                            </Link>
-                            <Link href="/marketplace/requirements" onClick={handleLinkClick} className="block px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 rounded-md">
-                                Active Requirements
-                            </Link>
-                            <Link href="/marketplace/sellers" onClick={handleLinkClick} className="block px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 rounded-md">
-                                Top Sellers
-                            </Link>
-                            <Link href="/marketplace/buyers" onClick={handleLinkClick} className="block px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 rounded-md">
-                                Top Buyers
-                            </Link>
-                            <Link href="/marketplace/products?sort=most_purchased" onClick={handleLinkClick} className="block px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 rounded-md">
-                                Top Bought Items
-                            </Link>
-                        </div>
-
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

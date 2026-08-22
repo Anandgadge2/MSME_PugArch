@@ -108,8 +108,8 @@ export function HeroBanner({ banners }: Props) {
             {/* Hero Main Content Container */}
             <div className="relative z-10 mx-auto flex min-h-[440px] max-w-[1680px] items-center px-4 pt-10 pb-16 sm:px-6 sm:pt-16 sm:pb-24 lg:min-h-[480px] xl:min-h-[520px] 2xl:px-8">
                 
-                {/* FLOATING CTA OVERLAY */}
-                <div className="absolute top-4 right-4 sm:top-6 sm:right-6 2xl:right-8 z-30 flex flex-row flex-wrap sm:flex-nowrap justify-end gap-2 sm:gap-3 pointer-events-auto">
+                {/* FLOATING CTA OVERLAY (Desktop Only) */}
+                <div className="hidden sm:flex absolute sm:top-6 sm:right-6 2xl:right-8 z-30 flex-row flex-nowrap justify-end gap-2 sm:gap-3 pointer-events-auto">
                     <button 
                         onClick={handlePostRequirement} 
                         className="h-9 sm:h-10 px-3 sm:px-5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/30 backdrop-blur-md text-white text-[11px] sm:text-xs font-bold transition-all active:scale-95 shadow-sm"
@@ -133,7 +133,7 @@ export function HeroBanner({ banners }: Props) {
                         </div>
 
                         {/* Title */}
-                        <h1 className="mb-4 sm:mb-6 text-3xl min-[400px]:text-4xl sm:text-5xl lg:text-[3rem] xl:text-[3.4rem] font-black leading-[1.12] tracking-tight text-white drop-shadow-lg">
+                        <h1 className="mb-4 sm:mb-6 text-2xl min-[400px]:text-3xl sm:text-5xl lg:text-[3rem] xl:text-[3.4rem] font-black leading-[1.12] tracking-tight text-white drop-shadow-lg">
                             {slide.title.split('\n').map((line, i) => (
                                 <React.Fragment key={i}>
                                     {i > 0 && <br className="hidden sm:inline" />}
@@ -151,6 +151,22 @@ export function HeroBanner({ banners }: Props) {
 
                         {/* Action Buttons */}
                         <div className="flex flex-col min-[400px]:flex-row flex-wrap gap-3.5">
+                            {/* Mobile CTAs (Hidden on Desktop) */}
+                            <div className="flex sm:hidden flex-row gap-2.5 w-full">
+                                <button 
+                                    onClick={handlePostRequirement} 
+                                    className="flex-1 h-10 px-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/30 backdrop-blur-md text-white text-[11px] font-bold transition-all active:scale-95 shadow-sm"
+                                >
+                                    Post Requirement
+                                </button>
+                                <button 
+                                    onClick={handleStartSelling} 
+                                    className="flex-1 h-10 px-3 rounded-xl bg-white hover:bg-slate-50 text-[#0b2447] border border-transparent text-[11px] font-black transition-all active:scale-95 shadow-lg shadow-black/20"
+                                >
+                                    Start Selling
+                                </button>
+                            </div>
+
                             {ctaText && ctaLink && (
                                 <Link
                                     href={ctaLink}

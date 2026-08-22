@@ -160,7 +160,7 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
     const selectedBuyer = selectedBuyerId === 'all' ? null : buyerSummaries.find(buyer => buyer.id === selectedBuyerId) || null;
 
     return (
-        <section className="mt-2 border-b border-slate-100 bg-white" aria-labelledby="buyer-browser-heading">
+        <section id="verified-buyers" className="mt-2 border-b border-slate-100 bg-white scroll-mt-16" aria-labelledby="buyer-browser-heading">
             <div className="mx-auto max-w-[1680px] px-4 pt-8 pb-3 sm:px-6 sm:pt-10 sm:pb-4 2xl:px-8">
                 <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                     <div>
