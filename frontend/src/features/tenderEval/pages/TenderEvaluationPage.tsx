@@ -284,6 +284,10 @@ function TechnicalTab({ tenderId }: { tenderId: number }) {
     const submitMut = useSubmitTechnicalScores(tenderId);
     const [scoring, setScoring] = useState<{ bidId: number; scores: Record<number, number>; remarks: Record<number, string> } | null>(null);
 
+    type TechSortKey = 'bidder' | 'totalScore' | 'percent' | 'status';
+    const [sortKey, setSortKey] = useState<TechSortKey>('percent');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
     if (isLoading) return <LoadingState label="Loading technical evaluation..." />;
     if (error) return <InlineError message={(error as Error).message} onRetry={() => refetch()} />;
     if (!data) return null;
@@ -305,10 +309,6 @@ function TechnicalTab({ tenderId }: { tenderId: number }) {
             </CardContent></Card>
         );
     }
-
-    type TechSortKey = 'bidder' | 'totalScore' | 'percent' | 'status';
-    const [sortKey, setSortKey] = useState<TechSortKey>('percent');
-    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
     const toggleSort = (key: TechSortKey) => {
         setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
