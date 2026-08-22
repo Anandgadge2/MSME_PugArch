@@ -34,7 +34,7 @@ export default function MarketplaceProductDetail() {
     const productIdParam = pathname.split('/').pop() || '0';
     const productId = isNaN(Number(productIdParam)) ? 0 : Number(productIdParam);
 
-    const [activeTab, setActiveTab] = useState<'overview' | 'specs' | 'pricing' | 'compliance'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'specs' | 'compliance'>('overview');
     const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
     const { data: detailData, isLoading: loading } = useTanstackQuery({
@@ -110,6 +110,10 @@ export default function MarketplaceProductDetail() {
     const cartQuantity = getQuantity(productId, 'product');
 
     const handleAddToCart = () => {
+        if (!user) {
+            router.push(`/login?returnUrl=${encodeURIComponent(pathname)}`);
+            return;
+        }
         if (cartQuantity === 0 && product) {
             const img = resolveMarketplaceImage(product, 'product');
             addCartItem(
@@ -221,7 +225,12 @@ export default function MarketplaceProductDetail() {
     const isVerified = product.organization?.verificationStatus === 'VERIFIED';
     const location = product.organization?.city || product.organization?.district || product.organization?.state;
     const productAny = product as any;
-    const price = Number(product.price || 0);
+
+    const price = productAny.price ? Number(productAny.price) : 0;
+    const discountPrice = productAny.discountPrice ? Number(productAny.discountPrice) : 0;
+    const hasOffer = productAny.isOfferActive !== false && price > 0 && discountPrice > 0 && discountPrice < price;
+    const displayPrice = hasOffer ? discountPrice : price;
+    const discountPercent = hasOffer ? Math.round(((price - displayPrice) / price) * 100) : 0;
 
     const handleSaveSupplier = () => {
         if (!product.organization?.id) {
@@ -238,11 +247,6 @@ export default function MarketplaceProductDetail() {
         });
         toast.success('Supplier added to saved sellers!');
     };
-
-    const discountPrice = Number(productAny.discountPrice || 0);
-    const hasOffer = discountPrice > 0 && price > 0 && discountPrice < price;
-    const displayPrice = hasOffer ? discountPrice : price;
-    const discountPercent = hasOffer ? Math.round(((price - discountPrice) / price) * 100) : Number(productAny.discountPercent || 0);
 
     const productDocuments = (() => {
         if (!product) return [];
@@ -384,12 +388,6 @@ export default function MarketplaceProductDetail() {
                                         <p className="text-xs font-bold text-slate-400">Product preview unavailable</p>
                                     </div>
                                 )}
-
-                                {hasOffer && (
-                                    <div className="absolute top-4 left-4 bg-rose-600 text-white font-extrabold text-[11px] px-3 py-1.5 rounded-lg shadow-md uppercase tracking-wider flex items-center gap-1">
-                                        <Zap className="h-3.5 w-3.5 fill-current" /> {discountPercent}% OFF
-                                    </div>
-                                )}
                             </div>
 
                             {/* Thumbnail Selector */}
@@ -451,8 +449,48 @@ export default function MarketplaceProductDetail() {
                                 </p>
                             </div>
 
+                            {/* Price Highlight Banner */}
+                            {user ? (
+                                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-5 shadow-inner mt-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                                        <div>
+                                            <span className="block text-[10px] font-extrabold text-blue-600 uppercase tracking-wider mb-1">
+                                                {hasOffer ? 'Special Offer Price' : 'Standard Price'}
+                                            </span>
+                                            {displayPrice > 0 ? (
+                                                <div className="flex items-baseline gap-2">
+                                                    <span className="text-4xl font-black text-[#0b2447] tracking-tight">
+                                                        ₹{displayPrice.toLocaleString('en-IN')}
+                                                    </span>
+                                                    {hasOffer && (
+                                                        <span className="text-sm font-bold text-slate-400 line-through">
+                                                            ₹{price.toLocaleString('en-IN')}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="text-2xl font-black text-amber-600">Quote Required</span>
+                                            )}
+                                            <p className="text-xs font-semibold text-slate-500 mt-1">
+                                                Per {product.unitOfMeasure || 'unit'}
+                                                {product.taxRate ? ` • ${product.taxRate}% GST extra` : ''}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-inner mt-4">
+                                    <span className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                                        Procurement Pricing
+                                    </span>
+                                    <span className="inline-block px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm font-bold text-slate-600 shadow-sm">
+                                        Login to view price
+                                    </span>
+                                </div>
+                            )}
+
                             {/* Seller Quick Card */}
-                            <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition">
+                            <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition mt-6">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-11 h-11 rounded-xl bg-slate-900 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
                                         {(product.organization?.organizationName || product.seller?.name || 'M')[0].toUpperCase()}
@@ -485,51 +523,26 @@ export default function MarketplaceProductDetail() {
                                 )}
                             </div>
 
-                            {/* Price Highlight Banner */}
+                            {/* Procurement Highlight Banner */}
                             <div className="p-5 bg-gradient-to-br from-[#0b2447]/5 via-white to-slate-50 rounded-2xl border border-[#0b2447]/15 shadow-2xs">
-                                {displayPrice > 0 ? (
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 rounded-xl bg-[#0b2447]/10 text-[#0b2447]">
+                                        <Sparkles className="h-5 w-5" />
+                                    </div>
                                     <div>
-                                        <div className="flex items-baseline gap-3">
-                                            <span className="text-3xl sm:text-4xl font-black text-[#0b2447] tracking-tight">
-                                                ₹{displayPrice.toLocaleString('en-IN')}
-                                            </span>
-                                            {hasOffer && (
-                                                <span className="text-base font-bold text-slate-400 line-through">
-                                                    ₹{price.toLocaleString('en-IN')}
-                                                </span>
-                                            )}
-                                        </div>
+                                        <p className="text-sm font-bold text-[#0b2447]">Available for Procurement</p>
                                         <div className="flex flex-wrap items-center gap-2 mt-2 text-xs font-semibold text-slate-600">
-                                            <span className="bg-white px-2.5 py-1 rounded-md border border-slate-200/80">
-                                                Per {product.unitOfMeasure || 'unit'}
-                                            </span>
-                                            {product.taxRate ? (
-                                                <span className="bg-blue-50 text-blue-800 px-2.5 py-1 rounded-md border border-blue-200/80">
-                                                    GST {product.taxRate}% extra
-                                                </span>
-                                            ) : (
-                                                <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md">
-                                                    Inclusive of base taxes
-                                                </span>
-                                            )}
                                             {productAny.bulkMinQuantity && (
                                                 <span className="bg-amber-50 text-amber-800 px-2.5 py-1 rounded-md border border-amber-200">
-                                                    Min Bulk: {productAny.bulkMinQuantity} {product.unitOfMeasure || ''}
+                                                    Min Bulk: {productAny.bulkMinQuantity} {product.unitOfMeasure || 'units'}
                                                 </span>
                                             )}
+                                            <span className="bg-white px-2.5 py-1 rounded-md border border-slate-200/80 shadow-sm">
+                                                Sold in {product.unitOfMeasure || 'units'}
+                                            </span>
                                         </div>
                                     </div>
-                                ) : (
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2.5 rounded-xl bg-amber-100 text-amber-800">
-                                            <Info className="h-5 w-5" />
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-bold text-amber-900">Price Available Upon Request</p>
-                                            <p className="text-xs text-amber-700 mt-0.5">Contact supplier directly to request custom pricing and quotation terms.</p>
-                                        </div>
-                                    </div>
-                                )}
+                                </div>
                             </div>
 
                             {/* Interactive Details Navigation Tabs */}
@@ -546,12 +559,6 @@ export default function MarketplaceProductDetail() {
                                         className={`pb-3 px-3 text-xs font-extrabold transition-all border-b-2 whitespace-nowrap ${activeTab === 'specs' ? 'border-[#0b2447] text-[#0b2447]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
                                     >
                                         Technical Specs {product.specifications?.length ? `(${product.specifications.length})` : ''}
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('pricing')}
-                                        className={`pb-3 px-3 text-xs font-extrabold transition-all border-b-2 whitespace-nowrap ${activeTab === 'pricing' ? 'border-[#0b2447] text-[#0b2447]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-                                    >
-                                        Pricing & Terms
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('compliance')}
@@ -626,28 +633,7 @@ export default function MarketplaceProductDetail() {
                                     </div>
                                 )}
 
-                                {/* TAB 3: PRICING & TERMS */}
-                                {activeTab === 'pricing' && (
-                                    <div className="space-y-4 animate-in fade-in duration-200">
-                                        <div className="grid gap-3 text-xs sm:grid-cols-2">
-                                            {pricingFields.map(({ label, value }) => (
-                                                <div key={label} className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
-                                                    <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{label}</span>
-                                                    <span className="mt-1 block font-bold text-slate-800">{String(value)}</span>
-                                                </div>
-                                            ))}
-                                        </div>
 
-                                        <div className="p-4 rounded-xl border border-blue-200/80 bg-blue-50/50 text-xs space-y-1.5">
-                                            <h4 className="font-extrabold text-[#0b2447] flex items-center gap-1.5">
-                                                <Zap className="h-4 w-4 text-blue-600" /> Commercial & Tax Compliance
-                                            </h4>
-                                            <p className="text-slate-600 leading-relaxed">
-                                                Prices listed are subject to official seller quote confirmation. Taxes (GST) and freight logistics are calculated at procurement checkout or quote issuance.
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
 
                                 {/* TAB 4: SELLER VERIFICATION */}
                                 {activeTab === 'compliance' && (
@@ -699,28 +685,46 @@ export default function MarketplaceProductDetail() {
                                         </p>
                                     </div>
 
-                                    {/* Price Card */}
-                                    <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/80 space-y-1">
-                                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Order Unit Price</span>
-                                        {displayPrice > 0 ? (
-                                            <div>
-                                                <div className="flex items-baseline gap-2">
-                                                    <span className="text-2xl font-black text-[#0b2447]">₹{displayPrice.toLocaleString('en-IN')}</span>
-                                                    {hasOffer && <span className="text-xs font-bold text-slate-400 line-through">₹{price.toLocaleString('en-IN')}</span>}
+                                    {/* Order Unit Price Card */}
+                                    {user ? (
+                                        <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/80 space-y-1 mt-4">
+                                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Order Unit Price</span>
+                                            {displayPrice > 0 ? (
+                                                <div>
+                                                    <div className="flex items-baseline gap-2">
+                                                        <span className="text-2xl font-black text-[#0b2447]">₹{displayPrice.toLocaleString('en-IN')}</span>
+                                                        {hasOffer && <span className="text-xs font-bold text-slate-400 line-through">₹{price.toLocaleString('en-IN')}</span>}
+                                                    </div>
+                                                    <p className="text-[10px] font-bold text-slate-500 mt-0.5">
+                                                        Per {product.unitOfMeasure || 'unit'} {product.taxRate ? `| GST ${product.taxRate}% extra` : ''}
+                                                    </p>
                                                 </div>
-                                                <p className="text-[10px] font-bold text-slate-500 mt-0.5">
-                                                    Per {product.unitOfMeasure || 'unit'} {product.taxRate ? `| GST ${product.taxRate}% extra` : ''}
+                                            ) : (
+                                                <p className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded border border-amber-200">
+                                                    Quote Required
                                                 </p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/80 space-y-1 mt-4">
+                                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Order Unit Price</span>
+                                            <div className="mt-1">
+                                                <span className="inline-block px-3 py-1.5 rounded bg-white border border-slate-200 text-[11px] font-bold text-slate-600">
+                                                    Login to view price
+                                                </span>
                                             </div>
-                                        ) : (
-                                            <p className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded border border-amber-200">
-                                                Quote Required
-                                            </p>
-                                        )}
-                                    </div>
+                                        </div>
+                                    )}
 
                                     {/* Action Buttons */}
-                                    <div className="space-y-3">
+                                    <div className="space-y-3 mt-4">
+                                        <button
+                                            onClick={handleRequestQuote}
+                                            className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0b2447] text-white font-black text-sm shadow-md hover:bg-[#12335f] active:scale-[0.98] transition-all"
+                                        >
+                                            <FileText className="h-5 w-5" /> Request Formal Quote
+                                        </button>
+
                                         {cartQuantity > 0 ? (
                                             <div className="flex h-11 w-full items-center justify-between rounded-xl border-2 border-[#0b2447] bg-white shadow-sm overflow-hidden">
                                                 <button
@@ -730,7 +734,7 @@ export default function MarketplaceProductDetail() {
                                                     −
                                                 </button>
                                                 <div className="flex-1 flex items-center justify-center font-black text-[#0b2447] text-sm">
-                                                    {cartQuantity} in cart
+                                                    {cartQuantity} in Procurement Cart
                                                 </div>
                                                 <button
                                                     onClick={() => handleQuantityChange(1)}
@@ -742,18 +746,11 @@ export default function MarketplaceProductDetail() {
                                         ) : (
                                             <button
                                                 onClick={handleAddToCart}
-                                                className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0b2447] text-white font-extrabold text-xs shadow-md shadow-[#0b2447]/15 hover:bg-[#12335f] active:scale-[0.98] transition-all"
+                                                className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-slate-200 text-slate-700 font-extrabold text-xs hover:bg-slate-50 active:scale-[0.98] transition-all"
                                             >
-                                                <ShoppingCart className="h-4 w-4" /> Add to Procurement Cart
+                                                <ShoppingCart className="h-4 w-4 text-[#0b2447]" /> Add to Procurement Cart
                                             </button>
                                         )}
-
-                                        <button
-                                            onClick={handleRequestQuote}
-                                            className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[#0b2447] text-[#0b2447] font-extrabold text-xs hover:bg-[#0b2447] hover:text-white active:scale-[0.98] transition-all"
-                                        >
-                                            <FileText className="h-4 w-4" /> Request Formal Quote
-                                        </button>
 
                                         <div className="grid grid-cols-2 gap-2 pt-1">
                                             <CompareToggleButton
@@ -880,11 +877,9 @@ export default function MarketplaceProductDetail() {
                                             <p className="text-[10px] font-semibold text-slate-500 truncate">{p.organization?.organizationName || 'Verified Supplier'}</p>
                                         </div>
                                         <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                                            {p.price ? (
-                                                <span className="text-xs font-black text-[#0b2447]">₹{Number(p.price).toLocaleString('en-IN')}</span>
-                                            ) : (
-                                                <span className="text-[10px] font-bold text-amber-700">Quote Only</span>
-                                            )}
+                                            <span className="text-[10px] font-bold text-slate-500">
+                                                {(p as any).bulkMinQuantity ? `MOQ: ${(p as any).bulkMinQuantity}` : 'Procurement Available'}
+                                            </span>
                                             <span className="text-[10px] font-bold text-[#0b2447] group-hover:underline flex items-center gap-0.5">
                                                 View <ChevronRight className="h-3 w-3" />
                                             </span>
@@ -919,45 +914,51 @@ export default function MarketplaceProductDetail() {
             {user?.role !== 'seller' && (
                 <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
                     <div className="flex items-center gap-3">
-                        <div className="min-w-0 flex-1">
-                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Unit Price</span>
-                            {displayPrice > 0 ? (
-                                <div className="flex items-baseline gap-1.5 truncate">
-                                    <span className="text-base font-black text-[#0b2447]">₹{displayPrice.toLocaleString('en-IN')}</span>
-                                    {hasOffer && <span className="text-[10px] font-bold text-slate-400 line-through">₹{price.toLocaleString('en-IN')}</span>}
-                                </div>
-                            ) : (
-                                <span className="text-xs font-black text-amber-700">Quote Only</span>
-                            )}
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                            {displayPrice > 0 && (
-                                cartQuantity > 0 ? (
-                                    <div className="flex h-10 min-w-[84px] items-center justify-between rounded-xl border-2 border-[#0b2447] bg-white px-1.5 font-black text-[#0b2447]">
-                                        <button type="button" onClick={() => handleQuantityChange(-1)} className="p-1 text-sm active:scale-90">−</button>
-                                        <span className="text-xs">{cartQuantity}</span>
-                                        <button type="button" onClick={() => handleQuantityChange(1)} className="p-1 text-sm active:scale-90">+</button>
+                        {user ? (
+                            <div className="min-w-0 flex-1">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Unit Price</span>
+                                {displayPrice > 0 ? (
+                                    <div className="flex items-baseline gap-1.5 truncate">
+                                        <span className="text-base font-black text-[#0b2447]">₹{displayPrice.toLocaleString('en-IN')}</span>
+                                        {hasOffer && <span className="text-[10px] font-bold text-slate-400 line-through">₹{price.toLocaleString('en-IN')}</span>}
                                     </div>
                                 ) : (
-                                    <button
-                                        type="button"
-                                        onClick={handleAddToCart}
-                                        className="h-10 px-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 active:scale-95 transition"
-                                        aria-label="Add to cart"
-                                    >
-                                        <ShoppingCart className="h-4 w-4 text-[#0b2447]" />
-                                        <span>Cart</span>
-                                    </button>
-                                )
+                                    <span className="text-xs font-black text-amber-700">Quote Only</span>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="min-w-0 flex-1">
+                                <span className="inline-block px-2 py-1 rounded bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-600">
+                                    Login for price
+                                </span>
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-2 shrink-0">
+                            {cartQuantity > 0 ? (
+                                <div className="flex h-10 min-w-[84px] items-center justify-between rounded-xl border-2 border-[#0b2447] bg-white px-1.5 font-black text-[#0b2447]">
+                                    <button type="button" onClick={() => handleQuantityChange(-1)} className="p-1 text-sm active:scale-90">−</button>
+                                    <span className="text-xs">{cartQuantity}</span>
+                                    <button type="button" onClick={() => handleQuantityChange(1)} className="p-1 text-sm active:scale-90">+</button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleAddToCart}
+                                    className="h-10 px-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 active:scale-95 transition"
+                                    aria-label="Add to cart"
+                                >
+                                    <ShoppingCart className="h-4 w-4 text-[#0b2447]" />
+                                    <span className="hidden sm:inline">Cart</span>
+                                </button>
                             )}
 
                             <button
                                 type="button"
-                                onClick={displayPrice > 0 ? handleAddToCart : handleRequestQuote}
-                                className="h-10 px-4 rounded-xl bg-[#0b2447] text-white font-black text-xs uppercase tracking-wider shadow-md active:scale-95 transition"
+                                onClick={handleRequestQuote}
+                                className="h-10 px-4 rounded-xl bg-[#0b2447] text-white font-black text-xs uppercase tracking-wider shadow-md active:scale-95 transition flex items-center justify-center gap-2"
                             >
-                                {displayPrice > 0 ? 'Buy Now' : 'Request Quote'}
+                                <FileText className="h-4 w-4" /> Quote
                             </button>
                         </div>
                     </div>

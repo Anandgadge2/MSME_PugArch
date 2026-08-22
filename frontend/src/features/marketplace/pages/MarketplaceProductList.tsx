@@ -326,6 +326,11 @@ export default function MarketplaceProductList() {
     };
 
     const handleAddToCart = (item: any, options: { showToast?: boolean } = {}) => {
+        if (!user) {
+            router.push(`/login?returnUrl=${encodeURIComponent(pathname + '?' + searchParams?.toString())}`);
+            return;
+        }
+
         if (!item || item.id < 0) {
             toast.info(`Open a live ${isServices ? 'service' : 'product'} listing to add it to cart.`);
             return;
@@ -1163,17 +1168,25 @@ export default function MarketplaceProductList() {
                                                 {/* Price & Action Buttons */}
                                                 <div className="mt-4 border-t border-slate-100 pt-3">
                                                     {/* Price Section */}
-                                                    <div className="flex items-baseline gap-2 flex-wrap mb-3">
-                                                        <span className="text-lg font-black text-slate-900">
-                                                            ₹{pricing.effectivePrice.toLocaleString('en-IN')}
-                                                        </span>
-                                                        <span className="text-xs text-slate-400 line-through">
-                                                            ₹{pricing.originalPrice.toLocaleString('en-IN')}
-                                                        </span>
-                                                        <span className="text-xs font-black text-emerald-600">
-                                                            {pricing.discountPercent}% OFF
-                                                        </span>
-                                                    </div>
+                                                    {user ? (
+                                                        <div className="flex items-baseline gap-2 flex-wrap mb-3">
+                                                            <span className="text-lg font-black text-slate-900">
+                                                                ₹{pricing.effectivePrice.toLocaleString('en-IN')}
+                                                            </span>
+                                                            <span className="text-xs text-slate-400 line-through">
+                                                                ₹{pricing.originalPrice.toLocaleString('en-IN')}
+                                                            </span>
+                                                            <span className="text-xs font-black text-emerald-600">
+                                                                {pricing.discountPercent}% OFF
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="mb-3 mt-1">
+                                                            <span className="inline-block rounded bg-slate-100 border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-500">
+                                                                Login to view price
+                                                            </span>
+                                                        </div>
+                                                    )}
 
                                                     {/* Actions Row */}
                                                     <div className="flex gap-2 items-center">
