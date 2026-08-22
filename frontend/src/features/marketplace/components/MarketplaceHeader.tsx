@@ -154,7 +154,7 @@ export function MarketplaceHeader({ user }: Props) {
                     </form>
 
                     {/* Desktop Action Cluster */}
-                    <div className="hidden sm:flex items-center gap-2 shrink-0">
+                    <div className="hidden md:flex items-center gap-2 shrink-0">
                         {!user ? (
                             <>
                                 {/* Login Button */}
@@ -225,7 +225,7 @@ export function MarketplaceHeader({ user }: Props) {
                     </div>
 
                     {/* Mobile Controls (Cart + Menu Toggle) */}
-                    <div className="flex items-center gap-1.5 sm:hidden shrink-0">
+                    <div className="flex items-center gap-1.5 md:hidden shrink-0">
                         {/* Hamburger Menu Toggle */}
                         <button
                             onClick={() => setMobileMenuOpen(v => !v)}
@@ -242,7 +242,7 @@ export function MarketplaceHeader({ user }: Props) {
                 MOBILE FULL-WIDTH DROPDOWN MENU
             ════════════════════════════════════════════════════════════════════ */}
             {mobileMenuOpen && (
-                <div className="absolute top-full left-0 w-full max-h-[calc(100dvh-64px)] overflow-y-auto bg-white shadow-2xl border-t border-slate-200 sm:hidden z-40 animate-in slide-in-from-top-2 flex flex-col pb-safe">
+                <div className="absolute top-full left-0 w-full max-h-[calc(100dvh-64px)] overflow-y-auto bg-white shadow-2xl border-t border-slate-200 md:hidden z-40 animate-in slide-in-from-top-2 flex flex-col pb-safe">
                     {/* Drawer Search */}
                     <div className="p-3.5 bg-slate-50 border-b border-slate-100">
                             <form onSubmit={handleSearch} className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-3 shadow-inner focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all">
