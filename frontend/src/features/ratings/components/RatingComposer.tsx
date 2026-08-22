@@ -161,25 +161,25 @@ export function RatingComposer(props: RatingComposerProps) {
                 </header>
 
                 <div className="space-y-5 p-5">
-                    <div className="space-y-2">
+                    <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3.5">
                         <p className={fieldLabel}>Overall rating</p>
-                        <StarRating value={overall} onChange={setOverall} size="lg" />
+                        <StarRating value={overall} onChange={setOverall} size="lg" showLabel />
                     </div>
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
+                        <div className="space-y-1.5 rounded-xl border border-slate-100 p-3">
                             <p className={fieldLabel}>{primaryLabel}</p>
-                            <StarRating value={primary} onChange={setPrimary} />
+                            <StarRating value={primary} onChange={setPrimary} showLabel />
                         </div>
                         {secondaryLabel && (
-                            <div className="space-y-1">
+                            <div className="space-y-1.5 rounded-xl border border-slate-100 p-3">
                                 <p className={fieldLabel}>{secondaryLabel}</p>
-                                <StarRating value={secondary} onChange={setSecondary} />
+                                <StarRating value={secondary} onChange={setSecondary} showLabel />
                             </div>
                         )}
-                        <div className="space-y-1">
+                        <div className="space-y-1.5 rounded-xl border border-slate-100 p-3">
                             <p className={fieldLabel}>Communication</p>
-                            <StarRating value={communication} onChange={setCommunication} />
+                            <StarRating value={communication} onChange={setCommunication} showLabel />
                         </div>
                     </div>
 
