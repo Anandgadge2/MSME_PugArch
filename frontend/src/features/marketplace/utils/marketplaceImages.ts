@@ -30,7 +30,7 @@ const stableHash = (value: string) => {
 const normalizeUrl = (value: unknown) => {
     const raw = String(value || '').trim();
     if (!raw) return '';
-    if (raw.startsWith('/org-logos/') || raw.startsWith('/banners/') || raw.startsWith('/products/')) {
+    if (raw.startsWith('/org-logos/') || raw.startsWith('/products/')) {
         return raw;
     }
     const resolved = resolveMediaUrl(raw);

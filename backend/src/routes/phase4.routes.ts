@@ -1,10 +1,12 @@
 import { Router, type Response } from 'express';
+import path from 'path';
 import { Prisma } from '@prisma/client';
 import https from 'https';
 import { z } from 'zod';
 import prisma from '../lib/prisma.js';
 import { permanentlyDeleteUser } from './master-admin.routes.js';
 import { env } from '../config/env.js';
+import { getGCSBucket } from '../config/gcs.js';
 import { getFileContent, getSignedUrl, uploadFile } from '../services/storage/storage.service.js';
 import { authenticate, optionalAuthenticate, authorize, authorizeAdmin, requireAccountType, requirePermission, type AuthRequest } from '../middleware/auth.js';
 import { verifyAccessToken } from '../services/token.service.js';
@@ -2647,6 +2649,44 @@ router.get('/public/files/:id/signed-url', asyncRoute(async (req: AuthRequest, r
       size: (file.asset as any).size
     }
   });
+}));
+
+const RAW_MIME_TYPES: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.gif': 'image/gif',
+  '.pdf': 'application/pdf',
+  '.txt': 'text/plain'
+};
+
+router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
+  const rawKey = req.params.key;
+  if (!rawKey) throw new ApiError(400, 'Key is required', 'KEY_REQUIRED');
+
+  try {
+    const bucket = getGCSBucket();
+    const file = bucket.file(rawKey);
+    const [exists] = await file.exists();
+    if (!exists) {
+      throw new ApiError(404, 'File not found in storage', 'FILE_NOT_FOUND');
+    }
+
+    const ext = path.extname(rawKey).toLowerCase();
+    const contentType = RAW_MIME_TYPES[ext] || 'application/octet-stream';
+    const [buffer] = await file.download();
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    return res.end(buffer);
+  } catch (err: any) {
+    if (err instanceof ApiError) throw err;
+    throw new ApiError(500, `Storage read error: ${err?.message || 'failed'}`, 'STORAGE_READ_ERROR');
+  }
 }));
 
 router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {

@@ -12,6 +12,8 @@ export const bannerApi = {
     api.get(`/api/admin/banners${status ? `?status=${encodeURIComponent(status)}` : ''}`, { headers: headers(), skipCache: true }).then(res => json<{ banners: any[] }>(res)),
   create: (data: Record<string, unknown>) =>
     api.post('/api/admin/banners', data, { headers: headers() }).then(res => json<any>(res)),
+  update: (id: number, data: Record<string, unknown>) =>
+    api.put(`/api/admin/banners/${id}`, data, { headers: headers() }).then(res => json<any>(res)),
   updateStatus: (id: number, action: 'approve' | 'reject' | 'show' | 'hide' | 'delete', body: Record<string, unknown> = {}) => {
     if (action === 'delete') return api.delete(`/api/admin/banners/${id}`, { headers: headers() }).then(res => json<any>(res));
     return api.post(`/api/admin/banners/${id}/${action}`, body, { headers: headers() }).then(res => json<any>(res));

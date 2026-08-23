@@ -1,12 +1,12 @@
 export const DEFAULT_MARKETPLACE_BANNERS = [
-  // --- New clean use-case banners (no portal names baked in, Jharsuguda/Odisha relevant) ---
+  // --- Clean hero banners hosted on GCP Cloud Storage ---
   {
     id: -9001,
     title: 'Steel & Metal Fabrication\nPowering Jharsuguda Industry',
     subtitle: 'Source verified steel, TMT bars, industrial castings, and metal components from local manufacturers across the district.',
     ctaText: 'Browse Steel & Metal',
     ctaLink: '#products',
-    imageUrl: '/banners/jharsuguda-steel-industry.jpg',
+    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/jharsuguda-steel-industry.jpg',
     displayOrder: 1,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -17,7 +17,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'Compare quotations, track orders, and manage your procurement from verified district suppliers — all in one dashboard.',
     ctaText: 'Start Buying',
     ctaLink: '/buyer/register',
-    imageUrl: '/banners/digital-procurement.jpg',
+    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/digital-procurement.jpg',
     displayOrder: 2,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -28,7 +28,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'Sambalpuri textiles, Dhokra brass, terracotta, tribal jewelry — discover authentic Odisha craftsmanship from self-help groups.',
     ctaText: 'Explore SHG Products',
     ctaLink: '#categories',
-    imageUrl: '/banners/odisha-handicraft-shg.jpg',
+    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/odisha-handicraft-shg.jpg',
     displayOrder: 3,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -39,7 +39,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'Thermal power, aluminum smelting, coal logistics — connecting the industrial backbone of Jharsuguda with verified digital procurement.',
     ctaText: 'Explore Ecosystem',
     ctaLink: '#categories',
-    imageUrl: '/banners/thermal-power-plant.jpg',
+    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/thermal-power-plant.jpg',
     displayOrder: 4,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -50,7 +50,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'List your products, get GST & Udyam verified, receive orders directly from government agencies and industrial conglomerates.',
     ctaText: 'Register as Seller',
     ctaLink: '/seller/register',
-    imageUrl: '/banners/seller-mobile-orders.jpg',
+    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/seller-mobile-orders.jpg',
     displayOrder: 5,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -61,12 +61,12 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'Refractories, chemicals, electrical components, hydraulics — everything major industries need, sourced from verified local suppliers.',
     ctaText: 'Find Suppliers',
     ctaLink: '#products',
-    imageUrl: '/banners/vedanta-industrial-hub.jpg',
+    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/vedanta-industrial-hub.jpg',
     displayOrder: 6,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
   },
-  // --- Original fallback banners ---
+  // --- Curated fallback banners ---
   {
     id: -9007,
     title: 'Discover Verified MSME\nProducts & Services',
