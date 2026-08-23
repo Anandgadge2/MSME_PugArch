@@ -1022,7 +1022,8 @@ const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketpl
             name: true,
             slug: true,
             type: true,
-            displayOrder: true
+            displayOrder: true,
+            imageUrl: true
         }
     }).catch(() => []);
     return (categories || []).map((category: any) => ({
@@ -1030,6 +1031,7 @@ const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketpl
         name: category.name,
         slug: category.slug,
         icon: category.slug,
+        imageUrl: category.imageUrl || null,
         type: category.type,
         productCount: 0,
         serviceCount: 0,

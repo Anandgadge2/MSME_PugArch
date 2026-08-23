@@ -1,7 +1,8 @@
-import { ChangeEvent, FormEvent, InputHTMLAttributes, useMemo, useState } from 'react';
+import React, { ChangeEvent, FormEvent, InputHTMLAttributes, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
+  Edit,
   Eye,
   EyeOff,
   ImagePlus,
@@ -9,33 +10,35 @@ import {
   Link as LinkIcon,
   Plus,
   RefreshCw,
+  Sparkles,
   Trash2,
   UploadCloud,
   X
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
-import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
+import { EmptyState, LoadingState } from '../../shared/FeatureStates';
 import { formatDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
-import { api, BASE_URL, readJsonResponse, unwrapApiData } from '../../../lib/api';
+import { api, BASE_URL, readJsonResponse, unwrapApiData, resolveMediaUrl } from '../../../lib/api';
 import { compressImage } from '../../../lib/compress';
 import { cn } from '../../../lib/utils';
 import { bannerApi } from '../api';
-import { DEFAULT_MARKETPLACE_BANNERS } from '../defaultBanners';
 
 type BannerAction = 'approve' | 'reject' | 'show' | 'hide' | 'delete';
 
-type BannerRecord = {
+export type BannerRecord = {
   id: number;
   title: string;
   subtitle?: string | null;
   imageUrl?: string | null;
   targetUrl?: string | null;
+  ctaText?: string | null;
   ctaLink?: string | null;
   bannerType?: string;
   status?: string;
+  isActive?: boolean;
   startAt?: string;
   endAt?: string;
   durationDays?: number;
@@ -47,34 +50,48 @@ type BannerRecord = {
   rejectionReason?: string | null;
 };
 
-type UploadState = {
-  fileId: number | null;
-  url: string;
-  name: string;
+type FormState = {
+  id?: number;
+  title: string;
+  subtitle: string;
+  imageUrl: string;
+  ctaText: string;
+  ctaLink: string;
+  targetUrl: string;
+  bannerType: string;
+  displayLocation: string;
+  priority: string;
+  durationDays: string;
+  status: string;
 };
 
-const statusOptions = [
-  { label: 'All', value: '' },
-  { label: 'Active', value: 'ACTIVE' },
-  { label: 'Pending', value: 'PENDING_APPROVAL' },
-  { label: 'Approved', value: 'APPROVED' },
-  { label: 'Hidden', value: 'HIDDEN' },
-  { label: 'Rejected', value: 'REJECTED' }
-];
-
-const initialForm = {
+const initialForm: FormState = {
   title: '',
   subtitle: '',
   imageUrl: '',
+  ctaText: '',
+  ctaLink: '',
   targetUrl: '',
   bannerType: 'DEFAULT_ADMIN',
   displayLocation: 'HOME_HERO',
-  priority: '10',
-  durationDays: '10'
+  priority: '50',
+  durationDays: '30',
+  status: 'ACTIVE'
 };
 
+const statusOptions = [
+  { label: 'All Statuses', value: '' },
+  { label: 'Active', value: 'ACTIVE' },
+  { label: 'Hidden', value: 'HIDDEN' },
+  { label: 'Pending Approval', value: 'PENDING_APPROVAL' },
+  { label: 'Approved', value: 'APPROVED' },
+  { label: 'Rejected', value: 'REJECTED' }
+];
+
 const imageSrc = (url?: string | null) => {
-  if (!url) return '';
+  if (!url || url.trim() === '') return '';
+  const resolved = resolveMediaUrl(url);
+  if (resolved) return resolved;
   if (/^(https?:|data:|blob:)/i.test(url)) return url;
   if (url.startsWith('/')) return `${BASE_URL}${url}`;
   return url;
@@ -82,7 +99,7 @@ const imageSrc = (url?: string | null) => {
 
 const statusTone = (status?: string) => {
   if (status === 'ACTIVE' || status === 'APPROVED') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  if (status === 'PENDING_APPROVAL' || status === 'DEFAULT') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (status === 'PENDING_APPROVAL') return 'border-amber-200 bg-amber-50 text-amber-700';
   if (status === 'REJECTED') return 'border-red-200 bg-red-50 text-red-700';
   if (status === 'HIDDEN') return 'border-slate-200 bg-slate-100 text-slate-600';
   return 'border-blue-200 bg-blue-50 text-[#12335f]';
@@ -90,66 +107,109 @@ const statusTone = (status?: string) => {
 
 export default function AdminBannerManagementPage() {
   const qc = useQueryClient();
-  const [status, setStatus] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [message, setMessage] = useState('');
-  const [form, setForm] = useState(initialForm);
-  const [upload, setUpload] = useState<UploadState>({ fileId: null, url: '', name: '' });
+  const [form, setForm] = useState<FormState>(initialForm);
+  const [editingBanner, setEditingBanner] = useState<BannerRecord | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const query = useQuery({
-    queryKey: ['admin-banners', status],
-    queryFn: () => bannerApi.adminList(status),
-    staleTime: 20_000
+    queryKey: ['admin-banners', statusFilter],
+    queryFn: () => bannerApi.adminList(statusFilter),
+    staleTime: 15_000
   });
 
   const banners: BannerRecord[] = query.data?.banners || [];
-  const visibleBanners = useMemo(() => banners.filter(banner => banner.status !== 'DELETED'), [banners]);
-  const { page, pageSize, pageItems: pagedBanners, total, setPage, setPageSize } = usePagination(visibleBanners, 10);
+  const visibleBanners = useMemo(() => banners.filter(b => b.status !== 'DELETED'), [banners]);
+  const { page, pageSize, pageItems: pagedBanners, total, setPage, setPageSize } = usePagination(visibleBanners, 12);
   const managedCount = visibleBanners.length;
-  const activeCount = visibleBanners.filter(banner => ['ACTIVE', 'APPROVED'].includes(String(banner.status))).length;
-  const pendingCount = visibleBanners.filter(banner => banner.status === 'PENDING_APPROVAL').length;
-  const hiddenCount = visibleBanners.filter(banner => banner.status === 'HIDDEN').length;
-  const previewImage = imageSrc(upload.url || form.imageUrl);
+  const activeCount = visibleBanners.filter(b => ['ACTIVE', 'APPROVED'].includes(String(b.status))).length;
+  const hiddenCount = visibleBanners.filter(b => b.status === 'HIDDEN').length;
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-banners'] });
 
-  const action = useMutation({
+  const actionMutation = useMutation({
     mutationFn: ({ id, next }: { id: number; next: BannerAction }) =>
       bannerApi.updateStatus(id, next, next === 'reject' ? { reason: 'Rejected by admin review' } : {}),
     onSuccess: (_data, variables) => {
-      setMessage(`Banner ${actionLabel(variables.next)}.`);
+      setMessage(`Banner ${variables.next === 'delete' ? 'deleted' : variables.next === 'show' ? 'activated' : variables.next === 'hide' ? 'hidden' : 'updated'}.`);
       refresh();
     },
     onError: err => setMessage((err as Error).message)
   });
 
-  const create = useMutation({
-    mutationFn: bannerApi.create,
+  const saveMutation = useMutation({
+    mutationFn: async (data: FormState) => {
+      const payload: Record<string, unknown> = {
+        title: data.title.trim(),
+        subtitle: data.subtitle.trim() || undefined,
+        imageUrl: data.imageUrl.trim() || undefined,
+        ctaText: data.ctaText.trim() || undefined,
+        ctaLink: (data.ctaLink.trim() || data.targetUrl.trim()) || undefined,
+        targetUrl: (data.targetUrl.trim() || data.ctaLink.trim()) || undefined,
+        bannerType: data.bannerType,
+        displayLocation: data.displayLocation,
+        priority: Number(data.priority || 50),
+        durationDays: Number(data.durationDays || 30),
+        status: data.status || 'ACTIVE'
+      };
+
+      if (data.id) {
+        return bannerApi.update(data.id, payload);
+      } else {
+        return bannerApi.create(payload);
+      }
+    },
     onSuccess: () => {
-      setMessage('Banner created and added to management');
+      setMessage(editingBanner ? 'Banner updated successfully!' : 'New banner created successfully!');
+      setIsModalOpen(false);
+      setEditingBanner(null);
       setForm(initialForm);
-      setUpload({ fileId: null, url: '', name: '' });
       refresh();
     },
     onError: err => setMessage((err as Error).message)
   });
 
-  const setField = (name: keyof typeof initialForm, value: string) => {
-    setForm(prev => ({ ...prev, [name]: value }));
+  const openCreateModal = () => {
+    setEditingBanner(null);
+    setForm(initialForm);
+    setIsModalOpen(true);
+    setMessage('');
   };
 
-  const uploadImage = async (event: ChangeEvent<HTMLInputElement>) => {
+  const openEditModal = (banner: BannerRecord) => {
+    setEditingBanner(banner);
+    setForm({
+      id: banner.id,
+      title: banner.title || '',
+      subtitle: banner.subtitle || '',
+      imageUrl: banner.imageUrl || '',
+      ctaText: banner.ctaText || '',
+      ctaLink: banner.ctaLink || banner.targetUrl || '',
+      targetUrl: banner.targetUrl || banner.ctaLink || '',
+      bannerType: banner.bannerType || 'DEFAULT_ADMIN',
+      displayLocation: banner.displayLocation || 'HOME_HERO',
+      priority: String(banner.priority ?? 50),
+      durationDays: String(banner.durationDays ?? 30),
+      status: banner.status || 'ACTIVE'
+    });
+    setIsModalOpen(true);
+    setMessage('');
+  };
+
+  const uploadImageFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setMessage('Please upload a JPG, PNG, WEBP, or SVG image.');
+      setMessage('Please upload a valid JPG, PNG, WEBP, or SVG image.');
       return;
     }
 
     setUploading(true);
     setMessage('');
     try {
-      const optimized = await compressImage(file, 1800, 900, 0.8);
+      const optimized = await compressImage(file, 1920, 1080, 0.85);
       const body = new FormData();
       body.append('file', optimized);
       const token = localStorage.getItem('token');
@@ -160,12 +220,12 @@ export default function AdminBannerManagementPage() {
       });
       const json = unwrapApiData<any>(await readJsonResponse(res));
       if (!res.ok) throw new Error(json?.message || 'Unable to upload banner image');
-      const fileId = Number(json?.fileId || json?.file?.id || 0) || null;
-      const url = json?.url || json?.file?.url || json?.file?.documentUrl || (fileId ? `/api/files/${fileId}/view` : '');
-      if (!fileId && !url) throw new Error('Upload completed but no file link was returned.');
-      setUpload({ fileId, url, name: json?.file?.originalName || optimized.name });
-      setField('imageUrl', '');
-      setMessage('Image uploaded. Review the preview and add the banner.');
+
+      const publicUrl = json?.url || json?.file?.url || json?.file?.documentUrl || '';
+      if (!publicUrl) throw new Error('Upload completed but no image URL was returned.');
+
+      setForm(prev => ({ ...prev, imageUrl: publicUrl }));
+      setMessage('Image uploaded directly to GCP Storage!');
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Unable to upload banner image');
     } finally {
@@ -174,371 +234,513 @@ export default function AdminBannerManagementPage() {
     }
   };
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const imageUrl = form.imageUrl.trim();
-    if (!imageUrl && !upload.fileId) {
-      setMessage('Add an image URL or upload a banner image first.');
+  const handleFormSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!form.title.trim()) {
+      setMessage('Headline Title is required.');
       return;
     }
-    create.mutate({
-      title: form.title.trim(),
-      subtitle: form.subtitle.trim() || undefined,
-      imageUrl: imageUrl || undefined,
-      documentId: upload.fileId || undefined,
-      targetUrl: form.targetUrl.trim() || undefined,
-      bannerType: form.bannerType,
-      displayLocation: form.displayLocation,
-      priority: Number(form.priority || 0),
-      durationDays: Number(form.durationDays || 10),
-      status: 'ACTIVE'
-    });
+    if (!form.imageUrl.trim()) {
+      setMessage('Please upload a banner image or provide an image URL.');
+      return;
+    }
+    saveMutation.mutate(form);
   };
-
-  const createManagedCopy = (banner: (typeof DEFAULT_MARKETPLACE_BANNERS)[number]) => {
-    create.mutate({
-      title: banner.title,
-      subtitle: banner.subtitle,
-      imageUrl: banner.imageUrl,
-      targetUrl: banner.ctaLink?.startsWith('http') ? banner.ctaLink : undefined,
-      bannerType: 'DEFAULT_ADMIN',
-      displayLocation: banner.displayLocation,
-      priority: 100 - banner.displayOrder,
-      durationDays: 30,
-      status: 'ACTIVE'
-    });
-  };
-
-  if (query.isLoading) return <LoadingState label="Loading banners..." />;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 xl:flex-row xl:items-end xl:justify-between">
+    <div className="space-y-6 pb-12">
+      {/* Top Header */}
+      <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Admin Controls</p>
-          <h1 className="text-2xl font-black text-slate-950">Banner Management</h1>
-          <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">
-            Create, preview, approve, hide, and remove marketplace hero banners from one place.
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-6 items-center rounded-full bg-blue-50 px-2.5 text-[10px] font-black uppercase tracking-widest text-[#12335f] ring-1 ring-blue-700/10">
+              Admin Portal
+            </span>
+            <span className="text-xs font-semibold text-slate-400">• Cloud Storage Live</span>
+          </div>
+          <h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl">Banner Management</h1>
+          <p className="mt-1 text-xs font-semibold text-slate-500">
+            Control, edit, and publish hero carousel banners hosted on Google Cloud Storage.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-slate-200 bg-white p-1">
-            {statusOptions.map(option => (
-              <button
-                key={option.label}
-                type="button"
-                onClick={() => setStatus(option.value)}
-                className={cn(
-                  'h-8 rounded-md px-3 text-[10px] font-black uppercase tracking-wider transition-colors',
-                  status === option.value ? 'bg-[#12335f] text-white' : 'text-slate-600 hover:bg-slate-50'
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <Button variant="outline" onClick={() => query.refetch()}>
-            <RefreshCw className="mr-2 h-4 w-4" />Refresh
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button variant="outline" size="sm" onClick={refresh} className="font-bold">
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            Refresh
+          </Button>
+          <Button size="sm" onClick={openCreateModal} className="bg-[#12335f] font-bold text-white hover:bg-[#0b2447]">
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add New Banner
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label="Managed" value={managedCount} />
-        <Metric label="Live" value={activeCount} />
-        <Metric label="Pending" value={pendingCount} />
-        <Metric label="Hidden" value={hiddenCount} />
+      {/* Message Alert */}
+      {message && (
+        <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-bold text-blue-900 shadow-xs animate-in fade-in">
+          <span>{message}</span>
+          <button type="button" onClick={() => setMessage('')} className="text-blue-600 hover:text-blue-800">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Metrics Row */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <MetricCard label="Total Banners" value={managedCount} icon={Images} />
+        <MetricCard label="Active on Homepage" value={activeCount} tone="emerald" icon={Eye} />
+        <MetricCard label="Hidden / Draft" value={hiddenCount} tone="slate" icon={EyeOff} />
+        <MetricCard label="Storage Provider" value="GCP Bucket" subtitle="jsgsmile1" tone="blue" icon={UploadCloud} isText />
       </div>
 
-      {message && <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-bold text-[#12335f]">{message}</div>}
-      {query.error && <InlineError message={(query.error as Error).message} onRetry={() => query.refetch()} />}
+      {/* Filters Bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-bold text-slate-600">Filter by Status:</label>
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+          >
+            {statusOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+        <p className="text-xs font-semibold text-slate-500">
+          Showing <span className="font-bold text-slate-900">{visibleBanners.length}</span> database banners
+        </p>
+      </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <Card className="border-slate-200">
-          <CardContent className="p-4">
-            <div className="mb-4 flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#12335f] text-white">
-                <ImagePlus className="h-4 w-4" />
-              </div>
-              <div>
-                <h2 className="text-base font-black text-slate-950">Create Banner</h2>
-                <p className="text-xs font-semibold text-slate-500">Use an image URL or upload a banner image.</p>
-              </div>
-            </div>
-
-            <form onSubmit={submit} className="grid gap-3 lg:grid-cols-2">
-              <Input label="Title" value={form.title} onChange={value => setField('title', value)} required />
-              <Input label="Target URL" value={form.targetUrl} onChange={value => setField('targetUrl', value)} placeholder="https://..." />
-              <Input label="Subtitle" value={form.subtitle} onChange={value => setField('subtitle', value)} className="lg:col-span-2" />
-              <Input label="Image URL" value={form.imageUrl} onChange={value => { setField('imageUrl', value); setUpload({ fileId: null, url: '', name: '' }); }} placeholder="https://..." />
-
-              <label className="flex min-h-16 cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 transition hover:border-[#12335f]/50 hover:bg-blue-50/40">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Upload Image</p>
-                  <p className="truncate text-xs font-bold text-slate-800">{upload.name || (uploading ? 'Uploading image...' : 'Choose JPG, PNG, WEBP, or SVG')}</p>
-                </div>
-                <UploadCloud className={cn('h-5 w-5 text-[#12335f]', uploading && 'animate-pulse')} />
-                <input type="file" accept="image/*" onChange={uploadImage} disabled={uploading || create.isPending} className="hidden" />
-              </label>
-
-              <Select label="Type" value={form.bannerType} onChange={value => setField('bannerType', value)} options={[
-                ['DEFAULT_ADMIN', 'Admin'],
-                ['ANNOUNCEMENT', 'Announcement']
-              ]} />
-              <Select label="Location" value={form.displayLocation} onChange={value => setField('displayLocation', value)} options={[
-                ['HOME_HERO', 'Home hero'],
-                ['MARKETPLACE_HOME', 'Marketplace'],
-                ['DASHBOARD', 'Dashboard']
-              ]} />
-              <Input label="Priority" type="number" min="0" value={form.priority} onChange={value => setField('priority', value)} />
-              <Input label="Duration days" type="number" min="1" value={form.durationDays} onChange={value => setField('durationDays', value)} />
-              <Button disabled={create.isPending || uploading} className="lg:col-span-2">
-                <Plus className="mr-2 h-4 w-4" />Add Banner
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <BannerPreview
-          title={form.title || 'Banner title preview'}
-          subtitle={form.subtitle || 'Subtitle preview appears here before this banner goes live.'}
-          imageUrl={previewImage}
-          status={upload.fileId ? 'UPLOADED' : form.imageUrl ? 'URL IMAGE' : 'WAITING IMAGE'}
-          targetUrl={form.targetUrl}
+      {/* Banners Grid */}
+      {query.isLoading ? (
+        <LoadingState label="Loading cloud banners..." />
+      ) : visibleBanners.length === 0 ? (
+        <EmptyState
+          title="No banners found"
+          description="There are no banners matching this filter. Click 'Add New Banner' to create one."
+          icon={Images}
         />
-      </div>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Managed Banners</p>
-            <h2 className="text-lg font-black text-slate-950">Admin controlled banners</h2>
-          </div>
-        </div>
-
-        {visibleBanners.length === 0 ? (
-          <EmptyState title="No managed banners yet" description="The public marketplace is using the default banner set below until you add one here." icon={Images} />
-        ) : (
-          <div className="space-y-4">
-            <div className="grid gap-4 xl:grid-cols-2">
-              {pagedBanners.map(banner => (
-                <ManagedBannerCard
-                  key={banner.id}
-                  banner={banner}
-                  busy={action.isPending || create.isPending}
-                  onAction={(next) => action.mutate({ id: banner.id, next })}
-                />
-              ))}
-            </div>
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-                label="banners"
+      ) : (
+        <div className="space-y-4">
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {pagedBanners.map(banner => (
+              <BannerAdminCard
+                key={banner.id}
+                banner={banner}
+                busy={actionMutation.isPending || saveMutation.isPending}
+                onEdit={() => openEditModal(banner)}
+                onToggleVisibility={() =>
+                  actionMutation.mutate({
+                    id: banner.id,
+                    next: banner.status === 'ACTIVE' ? 'hide' : 'show'
+                  })
+                }
+                onDelete={() => {
+                  if (confirm(`Are you sure you want to delete banner: "${banner.title}"?`)) {
+                    actionMutation.mutate({ id: banner.id, next: 'delete' });
+                  }
+                }}
               />
-            </div>
+            ))}
           </div>
-        )}
-      </section>
 
-      <section className="space-y-3">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Default Marketplace Banners</p>
-          <h2 className="text-lg font-black text-slate-950">Currently shown when no managed banner is live</h2>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              label="banners"
+            />
+          </div>
         </div>
-        <div className="grid gap-4 xl:grid-cols-2">
-          {DEFAULT_MARKETPLACE_BANNERS.map(banner => (
-            <DefaultBannerCard key={banner.id} banner={banner} busy={create.isPending} onCreate={() => createManagedCopy(banner)} />
-          ))}
+      )}
+
+      {/* Modal for Create / Edit Banner */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+            {/* Sticky Header */}
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-5 py-3.5">
+              <div>
+                <h3 className="text-base font-black text-slate-950">
+                  {editingBanner ? `Edit Banner [ID: ${editingBanner.id}]` : 'Create New Hero Banner'}
+                </h3>
+                <p className="text-[11px] font-semibold text-slate-500">
+                  {editingBanner ? 'Update headline, links, priority, or replace the GCP image.' : 'Add a new high-impact banner to the homepage hero carousel.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleFormSubmit} className="flex flex-1 flex-col overflow-hidden">
+              <div className="flex-1 space-y-3.5 overflow-y-auto p-5">
+                {/* Image Preview & Upload Section */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Banner Image (GCP Cloud Storage)
+                    </span>
+                    {form.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setForm(prev => ({ ...prev, imageUrl: '' }))}
+                        className="text-[11px] font-bold text-red-600 hover:underline"
+                      >
+                        Remove Image
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Compact Preview Box */}
+                  <div className="relative h-32 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-inner">
+                    {form.imageUrl ? (
+                      <img
+                        src={imageSrc(form.imageUrl)}
+                        alt="Banner Preview"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
+                        <ImagePlus className="h-7 w-7 text-slate-500" />
+                        <span className="text-[11px] font-bold">No image selected</span>
+                      </div>
+                    )}
+                    {form.imageUrl && (
+                      <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-r from-[#07172e]/90 via-[#0b2447]/60 to-transparent p-3">
+                        <h4 className="line-clamp-1 max-w-md text-xs font-black leading-tight text-white drop-shadow-sm">
+                          {form.title || 'Headline Title Preview'}
+                        </h4>
+                        <p className="mt-0.5 line-clamp-1 max-w-md text-[10px] font-medium text-white/80">
+                          {form.subtitle || 'Subtitle preview will appear here.'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upload Button */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-[#12335f] ring-1 ring-blue-700/20 transition hover:bg-blue-100">
+                      <UploadCloud className="h-3.5 w-3.5 text-blue-700" />
+                      <span>{uploading ? 'Uploading to GCP...' : form.imageUrl ? 'Replace Image' : 'Upload Image to GCP'}</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                        onChange={uploadImageFile}
+                        disabled={uploading}
+                        className="hidden"
+                      />
+                    </label>
+                    <span className="text-[10px] font-medium text-slate-400">JPG, PNG, WEBP, SVG</span>
+                  </div>
+                </div>
+
+                {/* Direct Image URL input */}
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Or Image Public URL / Path:
+                  </label>
+                  <input
+                    type="text"
+                    value={form.imageUrl}
+                    onChange={e => setForm(prev => ({ ...prev, imageUrl: e.target.value }))}
+                    placeholder="https://storage.googleapis.com/jsgsmile1/banners/..."
+                    className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                  />
+                </div>
+
+                {/* Headline Title */}
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Headline Title * <span className="text-slate-400 font-normal">(use Enter for line break)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={form.title}
+                    onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="Steel & Metal Fabrication&#10;Powering Jharsuguda Industry"
+                    required
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                  />
+                </div>
+
+                {/* Subtitle */}
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Subtitle Description
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={form.subtitle}
+                    onChange={e => setForm(prev => ({ ...prev, subtitle: e.target.value }))}
+                    placeholder="Source verified steel, TMT bars, industrial castings from local manufacturers."
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                  />
+                </div>
+
+                {/* CTA Row */}
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      CTA Button Text
+                    </label>
+                    <input
+                      type="text"
+                      value={form.ctaText}
+                      onChange={e => setForm(prev => ({ ...prev, ctaText: e.target.value }))}
+                      placeholder="Browse Steel & Metal"
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      CTA Button Link / URL
+                    </label>
+                    <input
+                      type="text"
+                      value={form.ctaLink}
+                      onChange={e => setForm(prev => ({ ...prev, ctaLink: e.target.value, targetUrl: e.target.value }))}
+                      placeholder="#products or /buyer/register"
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                    />
+                  </div>
+                </div>
+
+                {/* Priority & Status Row */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Priority (0-100)
+                    </label>
+                    <input
+                      type="number"
+                      value={form.priority}
+                      onChange={e => setForm(prev => ({ ...prev, priority: e.target.value }))}
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Status
+                    </label>
+                    <select
+                      value={form.status}
+                      onChange={e => setForm(prev => ({ ...prev, status: e.target.value }))}
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="HIDDEN">Hidden</option>
+                      <option value="DRAFT">Draft</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Location
+                    </label>
+                    <select
+                      value={form.displayLocation}
+                      onChange={e => setForm(prev => ({ ...prev, displayLocation: e.target.value }))}
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                    >
+                      <option value="HOME_HERO">Home Hero</option>
+                      <option value="MARKETPLACE_HOME">Marketplace</option>
+                      <option value="DASHBOARD">Dashboard</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sticky Footer */}
+              <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-slate-100 bg-slate-50 px-5 py-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsModalOpen(false)}
+                  className="font-bold"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={saveMutation.isPending || uploading}
+                  className="bg-[#12335f] font-bold text-white hover:bg-[#0b2447]"
+                >
+                  {saveMutation.isPending ? 'Saving...' : editingBanner ? 'Save Changes' : 'Create Banner'}
+                </Button>
+              </div>
+            </form>
+          </div>
         </div>
-      </section>
+      )}
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-        <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-const actionLabel = (action: BannerAction) => {
-  if (action === 'approve') return 'approved';
-  if (action === 'show') return 'shown';
-  if (action === 'hide') return 'hidden';
-  if (action === 'reject') return 'rejected';
-  return 'deleted';
-};
-
-function Input({
+function MetricCard({
   label,
   value,
-  onChange,
-  className,
-  ...props
-}: Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange'> & {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className={cn('block', className)}>
-      <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</span>
-      <input
-        {...props}
-        value={value}
-        onChange={event => onChange(event.target.value)}
-        className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-[#12335f]/20"
-      />
-    </label>
-  );
-}
-
-function Select({
-  label,
-  value,
-  onChange,
-  options
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<[string, string]>;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</span>
-      <select
-        value={value}
-        onChange={event => onChange(event.target.value)}
-        className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-[#12335f]/20"
-      >
-        {options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}
-      </select>
-    </label>
-  );
-}
-
-function BannerPreview({
-  title,
   subtitle,
-  imageUrl,
-  status,
-  targetUrl
+  tone = 'blue',
+  icon: Icon,
+  isText = false
 }: {
-  title: string;
-  subtitle: string;
-  imageUrl: string;
-  status: string;
-  targetUrl?: string;
+  label: string;
+  value: number | string;
+  subtitle?: string;
+  tone?: 'blue' | 'emerald' | 'slate';
+  icon: any;
+  isText?: boolean;
 }) {
   return (
-    <Card className="min-h-[320px] border-slate-200">
-      <CardContent className="flex h-full flex-col p-0">
-        <div className="relative min-h-[260px] overflow-hidden bg-[#0b2447]">
-          {imageUrl ? (
-            <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-100 text-slate-400">
-              <ImagePlus className="h-10 w-10" />
-            </div>
-          )}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#07172e]/95 via-[#0b2447]/70 to-transparent" />
-          <div className="relative flex min-h-[260px] flex-col justify-end p-5">
-            <span className="mb-3 w-max rounded border border-white/20 bg-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-white/80">{status}</span>
-            <h3 className="max-w-md whitespace-pre-line text-2xl font-black leading-tight text-white">{title}</h3>
-            <p className="mt-2 max-w-md text-xs font-semibold leading-relaxed text-white/70">{subtitle}</p>
-          </div>
+    <Card className="border-slate-200 bg-white shadow-xs">
+      <CardContent className="flex items-center justify-between p-4">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+          <p className={cn("mt-1 font-black leading-none", isText ? "text-base text-blue-900" : "text-2xl text-slate-950")}>
+            {value}
+          </p>
+          {subtitle && <p className="mt-1 text-[10px] font-semibold text-slate-400">{subtitle}</p>}
         </div>
-        <div className="flex items-center gap-2 border-t border-slate-200 px-4 py-3 text-xs font-bold text-slate-500">
-          <LinkIcon className="h-4 w-4" />
-          <span className="truncate">{targetUrl || 'No target URL set'}</span>
+        <div className={cn(
+          "flex h-9 w-9 items-center justify-center rounded-xl ring-1",
+          tone === 'emerald' ? "bg-emerald-50 text-emerald-600 ring-emerald-200" :
+          tone === 'slate' ? "bg-slate-50 text-slate-600 ring-slate-200" :
+          "bg-blue-50 text-blue-600 ring-blue-200"
+        )}>
+          <Icon className="h-4 w-4" />
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function ManagedBannerCard({
+function BannerAdminCard({
   banner,
   busy,
-  onAction
+  onEdit,
+  onToggleVisibility,
+  onDelete
 }: {
   banner: BannerRecord;
   busy: boolean;
-  onAction: (action: BannerAction) => void;
+  onEdit: () => void;
+  onToggleVisibility: () => void;
+  onDelete: () => void;
 }) {
   const src = imageSrc(banner.imageUrl);
+  const isActive = banner.status === 'ACTIVE' || banner.status === 'APPROVED';
 
   return (
-    <Card className="border-slate-200">
-      <CardContent className="p-0">
-        <div className="grid md:grid-cols-[240px_1fr]">
-          <div className="relative min-h-[180px] bg-slate-100">
-            {src ? <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover" /> : <div className="flex h-full min-h-[180px] items-center justify-center"><ImagePlus className="h-8 w-8 text-slate-400" /></div>}
-            <span className={cn('absolute left-3 top-3 rounded border px-2 py-1 text-[9px] font-black uppercase tracking-widest', statusTone(banner.status))}>
-              {String(banner.status || 'DRAFT').replace(/_/g, ' ')}
+    <Card className="overflow-hidden border-slate-200 bg-white shadow-xs transition hover:shadow-md">
+      <CardContent className="flex h-full flex-col p-0">
+        {/* Banner Visual Header */}
+        <div className="relative min-h-[170px] overflow-hidden bg-slate-900">
+          {src ? (
+            <img
+              src={src}
+              alt={banner.title}
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full min-h-[170px] items-center justify-center bg-slate-100 text-slate-400">
+              <ImagePlus className="h-8 w-8" />
+            </div>
+          )}
+
+          {/* Dark scrim gradient */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#07172e]/90 via-[#07172e]/40 to-transparent" />
+
+          {/* Top Badges */}
+          <div className="absolute left-3 top-3 flex items-center gap-1.5">
+            <span className={cn('rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider backdrop-blur-xs shadow-xs', statusTone(banner.status))}>
+              {String(banner.status || 'ACTIVE')}
+            </span>
+            <span className="rounded-md bg-black/50 px-2 py-0.5 text-[9px] font-black text-white/90 backdrop-blur-xs">
+              Priority: {banner.priority ?? 0}
             </span>
           </div>
-          <div className="flex min-w-0 flex-col justify-between p-4">
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{banner.bannerType || 'DEFAULT'} / {banner.displayLocation || 'HOME_HERO'}</p>
-              <h3 className="mt-1 text-lg font-black leading-tight text-slate-950 text-wrap-anywhere">{banner.title}</h3>
-              {banner.subtitle && <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-500">{banner.subtitle}</p>}
-              <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-500">
-                <p>Priority <span className="text-slate-900">{banner.priority ?? 0}</span></p>
-                <p>Order <span className="text-slate-900">{banner.displayOrder ?? 0}</span></p>
-                <p className="col-span-2">Dates <span className="text-slate-900">{formatDate(banner.startAt)} - {formatDate(banner.endAt)}</span></p>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button size="sm" disabled={busy} onClick={() => onAction('approve')}><Check className="mr-1 h-3.5 w-3.5" />Approve</Button>
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => onAction('show')}><Eye className="mr-1 h-3.5 w-3.5" />Show</Button>
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => onAction('hide')}><EyeOff className="mr-1 h-3.5 w-3.5" />Hide</Button>
-              <Button size="sm" variant="danger" disabled={busy} onClick={() => onAction('reject')}><X className="mr-1 h-3.5 w-3.5" />Reject</Button>
-              <Button size="sm" variant="danger" disabled={busy} onClick={() => onAction('delete')}><Trash2 className="mr-1 h-3.5 w-3.5" />Delete</Button>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
-function DefaultBannerCard({
-  banner,
-  busy,
-  onCreate
-}: {
-  banner: (typeof DEFAULT_MARKETPLACE_BANNERS)[number];
-  busy: boolean;
-  onCreate: () => void;
-}) {
-  return (
-    <Card className="border-slate-200">
-      <CardContent className="p-0">
-        <div className="relative min-h-[210px] overflow-hidden bg-[#0b2447]">
-          <img src={banner.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#07172e]/95 via-[#0b2447]/70 to-transparent" />
-          <div className="relative flex min-h-[210px] flex-col justify-end p-5">
-            <span className={cn('mb-3 w-max rounded border px-2 py-1 text-[9px] font-black uppercase tracking-widest', statusTone('DEFAULT'))}>Default</span>
-            <h3 className="max-w-md whitespace-pre-line text-xl font-black leading-tight text-white">{banner.title}</h3>
-            <p className="mt-2 max-w-md text-xs font-semibold leading-relaxed text-white/70">{banner.subtitle}</p>
+          {/* Headline on Image */}
+          <div className="relative flex min-h-[170px] flex-col justify-end p-4">
+            <h3 className="whitespace-pre-line text-base font-black leading-tight text-white drop-shadow-sm line-clamp-2">
+              {banner.title}
+            </h3>
+            {banner.subtitle && (
+              <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-normal text-white/80">
+                {banner.subtitle}
+              </p>
+            )}
           </div>
         </div>
-        <div className="flex flex-col gap-3 border-t border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs font-semibold text-slate-500">Create a managed copy to edit, hide, or replace this default banner.</p>
-          <Button size="sm" variant="outline" disabled={busy} onClick={onCreate}>
-            <Plus className="mr-1 h-3.5 w-3.5" />Manage
-          </Button>
+
+        {/* Details & CTA Footer */}
+        <div className="flex flex-1 flex-col justify-between p-4">
+          <div className="space-y-2 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+              <LinkIcon className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+              <span className="truncate font-bold text-slate-800">
+                {banner.ctaText || 'Button'}: <span className="text-slate-500 font-normal">{banner.ctaLink || banner.targetUrl || '#'}</span>
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
+              <span>Location: {banner.displayLocation || 'HOME_HERO'}</span>
+              <span>Updated: {formatDate(banner.startAt || new Date().toISOString())}</span>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={onEdit}
+              className="flex-1 font-bold text-slate-800 hover:bg-slate-50 hover:text-blue-700"
+            >
+              <Edit className="mr-1.5 h-3.5 w-3.5 text-blue-600" />
+              Edit
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={onToggleVisibility}
+              className={cn("flex-1 font-bold", isActive ? "text-amber-700 hover:bg-amber-50" : "text-emerald-700 hover:bg-emerald-50")}
+            >
+              {isActive ? (
+                <>
+                  <EyeOff className="mr-1.5 h-3.5 w-3.5" />
+                  Hide
+                </>
+              ) : (
+                <>
+                  <Eye className="mr-1.5 h-3.5 w-3.5" />
+                  Show
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={busy}
+              onClick={onDelete}
+              className="px-2.5"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

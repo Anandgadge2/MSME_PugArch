@@ -7,9 +7,17 @@ import { apiResponse } from '../utils/apiResponse.js';
 import { maskSensitive } from '../utils/maskSensitive.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { shortCache } from '../middleware/httpCache.js';
+import { deleteCache, invalidateByPattern } from '../services/cache.service.js';
+import { redisKeys } from '../constants/redis-keys.js';
 
 const router = Router();
 const db = prisma as any;
+
+const purgeBannerCache = async () => {
+  await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
+  await deleteCache(redisKeys.cacheMarketplaceHome()).catch(() => undefined);
+  await deleteCache('marketplace:home:v2').catch(() => undefined);
+};
 
 const adminRoles = ['admin', 'master_admin'];
 const isAdmin = (req: AuthRequest) => adminRoles.includes(String(req.user?.role));
@@ -34,14 +42,13 @@ const bannerFieldsSchema = z.object({
   title: z.string().trim().min(2).max(160),
   subtitle: z.string().trim().max(500).optional(),
   imageUrl: z.string().trim().max(1000).optional().refine(
-    val => !val || val === '' || /^\//.test(val) || /^https?:\/\/.+/.test(val),
-    { message: 'imageUrl must be a valid absolute URL, relative path, or empty' }
+    val => !val || val === '' || /^\//.test(val) || /^https?:\/\/.+/.test(val) || /^data:image\/.+/.test(val),
+    { message: 'imageUrl must be a valid absolute URL, relative path, data URI, or empty' }
   ),
   documentId: z.coerce.number().int().positive().optional(),
-  targetUrl: z.string().trim().max(1000).optional().refine(
-    val => !val || val === '' || /^\//.test(val) || /^https?:\/\/.+/.test(val),
-    { message: 'targetUrl must be a valid absolute URL, relative path, or empty' }
-  ),
+  targetUrl: z.string().trim().max(1000).optional(),
+  ctaText: z.string().trim().max(100).optional(),
+  ctaLink: z.string().trim().max(1000).optional(),
   bannerType: z.enum(['DEFAULT_ADMIN', 'TOP_BUYER_PROMOTION', 'TOP_SELLER_PROMOTION', 'ANNOUNCEMENT']).default('DEFAULT_ADMIN'),
   status: z.enum(['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'HIDDEN']).optional(),
   startAt: z.coerce.date().optional(),
@@ -114,9 +121,25 @@ const safeBannerSelect = {
   updatedAt: true
 };
 
+const formatBannerImageUrl = (url: string | null | undefined, documentId?: number | null) => {
+  if (url) {
+    const trimmed = url.trim();
+    if (trimmed.startsWith('/banners/')) {
+      return `/api/files/raw${trimmed}`;
+    }
+    const gcsMatch = trimmed.match(/^https?:\/\/storage\.googleapis\.com\/[^/]+\/(.+)$/);
+    if (gcsMatch) {
+      return `/api/files/raw/${gcsMatch[1]}`;
+    }
+    return trimmed;
+  }
+  if (documentId) return `/api/files/${documentId}/view`;
+  return url;
+};
+
 const withBannerImageUrls = (banners: any[]) => banners.map(banner => ({
   ...banner,
-  imageUrl: banner.imageUrl || (banner.documentId ? `/api/files/${banner.documentId}/view` : banner.imageUrl)
+  imageUrl: formatBannerImageUrl(banner.imageUrl, banner.documentId)
 }));
 
 router.get('/banners/active', shortCache(60), async (req, res: Response) => {
@@ -239,6 +262,7 @@ router.post('/admin/banners', authenticate, authorize('admin', 'master_admin'), 
       }
     });
     await audit(req, 'banner.created_by_admin', 'marketplaceBanner', banner.id);
+    await purgeBannerCache();
     return apiResponse.created(res, maskSensitive(banner), 'Banner created');
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to create banner', error.code || 'ADMIN_BANNER_CREATE_ERROR');
@@ -249,11 +273,36 @@ router.patch('/admin/banners/:id', authenticate, authorize('admin', 'master_admi
   try {
     const id = Number(req.params.id);
     const payload = bannerFieldsSchema.partial().parse(req.body);
+    const updateData: any = { ...payload };
+    if (payload.ctaLink || payload.targetUrl) updateData.ctaLink = payload.ctaLink || payload.targetUrl;
+    if (payload.targetUrl || payload.ctaLink) updateData.targetUrl = payload.targetUrl || payload.ctaLink;
+    if (payload.status) updateData.isActive = ['ACTIVE', 'APPROVED'].includes(payload.status);
     const banner = await db.marketplaceBanner.update({
       where: { id },
-      data: { ...payload, ctaLink: payload.targetUrl || undefined, isActive: payload.status ? ['ACTIVE', 'APPROVED'].includes(payload.status) : undefined }
+      data: updateData
     });
     await audit(req, 'banner.updated', 'marketplaceBanner', id, payload);
+    await purgeBannerCache();
+    return apiResponse.success(res, maskSensitive(banner), 200, 'Banner updated');
+  } catch (error: any) {
+    return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to update banner', error.code || 'ADMIN_BANNER_UPDATE_ERROR');
+  }
+});
+
+router.put('/admin/banners/:id', authenticate, authorize('admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const payload = bannerFieldsSchema.partial().parse(req.body);
+    const updateData: any = { ...payload };
+    if (payload.ctaLink || payload.targetUrl) updateData.ctaLink = payload.ctaLink || payload.targetUrl;
+    if (payload.targetUrl || payload.ctaLink) updateData.targetUrl = payload.targetUrl || payload.ctaLink;
+    if (payload.status) updateData.isActive = ['ACTIVE', 'APPROVED'].includes(payload.status);
+    const banner = await db.marketplaceBanner.update({
+      where: { id },
+      data: updateData
+    });
+    await audit(req, 'banner.updated', 'marketplaceBanner', id, payload);
+    await purgeBannerCache();
     return apiResponse.success(res, maskSensitive(banner), 200, 'Banner updated');
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to update banner', error.code || 'ADMIN_BANNER_UPDATE_ERROR');
@@ -268,6 +317,7 @@ const bannerStatusAction = (status: string, isActive: boolean) => async (req: Au
       : {};
     const banner = await db.marketplaceBanner.update({ where: { id }, data: { status, isActive, ...extra } });
     await audit(req, `banner.${status.toLowerCase()}`, 'marketplaceBanner', id);
+    await purgeBannerCache();
     return apiResponse.success(res, maskSensitive(banner));
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to update banner status', error.code || 'BANNER_STATUS_ERROR');
@@ -284,6 +334,7 @@ router.post('/admin/banners/:id/reject', authenticate, authorize('admin', 'maste
     const payload = rejectSchema.parse(req.body);
     const banner = await db.marketplaceBanner.update({ where: { id }, data: { status: 'REJECTED', isActive: false, rejectionReason: payload.reason } });
     await audit(req, 'banner.rejected', 'marketplaceBanner', id, { reason: payload.reason });
+    await purgeBannerCache();
     return apiResponse.success(res, maskSensitive(banner), 200, 'Banner rejected');
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to reject banner', error.code || 'BANNER_REJECT_ERROR');
@@ -295,6 +346,7 @@ router.delete('/admin/banners/:id', authenticate, authorize('admin', 'master_adm
     const id = Number(req.params.id);
     const banner = await db.marketplaceBanner.update({ where: { id }, data: { status: 'DELETED', isActive: false, deletedAt: new Date() } });
     await audit(req, 'banner.deleted', 'marketplaceBanner', id);
+    await purgeBannerCache();
     return apiResponse.success(res, maskSensitive(banner), 200, 'Banner deleted');
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to delete banner', error.code || 'BANNER_DELETE_ERROR');
@@ -306,6 +358,7 @@ router.patch('/admin/banners/reorder', authenticate, authorize('admin', 'master_
     const payload = reorderSchema.parse(req.body);
     await Promise.all(payload.items.map(item => db.marketplaceBanner.update({ where: { id: item.id }, data: { priority: item.priority, displayOrder: item.displayOrder ?? item.priority } })));
     await audit(req, 'banner.reordered', 'marketplaceBanner', undefined, { count: payload.items.length });
+    await purgeBannerCache();
     return apiResponse.success(res, { success: true }, 200, 'Banners reordered');
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to reorder banners', error.code || 'BANNER_REORDER_ERROR');

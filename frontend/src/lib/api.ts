@@ -68,7 +68,10 @@ export const resolveMediaUrl = (url: string | null | undefined): string | null =
     return trimmed;
   }
   const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-  if (cleanPath.startsWith('/org-logos/') || cleanPath.startsWith('/banners/') || cleanPath.startsWith('/products/')) {
+  if (cleanPath.startsWith('/banners/')) {
+    return `${BASE_URL}/api/files/raw${cleanPath}`;
+  }
+  if (cleanPath.startsWith('/org-logos/') || cleanPath.startsWith('/products/')) {
     return cleanPath;
   }
   return `${BASE_URL}${cleanPath}`;
