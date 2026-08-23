@@ -439,10 +439,11 @@ export default function SubmitQuotationPage() {
         requirementNumber: queryData.requirement.requirementNumber,
         buyerOrganization: queryData.requirement.buyerOrganization,
         deadlineDate: queryData.requirement.lastDate,
-        items: queryData.requirement.items,
-        boqTable: queryData.requirement.boqTable || queryData.requirement.payload?.boqTable,
+        items: queryData.requirement.items || queryData.requirement.boqTable || queryData.requirement.payload?.items || queryData.requirement.payload?.boqTable || queryData.requirement.technicalPacket?.items || queryData.requirement.technicalPacket?.boqTable,
+        boqTable: queryData.requirement.boqTable || queryData.requirement.payload?.boqTable || queryData.requirement.technicalPacket?.boqTable,
         documents: queryData.requirement.documents,
         payload: queryData.requirement.payload,
+        technicalPacket: queryData.requirement.technicalPacket || queryData.requirement.payload?.technicalPacket,
         requiredDocuments: queryData.requirement.requiredDocuments,
         estimatedValue: queryData.requirement.estimatedValue || queryData.requirement.budgetMax,
         quantity: queryData.requirement.quantity,
@@ -688,10 +689,21 @@ export default function SubmitQuotationPage() {
       rfqData?.payload?.technicalPacket?.wizardData?.boqTable,
       rfqData?.payload?.technicalPacket?.wizardData?.items,
       rfqData?.payload?.technicalPacket?.rateContractConfig?.itemRateSchedule,
+      rfqData?.technicalPacket?.boqTable,
+      rfqData?.technicalPacket?.items,
+      rfqData?.technicalPacket?.boq,
+      rfqData?.technicalPacket?.wizardData?.boqTable,
+      rfqData?.technicalPacket?.wizardData?.items,
       rfqData?.boqTable,
       rfqData?.items,
       rfqData?.lineItems,
       rfqData?.products,
+      queryData?.requirement?.items,
+      queryData?.requirement?.boqTable,
+      queryData?.requirement?.payload?.items,
+      queryData?.requirement?.payload?.boqTable,
+      queryData?.requirement?.technicalPacket?.items,
+      queryData?.requirement?.technicalPacket?.boqTable,
     ];
 
     let rawItems: any[] = [];
@@ -708,39 +720,164 @@ export default function SubmitQuotationPage() {
       return str;
     };
 
+    const isGenericName = (val?: any): boolean => {
+      if (!val) return true;
+      const s = String(val).trim().toLowerCase();
+      if (!s || s === 'n/a' || s === '—' || s === 'none' || s === 'null' || s === 'undefined') return true;
+      if (s === 'general' || s === 'general procurement' || s === 'general sub-category' || s === 'default' || s === 'uncategorized' || s === 'item' || s === 'product' || s === 'requirement item' || s === 'sourcing requirement' || s === 'procurement item' || s === 'procurement product') return true;
+      if (s.startsWith('item #') || s.startsWith('item-') || s.startsWith('product #') || s.startsWith('procurement #') || s.startsWith('procurement bid #') || s.startsWith('untitled procurement')) return true;
+      return false;
+    };
+
     let parsedList: any[] = [];
     if (rawItems.length > 0) {
       parsedList = rawItems.map((item: any, idx: number) => {
-        const specs = (item.specifications && typeof item.specifications === 'object') ? item.specifications : {};
-        const cleanedDesc = stripAutoDesc(item.description || item.specification || specs.description || item.details);
-        const nameCandidate = item.itemName || item.name || (item.description && item.description !== rfqData?.title ? item.description : undefined) || item.productName || item.itemDescription || specs.itemName || specs.name;
+        if (typeof item === 'string' && item.trim() !== '') {
+          return {
+            itemName: item.trim(),
+            quantity: rfqData?.quantity || 1,
+            unitOfMeasure: rfqData?.unit || 'Nos',
+            description: '',
+          };
+        }
 
-        const finalName = nameCandidate && String(nameCandidate).trim() !== ''
-          ? String(nameCandidate).trim()
-          : cleanedDesc && cleanedDesc.length <= 80
-          ? cleanedDesc
-          : `Item #${idx + 1}`;
+        const specs = (item && typeof item === 'object' && item.specifications && typeof item.specifications === 'object') ? item.specifications : {};
+        const cleanedDesc = stripAutoDesc(
+          item?.description || item?.specification || specs?.description || item?.details || item?.remarks
+        );
+
+        // Explicit line item candidates (excluding category)
+        const candidateNames = [
+          item?.itemName,
+          item?.name,
+          item?.title,
+          item?.productName,
+          item?.itemDescription,
+          specs?.itemName,
+          specs?.name,
+          specs?.title,
+          item?.description,
+          item?.specification,
+          specs?.description,
+          item?.details,
+          item?.workDescription,
+          item?.serviceName,
+          item?.materialName,
+          item?.boqItem,
+          item?.particulars,
+        ];
+
+        let finalName = '';
+        for (const cand of candidateNames) {
+          if (cand && typeof cand === 'string' && cand.trim() !== '') {
+            const trimmed = cand.trim();
+            if (!isGenericName(trimmed) && !trimmed.includes('Sourcing Method:')) {
+              finalName = trimmed;
+              break;
+            }
+          }
+        }
+
+        // If line item didn't yield a non-generic product name, try the buyer's procurement title/subject
+        if (!finalName) {
+          const buyerTitles = [
+            rfqData?.title,
+            rfqData?.subject,
+            queryData?.requirement?.title,
+            queryData?.requirement?.subject,
+            queryData?.requirement?.payload?.basics?.title,
+            queryData?.requirement?.payload?.title,
+            queryData?.requirement?.payload?.basics?.contractTitle,
+            queryData?.requirement?.payload?.rateContractConfig?.contractTitle,
+            queryData?.requirement?.technicalPacket?.basics?.title,
+            queryData?.requirement?.technicalPacket?.title,
+            rfqData?.payload?.basics?.title,
+            rfqData?.payload?.title,
+            rfqData?.technicalPacket?.basics?.title,
+          ];
+
+          for (const titleCand of buyerTitles) {
+            if (titleCand && typeof titleCand === 'string' && titleCand.trim() !== '') {
+              const trimmedTitle = titleCand.trim();
+              if (!isGenericName(trimmedTitle) && !trimmedTitle.includes('Sourcing Method:')) {
+                finalName = rawItems.length > 1 ? `${trimmedTitle} (Item #${idx + 1})` : trimmedTitle;
+                break;
+              }
+            }
+          }
+        }
+
+        // If still no valid name, check category/subcategory if non-generic
+        if (!finalName) {
+          const catCandidates = [
+            item?.category,
+            rfqData?.category,
+            queryData?.requirement?.category,
+            rfqData?.subCategory,
+            queryData?.requirement?.subCategory,
+          ];
+          for (const catCand of catCandidates) {
+            const catStr = typeof catCand === 'string' ? catCand : catCand?.name;
+            if (catStr && typeof catStr === 'string' && catStr.trim() !== '') {
+              const trimmedCat = catStr.trim();
+              if (!isGenericName(trimmedCat) && !trimmedCat.includes('Sourcing Method:')) {
+                finalName = rawItems.length > 1 ? `${trimmedCat} (Item #${idx + 1})` : trimmedCat;
+                break;
+              }
+            }
+          }
+        }
+
+        // Last resort fallback
+        if (!finalName) {
+          finalName = `Item #${idx + 1}`;
+        }
 
         return {
           itemName: finalName,
-          quantity: item.quantity || item.qty || item.estimatedAnnualQuantity || item.count || 1,
-          unitOfMeasure: item.unitOfMeasure || item.unit || item.uom || item.unitType || specs.unit || 'Nos',
-          description: cleanedDesc,
+          quantity: item?.quantity || item?.qty || item?.count || item?.estimatedAnnualQuantity || item?.annualQuantity || item?.estimatedRateQuantity || rfqData?.quantity || 1,
+          unitOfMeasure: item?.unitOfMeasure || item?.unit || item?.uom || item?.unitType || item?.uomName || specs?.unit || rfqData?.unit || 'Nos',
+          description: cleanedDesc !== finalName ? cleanedDesc : '',
         };
       });
-    } else if (rfqData) {
-      const cleanedReqDesc = stripAutoDesc(rfqData.description);
-      const titleCandidate = rfqData.title || rfqData.subject;
-      const finalTitle = titleCandidate && !String(titleCandidate).includes('Sourcing Method:')
-        ? String(titleCandidate).trim()
-        : 'Requirement Item';
+    } else if (rfqData || queryData?.requirement) {
+      const cleanedReqDesc = stripAutoDesc(rfqData?.description || queryData?.requirement?.description);
+      const titleCandidates = [
+        rfqData?.title,
+        rfqData?.subject,
+        queryData?.requirement?.title,
+        queryData?.requirement?.subject,
+        queryData?.requirement?.payload?.basics?.title,
+        queryData?.requirement?.payload?.title,
+        queryData?.requirement?.payload?.basics?.contractTitle,
+        queryData?.requirement?.technicalPacket?.basics?.title,
+      ];
+
+      let finalTitle = '';
+      for (const t of titleCandidates) {
+        if (t && typeof t === 'string' && t.trim() !== '') {
+          const trimmed = t.trim();
+          if (!isGenericName(trimmed) && !trimmed.includes('Sourcing Method:')) {
+            finalTitle = trimmed;
+            break;
+          }
+        }
+      }
+
+      if (!finalTitle && cleanedReqDesc && !isGenericName(cleanedReqDesc)) {
+        finalTitle = cleanedReqDesc;
+      }
+
+      if (!finalTitle) {
+        finalTitle = 'Requirement Item';
+      }
 
       parsedList = [
         {
           itemName: finalTitle,
-          quantity: rfqData.quantity || 1,
-          unitOfMeasure: rfqData.unit || 'Nos',
-          description: cleanedReqDesc,
+          quantity: rfqData?.quantity || queryData?.requirement?.quantity || 1,
+          unitOfMeasure: rfqData?.unit || queryData?.requirement?.unit || 'Nos',
+          description: cleanedReqDesc !== finalTitle ? cleanedReqDesc : '',
         }
       ];
     }
@@ -756,7 +893,7 @@ export default function SubmitQuotationPage() {
       }
     }
     return result;
-  }, [rfqData]);
+  }, [rfqData, queryData]);
 
   const maxQuantity = itemsList.length > 0
     ? Math.max(...itemsList.map((i: any) => Number(i.quantity) || 0))
