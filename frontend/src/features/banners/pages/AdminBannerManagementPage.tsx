@@ -361,15 +361,15 @@ export default function AdminBannerManagementPage() {
 
       {/* Modal for Create / Edit Banner */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+            {/* Sticky Header */}
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-5 py-3.5">
               <div>
-                <h3 className="text-lg font-black text-slate-950">
+                <h3 className="text-base font-black text-slate-950">
                   {editingBanner ? `Edit Banner [ID: ${editingBanner.id}]` : 'Create New Hero Banner'}
                 </h3>
-                <p className="text-xs font-semibold text-slate-500">
+                <p className="text-[11px] font-semibold text-slate-500">
                   {editingBanner ? 'Update headline, links, priority, or replace the GCP image.' : 'Add a new high-impact banner to the homepage hero carousel.'}
                 </p>
               </div>
@@ -382,186 +382,192 @@ export default function AdminBannerManagementPage() {
               </button>
             </div>
 
-            {/* Modal Body / Form */}
-            <form onSubmit={handleFormSubmit} className="space-y-4 p-6">
-              {/* Image Preview & Upload Section */}
-              <div>
-                <span className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                  Banner Image (GCP Cloud Storage)
-                </span>
-                
-                {/* Live Preview Box */}
-                <div className="relative min-h-[160px] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-inner">
-                  {form.imageUrl ? (
-                    <img
-                      src={imageSrc(form.imageUrl)}
-                      alt="Banner Preview"
-                      className="h-44 w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-44 w-full flex-col items-center justify-center gap-2 text-slate-400">
-                      <ImagePlus className="h-10 w-10 text-slate-500" />
-                      <span className="text-xs font-bold">No image selected</span>
-                    </div>
-                  )}
-                  {form.imageUrl && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#07172e]/90 via-[#0b2447]/60 to-transparent p-4 flex flex-col justify-end">
-                      <h4 className="max-w-md whitespace-pre-line text-sm font-black leading-tight text-white drop-shadow-sm">
-                        {form.title || 'Headline Title Preview'}
-                      </h4>
-                      <p className="mt-1 line-clamp-1 max-w-md text-[11px] font-medium text-white/80">
-                        {form.subtitle || 'Subtitle preview will appear here.'}
-                      </p>
-                    </div>
-                  )}
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleFormSubmit} className="flex flex-1 flex-col overflow-hidden">
+              <div className="flex-1 space-y-3.5 overflow-y-auto p-5">
+                {/* Image Preview & Upload Section */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Banner Image (GCP Cloud Storage)
+                    </span>
+                    {form.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setForm(prev => ({ ...prev, imageUrl: '' }))}
+                        className="text-[11px] font-bold text-red-600 hover:underline"
+                      >
+                        Remove Image
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Compact Preview Box */}
+                  <div className="relative h-32 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-inner">
+                    {form.imageUrl ? (
+                      <img
+                        src={imageSrc(form.imageUrl)}
+                        alt="Banner Preview"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
+                        <ImagePlus className="h-7 w-7 text-slate-500" />
+                        <span className="text-[11px] font-bold">No image selected</span>
+                      </div>
+                    )}
+                    {form.imageUrl && (
+                      <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-r from-[#07172e]/90 via-[#0b2447]/60 to-transparent p-3">
+                        <h4 className="line-clamp-1 max-w-md text-xs font-black leading-tight text-white drop-shadow-sm">
+                          {form.title || 'Headline Title Preview'}
+                        </h4>
+                        <p className="mt-0.5 line-clamp-1 max-w-md text-[10px] font-medium text-white/80">
+                          {form.subtitle || 'Subtitle preview will appear here.'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upload Button */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-[#12335f] ring-1 ring-blue-700/20 transition hover:bg-blue-100">
+                      <UploadCloud className="h-3.5 w-3.5 text-blue-700" />
+                      <span>{uploading ? 'Uploading to GCP...' : form.imageUrl ? 'Replace Image' : 'Upload Image to GCP'}</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                        onChange={uploadImageFile}
+                        disabled={uploading}
+                        className="hidden"
+                      />
+                    </label>
+                    <span className="text-[10px] font-medium text-slate-400">JPG, PNG, WEBP, SVG</span>
+                  </div>
                 </div>
 
-                {/* Upload Button Controls */}
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs font-black text-[#12335f] ring-1 ring-blue-700/20 transition hover:bg-blue-100">
-                    <UploadCloud className="h-4 w-4 text-blue-700" />
-                    <span>{uploading ? 'Uploading to GCP...' : form.imageUrl ? 'Change Image' : 'Upload Image to GCP'}</span>
+                {/* Direct Image URL input */}
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Or Image Public URL / Path:
+                  </label>
+                  <input
+                    type="text"
+                    value={form.imageUrl}
+                    onChange={e => setForm(prev => ({ ...prev, imageUrl: e.target.value }))}
+                    placeholder="https://storage.googleapis.com/jsgsmile1/banners/..."
+                    className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                  />
+                </div>
+
+                {/* Headline Title */}
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Headline Title * <span className="text-slate-400 font-normal">(use Enter for line break)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={form.title}
+                    onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="Steel & Metal Fabrication&#10;Powering Jharsuguda Industry"
+                    required
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                  />
+                </div>
+
+                {/* Subtitle */}
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Subtitle Description
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={form.subtitle}
+                    onChange={e => setForm(prev => ({ ...prev, subtitle: e.target.value }))}
+                    placeholder="Source verified steel, TMT bars, industrial castings from local manufacturers."
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                  />
+                </div>
+
+                {/* CTA Row */}
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      CTA Button Text
+                    </label>
                     <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/svg+xml"
-                      onChange={uploadImageFile}
-                      disabled={uploading}
-                      className="hidden"
+                      type="text"
+                      value={form.ctaText}
+                      onChange={e => setForm(prev => ({ ...prev, ctaText: e.target.value }))}
+                      placeholder="Browse Steel & Metal"
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
                     />
-                  </label>
-                  {form.imageUrl && (
-                    <button
-                      type="button"
-                      onClick={() => setForm(prev => ({ ...prev, imageUrl: '' }))}
-                      className="rounded-lg px-2.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50"
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      CTA Button Link / URL
+                    </label>
+                    <input
+                      type="text"
+                      value={form.ctaLink}
+                      onChange={e => setForm(prev => ({ ...prev, ctaLink: e.target.value, targetUrl: e.target.value }))}
+                      placeholder="#products or /buyer/register"
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                    />
+                  </div>
+                </div>
+
+                {/* Priority & Status Row */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Priority (0-100)
+                    </label>
+                    <input
+                      type="number"
+                      value={form.priority}
+                      onChange={e => setForm(prev => ({ ...prev, priority: e.target.value }))}
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Status
+                    </label>
+                    <select
+                      value={form.status}
+                      onChange={e => setForm(prev => ({ ...prev, status: e.target.value }))}
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
                     >
-                      Remove
-                    </button>
-                  )}
+                      <option value="ACTIVE">Active</option>
+                      <option value="HIDDEN">Hidden</option>
+                      <option value="DRAFT">Draft</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Location
+                    </label>
+                    <select
+                      value={form.displayLocation}
+                      onChange={e => setForm(prev => ({ ...prev, displayLocation: e.target.value }))}
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
+                    >
+                      <option value="HOME_HERO">Home Hero</option>
+                      <option value="MARKETPLACE_HOME">Marketplace</option>
+                      <option value="DASHBOARD">Dashboard</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              {/* Direct Image URL input (optional alternative) */}
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                  Or Image Public URL:
-                </label>
-                <input
-                  type="text"
-                  value={form.imageUrl}
-                  onChange={e => setForm(prev => ({ ...prev, imageUrl: e.target.value }))}
-                  placeholder="https://storage.googleapis.com/jsgsmile1/banners/..."
-                  className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
-                />
-              </div>
-
-              {/* Headline Title */}
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                  Headline Title * <span className="text-slate-400 font-normal">(use Enter for line break)</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={form.title}
-                  onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="Steel & Metal Fabrication&#10;Powering Jharsuguda Industry"
-                  required
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-3 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
-                />
-              </div>
-
-              {/* Subtitle */}
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                  Subtitle Description
-                </label>
-                <textarea
-                  rows={2}
-                  value={form.subtitle}
-                  onChange={e => setForm(prev => ({ ...prev, subtitle: e.target.value }))}
-                  placeholder="Source verified steel, TMT bars, industrial castings from local manufacturers."
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
-                />
-              </div>
-
-              {/* CTA Row */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    CTA Button Text
-                  </label>
-                  <input
-                    type="text"
-                    value={form.ctaText}
-                    onChange={e => setForm(prev => ({ ...prev, ctaText: e.target.value }))}
-                    placeholder="Browse Steel & Metal"
-                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    CTA Button Link / URL
-                  </label>
-                  <input
-                    type="text"
-                    value={form.ctaLink}
-                    onChange={e => setForm(prev => ({ ...prev, ctaLink: e.target.value, targetUrl: e.target.value }))}
-                    placeholder="#products or /marketplace/products?categoryId=1"
-                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
-                  />
-                </div>
-              </div>
-
-              {/* Priority & Status Row */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    Priority Score (0-100)
-                  </label>
-                  <input
-                    type="number"
-                    value={form.priority}
-                    onChange={e => setForm(prev => ({ ...prev, priority: e.target.value }))}
-                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    Status
-                  </label>
-                  <select
-                    value={form.status}
-                    onChange={e => setForm(prev => ({ ...prev, status: e.target.value }))}
-                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
-                  >
-                    <option value="ACTIVE">Active (Live)</option>
-                    <option value="HIDDEN">Hidden (Paused)</option>
-                    <option value="DRAFT">Draft</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    Display Location
-                  </label>
-                  <select
-                    value={form.displayLocation}
-                    onChange={e => setForm(prev => ({ ...prev, displayLocation: e.target.value }))}
-                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
-                  >
-                    <option value="HOME_HERO">Homepage Hero</option>
-                    <option value="MARKETPLACE_HOME">Marketplace Home</option>
-                    <option value="DASHBOARD">Dashboard</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Modal Footer Actions */}
-              <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 pt-4">
+              {/* Sticky Footer */}
+              <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-slate-100 bg-slate-50 px-5 py-3">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setIsModalOpen(false)}
+                  className="font-bold"
                 >
                   Cancel
                 </Button>
@@ -569,7 +575,7 @@ export default function AdminBannerManagementPage() {
                   type="submit"
                   size="sm"
                   disabled={saveMutation.isPending || uploading}
-                  className="bg-[#12335f] text-white hover:bg-[#0b2447]"
+                  className="bg-[#12335f] font-bold text-white hover:bg-[#0b2447]"
                 >
                   {saveMutation.isPending ? 'Saving...' : editingBanner ? 'Save Changes' : 'Create Banner'}
                 </Button>

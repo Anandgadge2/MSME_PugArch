@@ -6,8 +6,17 @@ import prisma from '../src/lib/prisma.js';
 import { configureGCS } from '../src/config/gcs.js';
 import { gcpStorageProvider } from '../src/services/storage/gcp-storage.service.js';
 import { mapEntityTypeToFolder } from '../src/services/storage/storage-folders.enum.js';
-import { cloudinary } from '../src/config/cloudinary.js';
 import { logger } from '../src/config/logger.js';
+
+// Cloudinary client fallback definition (Cloudinary was deprecated in favor of GCP Storage)
+const cloudinary: any = {
+  utils: {
+    download_archive_url: (options: any) => {
+      const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'demo';
+      return `https://api.cloudinary.com/v1_1/${cloudName}/image/download_zip?public_ids=${options.public_ids?.join(',')}`;
+    }
+  }
+};
 
 interface MigrationProgressReport {
   timestamp: string;
