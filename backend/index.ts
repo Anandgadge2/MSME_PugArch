@@ -1149,7 +1149,9 @@ const conversationUserSelect = {
   name: true,
   email: true,
   role: true,
-  organization: { select: { id: true, organizationName: true } }
+  organization: { select: { id: true, organizationName: true } },
+  buyerProfile: { select: { id: true, organizationName: true } },
+  sellerProfile: { select: { id: true, businessName: true, organization: { select: { id: true, organizationName: true } } } }
 } as const;
 
 const notifyConversationParticipants = async ({
@@ -5306,7 +5308,7 @@ app.get('/api/admin/stats', authenticate, authorizeAdmin, async (req, res) => {
 });
 
 // --- Secure Messaging ---
-app.get('/api/messages/users/search', authenticate, authorize('admin', 'master_admin'), async (req: AuthRequest, res) => {
+app.get('/api/messages/users/search', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin', 'financier', 'shg'), async (req: AuthRequest, res) => {
   try {
     const q = sanitizePortalText(String(req.query.q || '').trim(), 80);
     const role = String(req.query.role || '').trim();
@@ -5323,15 +5325,18 @@ app.get('/api/messages/users/search', authenticate, authorize('admin', 'master_a
         { name: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
         { mobile: { contains: q, mode: 'insensitive' } },
-        { userId: { contains: q, mode: 'insensitive' } }
+        { userId: { contains: q, mode: 'insensitive' } },
+        { buyerProfile: { organizationName: { contains: q, mode: 'insensitive' } } },
+        { sellerProfile: { businessName: { contains: q, mode: 'insensitive' } } },
+        { organization: { organizationName: { contains: q, mode: 'insensitive' } } }
       ];
     }
 
     const users = await prisma.user.findMany({
       where,
       select: conversationUserSelect,
-      orderBy: [{ role: 'asc' }, { name: 'asc' }],
-      take: 25
+      orderBy: [{ name: 'asc' }],
+      take: 200
     });
     res.json(maskSensitive(users));
   } catch (err: any) {
@@ -5427,24 +5432,36 @@ app.post('/api/conversations', authenticate, authorize('buyer', 'seller', 'admin
       }
     }
 
-    if (actor.role === 'buyer') buyerId = Number(actor.id);
-    if (actor.role === 'seller') sellerId = Number(actor.id);
-    if (canModerateMessages(actor)) {
-      if (buyerId && !sellerId) sellerId = Number(actor.id);
-      if (sellerId && !buyerId) buyerId = Number(actor.id);
+    if (!payload.tenderId) {
+      if (actor.role === 'buyer') {
+        if (sellerId) {
+          buyerId = Number(actor.id);
+        } else if (buyerId) {
+          sellerId = buyerId;
+          buyerId = Number(actor.id);
+        }
+      } else if (actor.role === 'seller') {
+        if (buyerId) {
+          sellerId = Number(actor.id);
+        } else if (sellerId) {
+          buyerId = Number(actor.id);
+        }
+      } else {
+        if (buyerId && !sellerId) sellerId = Number(actor.id);
+        if (sellerId && !buyerId) buyerId = Number(actor.id);
+      }
     }
     if (!buyerId || !sellerId || buyerId === sellerId) {
       return res.status(400).json({ message: 'Valid buyer and seller are required' });
     }
 
-    const buyerRoleFilter = canModerateMessages(actor) ? ['buyer', 'admin', 'master_admin'] : ['buyer'];
-    const sellerRoleFilter = canModerateMessages(actor) ? ['seller', 'admin', 'master_admin'] : ['seller'];
+    const allowedUserRoles = ['buyer', 'seller', 'admin', 'master_admin', 'shg', 'financier'];
     const buyer = await prisma.user.findFirst({
-      where: { id: buyerId, role: { in: buyerRoleFilter as any } },
+      where: { id: buyerId, role: { in: allowedUserRoles as any } },
       select: conversationUserSelect
     });
     const seller = await prisma.user.findFirst({
-      where: { id: sellerId, role: { in: sellerRoleFilter as any } },
+      where: { id: sellerId, role: { in: allowedUserRoles as any } },
       select: conversationUserSelect
     });
     if (!buyer || !seller) return res.status(400).json({ message: 'Valid buyer and seller are required' });
@@ -5452,7 +5469,10 @@ app.post('/api/conversations', authenticate, authorize('buyer', 'seller', 'admin
     const conversation = payload.tenderId
       ? await prisma.conversation.upsert({
         where: { conversationTenderPair: { tenderId: payload.tenderId, buyerId, sellerId } } as any,
-        update: { subject: sanitizePortalText(payload.subject, 160) },
+        update: {
+          subject: sanitizePortalText(payload.subject, 160),
+          lastMessageAt: payload.initialMessage ? new Date() : undefined
+        },
         create: {
           tenderId: payload.tenderId,
           buyerId,
@@ -5461,9 +5481,29 @@ app.post('/api/conversations', authenticate, authorize('buyer', 'seller', 'admin
           lastMessageAt: payload.initialMessage ? new Date() : null
         }
       })
-      : await prisma.conversation.create({
-        data: { buyerId, sellerId, subject: sanitizePortalText(payload.subject, 160), lastMessageAt: payload.initialMessage ? new Date() : null }
-      });
+      : await (async () => {
+        const existing = await prisma.conversation.findFirst({
+          where: { buyerId, sellerId, tenderId: null },
+          orderBy: { updatedAt: 'desc' }
+        });
+        if (existing) {
+          return prisma.conversation.update({
+            where: { id: existing.id },
+            data: {
+              subject: sanitizePortalText(payload.subject, 160),
+              lastMessageAt: payload.initialMessage ? new Date() : existing.lastMessageAt
+            }
+          });
+        }
+        return prisma.conversation.create({
+          data: {
+            buyerId,
+            sellerId,
+            subject: sanitizePortalText(payload.subject, 160),
+            lastMessageAt: payload.initialMessage ? new Date() : null
+          }
+        });
+      })();
 
     let message = null;
     if (payload.initialMessage) {

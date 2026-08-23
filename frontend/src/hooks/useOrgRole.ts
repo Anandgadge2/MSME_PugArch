@@ -72,7 +72,7 @@ export function usePermissions() {
         const roleDefaults = user?.role === 'buyer'
             ? ['dashboard.view', 'marketplace.view', 'cart.view', 'cart.add', 'cart.submit_for_approval', 'approval.view', 'approval.submit', 'purchase_order.view', 'purchase_order.create', 'checkout.initiate', 'checkout.approve', 'delivery.view', 'delivery.manage', 'payment.view', 'payment.initiate', 'invoice.view', 'grn.view', 'grn.create', 'grn.approve']
             : user?.role === 'seller'
-            ? ['dashboard.view', 'marketplace.view', 'purchase_order.view', 'delivery.view', 'delivery.manage', 'payment.view', 'invoice.view', 'grn.view', 'grn.create', 'grn.approve']
+            ? ['dashboard.view', 'marketplace.view', 'purchase_order.view', 'delivery.view', 'delivery.manage', 'payment.view', 'invoice.view', 'grn.view']
             : user?.role === 'admin' || user?.role === 'master_admin'
             ? ['*']
             : [];

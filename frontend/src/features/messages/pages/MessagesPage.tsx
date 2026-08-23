@@ -596,13 +596,35 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
     );
 }
 
+const getUserCompanyName = (u?: MessageUserDto | null): string => {
+    if (!u) return '';
+    return (
+        u.organization?.organizationName ||
+        u.organization?.name ||
+        u.buyerProfile?.organizationName ||
+        u.sellerProfile?.businessName ||
+        u.company?.name ||
+        u.company?.portalDisplayName ||
+        ''
+    );
+};
+
+const getUserOptionLabel = (u: MessageUserDto): string => {
+    const comp = getUserCompanyName(u);
+    if (comp && comp.trim().toLowerCase() !== u.name.trim().toLowerCase()) {
+        return `${comp} (${u.name})`;
+    }
+    return u.name;
+};
+
 function ParticipantPill({ user, label }: { user?: MessageUserDto; label: string }) {
     if (!user) return null;
+    const comp = getUserCompanyName(user);
     return (
         <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
             <UserRound className="h-3.5 w-3.5 text-slate-400" />
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</span>
-            <span className="text-xs font-black text-slate-800">{user.name}</span>
+            <span className="text-xs font-black text-slate-800">{user.name}{comp ? ` (${comp})` : ''}</span>
             <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${roleBadgeClass(user.role)}`}>{roleLabel(user.role)}</span>
         </span>
     );
@@ -631,18 +653,37 @@ function CreateConversationModal({
         const id = Number(initialCounterpartyId);
         return Number.isFinite(id) && id > 0 ? id : '';
     });
-    const [query, setQuery] = useState('');
+    const [filterQuery, setFilterQuery] = useState('');
     const [subject, setSubject] = useState(initialSubject);
     const [message, setMessage] = useState(initialMessage);
     const mut = useCreateConversation();
-    const canSearchUsers = isAdminRole(user?.role);
-    const users = useMessageUserSearch({ q: query, role: recipientRole }, canSearchUsers);
+    const users = useMessageUserSearch({ role: recipientRole }, true);
     const isPrefilledCounterparty = Boolean(initialCounterpartyId);
     const isMarketplaceQuoteRequest = Boolean(
         isPrefilledCounterparty &&
         (initialIntent === 'quote' || initialSubject.toLowerCase().startsWith('quote request:') || initialMessage.toLowerCase().includes('request a quotation'))
     );
     const recipientLabel = recipientRole === 'seller' ? 'seller' : recipientRole === 'buyer' ? 'buyer' : roleLabel(recipientRole);
+
+    const sortedUsers = useMemo(() => {
+        if (!users.data) return [];
+        return [...users.data].sort((a, b) => {
+            const labelA = getUserOptionLabel(a);
+            const labelB = getUserOptionLabel(b);
+            return labelA.localeCompare(labelB, undefined, { sensitivity: 'base', numeric: true });
+        });
+    }, [users.data]);
+
+    const filteredUsers = useMemo(() => {
+        if (!filterQuery.trim()) return sortedUsers;
+        const term = filterQuery.trim().toLowerCase();
+        return sortedUsers.filter(candidate => {
+            const comp = getUserCompanyName(candidate).toLowerCase();
+            const name = candidate.name.toLowerCase();
+            const email = (candidate.email || '').toLowerCase();
+            return comp.includes(term) || name.includes(term) || email.includes(term);
+        });
+    }, [sortedUsers, filterQuery]);
 
     const payloadForRole = () => {
         if (!counterpartyId) return null;
@@ -652,92 +693,87 @@ function CreateConversationModal({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-            <div className={`w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl ${canSearchUsers ? 'max-w-2xl' : 'max-w-xl'}`}>
+            <div className="w-full max-w-xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
                 <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
                     <div>
                         <h3 className="text-sm font-black uppercase tracking-widest">{isMarketplaceQuoteRequest ? 'Request Quote' : 'New Message'}</h3>
                     </div>
                     <button onClick={onClose} className="rounded-md p-1 text-white/80 hover:bg-white/10"><X className="h-4 w-4" /></button>
                 </div>
-                <div className={`grid gap-4 p-5 ${canSearchUsers ? 'md:grid-cols-[1fr_260px]' : ''}`}>
-                    <div className="space-y-3">
-                        {isPrefilledCounterparty && !canSearchUsers ? (
-                            <div className="rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Recipient</p>
-                                <p className="mt-1 text-xs font-bold text-blue-950">
-                                    {isMarketplaceQuoteRequest
-                                        ? `This quote request will be sent to the listing ${recipientLabel}.`
-                                        : `This conversation will be sent to the selected ${recipientLabel}.`}
-                                </p>
-                            </div>
-                        ) : (
+                <div className="space-y-4 p-5">
+                    {isPrefilledCounterparty ? (
+                        <div className="rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Recipient</p>
+                            <p className="mt-1 text-xs font-bold text-blue-950">
+                                {isMarketplaceQuoteRequest
+                                    ? `This quote request will be sent to the listing ${recipientLabel}.`
+                                    : `This conversation will be sent to the selected ${recipientLabel}.`}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
                             <div className="grid gap-3 sm:grid-cols-2">
-                                <Select label="Recipient Role" value={recipientRole} onChange={event => setRecipientRole(event.target.value)}>
+                                <Select
+                                    label="Recipient Role"
+                                    value={recipientRole}
+                                    onChange={event => {
+                                        setRecipientRole(event.target.value);
+                                        setCounterpartyId('');
+                                        setFilterQuery('');
+                                    }}
+                                >
                                     <option value="buyer">Buyer</option>
                                     <option value="seller">Seller</option>
                                     {isAdminRole(user?.role) && <option value="admin">Admin</option>}
                                 </Select>
-                                <Input
-                                    label="Recipient User ID"
-                                    type="number"
+                                <Select
+                                    label={`Select ${recipientRole === 'seller' ? 'Seller' : recipientRole === 'buyer' ? 'Buyer' : 'Recipient'}`}
                                     value={counterpartyId}
                                     onChange={event => setCounterpartyId(event.target.value === '' ? '' : Number(event.target.value))}
-                                    placeholder="e.g. 42"
-                                />
+                                    disabled={users.isLoading}
+                                >
+                                    <option value="">
+                                        {users.isLoading
+                                            ? `Loading ${recipientRole === 'seller' ? 'sellers' : recipientRole === 'buyer' ? 'buyers' : 'users'}...`
+                                            : filteredUsers.length === 0
+                                                ? `No ${recipientRole === 'seller' ? 'sellers' : recipientRole === 'buyer' ? 'buyers' : 'users'} found`
+                                                : `-- Select ${recipientRole === 'seller' ? 'Seller' : recipientRole === 'buyer' ? 'Buyer' : 'Recipient'} --`}
+                                    </option>
+                                    {filteredUsers.map(candidate => (
+                                        <option key={candidate.id} value={candidate.id}>
+                                            {getUserOptionLabel(candidate)}
+                                        </option>
+                                    ))}
+                                </Select>
                             </div>
-                        )}
-                        <Input
-                            label="Subject"
-                            value={subject}
-                            onChange={event => setSubject(event.target.value)}
-                            placeholder="Tender clarification, delivery issue, support note..."
-                            maxLength={160}
-                        />
-                        <div className="space-y-1.5">
-                            <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">First Message</label>
-                            <textarea
-                                value={message}
-                                onChange={event => setMessage(event.target.value)}
-                                rows={5}
-                                maxLength={2000}
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                            />
-                            <p className="text-right text-[10px] text-slate-400">{message.length}/2000</p>
-                        </div>
-                    </div>
-                    {canSearchUsers ? (
-                        <div className="space-y-3">
+                            {sortedUsers.length > 5 && (
                                 <Input
-                                    label="Find User"
-                                    value={query}
-                                    onChange={event => setQuery(event.target.value)}
-                                    placeholder="Name, email, mobile"
+                                    label="Search Recipient"
+                                    value={filterQuery}
+                                    onChange={event => setFilterQuery(event.target.value)}
+                                    placeholder="Filter by company name, user name, email..."
                                 />
-                                <div className="max-h-[230px] space-y-2 overflow-y-auto rounded-lg border border-slate-200 p-2">
-                                    {users.isLoading ? (
-                                        <div className="py-4 text-center text-xs font-semibold text-slate-400">Searching...</div>
-                                    ) : users.data?.length ? (
-                                        users.data.map(candidate => (
-                                            <button
-                                                key={candidate.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    setCounterpartyId(candidate.id);
-                                                    setRecipientRole(candidate.role);
-                                                }}
-                                                className={`w-full rounded-lg border px-3 py-2 text-left transition hover:bg-slate-50 ${counterpartyId === candidate.id ? 'border-[#12335f] bg-[#12335f]/5' : 'border-slate-200'}`}
-                                            >
-                                                <p className="text-xs font-black text-slate-900">{candidate.name}</p>
-                                                <p className="mt-0.5 text-[10px] font-semibold text-slate-500">{candidate.email}</p>
-                                                <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${roleBadgeClass(candidate.role)}`}>{roleLabel(candidate.role)}</span>
-                                            </button>
-                                        ))
-                                    ) : (
-                                        <div className="py-4 text-center text-xs font-semibold text-slate-400">No matching users</div>
-                                    )}
-                                </div>
+                            )}
                         </div>
-                    ) : null}
+                    )}
+                    <Input
+                        label="Subject"
+                        value={subject}
+                        onChange={event => setSubject(event.target.value)}
+                        placeholder="Tender clarification, delivery issue, support note..."
+                        maxLength={160}
+                    />
+                    <div className="space-y-1.5">
+                        <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">First Message</label>
+                        <textarea
+                            value={message}
+                            onChange={event => setMessage(event.target.value)}
+                            rows={5}
+                            maxLength={2000}
+                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                        />
+                        <p className="text-right text-[10px] text-slate-400">{message.length}/2000</p>
+                    </div>
                 </div>
                 <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
                     <Button variant="outline" onClick={onClose}>Cancel</Button>
