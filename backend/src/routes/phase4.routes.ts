@@ -4015,9 +4015,17 @@ router.post('/categories/custom', authenticate, asyncRoute(async (req, res) => {
 }));
 
 router.post('/admin/categories', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
-  const body = parse(z.object({ name: z.string().trim().min(2).max(160), parentId: z.coerce.number().int().positive().optional(), type: z.enum(['PRODUCT', 'SERVICE', 'BOTH']).default('BOTH'), description: z.string().trim().max(1000).optional() }), req.body);
+  const body = parse(z.object({
+    name: z.string().trim().min(2).max(160),
+    parentId: z.coerce.number().int().positive().optional(),
+    type: z.enum(['PRODUCT', 'SERVICE', 'BOTH']).default('BOTH'),
+    description: z.string().trim().max(1000).optional(),
+    imageUrl: z.string().optional().nullable()
+  }), req.body);
   const category = await db.category.create({ data: { ...body, slug: slugFor(body.name), isActive: true } });
   await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
+  await deleteCache(redisKeys.cacheMarketplaceFeaturedCategories()).catch(() => undefined);
+  await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
   await auditWrite(req, 'category.created', 'category', category.id);
   ok(res, category, 201);
 }));
@@ -4029,6 +4037,8 @@ router.put('/admin/categories/:id', authenticate, authorizeAdmin, asyncRoute(asy
   if (body.name) updateData.slug = slugFor(body.name);
   const category = await db.category.update({ where: { id }, data: updateData });
   await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
+  await deleteCache(redisKeys.cacheMarketplaceFeaturedCategories()).catch(() => undefined);
+  await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
   await auditWrite(req, 'category.updated', 'category', id);
   ok(res, category);
 }));
@@ -4037,6 +4047,8 @@ router.delete('/admin/categories/:id', authenticate, authorizeAdmin, asyncRoute(
   const { id } = parse(idParams, req.params);
   const category = await db.category.update({ where: { id }, data: { isActive: false } }).catch(() => null);
   await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
+  await deleteCache(redisKeys.cacheMarketplaceFeaturedCategories()).catch(() => undefined);
+  await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
   await auditWrite(req, 'category.deleted', 'category', id);
   ok(res, category || { id, deleted: true });
 }));

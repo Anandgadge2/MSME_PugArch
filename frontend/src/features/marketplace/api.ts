@@ -20,6 +20,7 @@ export interface MarketplaceCategory {
     slug: string;
     type: string;
     icon?: string;
+    imageUrl?: string | null;
     description?: string;
     productCount?: number;
     serviceCount?: number;

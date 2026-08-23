@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Search, RefreshCw, FolderPlus, CheckCircle2, AlertTriangle, Layers, Tag, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Plus, Edit2, Trash2, Search, RefreshCw, FolderPlus, CheckCircle2, AlertTriangle, Layers, Tag, ArrowUp, ArrowDown, ArrowUpDown, Upload, Image as ImageIcon, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../../lib/api';
 import { Button } from '../../../components/ui/button';
@@ -7,6 +7,7 @@ import { Input } from '../../../components/ui/input';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
+import { getCategoryImageUrl } from '../../marketplace/utils/categoryImages';
 
 export interface Category {
   id: number;
@@ -14,6 +15,7 @@ export interface Category {
   slug: string;
   type: 'PRODUCT' | 'SERVICE' | 'BOTH';
   description?: string | null;
+  imageUrl?: string | null;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -40,6 +42,9 @@ export default function AdminCategoriesPage() {
   const [formName, setFormName] = useState('');
   const [formType, setFormType] = useState<'PRODUCT' | 'SERVICE' | 'BOTH'>('BOTH');
   const [formDescription, setFormDescription] = useState('');
+  const [formImageUrl, setFormImageUrl] = useState<string>('');
+  const [imagePreview, setImagePreview] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchCategories = async () => {
     setIsLoading(true);
@@ -77,6 +82,9 @@ export default function AdminCategoriesPage() {
     setFormName('');
     setFormType('BOTH');
     setFormDescription('');
+    setFormImageUrl('');
+    setImagePreview('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setIsAddModalOpen(true);
   };
 
@@ -85,7 +93,42 @@ export default function AdminCategoriesPage() {
     setFormName(cat.name);
     setFormType(cat.type || 'BOTH');
     setFormDescription(cat.description || '');
+    setFormImageUrl(cat.imageUrl || '');
+    setImagePreview(cat.imageUrl || '');
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setIsAddModalOpen(true);
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size should be less than 2MB');
+      return;
+    }
+
+    const allowedTypes = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!allowedTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.svg')) {
+      toast.error('Please upload an SVG, PNG, JPG, or WebP image');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = (event.target?.result as string) || '';
+      setImagePreview(result);
+      setFormImageUrl(result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setImagePreview('');
+    setFormImageUrl('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleSaveCategory = async (e: React.FormEvent) => {
@@ -104,7 +147,8 @@ export default function AdminCategoriesPage() {
           body: JSON.stringify({
             name: formName.trim(),
             type: formType,
-            description: formDescription.trim() || undefined
+            description: formDescription.trim() || undefined,
+            imageUrl: formImageUrl || null
           })
         });
         if (res.ok) {
@@ -122,7 +166,8 @@ export default function AdminCategoriesPage() {
           body: JSON.stringify({
             name: formName.trim(),
             type: formType,
-            description: formDescription.trim() || undefined
+            description: formDescription.trim() || undefined,
+            imageUrl: formImageUrl || null
           })
         });
         if (res.ok) {
@@ -198,86 +243,77 @@ export default function AdminCategoriesPage() {
       total: categories.length,
       product: categories.filter(c => c.type === 'PRODUCT').length,
       service: categories.filter(c => c.type === 'SERVICE').length,
-      both: categories.filter(c => c.type === 'BOTH').length
+      both: categories.filter(c => c.type === 'BOTH').length,
+      active: categories.filter(c => c.isActive !== false).length,
     };
   }, [categories]);
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-
-        {/* Top Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded">ADMIN MANAGEMENT</span>
-            </div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Categories</h1>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">Manage product and service category taxonomy across the ecosystem.</p>
+    <div className="min-h-screen bg-slate-50/50 p-4 sm:p-6 lg:p-8 space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              Categories & Taxonomy Management
+            </h1>
+            <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-0.5 rounded-full border border-indigo-100">
+              Admin Control
+            </span>
           </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={fetchCategories}
-              disabled={isLoading}
-              className="h-10 border-slate-300 bg-white text-slate-700 text-xs font-bold gap-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
-            <Button
-              onClick={openAddModal}
-              className="h-10 bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-bold tracking-wide gap-2 shadow-sm"
-            >
-              <Plus className="h-4 w-4" /> Add Category
-            </Button>
-          </div>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 font-medium">
+            Manage product and service classification taxonomy, icons, and marketplace visibility.
+          </p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Total Categories</p>
-              <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{stats.total}</h3>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <Layers className="h-5 w-5" />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Product Only</p>
-              <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{stats.product}</h3>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Tag className="h-5 w-5" />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Service Only</p>
-              <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{stats.service}</h3>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-              <FolderPlus className="h-5 w-5" />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Product & Service</p>
-              <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{stats.both}</h3>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchCategories}
+            disabled={isLoading}
+            className="h-9 gap-1.5 text-xs font-bold border-slate-200 text-slate-700 hover:bg-slate-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button
+            size="sm"
+            onClick={openAddModal}
+            className="h-9 gap-1.5 text-xs font-bold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-xs"
+          >
+            <Plus className="h-4 w-4" />
+            Add Category
+          </Button>
         </div>
+      </div>
 
-        {/* Filter and Search Bar */}
+      {/* KPI Stats Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Categories</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{stats.total}</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Product Only</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{stats.product}</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-purple-600">Service Only</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{stats.service}</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">Both (Hybrid)</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{stats.both}</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs col-span-2 sm:col-span-1">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Active Status</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{stats.active}</div>
+        </div>
+      </div>
+
+      {/* Search & Filter Bar */}
+      <div className="space-y-4">
         <ResponsiveFilterBar
           className="border-none"
           activeFilterCount={typeFilter !== 'ALL' ? 1 : 0}
@@ -327,6 +363,7 @@ export default function AdminCategoriesPage() {
                       )}
                     </button>
                   </th>
+                  <th className="py-3.5 px-4 text-center">IMAGE</th>
                   <th className="py-3.5 px-4">
                     <button
                       type="button"
@@ -393,68 +430,83 @@ export default function AdminCategoriesPage() {
               <tbody className="divide-y divide-slate-100 text-xs">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
                       Loading categories taxonomy...
                     </td>
                   </tr>
                 ) : filteredCategories.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
                       No categories found matching your criteria.
                     </td>
                   </tr>
                 ) : (
-                  pagedCategories.map((cat, idx) => (
-                    <tr key={cat.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3.5 px-4 text-center font-bold text-slate-400">
-                        {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-800">{cat.name}</div>
-                        {cat.description && (
-                          <div className="text-[11px] text-slate-400 font-medium truncate max-w-xs">{cat.description}</div>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                          cat.type === 'PRODUCT' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                          cat.type === 'SERVICE' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                          'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                        }`}>
-                          {cat.type || 'BOTH'}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500">
-                        {cat.slug}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                          cat.isActive !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                        }`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${cat.isActive !== false ? 'bg-emerald-600' : 'bg-slate-400'}`} />
-                          {cat.isActive !== false ? 'ACTIVE' : 'INACTIVE'}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => openEditModal(cat)}
-                            title="Edit Category"
-                            className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeletingCategory(cat)}
-                            title="Delete Category"
-                            className="p-1.5 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  pagedCategories.map((cat, idx) => {
+                    const displayImg = getCategoryImageUrl(cat as any);
+                    return (
+                      <tr key={cat.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="py-3.5 px-4 text-center font-bold text-slate-400">
+                          {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="h-10 w-10 mx-auto rounded-lg border border-slate-200/80 bg-white flex items-center justify-center p-1.5 shadow-2xs overflow-hidden">
+                            <img
+                              src={displayImg}
+                              alt={cat.name}
+                              className="h-full w-full object-contain drop-shadow-2xs"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-slate-800">{cat.name}</div>
+                          {cat.description && (
+                            <div className="text-[11px] text-slate-400 font-medium truncate max-w-xs">{cat.description}</div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                            cat.type === 'PRODUCT' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                            cat.type === 'SERVICE' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                            'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                          }`}>
+                            {cat.type || 'BOTH'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500">
+                          {cat.slug}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                            cat.isActive !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${cat.isActive !== false ? 'bg-emerald-600' : 'bg-slate-400'}`} />
+                            {cat.isActive !== false ? 'ACTIVE' : 'INACTIVE'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => openEditModal(cat)}
+                              title="Edit Category"
+                              className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeletingCategory(cat)}
+                              title="Delete Category"
+                              className="p-1.5 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -470,13 +522,12 @@ export default function AdminCategoriesPage() {
             />
           </div>
         </div>
-
       </div>
 
       {/* Add / Edit Category Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <h3 className="text-lg font-bold text-slate-900">
                 {editingCategory ? 'Edit Category' : 'Add New Category'}
@@ -516,6 +567,65 @@ export default function AdminCategoriesPage() {
                   <option value="PRODUCT">Product Only</option>
                   <option value="SERVICE">Service Only</option>
                 </select>
+              </div>
+
+              {/* Category Image / SVG Upload */}
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
+                  Category Image / SVG Icon
+                </label>
+                
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/svg+xml,image/png,image/jpeg,image/jpg,image/webp,.svg"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+
+                {imagePreview ? (
+                  <div className="flex items-center gap-3.5 p-3 rounded-lg border border-slate-200 bg-slate-50/70">
+                    <div className="h-14 w-14 rounded-lg border border-slate-200 bg-white flex items-center justify-center p-2 shadow-2xs shrink-0">
+                      <img
+                        src={imagePreview}
+                        alt="Category Preview"
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-slate-800">Image Ready</div>
+                      <div className="text-[11px] text-slate-500">Stored directly in database</div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 underline"
+                        >
+                          Change Image
+                        </button>
+                        <span className="text-slate-300">•</span>
+                        <button
+                          type="button"
+                          onClick={handleRemoveImage}
+                          className="text-[11px] font-bold text-red-600 hover:text-red-800 underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/20 rounded-lg p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-1.5"
+                  >
+                    <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                      <Upload className="h-4 w-4" />
+                    </div>
+                    <div className="text-xs font-bold text-slate-700">Click to upload category image / SVG</div>
+                    <div className="text-[10px] text-slate-400 font-medium">SVG, PNG, JPG, or WebP (max 2MB)</div>
+                  </div>
+                )}
               </div>
 
               <div>

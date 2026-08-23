@@ -52,6 +52,11 @@ function CategoryDirectoryCard({ category }: { category: MarketplaceCategory }) 
     const [imgSrc, setImgSrc] = useState<string>(() => getCategoryImageUrl(category));
     const [imgError, setImgError] = useState(false);
 
+    React.useEffect(() => {
+        setImgSrc(getCategoryImageUrl(category));
+        setImgError(false);
+    }, [category, category.imageUrl]);
+
     const handleImageError = () => {
         if (!imgError) {
             setImgError(true);
