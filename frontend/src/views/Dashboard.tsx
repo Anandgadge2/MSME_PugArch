@@ -738,11 +738,11 @@ export default function Dashboard() {
                   My Catalogue
                 </Button>
               </Link>
-              <Link href="/">
+              {/* <Link href="/">
                 <Button className="h-8 rounded border border-white/20 bg-white/10 px-3 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20 transition">
                   Public Market
                 </Button>
-              </Link>
+              </Link> */}
             </div>
           </div>
         </section>

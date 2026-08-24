@@ -208,6 +208,12 @@ export class PdfEngine {
       headStyles: { fillColor: PRIMARY_COLOR, fontStyle: 'bold', textColor: 255 },
       bodyStyles: { textColor: TEXT_DARK },
       styles: { fontSize: 8.5, cellPadding: 3, overflow: 'linebreak' },
+      columnStyles: config.tableHeaders.reduce((acc, header, idx) => {
+        if (header.toLowerCase().includes('sr. no.') || header.toLowerCase() === 'sr') {
+          acc[idx] = { cellWidth: 15, halign: 'center' };
+        }
+        return acc;
+      }, {} as any),
       didParseCell: (data) => {
         // Right align money columns if it matches expected patterns
         if (data.section === 'body' || data.section === 'head') {
