@@ -564,7 +564,6 @@ export default function ProcurementDraftsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
           <Button type="button" variant="outline" onClick={() => loadAllDrafts()} disabled={loading} className="h-10 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 border-slate-200 shadow-2xs cursor-pointer">
             <RefreshCw className={cn('mr-2 h-4 w-4 text-[#12335f]', loading && 'animate-spin')} /> Refresh
           </Button>
@@ -680,6 +679,9 @@ export default function ProcurementDraftsPage() {
                 </Button>
               )}
             </>
+          }
+          endContent={
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
           }
         />
 

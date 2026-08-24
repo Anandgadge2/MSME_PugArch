@@ -67,6 +67,8 @@ export interface PageToolbarProps {
     eyebrow?: string;
     /** Disable the rounded card styling when embedding the toolbar inline. */
     embedded?: boolean;
+    /** If true, the search and filters will be on a single row on desktop/tablet. */
+    singleRowDesktop?: boolean;
 }
 
 const inputBase =
@@ -121,7 +123,8 @@ export function PageToolbar({
     actions,
     className,
     eyebrow,
-    embedded
+    embedded,
+    singleRowDesktop
 }: PageToolbarProps) {
     const hasSearch = onSearchChange !== undefined;
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -211,9 +214,9 @@ export function PageToolbar({
             </div>
 
             {/* Tablet & Desktop layout: search full-width on top, filters in flex row below */}
-            <div className="hidden sm:flex sm:flex-col gap-3">
+            <div className={cn("hidden sm:flex gap-3", singleRowDesktop ? "sm:flex-row sm:items-center sm:flex-nowrap" : "sm:flex-col")}>
                 {hasSearch && (
-                    <div className="relative w-full min-w-0">
+                    <div className={cn("relative min-w-0", singleRowDesktop ? "flex-1" : "w-full")}>
                         <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
                             value={search ?? ''}
@@ -229,7 +232,7 @@ export function PageToolbar({
                 )}
 
                 {(filters.length > 0 || onReset || actions) && (
-                    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+                    <div className={cn("flex items-center gap-2.5 sm:gap-3", singleRowDesktop ? "flex-nowrap shrink-0" : "flex-wrap")}>
                         {filters.map((f, idx) => renderFilter(f, idx))}
 
                         {onReset && (
