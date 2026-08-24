@@ -153,7 +153,7 @@ export function CategoryCatalogueStrip({
         <section
             ref={sectionRef}
             className={cn(
-                'relative overflow-hidden py-9 sm:py-12 border-y border-blue-400/30 shadow-xl bg-gradient-to-br from-[#0e2554] via-[#133878] to-[#0c1e44] bg-[radial-gradient(ellipse_80%_80%_at_50%_-10%,rgba(96,165,250,0.35),rgba(15,37,84,0))]',
+                'relative overflow-hidden py-9 sm:py-12 border-t border-slate-200/80 bg-gradient-to-br from-[#0e2554] via-[#133878] to-[#0c1e44] bg-[radial-gradient(ellipse_80%_80%_at_50%_-10%,rgba(96,165,250,0.35),rgba(15,37,84,0))]',
                 className
             )}
             id="categories"
@@ -161,17 +161,12 @@ export function CategoryCatalogueStrip({
             {/* Top Luminous Shimmer Line */}
             <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-400/80 via-blue-400/80 to-transparent" />
 
-            {/* Ambient Background Light Orbs for Rich Atmosphere */}
-            <div className="absolute -top-24 right-1/4 w-[500px] h-[500px] bg-cyan-400/15 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-24 left-1/4 w-[500px] h-[500px] bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[300px] bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
-
             <div className="relative mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
                 {/* Header Section */}
                 <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-800 border border-blue-200/80 shadow-sm backdrop-blur-md">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-800 border border-blue-200/80 shadow-xs backdrop-blur-md">
                                 <Sparkles className="h-3.5 w-3.5 text-blue-600" />
                                 {categories.length} Industrial Sectors &amp; Work Categories
                             </span>
@@ -187,7 +182,7 @@ export function CategoryCatalogueStrip({
                     <div className="flex items-center gap-3 shrink-0">
                         <Link
                             href="/marketplace/categories"
-                            className="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-[#0b2447] bg-white hover:bg-slate-50 border border-slate-200/90 shadow-sm hover:shadow-md hover:border-[#0b2447]/30 transition-all"
+                            className="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-[#0b2447] bg-white hover:bg-slate-50 border border-slate-200/90 shadow-xs hover:shadow-sm hover:border-[#0b2447]/30 transition-all"
                         >
                             <Compass className="h-4 w-4 text-blue-600" />
                             <span>Browse Directory</span>
@@ -219,10 +214,10 @@ export function CategoryCatalogueStrip({
                             type="button"
                             onClick={handleToggleExpand}
                             className={cn(
-                                "group relative inline-flex items-center gap-3 px-8 sm:px-10 py-3.5 rounded-full text-xs sm:text-sm font-black tracking-wide text-white transition-all duration-300 shadow-2xl overflow-hidden active:scale-95 cursor-pointer",
+                                "group relative inline-flex items-center gap-3 px-8 sm:px-10 py-3 rounded-full text-xs sm:text-sm font-black tracking-wide text-white transition-all duration-300 shadow-md hover:shadow-lg overflow-hidden active:scale-95 cursor-pointer",
                                 isExpanded
-                                    ? "bg-slate-900/90 hover:bg-slate-800 border border-white/20 text-blue-100 shadow-slate-950/50"
-                                    : "bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 hover:from-blue-500 hover:via-indigo-500 hover:to-cyan-400 border border-cyan-300/40 shadow-blue-500/30 hover:shadow-cyan-500/50 hover:scale-105"
+                                    ? "bg-slate-900/90 hover:bg-slate-800 border border-white/20 text-blue-100"
+                                    : "bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 hover:from-blue-500 hover:via-indigo-500 hover:to-cyan-400 border border-cyan-300/40 hover:scale-105"
                             )}
                         >
                             {/* Animated Shimmer Sweep */}
