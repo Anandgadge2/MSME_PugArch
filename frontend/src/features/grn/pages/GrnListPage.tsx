@@ -125,14 +125,52 @@ export default function GrnListPage() {
             </div>
 
             {/* KPI Cards Grid */}
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                <KpiCard label="Total" value={counts.ALL} icon={ClipboardList} active={filter === 'ALL'} onClick={() => setFilter('ALL')} color="indigo" />
-                <KpiCard label="Draft" value={counts.DRAFT} icon={Clock} active={filter === 'DRAFT'} onClick={() => setFilter('DRAFT')} color="slate" />
-                <KpiCard label="Submitted" value={counts.SUBMITTED} icon={FileCheck2} active={filter === 'SUBMITTED'} onClick={() => setFilter('SUBMITTED')} color="amber" />
-                <KpiCard label="Approved" value={counts.APPROVED + counts.PARTIAL} icon={CheckCircle2} active={filter === 'APPROVED'} onClick={() => setFilter('APPROVED')} color="green" />
-                <div className="col-span-2 sm:col-span-1">
-                    <KpiCard label="Rejected" value={counts.REJECTED} icon={XCircle} active={filter === 'REJECTED'} onClick={() => setFilter('REJECTED')} color="red" />
-                </div>
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <KpiCard
+                    label="Total"
+                    value={counts.ALL}
+                    subtext="All goods receipts"
+                    icon={ClipboardList}
+                    active={filter === 'ALL'}
+                    onClick={() => setFilter('ALL')}
+                    color="indigo"
+                />
+                <KpiCard
+                    label="Draft"
+                    value={counts.DRAFT}
+                    subtext="Draft GRNs"
+                    icon={Clock}
+                    active={filter === 'DRAFT'}
+                    onClick={() => setFilter('DRAFT')}
+                    color="slate"
+                />
+                <KpiCard
+                    label="Submitted"
+                    value={counts.SUBMITTED}
+                    subtext="Submitted GRNs"
+                    icon={FileCheck2}
+                    active={filter === 'SUBMITTED'}
+                    onClick={() => setFilter('SUBMITTED')}
+                    color="amber"
+                />
+                <KpiCard
+                    label="Approved"
+                    value={counts.APPROVED + counts.PARTIAL}
+                    subtext="Approved GRNs"
+                    icon={CheckCircle2}
+                    active={filter === 'APPROVED'}
+                    onClick={() => setFilter('APPROVED')}
+                    color="green"
+                />
+                <KpiCard
+                    label="Rejected"
+                    value={counts.REJECTED}
+                    subtext="Rejected GRNs"
+                    icon={XCircle}
+                    active={filter === 'REJECTED'}
+                    onClick={() => setFilter('REJECTED')}
+                    color="red"
+                />
             </div>
 
             {error && <InlineError message={(error as Error).message} onRetry={() => refetch()} />}

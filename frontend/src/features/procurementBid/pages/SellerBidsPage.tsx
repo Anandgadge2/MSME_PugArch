@@ -393,36 +393,36 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
 
       {/* Dynamic KPI Metrics based on tab */}
       {subRouteType === 'submitted' && (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <KpiCard label="Submitted Bids" value={kpiData.totalSubmitted} icon={CheckCircle2} active={true} color="green" />
-          <KpiCard label="Under Technical Eval" value={kpiData.underTech} icon={Clock} active={false} color="purple" />
-          <KpiCard label="Under Financial Eval" value={kpiData.underFin} icon={Gavel} active={false} color="amber" />
-          <KpiCard label="Awarded Bids" value={kpiData.totalAwarded} icon={Trophy} active={false} color="indigo" />
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard label="Submitted Bids" value={kpiData.totalSubmitted} subtext="Responses delivered" icon={CheckCircle2} active={true} tone="green" />
+          <KpiCard label="Under Technical Eval" value={kpiData.underTech} subtext="Technical audit stage" icon={Clock} active={false} tone="purple" />
+          <KpiCard label="Under Financial Eval" value={kpiData.underFin} subtext="Commercial comparison" icon={Gavel} active={false} tone="amber" />
+          <KpiCard label="Awarded Bids" value={kpiData.totalAwarded} subtext="Contracts secured" icon={Trophy} active={false} tone="indigo" />
         </div>
       )}
 
       {subRouteType === 'draft' && (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <KpiCard label="Total Draft Bids" value={kpiData.totalDrafts} icon={FileEdit} active={true} color="amber" />
-          <KpiCard label="Closing in 7 Days" value={kpiData.draftsDueSoon} icon={Clock} active={false} color="red" />
-          <KpiCard label="All Drafts Value" value={formatCurrency(filteredItems.reduce((s, p) => s + (p.bid?.estimatedValue || 0), 0))} icon={IndianRupee} active={false} color="blue" />
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <KpiCard label="Total Draft Bids" value={kpiData.totalDrafts} subtext="Unsubmitted responses" icon={FileEdit} active={true} tone="amber" />
+          <KpiCard label="Closing in 7 Days" value={kpiData.draftsDueSoon} subtext="Expiring soon" icon={Clock} active={false} tone="red" />
+          <KpiCard label="All Drafts Value" value={formatCurrency(filteredItems.reduce((s, p) => s + (p.bid?.estimatedValue || 0), 0))} subtext="Potential pipeline" icon={IndianRupee} active={false} tone="blue" />
         </div>
       )}
 
       {subRouteType === 'awarded' && (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <KpiCard label="Awarded Contracts" value={kpiData.totalAwarded} icon={Trophy} active={true} color="indigo" />
-          <KpiCard label="Total Awarded Value" value={formatCurrency(kpiData.totalAwardedValue)} icon={IndianRupee} active={false} color="green" />
-          <KpiCard label="Active Bid Value" value={formatCurrency(filteredItems.reduce((s, p) => s + (p.quotedAmount || 0), 0))} icon={CheckCircle2} active={false} color="blue" />
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <KpiCard label="Awarded Contracts" value={kpiData.totalAwarded} subtext="Finalized agreements" icon={Trophy} active={true} tone="indigo" />
+          <KpiCard label="Total Awarded Value" value={formatCurrency(kpiData.totalAwardedValue)} subtext="Cumulative win value" icon={IndianRupee} active={false} tone="green" />
+          <KpiCard label="Active Bid Value" value={formatCurrency(filteredItems.reduce((s, p) => s + (p.quotedAmount || 0), 0))} subtext="In-progress awards" icon={CheckCircle2} active={false} tone="blue" />
         </div>
       )}
 
       {subRouteType === 'all' && (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <KpiCard label="All Bids" value={kpiData.totalAll} icon={FileText} active={true} color="blue" />
-          <KpiCard label="Submitted" value={kpiData.totalSubmitted} icon={CheckCircle2} active={false} color="green" />
-          <KpiCard label="Drafts" value={kpiData.totalDrafts} icon={FileEdit} active={false} color="amber" />
-          <KpiCard label="Awarded" value={kpiData.totalAwarded} icon={Trophy} active={false} color="indigo" />
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard label="All Bids" value={kpiData.totalAll} subtext="Total participations" icon={FileText} active={true} tone="blue" />
+          <KpiCard label="Submitted" value={kpiData.totalSubmitted} subtext="Active in evaluation" icon={CheckCircle2} active={false} tone="green" />
+          <KpiCard label="Drafts" value={kpiData.totalDrafts} subtext="In-progress forms" icon={FileEdit} active={false} tone="amber" />
+          <KpiCard label="Awarded" value={kpiData.totalAwarded} subtext="Won contracts" icon={Trophy} active={false} tone="indigo" />
         </div>
       )}
 

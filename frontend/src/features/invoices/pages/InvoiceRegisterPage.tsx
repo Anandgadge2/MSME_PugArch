@@ -567,13 +567,50 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4 xl:grid-cols-6">
-        <KpiCard label="Invoices" value={total} icon={FileText} active={true} color="blue" />
-        <KpiCard label="Pending" value={pendingCount} icon={Clock} color="amber" />
-        <KpiCard label="Approved/Paid" value={approvedCount} icon={CheckCircle2} color="green" />
-        <KpiCard label="Invoice Value" value={formatCurrency(totalValue)} icon={IndianRupee} color="indigo" />
-        <KpiCard label="Overdue" value={invoiceHealth.overdue} icon={AlertCircle} color="red" />
-        <KpiCard label="GST/TDS" value={`${formatCurrency(invoiceHealth.tax)} / ${formatCurrency(invoiceHealth.tds)}`} icon={ShieldCheck} color="purple" />
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+        <KpiCard
+          label="Invoices"
+          value={total}
+          subtext="All invoices"
+          icon={FileText}
+          active={true}
+          color="blue"
+        />
+        <KpiCard
+          label="Pending"
+          value={pendingCount}
+          subtext="Pending approval"
+          icon={Clock}
+          color="amber"
+        />
+        <KpiCard
+          label="Approved/Paid"
+          value={approvedCount}
+          subtext="Paid invoices"
+          icon={CheckCircle2}
+          color="green"
+        />
+        <KpiCard
+          label="Invoice Value"
+          value={formatCurrency(totalValue)}
+          subtext="Total invoice value"
+          icon={IndianRupee}
+          color="indigo"
+        />
+        <KpiCard
+          label="Overdue"
+          value={invoiceHealth.overdue}
+          subtext="Overdue invoices"
+          icon={AlertCircle}
+          color="red"
+        />
+        <KpiCard
+          label="GST/TDS"
+          value={`${formatCurrency(invoiceHealth.tax)} / ${formatCurrency(invoiceHealth.tds)}`}
+          subtext="Total GST/TDS"
+          icon={ShieldCheck}
+          color="purple"
+        />
       </div>
 
       {error && <InlineError message={error} onRetry={reload} />}

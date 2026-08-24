@@ -17,7 +17,7 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
-import { BarChart3, Download, FileSpreadsheet, FileText, RefreshCw, Search, ShoppingCart, Truck } from 'lucide-react';
+import { BarChart3, Download, FileSpreadsheet, FileText, RefreshCw, Search, ShoppingCart, Truck, IndianRupee, Receipt } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useAuth } from '../../../hooks/useAuth';
 import { getApi } from '../../shared/apiClient';
@@ -366,10 +366,10 @@ function buildAnalytics(orders: any[], summary: any, role?: string) {
     const count = orders.length || 1;
     return {
         kpis: [
-            { label: 'Total order value', value: money(totalValue), hint: `${orders.length} filtered orders` },
-            { label: 'Active orders', value: activeOrders.toLocaleString('en-IN'), hint: 'Not completed or cancelled' },
-            { label: role === 'seller' ? 'Open opportunities' : 'Created tenders', value: Number(opportunities || 0).toLocaleString('en-IN'), hint: 'From dashboard summary' },
-            { label: 'Pending invoices', value: Number(pendingInvoices || 0).toLocaleString('en-IN'), hint: 'Needs action or follow-up' },
+            { label: 'Total order value', value: money(totalValue), subtext: `${orders.length} filtered orders`, hint: `${orders.length} filtered orders`, icon: IndianRupee, tone: 'indigo' },
+            { label: 'Active orders', value: activeOrders.toLocaleString('en-IN'), subtext: 'Not completed or cancelled', hint: 'Not completed or cancelled', icon: Truck, tone: 'emerald' },
+            { label: role === 'seller' ? 'Open opportunities' : 'Created tenders', value: Number(opportunities || 0).toLocaleString('en-IN'), subtext: 'From dashboard summary', hint: 'From dashboard summary', icon: FileText, tone: 'blue' },
+            { label: 'Pending invoices', value: Number(pendingInvoices || 0).toLocaleString('en-IN'), subtext: 'Needs action or follow-up', hint: 'Needs action or follow-up', icon: Receipt, tone: 'amber' },
         ],
         statusDistribution: Array.from(statusMap.entries()).map(([name, value]) => ({ name, value })),
         monthlyValue: Array.from(monthlyMap.entries()).map(([month, value]) => ({ month, value })),

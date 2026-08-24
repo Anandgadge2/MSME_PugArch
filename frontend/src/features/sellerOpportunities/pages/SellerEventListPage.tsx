@@ -11,7 +11,7 @@ import type { ProcurementBid } from '../../procurementBid/data';
 import { MethodBadge, ProcurementStatusBadge, BuyerTypeBadge } from '../../procurementWizard/components/SourcingWizardComponents';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
-
+import { KpiCard } from '../../shared/KpiCard';
 
 type SellerEventView = 'all' | 'invited' | 'submitted' | 'clarifications';
 
@@ -32,33 +32,6 @@ const hasClarification = (bid: ProcurementBid) => {
   const status = String(bid.clarificationStatus || '').toLowerCase();
   return status === 'pending' || status === 'responded' || Boolean(bid.clarifications?.length);
 };
-
-/* ── KpiCard ─────────────────────────────────────────── */
-const KPI_COLORS: Record<string, string> = {
-  blue:   'bg-blue-50 text-blue-700 ring-blue-200/60',
-  green:  'bg-emerald-50 text-emerald-700 ring-emerald-200/60',
-  purple: 'bg-purple-50 text-purple-700 ring-purple-200/60',
-  amber:  'bg-amber-50 text-amber-700 ring-amber-200/60',
-  red:    'bg-red-50 text-red-700 ring-red-200/60',
-  indigo: 'bg-indigo-50 text-indigo-700 ring-indigo-200/60',
-};
-
-function KpiCard({ label, value, icon: Icon, color = 'blue', onClick, active }: { label: string; value: string | number; icon: LucideIcon; color?: string; onClick?: () => void; active?: boolean }) {
-  const palette = KPI_COLORS[color] ?? KPI_COLORS.blue;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-full text-left rounded-2xl p-4 ring-1 ${palette} transition hover:scale-[1.02] cursor-pointer ${active ? 'ring-2 ring-offset-1' : ''}`}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className="h-4 w-4 opacity-70" />
-        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">{label}</span>
-      </div>
-      <p className="text-2xl font-black">{value}</p>
-    </button>
-  );
-}
 
 export default function SellerEventListPage() {
   const router = useRouter();
@@ -272,10 +245,10 @@ export default function SellerEventListPage() {
 
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Total Bids" value={kpiTotal} icon={ClipboardList} color="blue" onClick={() => router.push('/seller/opportunities?filter=all')} active={activeView === 'all'} />
-        <KpiCard label="Invited" value={kpiInvited} icon={Users} color="purple" onClick={() => router.push('/seller/opportunities?filter=invited')} active={activeView === 'invited'} />
-        <KpiCard label="Submitted" value={kpiSubmitted} icon={CheckCircle2} color="green" onClick={() => router.push('/seller/opportunities?filter=submitted')} active={activeView === 'submitted'} />
-        <KpiCard label="Closing in 7 Days" value={kpiClosingSoon} icon={CalendarDays} color="amber" onClick={() => router.push('/seller/opportunities?filter=clarifications')} active={activeView === 'clarifications'} />
+        <KpiCard label="Total Bids" value={kpiTotal} subtext="Available opportunities" icon={ClipboardList} tone="blue" onClick={() => router.push('/seller/opportunities?filter=all')} active={activeView === 'all'} />
+        <KpiCard label="Invited" value={kpiInvited} subtext="Direct buyer invitations" icon={Users} tone="purple" onClick={() => router.push('/seller/opportunities?filter=invited')} active={activeView === 'invited'} />
+        <KpiCard label="Submitted" value={kpiSubmitted} subtext="Bids submitted" icon={CheckCircle2} tone="green" onClick={() => router.push('/seller/opportunities?filter=submitted')} active={activeView === 'submitted'} />
+        <KpiCard label="Closing in 7 Days" value={kpiClosingSoon} subtext="Expiring soon" icon={CalendarDays} tone="amber" onClick={() => router.push('/seller/opportunities?filter=clarifications')} active={activeView === 'clarifications'} />
       </div>
 
       {activeView === 'submitted' ? (

@@ -21,7 +21,10 @@ import {
   Download,
   Printer,
   Upload,
-  FileCheck
+  FileCheck,
+  RotateCcw,
+  XCircle,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -103,8 +106,10 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
     const escrowHeldValue = payments
       .filter(payment => String(payment.escrowAccount?.status || '').toLowerCase() === 'held')
       .reduce((sum, payment) => sum + Number(payment.escrowAccount?.amount || payment.amount || 0), 0);
+    const refunded = payments.filter(payment => String(payment.status || '').toLowerCase() === 'refunded').length;
+    const failed = payments.filter(payment => ['failed', 'cancelled'].includes(String(payment.status || '').toLowerCase())).length;
     const successRate = payments.length ? Math.round((successful.length / payments.length) * 100) : 0;
-    return { totalAmount, successful: successful.length, settledValue, escrowHeldValue, successRate };
+    return { totalAmount, successful: successful.length, settledValue, escrowHeldValue, refunded, failed, successRate };
   }, [payments]);
 
   const filtered = useMemo(() => {
@@ -202,14 +207,99 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiCard label="Payments" value={total || payments.length} icon={CreditCard} active={true} color="blue" />
-        <KpiCard label="Successful" value={paymentSummary.successful} icon={ShieldCheck} color="green" />
-        <KpiCard label="Visible Value" value={formatCurrency(paymentSummary.totalAmount)} icon={IndianRupee} color="indigo" />
-        <KpiCard label="Success Rate" value={`${paymentSummary.successRate}%`} icon={CheckCircle2} color="purple" />
-        <KpiCard label="Settled Value" value={formatCurrency(paymentSummary.settledValue)} icon={Receipt} color="blue" />
-        <KpiCard label="Escrow Held" value={formatCurrency(paymentSummary.escrowHeldValue)} icon={Lock} color="amber" />
-      </div>
+      {typeof window !== 'undefined' && window.location.pathname.includes('/transactions') ? (
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+          <KpiCard
+            label="Total Transactions"
+            value={total || payments.length}
+            subtext="Total transactions"
+            icon={CreditCard}
+            active={true}
+            color="blue"
+          />
+          <KpiCard
+            label="Successful"
+            value={paymentSummary.successful}
+            subtext="Successful transactions"
+            icon={ShieldCheck}
+            color="green"
+          />
+          <KpiCard
+            label="Total Amount"
+            value={formatCurrency(paymentSummary.totalAmount)}
+            subtext="Total transaction amount"
+            icon={IndianRupee}
+            color="indigo"
+          />
+          <KpiCard
+            label="Success Rate"
+            value={`${paymentSummary.successRate}%`}
+            subtext="Transaction success rate"
+            icon={CheckCircle2}
+            color="purple"
+          />
+          <KpiCard
+            label="Refunded"
+            value={paymentSummary.refunded}
+            subtext="Refunded transactions"
+            icon={RotateCcw}
+            color="amber"
+          />
+          <KpiCard
+            label="Failed"
+            value={paymentSummary.failed}
+            subtext="Failed transactions"
+            icon={XCircle}
+            color="red"
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+          <KpiCard
+            label="Payments"
+            value={total || payments.length}
+            subtext="Total payments"
+            icon={CreditCard}
+            active={true}
+            color="blue"
+          />
+          <KpiCard
+            label="Successful"
+            value={paymentSummary.successful}
+            subtext="Successful payments"
+            icon={ShieldCheck}
+            color="green"
+          />
+          <KpiCard
+            label="Visible Value"
+            value={formatCurrency(paymentSummary.totalAmount)}
+            subtext="Payment amount"
+            icon={IndianRupee}
+            color="indigo"
+          />
+          <KpiCard
+            label="Success Rate"
+            value={`${paymentSummary.successRate}%`}
+            subtext="Payment success rate"
+            icon={CheckCircle2}
+            color="purple"
+          />
+          <KpiCard
+            label="Settled Value"
+            value={formatCurrency(paymentSummary.settledValue)}
+            subtext="Settled payments"
+            icon={Receipt}
+            color="blue"
+          />
+          <KpiCard
+            label="Escrow Held"
+            value={formatCurrency(paymentSummary.escrowHeldValue)}
+            subtext="Escrow amount held"
+            icon={Lock}
+            color="amber"
+          />
+        </div>
+      )}
 
       {error && <InlineError message={error} onRetry={reload} />}
       {warning && (

@@ -9,6 +9,7 @@ import { ResponsiveFilterBar } from "../components/ui/ResponsiveFilterBar";
 import { Pagination } from "../features/shared/Pagination";
 import { useResponsiveViewMode } from "../features/shared/hooks";
 import { ViewModeToggle } from "../features/shared/ViewModeToggle";
+import { KpiCard } from "../features/shared/KpiCard";
 import {
   Card,
   CardHeader,
@@ -3583,17 +3584,15 @@ export default function AdminOnboarding() {
 }
 
 
-function MetricTile({ label, value }: { label: string; value: number }) {
+function MetricTile({ label, value, subtext }: { label: string; value: number; subtext?: string }) {
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
-      <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-        Live onboarding record
-      </p>
-    </div>
+    <KpiCard
+      label={label}
+      value={value}
+      subtext={subtext || (label.toLowerCase().includes('reject') ? 'Denied submissions' : 'Requires stakeholder action')}
+      tone={label.toLowerCase().includes('reject') ? 'red' : 'amber'}
+      icon={label.toLowerCase().includes('reject') ? XCircle : AlertTriangle}
+    />
   );
 }
 

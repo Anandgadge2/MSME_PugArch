@@ -301,7 +301,7 @@ export default function RepeatOrders() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Repeatable Orders"
           value={deliveredCount}

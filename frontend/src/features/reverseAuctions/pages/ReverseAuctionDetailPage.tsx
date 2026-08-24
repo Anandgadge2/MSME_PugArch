@@ -494,16 +494,16 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
               <h2 className="text-sm font-black uppercase text-[#0b2447] tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
                 <FileText className="h-4 w-4 text-blue-600" /> 1. Auction Overview
               </h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3">
-                <KpiCard label="Procurement Method" value={auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'Bid with Reverse Auction' : 'Reverse Auction'} icon={Scale} tone="blue" />
-                <KpiCard label="Buyer Organization" value={auction.data.buyerOrganizationName || (auction.data.buyerOrgId ? `Buyer Org #${auction.data.buyerOrgId}` : 'Verified Buyer')} icon={Building2} tone="indigo" />
-                <KpiCard label="Category" value={auction.data.category || 'Not specified'} icon={Tag} tone="amber" />
-                <KpiCard label="Auction Type" value={auction.data.auctionType || 'ENGLISH_REVERSE'} icon={Settings} tone="slate" />
-                <KpiCard label="Auction Mode" value={auction.data.auctionMode || 'ONLINE'} icon={Activity} tone="emerald" />
-                <KpiCard label="Minimum Qualified Bidders" value={String(auction.data.minimumQualifiedBidders || 2)} icon={Users} tone="purple" />
-                <KpiCard label="Start Time" value={formatDateTime(auction.data.startTime)} icon={Clock} tone="blue" />
-                <KpiCard label="End Time" value={formatDateTime(auction.data.endTime)} icon={Clock} tone="red" />
-                <KpiCard label="Calculated Duration" value={`${durationMin} mins`} icon={Clock} tone="slate" />
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3">
+                <KpiCard label="Procurement Method" value={auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'Bid with Reverse Auction' : 'Reverse Auction'} subtext="Auction procedure" icon={Scale} tone="blue" />
+                <KpiCard label="Buyer Organization" value={auction.data.buyerOrganizationName || (auction.data.buyerOrgId ? `Buyer Org #${auction.data.buyerOrgId}` : 'Verified Buyer')} subtext="Host organization" icon={Building2} tone="indigo" />
+                <KpiCard label="Category" value={auction.data.category || 'Not specified'} subtext="Product classification" icon={Tag} tone="amber" />
+                <KpiCard label="Auction Type" value={auction.data.auctionType || 'ENGLISH_REVERSE'} subtext="Bidding mechanism" icon={Settings} tone="slate" />
+                <KpiCard label="Auction Mode" value={auction.data.auctionMode || 'ONLINE'} subtext="Execution channel" icon={Activity} tone="emerald" />
+                <KpiCard label="Minimum Qualified Bidders" value={String(auction.data.minimumQualifiedBidders || 2)} subtext="Bidder threshold" icon={Users} tone="purple" />
+                <KpiCard label="Start Time" value={formatDateTime(auction.data.startTime)} subtext="Bidding window opens" icon={Clock} tone="blue" />
+                <KpiCard label="End Time" value={formatDateTime(auction.data.endTime)} subtext="Bidding window closes" icon={Clock} tone="red" />
+                <KpiCard label="Calculated Duration" value={`${durationMin} mins`} subtext="Live event window" icon={Clock} tone="slate" />
               </div>
 
               {auction.data.description && (

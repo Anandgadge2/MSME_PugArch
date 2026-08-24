@@ -590,15 +590,11 @@ export default function PurchaseOrders() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <KpiCard label="Open POs" value={openCount} icon={FileText} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} color="blue" />
-        <KpiCard label="Delivered" value={deliveredCount} icon={CheckCircle2} onClick={() => setActiveTab('Delivered')} active={activeTab === 'Delivered'} color="green" />
-        <KpiCard label="Total Value" value={formatCurrency(totalSpend)} icon={ShieldCheck} onClick={() => setActiveTab('All')} active={activeTab === 'All'} color="indigo" />
-        <KpiCard label="Open Value" value={formatCurrency(poHealth.openValue)} icon={ShieldCheck} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} color="amber" />
-        {/* Commented out Awaiting Seller and Delivery Risk cards as requested
-        <KpiCard label={isSeller ? 'Invoice Ready' : 'Awaiting Seller'} value={isSeller ? poHealth.invoiceReady : allOrders.filter(order => String(order.status || '').toLowerCase() === 'generated').length} icon={Truck} onClick={() => setActiveTab('Open')} active={false} color="purple" />
-        <KpiCard label="Delivery Risk" value={poHealth.deliveryRisk} icon={XCircle} onClick={() => setActiveTab('Open')} active={false} color="red" />
-        */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Open POs" value={openCount} subtext="Active purchase orders" icon={FileText} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} tone="blue" />
+        <KpiCard label="Delivered" value={deliveredCount} subtext="Completed deliveries" icon={CheckCircle2} onClick={() => setActiveTab('Delivered')} active={activeTab === 'Delivered'} tone="green" />
+        <KpiCard label="Total Value" value={formatCurrency(totalSpend)} subtext="Cumulative purchase spend" icon={ShieldCheck} onClick={() => setActiveTab('All')} active={activeTab === 'All'} tone="indigo" />
+        <KpiCard label="Open Value" value={formatCurrency(poHealth.openValue)} subtext="Pending fulfillment value" icon={ShieldCheck} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} tone="amber" />
       </div>
 
       {error && <InlineError message={error} onRetry={reload} />}
