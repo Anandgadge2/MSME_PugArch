@@ -53,7 +53,7 @@ export function MarketplaceHeader({ user }: Props) {
     const searchParams = useSearchParams();
     const { count: cartCount } = useMarketplaceCart();
 
-    const [searchQ, setSearchQ] = useState(searchParams?.get('q') || '');
+    const [searchQ, setSearchQ] = useState('');
     const [showSignup, setShowSignup] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
@@ -132,9 +132,10 @@ export function MarketplaceHeader({ user }: Props) {
                     </Link>
 
                     {/* Search Bar (Desktop - hidden on mobile) */}
-                    <form onSubmit={handleSearch} className="hidden md:flex flex-1 max-w-xl mx-4 items-center h-10 rounded-xl border border-slate-200/90 bg-slate-50/80 shadow-inner focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all overflow-hidden">
+                    <form suppressHydrationWarning onSubmit={handleSearch} className="hidden md:flex flex-1 max-w-xl mx-4 items-center h-10 rounded-xl border border-slate-200/90 bg-slate-50/80 shadow-inner focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all overflow-hidden">
                         <Search className="h-4 w-4 text-slate-400 shrink-0 ml-3.5 pointer-events-none" />
                         <input
+                            suppressHydrationWarning
                             type="text"
                             value={searchQ}
                             onChange={e => setSearchQ(e.target.value)}
@@ -143,6 +144,7 @@ export function MarketplaceHeader({ user }: Props) {
                         />
                         {searchQ && (
                             <button
+                                suppressHydrationWarning
                                 type="button"
                                 onClick={handleClearSearch}
                                 className="h-5 w-5 mr-1 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition text-xs font-bold"
@@ -152,6 +154,7 @@ export function MarketplaceHeader({ user }: Props) {
                             </button>
                         )}
                         <button
+                            suppressHydrationWarning
                             type="submit"
                             className="h-full px-5 bg-[#0b2447] text-white text-xs font-bold hover:bg-[#12335f] active:scale-95 transition-all shrink-0 flex items-center gap-1.5"
                         >
@@ -175,6 +178,7 @@ export function MarketplaceHeader({ user }: Props) {
                                 {/* Sign Up dropdown */}
                                 <div ref={signupRef} className="relative shrink-0">
                                     <button
+                                        suppressHydrationWarning
                                         type="button"
                                         onClick={() => setShowSignup(v => !v)}
                                         className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#0b2447] px-3.5 text-xs font-bold text-white shadow-md shadow-[#0b2447]/15 transition-all hover:bg-[#12335f] active:scale-95"
@@ -233,6 +237,7 @@ export function MarketplaceHeader({ user }: Props) {
                     {/* Mobile Controls (Menu Toggle) */}
                     <div className="flex items-center gap-1.5 md:hidden shrink-0">
                         <button
+                            suppressHydrationWarning
                             onClick={() => setMobileMenuOpen(true)}
                             className="flex h-9.5 w-9.5 items-center justify-center rounded-xl bg-[#0b2447] text-white shadow-md shadow-[#0b2447]/20 active:scale-95 transition-all"
                             aria-label="Open Navigation Menu"
@@ -269,6 +274,7 @@ export function MarketplaceHeader({ user }: Props) {
                                 </div>
                             </Link>
                             <button
+                                suppressHydrationWarning
                                 onClick={() => setMobileMenuOpen(false)}
                                 className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white border border-white/20 backdrop-blur-md active:scale-90 transition-all"
                                 aria-label="Close menu"
@@ -279,16 +285,17 @@ export function MarketplaceHeader({ user }: Props) {
 
                         {/* Drawer Search */}
                         <div className="p-3 bg-slate-50/90 border-b border-slate-100 shrink-0">
-                            <form onSubmit={handleSearch} className="flex items-center h-9.5 rounded-full border border-slate-200 bg-white px-3 shadow-2xs focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all">
+                            <form suppressHydrationWarning onSubmit={handleSearch} className="flex items-center h-9.5 rounded-full border border-slate-200 bg-white px-3 shadow-2xs focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all">
                                 <Search className="h-4 w-4 text-slate-400 mr-2 shrink-0" />
                                 <input
+                                    suppressHydrationWarning
                                     type="text"
                                     value={searchQ}
                                     onChange={e => setSearchQ(e.target.value)}
                                     placeholder="Search products, services..."
                                     className="flex-1 min-w-0 bg-transparent text-xs font-medium outline-none text-slate-800 placeholder:text-slate-400"
                                 />
-                                <button type="submit" className="h-6.5 px-2.5 rounded-full bg-[#0b2447] text-white text-[10px] font-black uppercase hover:bg-[#12335f] transition-all shrink-0">
+                                <button suppressHydrationWarning type="submit" className="h-6.5 px-2.5 rounded-full bg-[#0b2447] text-white text-[10px] font-black uppercase hover:bg-[#12335f] transition-all shrink-0">
                                     Go
                                 </button>
                             </form>

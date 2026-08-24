@@ -28,6 +28,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     return (
       <button
+        suppressHydrationWarning
         ref={ref}
         disabled={disabled || isLoading}
         className={cn(

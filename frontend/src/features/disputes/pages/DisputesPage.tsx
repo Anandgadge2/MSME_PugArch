@@ -817,8 +817,8 @@ function StatusUpdateModal({ dispute, onClose, onSubmit, pending }: {
 
     const counterpartyId = selectedRecord ? (
         isBuyer
-            ? (selectedRecord.sellerId || selectedRecord.seller?.id || selectedRecord.purchaseOrder?.sellerId)
-            : (selectedRecord.buyerId || selectedRecord.buyer?.id || selectedRecord.purchaseOrder?.buyerId)
+            ? (selectedRecord.sellerId || selectedRecord.seller?.id || selectedRecord.purchaseOrder?.sellerId || selectedRecord.purchaseOrder?.seller?.id)
+            : (selectedRecord.buyerId || selectedRecord.buyer?.id || selectedRecord.purchaseOrder?.buyerId || selectedRecord.purchaseOrder?.buyer?.id)
     ) : undefined;
 
     const purchaseOrderId = selectedRecord ? (selectedRecord.purchaseOrderId || (linkedEntityType === 'PURCHASE_ORDER' ? selectedRecord.id : undefined)) : undefined;

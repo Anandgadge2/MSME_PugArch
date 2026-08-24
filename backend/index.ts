@@ -801,15 +801,27 @@ const messageCreateSchema = z.object({
   message: 'Message text or attachment is required'
 });
 const disputeCreateSchema = z.object({
+  linkedEntityType: z.string().trim().optional(),
+  linkedEntityId: z.coerce.number().int().positive().optional(),
   purchaseOrderId: z.coerce.number().int().positive().optional(),
+  invoiceId: z.coerce.number().int().positive().optional(),
+  deliveryId: z.coerce.number().int().positive().optional(),
+  grnId: z.coerce.number().int().positive().optional(),
   paymentTransactionId: z.coerce.number().int().positive().optional(),
   escrowAccountId: z.coerce.number().int().positive().optional(),
   counterpartyId: z.coerce.number().int().positive().optional(),
   category: z.string().trim().min(3).max(80),
-  reason: z.string().trim().min(10).max(4000),
+  title: z.string().trim().min(3).max(180).optional(),
+  description: z.string().trim().min(10).max(4000).optional(),
+  reason: z.string().trim().min(10).max(4000).optional(),
+  amountInDispute: z.coerce.number().min(0).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional().default('MEDIUM'),
   evidenceFileIds: idArraySchema.optional()
-}).refine(value => Boolean(value.purchaseOrderId || value.paymentTransactionId || value.escrowAccountId || value.counterpartyId), {
-  message: 'A related transaction or counterparty is required'
+}).refine(value => Boolean(
+  value.purchaseOrderId || value.invoiceId || value.deliveryId || value.grnId ||
+  value.paymentTransactionId || value.escrowAccountId || value.counterpartyId || value.linkedEntityId
+), {
+  message: 'A related transaction, entity, or counterparty is required'
 });
 const disputeMessageSchema = z.object({
   content: z.string().trim().min(1).max(3000),
@@ -1196,15 +1208,36 @@ const resolveDisputeParties = async (payload: z.infer<typeof disputeCreateSchema
     if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
     return { buyerId: po.buyerId, sellerId: po.sellerId, purchaseOrderId: po.id };
   }
+  if (payload.invoiceId) {
+    const invoice = await prisma.invoice.findUnique({ where: { id: payload.invoiceId } });
+    if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    return { buyerId: invoice.buyerId, sellerId: invoice.sellerId, invoiceId: invoice.id, purchaseOrderId: invoice.purchaseOrderId || undefined };
+  }
+  if (payload.deliveryId) {
+    const delivery = await prisma.deliveryTracking.findUnique({ where: { id: payload.deliveryId }, include: { purchaseOrder: true } });
+    if (!delivery) throw new ApiError(404, 'Delivery not found', 'DELIVERY_NOT_FOUND');
+    const buyerId = delivery.purchaseOrder?.buyerId || (actor.role === 'buyer' ? Number(actor.id) : payload.counterpartyId);
+    const sellerId = delivery.purchaseOrder?.sellerId || (actor.role === 'seller' ? Number(actor.id) : payload.counterpartyId);
+    if (!buyerId || !sellerId) throw new ApiError(400, 'Could not resolve buyer and seller for delivery', 'DELIVERY_PARTIES_INVALID');
+    return { buyerId, sellerId, deliveryId: delivery.id, purchaseOrderId: delivery.purchaseOrderId || undefined };
+  }
+  if (payload.grnId) {
+    const grn = await prisma.goodsReceiptNote.findUnique({ where: { id: payload.grnId }, include: { purchaseOrder: true } });
+    if (!grn) throw new ApiError(404, 'GRN not found', 'GRN_NOT_FOUND');
+    const buyerId = grn.purchaseOrder?.buyerId || grn.receivedById || (actor.role === 'buyer' ? Number(actor.id) : payload.counterpartyId);
+    const sellerId = grn.purchaseOrder?.sellerId || (actor.role === 'seller' ? Number(actor.id) : payload.counterpartyId);
+    if (!buyerId || !sellerId) throw new ApiError(400, 'Could not resolve buyer and seller for GRN', 'GRN_PARTIES_INVALID');
+    return { buyerId, sellerId, grnId: grn.id, purchaseOrderId: grn.purchaseOrderId || undefined };
+  }
   if (payload.escrowAccountId) {
     const escrow = await prisma.escrowAccount.findUnique({ where: { id: payload.escrowAccountId } });
     if (!escrow) throw new ApiError(404, 'Escrow account not found', 'ESCROW_NOT_FOUND');
-    return { buyerId: escrow.buyerId, sellerId: escrow.sellerId, escrowAccountId: escrow.id };
+    return { buyerId: escrow.buyerId, sellerId: escrow.sellerId, escrowAccountId: escrow.id, purchaseOrderId: escrow.purchaseOrderId || undefined };
   }
   if (payload.paymentTransactionId) {
     const payment = await prisma.paymentTransaction.findUnique({ where: { id: payload.paymentTransactionId } });
     if (!payment) throw new ApiError(404, 'Payment not found', 'PAYMENT_NOT_FOUND');
-    return { buyerId: payment.payerId, sellerId: payment.payeeId, paymentTransactionId: payment.id };
+    return { buyerId: payment.payerId, sellerId: payment.payeeId, paymentTransactionId: payment.id, purchaseOrderId: payment.purchaseOrderId || undefined };
   }
   if (!payload.counterpartyId) throw new ApiError(400, 'Counterparty is required', 'COUNTERPARTY_REQUIRED');
   if (actor.role === 'buyer') return { buyerId: Number(actor.id), sellerId: payload.counterpartyId };
@@ -5740,13 +5773,26 @@ app.post('/api/disputes', authenticate, authorize('buyer', 'seller', 'admin'), a
     }
     await assertFileAssetsAccessible(payload.evidenceFileIds || [], req.user!);
 
+    const disputeReason = payload.reason || payload.description || payload.title || 'Dispute raised';
+    const disputeTitle = payload.title || `Dispute: ${payload.category}`;
+    const disputeDescription = payload.description || payload.reason || disputeTitle;
+
     const result = await prisma.$transaction(async (tx) => {
       const dispute = await tx.dispute.create({
         data: {
           ...parties,
-          raisedById: Number(req.user?.id),
+          linkedEntityType: payload.linkedEntityType || (payload.purchaseOrderId ? 'PURCHASE_ORDER' : payload.invoiceId ? 'INVOICE' : payload.deliveryId ? 'DELIVERY' : payload.grnId ? 'GRN' : payload.escrowAccountId ? 'ESCROW_ACCOUNT' : undefined),
+          linkedEntityId: payload.linkedEntityId || payload.purchaseOrderId || payload.invoiceId || payload.deliveryId || payload.grnId || payload.escrowAccountId || undefined,
+          invoiceId: payload.invoiceId || (parties as any).invoiceId || undefined,
+          deliveryId: payload.deliveryId || (parties as any).deliveryId || undefined,
+          grnId: payload.grnId || (parties as any).grnId || undefined,
+          title: disputeTitle,
+          description: disputeDescription,
           category: sanitizePortalText(payload.category, 80),
-          reason: sanitizePortalText(payload.reason, 4000),
+          reason: sanitizePortalText(disputeReason, 4000),
+          amountInDispute: payload.amountInDispute !== undefined && payload.amountInDispute !== null ? payload.amountInDispute : undefined,
+          priority: (payload.priority as any) || 'MEDIUM',
+          raisedById: Number(req.user?.id),
           evidence: { create: (payload.evidenceFileIds || []).map(fileAssetId => ({ fileAssetId, uploadedById: Number(req.user?.id) })) }
         },
         include: { evidence: true }
@@ -5755,18 +5801,18 @@ app.post('/api/disputes', authenticate, authorize('buyer', 'seller', 'admin'), a
         await safeAsync(
           tx.escrowAccount.update({
             where: { id: parties.escrowAccountId },
-            data: { status: 'frozen', frozenAt: new Date(), version: { increment: 1 } }
+            data: { status: 'frozen', frozenAt: new Date() }
           }),
           { context: 'dispute.create.escrow.freeze' }
         );
       } else if (parties.purchaseOrderId) {
         await tx.escrowAccount.updateMany({
           where: { purchaseOrderId: parties.purchaseOrderId, status: { in: ['held', 'funded'] } },
-          data: { status: 'frozen', frozenAt: new Date(), version: { increment: 1 } }
+          data: { status: 'frozen', frozenAt: new Date() }
         });
       }
       return dispute;
-    });
+    }, { timeout: 15000 });
 
     await Promise.all([parties.buyerId, parties.sellerId].filter(id => id !== Number(req.user?.id)).map(userId =>
       createNotificationSafe({ userId, title: 'Dispute opened', message: `A dispute has been opened for a procurement transaction.`, type: 'dispute_created' })

@@ -289,23 +289,24 @@ const resolveLinkedEntity = async (body: z.infer<typeof createSchema>, req: Auth
 
 const ensureDisputeAccess = (req: AuthRequest, dispute: any) => {
   if (isAdmin(req)) return;
+  const currentUserId = userId(req);
+  if ([dispute.buyerId, dispute.sellerId, dispute.raisedById, dispute.raisedByUserId].filter(Boolean).includes(currentUserId)) return;
   const organizationId = orgId(req);
-  if (!organizationId || ![dispute.raisedByOrgId, dispute.againstOrgId, dispute.buyerOrgId, dispute.sellerOrgId].includes(organizationId)) {
-    throw new ApiError(403, 'You cannot access another organization dispute.', 'DISPUTE_FORBIDDEN');
-  }
+  if (organizationId && [dispute.raisedByOrgId, dispute.againstOrgId, dispute.buyerOrgId, dispute.sellerOrgId].filter(Boolean).includes(organizationId)) return;
+  throw new ApiError(403, 'You cannot access another organization dispute.', 'DISPUTE_FORBIDDEN');
 };
 
 router.get('/disputes', authenticate, asyncRoute(async (req, res) => {
   const where = isAdmin(req)
     ? {}
-    : { OR: [{ raisedByOrgId: orgId(req) }, { againstOrgId: orgId(req) }, { buyerOrgId: orgId(req) }, { sellerOrgId: orgId(req) }, { raisedById: userId(req) }] };
+    : { OR: [{ raisedByOrgId: orgId(req) }, { againstOrgId: orgId(req) }, { buyerOrgId: orgId(req) }, { sellerOrgId: orgId(req) }, { raisedById: userId(req) }, { buyerId: userId(req) }, { sellerId: userId(req) }] };
   const disputes = await db.dispute.findMany({ where, include: disputeInclude(isAdmin(req)), orderBy: { updatedAt: 'desc' }, take: 100 });
   ok(res, disputes.map(toDto));
 }));
 
 router.get('/disputes/my', authenticate, asyncRoute(async (req, res) => {
   const disputes = await db.dispute.findMany({
-    where: { OR: [{ raisedByOrgId: orgId(req) }, { againstOrgId: orgId(req) }, { buyerOrgId: orgId(req) }, { sellerOrgId: orgId(req) }, { raisedById: userId(req) }] },
+    where: { OR: [{ raisedByOrgId: orgId(req) }, { againstOrgId: orgId(req) }, { buyerOrgId: orgId(req) }, { sellerOrgId: orgId(req) }, { raisedById: userId(req) }, { buyerId: userId(req) }, { sellerId: userId(req) }] },
     include: disputeInclude(false),
     orderBy: { updatedAt: 'desc' },
     take: 100
@@ -316,7 +317,7 @@ router.get('/disputes/my', authenticate, asyncRoute(async (req, res) => {
 router.post('/disputes', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const body = createSchema.parse(req.body);
   const resolved = await resolveLinkedEntity(body, req);
-  const dispute = await prisma.$transaction(async tx => {
+  const createdDispute = await prisma.$transaction(async tx => {
     const created = await (tx as any).dispute.create({
       data: {
         disputeNo: `DSP-${Date.now().toString(36).toUpperCase()}-${userId(req)}`,
@@ -345,8 +346,10 @@ router.post('/disputes', authenticate, authorize('buyer', 'seller', 'admin', 'ma
       await (tx as any).disputeAttachment.createMany({ data: body.evidenceFileIds.map(fileAssetId => ({ disputeId: created.id, fileAssetId, uploadedByUserId: userId(req) })) });
       await (tx as any).disputeEvidence.createMany({ data: body.evidenceFileIds.map(fileAssetId => ({ disputeId: created.id, fileAssetId, uploadedById: userId(req) })) });
     }
-    return (tx as any).dispute.findUnique({ where: { id: created.id }, include: disputeInclude(true) });
-  });
+    return created;
+  }, { timeout: 15000 });
+
+  const dispute = await (db as any).dispute.findUnique({ where: { id: createdDispute.id }, include: disputeInclude(true) });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.created', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip, metadata: { disputeNo: dispute.disputeNo, linkedEntityType: dispute.linkedEntityType, linkedEntityId: dispute.linkedEntityId } });
   await notificationService.notifyAdmins({ title: 'New dispute raised', message: `${dispute.disputeNo || `DSP-${dispute.id}`} requires review.`, type: 'dispute_created', priority: body.priority === 'URGENT' ? 'urgent' : 'high', redirectUrl: '/admin/disputes' });
   const oppositeUserId = userId(req) === dispute.buyerId ? dispute.sellerId : dispute.buyerId;
@@ -364,7 +367,7 @@ router.get('/disputes/:id', authenticate, asyncRoute(async (req, res) => {
   ok(res, toDto(dispute));
 }));
 
-router.post('/disputes/:id/messages', authenticate, requireOrgPermission('DISPUTE_RESPOND'), asyncRoute(async (req, res) => {
+router.post('/disputes/:id/messages', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const body = messageSchema.parse(req.body);
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
@@ -389,12 +392,12 @@ router.post('/disputes/:id/messages', authenticate, requireOrgPermission('DISPUT
     }
     await (tx as any).dispute.update({ where: { id: dispute.id }, data: { status: internal ? dispute.status : 'RESPONDED', statusEnum: internal ? dispute.statusEnum : 'RESPONDED' } });
     return created;
-  });
+  }, { timeout: 15000 });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: internal ? 'dispute.internal_note_added' : 'dispute.message_added', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip });
   ok(res, { ...message, content: message.content || message.message }, 201);
 }));
 
-router.post('/disputes/:id/attachments', authenticate, requireOrgPermission('DISPUTE_RESPOND'), asyncRoute(async (req, res) => {
+router.post('/disputes/:id/attachments', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const { fileAssetIds } = z.object({ fileAssetIds: z.array(z.coerce.number().int().positive()).min(1) }).parse(req.body);
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
@@ -404,7 +407,7 @@ router.post('/disputes/:id/attachments', authenticate, requireOrgPermission('DIS
   ok(res, { success: true });
 }));
 
-router.post('/disputes/:id/respond-clarification', authenticate, requireOrgPermission('DISPUTE_RESPOND'), asyncRoute(async (req, res) => {
+router.post('/disputes/:id/respond-clarification', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const body = clarificationSchema.parse(req.body);
   req.body = { message: body.message };
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
@@ -416,7 +419,7 @@ router.post('/disputes/:id/respond-clarification', authenticate, requireOrgPermi
   ok(res, toDto(updated));
 }));
 
-router.post('/disputes/:id/close', authenticate, requireOrgPermission('DISPUTE_RESOLVE_ORG_SIDE'), asyncRoute(async (req, res) => {
+router.post('/disputes/:id/close', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
   ensureDisputeAccess(req, dispute);

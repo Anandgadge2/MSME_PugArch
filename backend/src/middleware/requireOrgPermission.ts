@@ -41,9 +41,9 @@ const ORG_PERMISSION_TO_RBAC: Partial<Record<OrgPermissionKey, string>> = {
   GRN_CREATE: 'grn.create',
   GRN_APPROVE: 'grn.approve',
   DISPUTE_VIEW: 'dispute.view',
-  DISPUTE_RAISE: 'dispute.manage',
-  DISPUTE_RESPOND: 'dispute.manage',
-  DISPUTE_RESOLVE_ORG_SIDE: 'dispute.manage',
+  DISPUTE_RAISE: 'dispute.view',
+  DISPUTE_RESPOND: 'dispute.view',
+  DISPUTE_RESOLVE_ORG_SIDE: 'dispute.view',
   REPORTS_VIEW: 'report.view',
   REPORTS_EXPORT: 'report.export'
 };
