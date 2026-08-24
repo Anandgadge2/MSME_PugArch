@@ -249,6 +249,10 @@ export default function ProcurementDraftsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [methodFilter, setMethodFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [valueFilter, setValueFilter] = useState('');
   const [activeKpi, setActiveKpi] = useState<string | null>(null);
 
   /* ── Data Loading ── */
@@ -373,6 +377,10 @@ export default function ProcurementDraftsPage() {
     };
   }, [allDrafts]);
 
+  const availableCategories = useMemo(() => {
+    return Array.from(new Set(allDrafts.map(d => d.categoryName).filter(Boolean))).sort();
+  }, [allDrafts]);
+
   const filteredDrafts = useMemo(() => {
     let list = [...allDrafts];
 
@@ -432,8 +440,41 @@ export default function ProcurementDraftsPage() {
       }
     }
 
+    if (categoryFilter) {
+      list = list.filter(d => d.categoryName === categoryFilter);
+    }
+
+    if (statusFilter) {
+      if (statusFilter === 'published') list = list.filter(d => d.isPublished);
+      else if (statusFilter === 'draft') list = list.filter(d => !d.isPublished);
+    }
+
+    if (dateFilter) {
+      const now = new Date();
+      list = list.filter(d => {
+        if (!d.updatedAt) return false;
+        const dt = new Date(d.updatedAt);
+        const diffDays = (now.getTime() - dt.getTime()) / (1000 * 3600 * 24);
+        if (dateFilter === 'today') return diffDays <= 1;
+        if (dateFilter === '7days') return diffDays <= 7;
+        if (dateFilter === '30days') return diffDays <= 30;
+        return true;
+      });
+    }
+
+    if (valueFilter) {
+      list = list.filter(d => {
+        const v = d.estimatedValue || 0;
+        if (valueFilter === 'under-1l') return v < 100000;
+        if (valueFilter === '1l-10l') return v >= 100000 && v <= 1000000;
+        if (valueFilter === '10l-50l') return v > 1000000 && v <= 5000000;
+        if (valueFilter === 'above-50l') return v > 5000000;
+        return true;
+      });
+    }
+
     return list;
-  }, [allDrafts, activeKpi, searchQuery, methodFilter, sourceFilter]);
+  }, [allDrafts, activeKpi, searchQuery, methodFilter, sourceFilter, categoryFilter, statusFilter, dateFilter, valueFilter]);
 
   const sortedDrafts = useMemo(() => {
     const sorted = [...filteredDrafts];
@@ -623,9 +664,9 @@ export default function ProcurementDraftsPage() {
       {/* Inline Filters Bar */}
       <div className="border-y border-slate-200 bg-slate-50/50 py-3 px-1">
         <ResponsiveFilterBar
-          activeFilterCount={(methodFilter ? 1 : 0) + (sourceFilter ? 1 : 0) + (activeKpi ? 1 : 0)}
+          activeFilterCount={(methodFilter ? 1 : 0) + (sourceFilter ? 1 : 0) + (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (dateFilter ? 1 : 0) + (valueFilter ? 1 : 0) + (activeKpi ? 1 : 0)}
           searchInput={
-            <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
+            <div className="relative min-w-0 w-full" style={{ flex: '2 1 250px' }}>
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
@@ -641,7 +682,8 @@ export default function ProcurementDraftsPage() {
               <select
                 value={methodFilter}
                 onChange={e => setMethodFilter(e.target.value)}
-                className="h-10 min-w-[160px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
+                style={{ flex: '1 1 120px' }}
               >
                 <option value="">All Types</option>
                 <option value="direct-purchase">Cart Checkout</option>
@@ -654,16 +696,65 @@ export default function ProcurementDraftsPage() {
               </select>
 
               <select
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
+                style={{ flex: '1 1 120px' }}
+              >
+                <option value="">All Categories</option>
+                {availableCategories.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
+                style={{ flex: '1 1 120px' }}
+              >
+                <option value="">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+              </select>
+
+              <select
                 value={sourceFilter}
                 onChange={e => setSourceFilter(e.target.value)}
-                className="h-10 min-w-[140px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
+                style={{ flex: '1 1 120px' }}
               >
                 <option value="">All Sources</option>
                 <option value="local">Local Drafts</option>
                 <option value="server">Server Drafts</option>
               </select>
 
-              {(searchQuery || methodFilter || sourceFilter || activeKpi) && (
+              <select
+                value={valueFilter}
+                onChange={e => setValueFilter(e.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
+                style={{ flex: '1 1 120px' }}
+              >
+                <option value="">All Values</option>
+                <option value="under-1l">Under ₹1 Lakh</option>
+                <option value="1l-10l">₹1L - ₹10L</option>
+                <option value="10l-50l">₹10L - ₹50L</option>
+                <option value="above-50l">Above ₹50L</option>
+              </select>
+
+              <select
+                value={dateFilter}
+                onChange={e => setDateFilter(e.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
+                style={{ flex: '1 1 120px' }}
+              >
+                <option value="">All Time</option>
+                <option value="today">Today</option>
+                <option value="7days">Last 7 Days</option>
+                <option value="30days">Last 30 Days</option>
+              </select>
+
+              {(searchQuery || methodFilter || sourceFilter || categoryFilter || statusFilter || dateFilter || valueFilter || activeKpi) && (
                 <Button
                   type="button"
                   variant="outline"
@@ -671,9 +762,13 @@ export default function ProcurementDraftsPage() {
                     setSearchQuery('');
                     setMethodFilter('');
                     setSourceFilter('');
+                    setCategoryFilter('');
+                    setStatusFilter('');
+                    setDateFilter('');
+                    setValueFilter('');
                     setActiveKpi(null);
                   }}
-                  className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50"
+                  className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50 min-w-[80px]"
                 >
                   Clear
                 </Button>
@@ -686,7 +781,7 @@ export default function ProcurementDraftsPage() {
         />
 
         {/* Active chips */}
-        {(searchQuery || methodFilter || sourceFilter || activeKpi) && (
+        {(searchQuery || methodFilter || sourceFilter || categoryFilter || statusFilter || dateFilter || valueFilter || activeKpi) && (
           <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3">
             <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Active:</span>
             {activeKpi && (
@@ -707,10 +802,34 @@ export default function ProcurementDraftsPage() {
                 <button onClick={() => setMethodFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
               </span>
             )}
+            {categoryFilter && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
+                Category: {categoryFilter}
+                <button onClick={() => setCategoryFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+              </span>
+            )}
+            {statusFilter && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
+                Status: {statusFilter === 'published' ? 'Published' : 'Draft'}
+                <button onClick={() => setStatusFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+              </span>
+            )}
             {sourceFilter && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
-                Source: {sourceFilter}
+                Source: {sourceFilter === 'local' ? 'Local Drafts' : 'Server Drafts'}
                 <button onClick={() => setSourceFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+              </span>
+            )}
+            {valueFilter && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
+                Value: {valueFilter === 'under-1l' ? 'Under ₹1L' : valueFilter === '1l-10l' ? '₹1L - ₹10L' : valueFilter === '10l-50l' ? '₹10L - ₹50L' : 'Above ₹50L'}
+                <button onClick={() => setValueFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+              </span>
+            )}
+            {dateFilter && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
+                Date: {dateFilter === 'today' ? 'Today' : dateFilter === '7days' ? 'Last 7 Days' : 'Last 30 Days'}
+                <button onClick={() => setDateFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
               </span>
             )}
           </div>
