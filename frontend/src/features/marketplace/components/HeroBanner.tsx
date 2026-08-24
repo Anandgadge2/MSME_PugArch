@@ -111,7 +111,7 @@ export function HeroBanner({ banners }: Props) {
             <button
                 type="button"
                 onClick={prev}
-                className="absolute left-2.5 sm:left-5 lg:left-8 top-1/2 -translate-y-1/2 z-30 flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all hover:scale-110 hover:border-white/60 hover:bg-black/75 active:scale-95 group/arrow focus:outline-none"
+                className="absolute left-2.5 sm:left-5 lg:left-8 top-1/2 -translate-y-1/2 z-30 flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-white/60 hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-100 md:opacity-0 md:group-hover/hero:opacity-100 focus:opacity-100"
                 aria-label="Previous Banner Slide"
             >
                 <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6 transition-transform duration-200 group-hover/arrow:-translate-x-0.5" />
@@ -121,7 +121,7 @@ export function HeroBanner({ banners }: Props) {
             <button
                 type="button"
                 onClick={next}
-                className="absolute right-2.5 sm:right-5 lg:right-8 top-1/2 -translate-y-1/2 z-30 flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all hover:scale-110 hover:border-white/60 hover:bg-black/75 active:scale-95 group/arrow focus:outline-none"
+                className="absolute right-2.5 sm:right-5 lg:right-8 top-1/2 -translate-y-1/2 z-30 flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-white/60 hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-100 md:opacity-0 md:group-hover/hero:opacity-100 focus:opacity-100"
                 aria-label="Next Banner Slide"
             >
                 <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6 transition-transform duration-200 group-hover/arrow:translate-x-0.5" />
