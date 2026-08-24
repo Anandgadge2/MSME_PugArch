@@ -224,6 +224,14 @@ const networkErrorResponse = (error: unknown) => {
 };
 
 const clearApiCache = (matcher?: string) => {
+  if (typeof window !== 'undefined') {
+    if (!matcher || matcher.includes('my-procurements') || matcher.includes('/procurement') || matcher.includes('requirements')) {
+      try {
+        sessionStorage.removeItem('buyer_my_procurements_cached_data_v1');
+        localStorage.removeItem('buyer_my_procurements_cached_data_v1');
+      } catch {}
+    }
+  }
   if (!matcher) {
     getCache.clear();
     return;
@@ -305,7 +313,10 @@ const invalidatePrefixFor = (endpoint: string) => {
   if (
     cleanPrefix.startsWith('/api/marketplace/requirements') ||
     cleanPrefix.startsWith('/api/buyer/procurement-bids') ||
-    cleanPrefix.startsWith('/api/procurement-bids')
+    cleanPrefix.startsWith('/api/procurement-bids') ||
+    cleanPrefix.startsWith('/api/procurement') ||
+    cleanPrefix.startsWith('/api/buyer/requirements') ||
+    cleanPrefix.startsWith('/api/buyer/my-procurements')
   ) {
     prefixesToInvalidate.add('/api/marketplace/requirements');
     prefixesToInvalidate.add('/api/buyer/procurement-bids');

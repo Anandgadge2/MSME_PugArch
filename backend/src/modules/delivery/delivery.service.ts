@@ -1622,28 +1622,42 @@ export const deliveryService = {
       throw new ApiError(400, 'Invalid Delivery OTP code. Please double-check and try again.', 'OTP_INVALID');
     }
 
-    const updated = await db.deliveryTracking.update({
-      where: { id },
-      data: {
-        deliveryOtpVerifiedAt: new Date(),
-        deliveryOtpHash: null,
-        deliveryOtpExpiresAt: null
-      }
-    });
+    const updated = await db.$transaction(async tx => {
+      const isPreDeliveryStatus = ['CREATED', 'ACCEPTED_BY_SELLER', 'PACKED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP', 'DELIVERY_CONFIRMATION_PENDING'].includes(delivery.status);
+      const targetStatus: DeliveryStatus = isPreDeliveryStatus ? 'DELIVERED' : delivery.status;
 
-    await db.deliveryStatusLog.create({
-      data: {
-        deliveryTrackingId: id,
-        previousStatus: delivery.status,
-        newStatus: delivery.status,
-        changedById: actor.id,
-        actorRole: actor.role,
-        remarks: 'Delivery physical receipt verified via 6-digit Email OTP'
+      const res = await tx.deliveryTracking.update({
+        where: { id },
+        data: {
+          deliveryOtpVerifiedAt: new Date(),
+          deliveryOtpHash: null,
+          deliveryOtpExpiresAt: null,
+          ...(isPreDeliveryStatus ? { status: 'DELIVERED', actualDelivery: new Date() } : {})
+        }
+      });
+
+      if (isPreDeliveryStatus) {
+        await transitionStatus(tx, delivery, 'DELIVERED', actor, {
+          remarks: 'Delivery physical receipt verified via 6-digit Email OTP'
+        }).catch(() => undefined);
+      } else {
+        await tx.deliveryStatusLog.create({
+          data: {
+            deliveryTrackingId: id,
+            previousStatus: delivery.status,
+            newStatus: targetStatus,
+            changedById: actor.id,
+            actorRole: actor.role,
+            remarks: 'Delivery physical receipt verified via 6-digit Email OTP'
+          }
+        });
       }
-    });
+
+      return res;
+    }, TX_OPTIONS);
 
     void safeAudit(actor, 'delivery.otp_verified', 'deliveryTracking', id);
-    void notifyOrderParties(delivery, delivery.status, actor, 'Delivery OTP successfully verified!');
+    void notifyOrderParties(delivery, 'DELIVERED', actor, 'Delivery OTP successfully verified! Status updated to Delivered.');
     return updated;
   },
 
