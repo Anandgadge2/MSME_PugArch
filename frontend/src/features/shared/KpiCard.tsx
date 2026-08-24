@@ -45,109 +45,109 @@ export interface KpiCardProps {
 
 const TONES: Record<string, { bg: string; iconBg: string; text: string; shadow: string }> = {
   blue: {
-    bg: 'from-sky-500/5 via-indigo-500/5 to-transparent border-sky-200/60',
+    bg: 'from-sky-100/80 via-indigo-50/50 to-transparent border-sky-200/60',
     iconBg: 'bg-gradient-to-br from-[#12335f] to-indigo-700 text-white shadow-indigo-500/25',
     text: 'text-[#12335f]',
     shadow: 'hover:shadow-indigo-500/10'
   },
   sky: {
-    bg: 'from-sky-500/5 via-blue-500/5 to-transparent border-sky-200/60',
+    bg: 'from-sky-100/80 via-blue-50/50 to-transparent border-sky-200/60',
     iconBg: 'bg-gradient-to-br from-sky-600 to-blue-700 text-white shadow-sky-500/25',
     text: 'text-sky-700',
     shadow: 'hover:shadow-sky-500/10'
   },
   green: {
-    bg: 'from-emerald-500/5 via-teal-500/5 to-transparent border-emerald-200/60',
+    bg: 'from-emerald-100/80 via-teal-50/50 to-transparent border-emerald-200/60',
     iconBg: 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-emerald-500/25',
     text: 'text-emerald-700',
     shadow: 'hover:shadow-emerald-500/10'
   },
   emerald: {
-    bg: 'from-emerald-500/5 via-teal-500/5 to-transparent border-emerald-200/60',
+    bg: 'from-emerald-100/80 via-teal-50/50 to-transparent border-emerald-200/60',
     iconBg: 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-emerald-500/25',
     text: 'text-emerald-700',
     shadow: 'hover:shadow-emerald-500/10'
   },
   positive: {
-    bg: 'from-emerald-500/5 via-teal-500/5 to-transparent border-emerald-200/60',
+    bg: 'from-emerald-100/80 via-teal-50/50 to-transparent border-emerald-200/60',
     iconBg: 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-emerald-500/25',
     text: 'text-emerald-700',
     shadow: 'hover:shadow-emerald-500/10'
   },
   amber: {
-    bg: 'from-amber-500/5 via-orange-500/5 to-transparent border-amber-200/60',
+    bg: 'from-amber-100/80 via-orange-50/50 to-transparent border-amber-200/60',
     iconBg: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-amber-500/25',
     text: 'text-amber-700',
     shadow: 'hover:shadow-amber-500/10'
   },
   orange: {
-    bg: 'from-orange-500/5 via-amber-500/5 to-transparent border-orange-200/60',
+    bg: 'from-orange-100/80 via-amber-50/50 to-transparent border-orange-200/60',
     iconBg: 'bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-orange-500/25',
     text: 'text-orange-700',
     shadow: 'hover:shadow-orange-500/10'
   },
   warning: {
-    bg: 'from-amber-500/5 via-orange-500/5 to-transparent border-amber-200/60',
+    bg: 'from-amber-100/80 via-orange-50/50 to-transparent border-amber-200/60',
     iconBg: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-amber-500/25',
     text: 'text-amber-700',
     shadow: 'hover:shadow-amber-500/10'
   },
   red: {
-    bg: 'from-rose-500/5 via-red-500/5 to-transparent border-rose-200/60',
+    bg: 'from-rose-100/80 via-red-50/50 to-transparent border-rose-200/60',
     iconBg: 'bg-gradient-to-br from-rose-600 to-red-700 text-white shadow-rose-500/25',
     text: 'text-rose-700',
     shadow: 'hover:shadow-rose-500/10'
   },
   negative: {
-    bg: 'from-rose-500/5 via-red-500/5 to-transparent border-rose-200/60',
+    bg: 'from-rose-100/80 via-red-50/50 to-transparent border-rose-200/60',
     iconBg: 'bg-gradient-to-br from-rose-600 to-red-700 text-white shadow-rose-500/25',
     text: 'text-rose-700',
     shadow: 'hover:shadow-rose-500/10'
   },
   rose: {
-    bg: 'from-rose-500/5 via-red-500/5 to-transparent border-rose-200/60',
+    bg: 'from-rose-100/80 via-red-50/50 to-transparent border-rose-200/60',
     iconBg: 'bg-gradient-to-br from-rose-600 to-red-700 text-white shadow-rose-500/25',
     text: 'text-rose-700',
     shadow: 'hover:shadow-rose-500/10'
   },
   purple: {
-    bg: 'from-purple-500/5 via-violet-500/5 to-transparent border-purple-200/60',
+    bg: 'from-purple-100/80 via-violet-50/50 to-transparent border-purple-200/60',
     iconBg: 'bg-gradient-to-br from-purple-600 to-indigo-700 text-white shadow-purple-500/25',
     text: 'text-purple-700',
     shadow: 'hover:shadow-purple-500/10'
   },
   indigo: {
-    bg: 'from-indigo-500/5 via-blue-500/5 to-transparent border-indigo-200/60',
+    bg: 'from-indigo-100/80 via-blue-50/50 to-transparent border-indigo-200/60',
     iconBg: 'bg-gradient-to-br from-indigo-600 to-blue-700 text-white shadow-indigo-500/25',
     text: 'text-indigo-700',
     shadow: 'hover:shadow-indigo-500/10'
   },
   slate: {
-    bg: 'from-slate-500/5 via-slate-400/5 to-transparent border-slate-200/80',
+    bg: 'from-slate-100/80 via-slate-50/50 to-transparent border-slate-200/80',
     iconBg: 'bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-slate-500/25',
     text: 'text-slate-700',
     shadow: 'hover:shadow-slate-500/10'
   },
   neutral: {
-    bg: 'from-slate-500/5 via-slate-400/5 to-transparent border-slate-200/80',
+    bg: 'from-slate-100/80 via-slate-50/50 to-transparent border-slate-200/80',
     iconBg: 'bg-gradient-to-br from-[#12335f] to-slate-800 text-white shadow-slate-500/25',
     text: 'text-[#12335f]',
     shadow: 'hover:shadow-slate-500/10'
   },
   cyan: {
-    bg: 'from-cyan-500/5 via-sky-500/5 to-transparent border-cyan-200/60',
+    bg: 'from-cyan-100/80 via-sky-50/50 to-transparent border-cyan-200/60',
     iconBg: 'bg-gradient-to-br from-cyan-600 to-sky-700 text-white shadow-cyan-500/25',
     text: 'text-cyan-700',
     shadow: 'hover:shadow-cyan-500/10'
   },
   teal: {
-    bg: 'from-teal-500/5 via-emerald-500/5 to-transparent border-teal-200/60',
+    bg: 'from-teal-100/80 via-emerald-50/50 to-transparent border-teal-200/60',
     iconBg: 'bg-gradient-to-br from-teal-600 to-emerald-700 text-white shadow-teal-500/25',
     text: 'text-teal-700',
     shadow: 'hover:shadow-teal-500/10'
   },
   info: {
-    bg: 'from-sky-500/5 via-indigo-500/5 to-transparent border-sky-200/60',
+    bg: 'from-sky-100/80 via-indigo-50/50 to-transparent border-sky-200/60',
     iconBg: 'bg-gradient-to-br from-sky-600 to-indigo-700 text-white shadow-sky-500/25',
     text: 'text-sky-700',
     shadow: 'hover:shadow-sky-500/10'
@@ -218,7 +218,7 @@ function KpiCardBase({
       aria-pressed={interactive ? Boolean(isCardActive) : undefined}
       aria-label={interactive ? ariaLabel || `Filter by ${label}` : undefined}
       className={cn(
-        'group relative w-full text-left overflow-hidden rounded-xl sm:rounded-2xl border bg-gradient-to-br p-2.5 sm:p-4 shadow-sm backdrop-blur-sm transition-all duration-300',
+        'group relative w-full text-left overflow-hidden rounded-xl sm:rounded-2xl border bg-gradient-to-br px-3 py-2.5 sm:px-4 sm:py-3 shadow-sm backdrop-blur-sm transition-all duration-300',
         interactive && 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#12335f]/30',
         isCardActive
           ? 'border-[#12335f] shadow-md ring-2 ring-[#12335f]/20 bg-white'
@@ -231,7 +231,7 @@ function KpiCardBase({
       <div className="flex items-start justify-between gap-1.5 sm:gap-2.5">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
-            <p className="text-[8.5px] sm:text-[10px] lg:text-xs font-black uppercase tracking-wider text-slate-500 truncate leading-tight">
+            <p className="text-[8.5px] sm:text-[10px] lg:text-[11px] font-black uppercase tracking-wider text-slate-500 truncate leading-tight">
               {label}
             </p>
             {badge && (
@@ -240,14 +240,14 @@ function KpiCardBase({
               </span>
             )}
           </div>
-          <div className={cn('mt-0.5 sm:mt-1 text-base sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight truncate', loading ? 'text-slate-300 animate-pulse' : 'text-slate-900')}>
+          <div className={cn('mt-0.5 text-base sm:text-2xl font-black tracking-tight leading-none truncate', loading ? 'text-slate-300 animate-pulse' : 'text-slate-900')}>
             {formattedValue}
           </div>
         </div>
         {Icon && (
           <div
             className={cn(
-              'flex h-7 w-7 sm:h-10 sm:w-10 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-lg sm:rounded-xl shadow-xs sm:shadow-md transition-transform duration-300 group-hover:scale-105',
+              'flex h-7 w-7 sm:h-9 sm:w-9 lg:h-10 lg:w-10 shrink-0 items-center justify-center rounded-lg sm:rounded-xl shadow-xs sm:shadow-md transition-transform duration-300 group-hover:scale-105',
               currentTone.iconBg
             )}
           >
@@ -256,9 +256,9 @@ function KpiCardBase({
         )}
       </div>
       {displaySubtext && (
-        <div className="mt-1.5 sm:mt-3 flex items-center gap-1 sm:gap-1.5 border-t border-slate-100/90 pt-1.5 sm:pt-2.5">
+        <div className="mt-2 flex items-center gap-1 sm:gap-1.5 border-t border-slate-100/90 pt-2">
           <span className="h-1 w-1 sm:h-1.5 sm:w-1.5 shrink-0 rounded-full bg-slate-400 animate-pulse" />
-          <div className="text-[9px] sm:text-[11px] lg:text-xs font-semibold text-slate-500 truncate">{displaySubtext}</div>
+          <div className="text-[9px] sm:text-[10.5px] lg:text-[11px] font-semibold text-slate-500 truncate">{displaySubtext}</div>
         </div>
       )}
     </Element>

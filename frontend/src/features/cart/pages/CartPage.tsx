@@ -1,12 +1,12 @@
 /**
- * CartPage — organisation-level shopping cart.
- *
- * Route: /cart
- * Access: any org member except VIEWER
- *
- * Active cart shows current items. Buttons: Update qty, Remove, Submit for Approval.
- * If cart is in another state (submitted/approved/rejected), shows status with timeline.
- */
+* CartPage — organisation-level shopping cart.
+*
+* Route: /cart
+* Access: any org member except VIEWER
+*
+* Active cart shows current items. Buttons: Update qty, Remove, Submit for Approval.
+* If cart is in another state (submitted/approved/rejected), shows status with timeline.
+*/
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Clock, History, Minus, Plus, RefreshCw, Send, ShoppingCart, Store, Trash2, X, XCircle } from 'lucide-react';
@@ -20,6 +20,7 @@ import { cn } from '../../../lib/utils';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
+import { KpiCard } from '../../shared/KpiCard';
 import { runWithToast } from '../../../lib/toast';
 import {
     useActiveCart,
@@ -162,10 +163,10 @@ export default function CartPage() {
 
             {/* Metrics */}
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <Metric label="Status" value={(cart?.status || 'ACTIVE').replace(/_/g, ' ')} icon={ShoppingCart} />
-                <Metric label="Line Items" value={totals.lineCount} icon={ShoppingCart} />
-                <Metric label="Sellers" value={totals.sellerCount} icon={Store} />
-                <Metric label="Total Value" value={formatCurrency(totals.total)} icon={ShoppingCart} />
+                <KpiCard label="Status" value={(cart?.status || 'ACTIVE').replace(/_/g, ' ')} icon={ShoppingCart} tone="blue" subtext="Current lifecycle state" />
+                <KpiCard label="Line Items" value={totals.lineCount} icon={ShoppingCart} tone="purple" subtext="Unique products/services" />
+                <KpiCard label="Sellers" value={totals.sellerCount} icon={Store} tone="green" subtext="Supplying vendors" />
+                <KpiCard label="Total Value" value={formatCurrency(totals.total)} icon={ShoppingCart} tone="amber" subtext="Estimated total value" />
             </div>
 
             {/* Status banners */}
@@ -539,22 +540,6 @@ function RejectCartModal({ cartId, onClose, onSubmit, pending }: { cartId: numbe
                 </div>
             </div>
         </div>
-    );
-}
-
-function Metric({ label, value, icon: Icon }: { label: string; value: string | number; icon: any }) {
-    return (
-        <Card>
-            <CardContent className="flex items-center justify-between p-4">
-                <div className="min-w-0">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-                    <p className="mt-1 text-base font-black text-slate-950 text-wrap-anywhere">{value}</p>
-                </div>
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#12335f] text-white">
-                    <Icon className="h-5 w-5" />
-                </div>
-            </CardContent>
-        </Card>
     );
 }
 
