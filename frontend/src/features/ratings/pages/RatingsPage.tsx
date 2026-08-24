@@ -5,7 +5,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { MessageSquareText, RefreshCw, Search, Star, ThumbsUp, TrendingUp } from 'lucide-react';
+import { MessageSquareText, RefreshCw, Search, Star, ThumbsUp, TrendingUp, BarChart3 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
@@ -257,44 +257,13 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
 
 function InsightTile({ label, value, hint }: { label: string; value: string | number; hint: string }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-        <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
-        <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">{hint}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  icon,
-  loading
-}: {
-  label: string;
-  value: string | number;
-  icon: 'star' | 'trend' | 'msg' | 'thumbs';
-  loading?: boolean;
-}) {
-  const Icon =
-    icon === 'star' ? Star
-      : icon === 'trend' ? TrendingUp
-        : icon === 'msg' ? MessageSquareText
-          : ThumbsUp;
-  return (
-    <Card>
-      <CardContent className="flex items-center justify-between p-4">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-          <p className={`mt-1 text-lg font-black ${loading ? 'text-slate-300' : 'text-slate-950'}`}>{loading ? "0" : value}</p>
-        </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 text-[#12335f]">
-          <Icon className="h-5 w-5" />
-        </div>
-      </CardContent>
-    </Card>
+    <KpiCard
+      label={label}
+      value={value}
+      subtext={hint}
+      tone="slate"
+      icon={BarChart3}
+    />
   );
 }
 

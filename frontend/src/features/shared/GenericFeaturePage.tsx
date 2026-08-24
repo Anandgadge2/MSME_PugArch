@@ -9,6 +9,7 @@ import { EmptyState, InlineError, LoadingState } from './FeatureStates';
 import { Pagination } from './Pagination';
 import { EntityIdLink } from './EntityIdLink';
 import { ViewModeToggle } from './ViewModeToggle';
+import { KpiCard } from './KpiCard';
 import { formatCurrency, formatDate } from './format';
 import { usePaginatedFeatureQuery, useResponsiveViewMode } from './hooks';
 import { SortableHeader, type SortDirection } from './SortableHeader';
@@ -184,10 +185,10 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
         </div>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
-        <Metric label="Records" value={filtered.length} icon={ClipboardList} />
-        <Metric label="Pending Action" value={pendingCount} icon={CalendarDays} />
-        <Metric label="Tracked Value" value={formatCurrency(totalValue)} icon={IndianRupee} />
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3">
+        <Metric label="Records" value={filtered.length} subtext="Total matching records" icon={ClipboardList} />
+        <Metric label="Pending Action" value={pendingCount} subtext="Requires workflow review" icon={CalendarDays} />
+        <Metric label="Tracked Value" value={formatCurrency(totalValue)} subtext="Cumulative financial volume" icon={IndianRupee} />
       </div>
 
       {error && <InlineError message={error} onRetry={reload} />}
@@ -605,18 +606,15 @@ function GenericEditModal({ title, endpoint, record, saving, onClose, onSubmit }
 }
 
 
-function Metric({ label, value, icon: Icon }: { label: string; value: string | number; icon: ComponentType<{ className?: string }> }) {
+function Metric({ label, value, icon: Icon, subtext }: { label: string; value: string | number; icon: ComponentType<{ className?: string }>; subtext?: string }) {
+  const tone = label.toLowerCase().includes('pending') ? 'amber' : label.toLowerCase().includes('value') ? 'indigo' : 'blue';
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-          <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
-        </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 text-[#12335f]">
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </div>
+    <KpiCard
+      label={label}
+      value={value}
+      subtext={subtext || (label.toLowerCase().includes('pending') ? 'Awaiting action' : label.toLowerCase().includes('value') ? 'Cumulative value' : 'Total recorded items')}
+      icon={Icon}
+      tone={tone}
+    />
   );
 }

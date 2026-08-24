@@ -33,6 +33,7 @@ import {
   Package,
   Award,
   Trash2,
+  Tag,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -43,6 +44,7 @@ import { cn } from '../../../lib/utils';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
+import { KpiCard } from '../../shared/KpiCard';
 import ClarificationPanel from './ClarificationPanel';
 import { EmdCard, EmdInfo, isEmdApplicable } from './EmdCard';
 import { EmdPaymentModal } from './EmdPaymentModal';
@@ -472,24 +474,22 @@ function MetricCard({
   value,
   icon: Icon,
   tone,
+  subtext,
 }: {
   label: string;
   value: React.ReactNode;
   icon: IconComponent;
   tone: Tone;
+  subtext?: string;
 }) {
-  const styles = toneStyles[tone] || toneStyles.slate;
-
   return (
-    <article className={cn('rounded-xl border p-3.5 shadow-2xs flex flex-col justify-between transition-all hover:shadow-xs', styles.card)}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 truncate">{label}</p>
-        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-2xs', styles.icon)}>
-          <Icon className="h-3.5 w-3.5" />
-        </span>
-      </div>
-      <div className={cn('mt-2 text-sm font-black tracking-tight break-words leading-tight', styles.text)}>{value}</div>
-    </article>
+    <KpiCard
+      label={label}
+      value={value as any}
+      icon={Icon}
+      tone={tone as any}
+      subtext={subtext || 'Procurement details'}
+    />
   );
 }
 
@@ -1871,7 +1871,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   const buyerContactDisplay = buyerPhoneNum ? `${buyerContactPerson} (${buyerPhoneNum})` : buyerContactPerson;
 
   const summaryCards = [
-    { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: 'slate' as Tone },
+    { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: 'slate' as Tone, subtext: 'Current lifecycle state' },
     {
       label: 'Submission Deadline',
       value: (
@@ -1886,12 +1886,13 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
       ),
       icon: Clock,
       tone: 'rose' as Tone,
+      subtext: 'Bidding window closing'
     },
-    { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone },
+    { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' },
     // { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
-    { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactDisplay, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone },
-    { label: 'Evaluation', value: formatPrimitiveValue(props.evaluationMethod || 'L1', 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone },
-    ...(isBuyerOrAdmin ? [{ label: 'Responses', value: Math.max(props.participantsCount || 0, submittedParticipations.length).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone }] : []),
+    { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactDisplay, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: 'Procurement officer' },
+    { label: 'Evaluation', value: formatPrimitiveValue(props.evaluationMethod || 'L1', 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone, subtext: 'Selection criteria' },
+    ...(isBuyerOrAdmin ? [{ label: 'Responses', value: Math.max(props.participantsCount || 0, submittedParticipations.length).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone, subtext: 'Proposals submitted' }] : []),
   ];
 
   const tabs = [
@@ -2775,25 +2776,35 @@ export function SellerQuotationReviewModal({
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
           {/* Top Metric Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-1">
-              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">Total Quoted Value</p>
-              <p className="text-lg font-black text-emerald-950">
-                {quotedAmount > 0 ? `₹${quotedAmount.toLocaleString('en-IN')}` : 'Sealed / Rates On File'}
-              </p>
-            </div>
-            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3.5 space-y-1">
-              <p className="text-[10px] font-black uppercase tracking-wider text-blue-800">Offered Quantity</p>
-              <p className="text-sm font-black text-blue-950">{offeredQty}</p>
-            </div>
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3.5 space-y-1">
-              <p className="text-[10px] font-black uppercase tracking-wider text-indigo-800">Delivery Timeline</p>
-              <p className="text-sm font-black text-indigo-950">{deliveryTimeline}</p>
-            </div>
-            <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3.5 space-y-1">
-              <p className="text-[10px] font-black uppercase tracking-wider text-purple-800">Brand / Make Offered</p>
-              <p className="text-sm font-black text-purple-950 truncate">{makeBrand}</p>
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3">
+            <KpiCard
+              label="Total Quoted Value"
+              value={quotedAmount > 0 ? `₹${quotedAmount.toLocaleString('en-IN')}` : 'Sealed / Rates On File'}
+              subtext="Supplier price quotation"
+              icon={IndianRupee}
+              tone="green"
+            />
+            <KpiCard
+              label="Offered Quantity"
+              value={offeredQty}
+              subtext="Committed supply batch"
+              icon={Package}
+              tone="blue"
+            />
+            <KpiCard
+              label="Delivery Timeline"
+              value={deliveryTimeline}
+              subtext="Promised fulfillment SLA"
+              icon={Clock}
+              tone="indigo"
+            />
+            <KpiCard
+              label="Brand / Make Offered"
+              value={makeBrand}
+              subtext="Product specifications"
+              icon={Tag}
+              tone="purple"
+            />
           </div>
 
           {/* Supplier & Commercial Info */}

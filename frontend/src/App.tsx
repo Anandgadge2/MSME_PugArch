@@ -736,6 +736,7 @@ export default function App() {
     if (pathname === '/admin/messages' && roleOk(user.role, ['admin'])) return <MessagesPage />;
     if (pathname === '/buyer/ratings' && roleOk(user.role, ['buyer'])) return <RatingsPage endpoint={`/api/ratings/buyer/${user.id}`} mode="buyer" />;
     if (pathname === '/payments' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
+    if (pathname === '/payments/payment-status' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
     if (pathname === '/payments/transactions' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
     if (pathname === '/payments/invoices' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <InvoiceRegisterPage role={user.role === 'admin' ? 'admin' : user.role === 'seller' ? 'seller' : 'buyer'} />;
     if (pathname === '/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <EscrowPage />;

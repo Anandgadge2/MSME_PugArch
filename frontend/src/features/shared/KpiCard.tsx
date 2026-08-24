@@ -189,7 +189,7 @@ function KpiCardBase({
   const currentTone = TONES[toneKey] || TONES.blue;
   const isCardActive = active ?? isActive ?? false;
   const interactive = typeof onClick === 'function';
-  const displaySubtext = subtext || hint || helper || change || description;
+  const displaySubtext = subtext || hint || helper || change || description || `${label} status`;
 
   const formattedValue = React.useMemo(() => {
     if (loading) return '...';
@@ -255,12 +255,10 @@ function KpiCardBase({
           </div>
         )}
       </div>
-      {displaySubtext && (
-        <div className="mt-2 flex items-center gap-1 sm:gap-1.5 border-t border-slate-100/90 pt-2">
-          <span className="h-1 w-1 sm:h-1.5 sm:w-1.5 shrink-0 rounded-full bg-slate-400 animate-pulse" />
-          <div className="text-[9px] sm:text-[10.5px] lg:text-[11px] font-semibold text-slate-500 truncate">{displaySubtext}</div>
-        </div>
-      )}
+      <div className="mt-1.5 sm:mt-3 flex items-center gap-1 sm:gap-1.5 border-t border-slate-100/90 pt-1.5 sm:pt-2.5">
+        <span className="h-1 w-1 sm:h-1.5 sm:w-1.5 shrink-0 rounded-full bg-slate-400 animate-pulse" />
+        <div className="text-[9px] sm:text-[11px] lg:text-xs font-semibold text-slate-500 truncate">{displaySubtext}</div>
+      </div>
     </Element>
   );
 }

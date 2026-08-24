@@ -177,12 +177,12 @@ export default function ProcurementReportPage() {
                         {/* Overview Tab — existing stats + tender comparison */}
                         {activeTab === 'overview' && data && (
                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-5">
-                                    <KpiCard label="Requirements" value={data.requirements} icon={ClipboardCheck} tone="amber" />
-                                    <KpiCard label="Tenders" value={data.tenders} icon={FileText} tone="blue" />
-                                    <KpiCard label="Direct Purchases" value={data.directPurchases} icon={ShoppingCart} tone="emerald" />
-                                    <KpiCard label="Quote Requests" value={data.quoteRequests} icon={FileText} tone="purple" />
-                                    <KpiCard label="Purchase Orders" value={data.purchaseOrders} icon={Truck} tone="indigo" />
+                                <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                                    <KpiCard label="Requirements" value={data.requirements} subtext="Logged buyer needs" icon={ClipboardCheck} tone="amber" />
+                                    <KpiCard label="Tenders" value={data.tenders} subtext="Competitive bidding items" icon={FileText} tone="blue" />
+                                    <KpiCard label="Direct Purchases" value={data.directPurchases} subtext="1-click marketplace orders" icon={ShoppingCart} tone="emerald" />
+                                    <KpiCard label="Quote Requests" value={data.quoteRequests} subtext="RFQ/RFP sourcing requests" icon={FileText} tone="purple" />
+                                    <KpiCard label="Purchase Orders" value={data.purchaseOrders} subtext="Issued buyer contracts" icon={Truck} tone="indigo" />
                                 </div>
                                 {methodWise.data?.tenderComparison && (
                                     <Card>
