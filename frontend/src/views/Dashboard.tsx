@@ -625,7 +625,7 @@ export default function Dashboard() {
           />
         </div>
 
-        <AIInsightBox dashboardData={dashboardData} />
+        {/* <AIInsightBox dashboardData={dashboardData} /> */}
 
         <div className="grid gap-3 xl:grid-cols-[1.35fr_0.65fr]">
           <section className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70">
@@ -808,7 +808,7 @@ export default function Dashboard() {
           </Card>
         )}
 
-        <AIInsightBox dashboardData={dashboardData} />
+        {/* <AIInsightBox dashboardData={dashboardData} /> */}
 
         <PromotionEligibilityCard eligibility={bannerEligibility} isLoading={isBannerEligibilityLoading} />
 
