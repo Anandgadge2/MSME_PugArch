@@ -181,7 +181,7 @@ export default function MarketplaceHome() {
     });
 
     return (
-        <div className="flex min-h-dvh flex-col overflow-x-hidden bg-[radial-gradient(circle_at_top,#eef5ff_0,#f6f8fb_36%,#eef2f7_100%)] text-slate-800">
+        <div className="flex min-h-dvh flex-col overflow-x-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/60 via-slate-50 to-slate-100/80 text-slate-800">
             <main className="flex-1 overflow-x-hidden">
                 <MarketplaceNav categories={categories} />
                 <HeroBanner banners={activeBannerData?.banners?.length ? activeBannerData.banners : (data?.banners || [])} />

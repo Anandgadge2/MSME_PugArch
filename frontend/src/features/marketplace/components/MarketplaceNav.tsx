@@ -203,8 +203,8 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                     
                     {activeDropdown === 'buyer' && (
                         <div className="absolute top-full left-0 mt-0 w-60 rounded-xl border border-slate-200 bg-white shadow-xl p-2 animate-in fade-in slide-in-from-top-2">
-                            <Link href="/marketplace/categories" onClick={handleLinkClick} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0b2447] transition-colors">
-                                <Layers className="h-4 w-4 text-slate-400" /> Categories
+                            <Link href="/marketplace/products" onClick={handleLinkClick} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0b2447] transition-colors">
+                                <Layers className="h-4 w-4 text-slate-400" /> All Categories
                             </Link>
                             <Link href="/#verified-sellers" onClick={(e) => handleAnchorClick(e, 'verified-sellers')} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0b2447] transition-colors">
                                 <Users className="h-4 w-4 text-slate-400" /> Verified Partners
@@ -268,11 +268,11 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                             </div>
                             <div className="mt-8 pt-4 border-t border-slate-100 flex justify-end">
                                 <Link 
-                                    href="/marketplace/categories" 
+                                    href="/marketplace/products" 
                                     onClick={handleLinkClick}
                                     className="text-xs font-black text-[#0b2447] hover:underline flex items-center gap-1"
                                 >
-                                    View All Categories &rarr;
+                                    Browse All Categories & Products &rarr;
                                 </Link>
                             </div>
                         </div>

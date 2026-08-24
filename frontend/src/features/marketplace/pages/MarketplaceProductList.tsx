@@ -17,7 +17,7 @@ import { SortableHeader, type SortDirection } from '../../shared/SortableHeader'
 import { useDebounce } from '../../../hooks/useDebounce';
 import { CompareToggleButton } from '../components/CompareToggleButton';
 import { CompareTray } from '../components/CompareTray';
-import { CategoryCatalogueStrip } from '../components/CategoryCatalogueStrip';
+import { CategoryHorizontalBar } from '../components/CategoryHorizontalBar';
 import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { cn } from '../../../lib/utils';
@@ -906,22 +906,27 @@ export default function MarketplaceProductList() {
                         </div>
                     </div>
 
-                    {/* Category Strip Carousel on Top (with multi-select toggle) */}
-                    <div className="mb-6 rounded-2xl bg-white p-2 shadow-sm border border-slate-200/80">
-                        <CategoryCatalogueStrip
+                    {/* Single Row Horizontal Category Strip */}
+                    <div className="mb-6">
+                        <CategoryHorizontalBar
                             categories={categories.filter((c: any) => isServices ? ['SERVICE', 'BOTH'].includes(c.type) : ['PRODUCT', 'BOTH'].includes(c.type))}
-                            selectedCategoryId={selectedCategoryIds[0] || ''}
-                            onSelect={(category) => {
-                                const catIdStr = String(category.id);
+                            selectedCategoryId={selectedCategoryIds.length === 1 ? selectedCategoryIds[0] : null}
+                            selectedCategoryIds={selectedCategoryIds}
+                            onSelectCategory={(catIdStr) => {
                                 let next: string[];
                                 if (selectedCategoryIds.includes(catIdStr)) {
                                     next = selectedCategoryIds.filter(id => id !== catIdStr);
                                 } else {
-                                    next = [...selectedCategoryIds, catIdStr];
+                                    next = [catIdStr];
                                 }
                                 setSelectedCategoryIds(next);
                                 setPage(1);
                                 syncUrl({ categoryId: next.join(','), page: 1 });
+                            }}
+                            onClearCategory={() => {
+                                setSelectedCategoryIds([]);
+                                setPage(1);
+                                syncUrl({ categoryId: '', page: 1 });
                             }}
                         />
                     </div>

@@ -17,7 +17,6 @@ import ForgotPassword from './views/ForgotPassword';
 // stream chunks per route so navigation only downloads what the user needs.
 const MarketplaceProductList = lazy(() => import('./features/marketplace/pages/MarketplaceProductList'));
 const MarketplaceHome = lazy(() => import('./features/marketplace/pages/MarketplaceHome'));
-const MarketplaceCategoriesPage = lazy(() => import('./features/marketplace/pages/MarketplaceCategoriesPage'));
 const Dashboard = lazy(() => import('./views/Dashboard'));
 const MarketplaceProductDetail = lazy(() => import('./features/marketplace/pages/MarketplaceProductDetail'));
 const MarketplaceServiceDetail = lazy(() => import('./features/marketplace/pages/MarketplaceServiceDetail'));
@@ -561,7 +560,7 @@ export default function App() {
       if (roleRestricted) return <Redirect to={authenticatedHome} />;
     }
     // Public marketplace routes (accessible without login)
-    if (pathname === '/marketplace/categories') return <MarketplaceCategoriesPage />;
+    if (pathname === '/marketplace/categories') return <Redirect to="/marketplace/products" />;
     if (pathname === '/marketplace/products') return <MarketplaceProductList />;
     if (pathname === '/marketplace/services') return <MarketplaceProductList />;
     if (pathname === '/marketplace/sellers') return <MarketplaceSellersPage />;

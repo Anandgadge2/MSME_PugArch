@@ -51,7 +51,7 @@ export const buildCategoryFallbackSvg = (categoryName: string, accentColor?: str
     const strokeColor = accentColor || palette.stroke;
 
     const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140">
+        <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
             <defs>
                 <linearGradient id="catbg_${hash}" x1="0" y1="0" x2="1" y2="1">
                     <stop offset="0%" stop-color="${palette.bg1}" />
@@ -61,25 +61,25 @@ export const buildCategoryFallbackSvg = (categoryName: string, accentColor?: str
                     <stop offset="0%" stop-color="${strokeColor}" />
                     <stop offset="100%" stop-color="${palette.fill}" />
                 </linearGradient>
-                <filter id="shadow_${hash}" x="-10%" y="-10%" width="130%" height="130%">
-                    <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-opacity="0.16"/>
+                <filter id="shadow_${hash}" x="-15%" y="-15%" width="130%" height="130%">
+                    <feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity="0.18"/>
                 </filter>
             </defs>
             <!-- Background Card -->
-            <rect width="132" height="132" x="4" y="4" rx="20" fill="url(#catbg_${hash})" stroke="${strokeColor}" stroke-width="1.5" opacity="0.85"/>
+            <rect width="190" height="190" x="5" y="5" rx="28" fill="url(#catbg_${hash})" stroke="${strokeColor}" stroke-width="2" opacity="0.95"/>
             <!-- 3D Category Emblem Badge -->
             <g filter="url(#shadow_${hash})">
-                <circle cx="70" cy="54" r="28" fill="url(#badge_${hash})"/>
-                <circle cx="70" cy="54" r="24" fill="#ffffff" opacity="0.15"/>
+                <circle cx="100" cy="80" r="42" fill="url(#badge_${hash})"/>
+                <circle cx="100" cy="80" r="36" fill="#ffffff" opacity="0.18"/>
                 <!-- Category Initials Monogram -->
-                <text x="70" y="62" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="900" text-anchor="middle" letter-spacing="1">${initials}</text>
+                <text x="100" y="91" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="900" text-anchor="middle" letter-spacing="1.5">${initials}</text>
             </g>
             <!-- Decorative Accent Elements -->
-            <circle cx="34" cy="34" r="3" fill="${strokeColor}" opacity="0.4"/>
-            <circle cx="106" cy="34" r="3" fill="${strokeColor}" opacity="0.4"/>
-            <circle cx="70" cy="94" r="2.5" fill="${strokeColor}" opacity="0.6"/>
+            <circle cx="48" cy="48" r="4" fill="${strokeColor}" opacity="0.4"/>
+            <circle cx="152" cy="48" r="4" fill="${strokeColor}" opacity="0.4"/>
+            <circle cx="100" cy="138" r="3" fill="${strokeColor}" opacity="0.6"/>
             <!-- Category Title Line -->
-            <text x="70" y="112" fill="${palette.text}" font-family="system-ui, -apple-system, sans-serif" font-size="9.5" font-weight="800" text-anchor="middle">${name}</text>
+            <text x="100" y="160" fill="${palette.text}" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="800" text-anchor="middle">${name}</text>
         </svg>`;
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.replace(/\s+/g, ' ').trim())}`;
 };
