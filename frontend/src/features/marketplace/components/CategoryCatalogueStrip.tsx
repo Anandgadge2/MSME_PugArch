@@ -40,46 +40,36 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     };
 
     const cardInner = (
-        <div className="flex flex-col items-center text-center w-full group select-none py-1">
-            {/* Product Cluster Image Container */}
-            <div className={cn(
-                "relative flex h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 items-center justify-center rounded-full transition-all duration-300 ease-out p-2.5",
-                selected
-                    ? "bg-white ring-2 ring-blue-600 shadow-md scale-105"
-                    : "bg-white shadow-2xs ring-1 ring-slate-100 group-hover:scale-105 group-hover:shadow-md group-hover:ring-blue-100"
-            )}>
+        <div className="flex flex-col items-center justify-center text-center w-full h-full group select-none p-2 sm:p-3">
+            {/* Product Image */}
+            <div className="relative flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center mb-2 sm:mb-3">
                 <img
                     src={imgSrc}
                     alt={category.name}
                     loading="lazy"
                     decoding="async"
                     onError={handleImageError}
-                    className="h-10 w-10 sm:h-14 sm:w-14 md:h-16 md:w-16 object-contain drop-shadow-2xs transition-transform duration-300 ease-out group-hover:scale-110"
+                    className="h-full w-full object-contain transition-transform duration-300 ease-out group-hover:scale-110"
                 />
             </div>
 
             {/* Category Name */}
             <span className={cn(
-                "mt-2 block max-w-[110px] sm:max-w-[125px] md:max-w-[135px] text-center text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 transition-colors duration-200",
+                "block w-full text-center text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 transition-colors duration-200",
                 selected
-                    ? "text-blue-700 font-extrabold"
+                    ? "text-blue-700"
                     : "text-slate-800 group-hover:text-blue-600"
             )}>
                 {category.name}
             </span>
-
-            {/* Active Indicator Bar */}
-            {selected && (
-                <span className="mt-1.5 h-1 w-6 rounded-full bg-blue-600 animate-in fade-in zoom-in duration-200" />
-            )}
         </div>
     );
 
     const containerClassName = cn(
-        'group flex flex-col items-center justify-start w-[100px] sm:w-[120px] md:w-[135px] shrink-0 p-1.5 rounded-2xl transition-all duration-200 text-center cursor-pointer snap-start',
+        'group flex flex-col items-center justify-center w-[130px] sm:w-[150px] md:w-[170px] h-[110px] sm:h-[130px] md:h-[140px] shrink-0 bg-white rounded-xl sm:rounded-2xl transition-all duration-200 text-center cursor-pointer snap-start',
         selected
-            ? 'bg-white shadow-sm ring-1 ring-blue-200'
-            : 'hover:bg-white/70'
+            ? 'shadow-lg ring-2 ring-blue-500 scale-[1.02]'
+            : 'shadow-sm hover:shadow-lg hover:-translate-y-0.5'
     );
 
     if (onSelect) {
@@ -143,19 +133,19 @@ export function CategoryCatalogueStrip({
     };
 
     return (
-        <section className={cn('border-y border-slate-100 bg-white/70 backdrop-blur-md py-4 sm:py-5', className)} id="categories">
+        <section className={cn('bg-gradient-to-br from-indigo-900 via-blue-900 to-indigo-900 py-6 sm:py-8 border-y border-indigo-950', className)} id="categories">
             <div className="mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
-                <div className="mb-3 sm:mb-4 flex items-center justify-between gap-3">
+                <div className="mb-5 sm:mb-6 flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                        <h2 className="text-sm sm:text-lg font-black tracking-tight text-[#0b2447]">{title}</h2>
-                        <p className="mt-0.5 text-[11px] sm:text-xs font-medium text-slate-500 line-clamp-1 sm:line-clamp-none">{subtitle}</p>
+                        <h2 className="text-lg sm:text-2xl font-bold tracking-tight text-white">{title}</h2>
+                        <p className="mt-1 text-[11px] sm:text-sm font-medium text-indigo-100 line-clamp-1 sm:line-clamp-none">{subtitle}</p>
                     </div>
                     <Link
                         href="/marketplace/categories"
-                        className="inline-flex items-center gap-1 shrink-0 text-[11px] sm:text-xs font-black text-[#0b2447] transition hover:text-blue-600 hover:underline"
+                        className="inline-flex items-center gap-1 shrink-0 text-[11px] sm:text-sm font-semibold text-white transition hover:text-blue-200 hover:underline"
                     >
                         <span>All categories</span>
-                        <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                        <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4" />
                     </Link>
                 </div>
 
@@ -164,7 +154,7 @@ export function CategoryCatalogueStrip({
                     <button
                         type="button"
                         onClick={() => scroll('left')}
-                        className="absolute -left-2 lg:-left-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/90 bg-white/95 shadow-md backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] active:scale-95 lg:flex text-slate-700"
+                        className="absolute -left-2 lg:-left-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/90 bg-white/95 shadow-md backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] active:scale-95 lg:flex text-slate-700 opacity-0 group-hover/strip:opacity-100 focus:opacity-100 focus-visible:opacity-100"
                         aria-label="Scroll categories left"
                     >
                         <ChevronLeft className="h-5 w-5" />
@@ -173,7 +163,7 @@ export function CategoryCatalogueStrip({
                     {/* Scrollable Track */}
                     <div
                         ref={scrollRef}
-                        className="flex gap-2 sm:gap-3 md:gap-4 overflow-x-auto pb-2 pt-1 px-1 no-scrollbar snap-x snap-mandatory lg:px-2 scroll-smooth"
+                        className="grid grid-rows-2 grid-flow-col auto-cols-max gap-3 sm:gap-4 overflow-x-auto pb-4 pt-2 px-1 no-scrollbar snap-x snap-mandatory lg:px-2 scroll-smooth"
                     >
                         {categories.map((category) => {
                             const selected = String(selectedCategoryId || '') === String(category.id);
@@ -193,7 +183,7 @@ export function CategoryCatalogueStrip({
                     <button
                         type="button"
                         onClick={() => scroll('right')}
-                        className="absolute -right-2 lg:-right-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/90 bg-white/95 shadow-md backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] active:scale-95 lg:flex text-slate-700"
+                        className="absolute -right-2 lg:-right-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/90 bg-white/95 shadow-md backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] active:scale-95 lg:flex text-slate-700 opacity-0 group-hover/strip:opacity-100 focus:opacity-100 focus-visible:opacity-100"
                         aria-label="Scroll categories right"
                     >
                         <ChevronRight className="h-5 w-5" />
