@@ -16,6 +16,7 @@ import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import type { CatalogueItemDto, CategoryDto } from '../../shared/types';
 import { GstTaxPicker, calculateGstBreakdown } from '../../shared/gstTax';
 import { catalogueApi, downloadCatalogueFile } from '../api';
@@ -848,60 +849,106 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
 
       {error && <InlineError message={error} onRetry={loadCatalogue} />}
 
-      <Card className="rounded-[24px] border-0 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row gap-2 items-center">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, seller, category..." className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" />
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(searchTerm ? 1 : 0) + (kindFilter !== 'all' ? 1 : 0) + (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (priceFilter ? 1 : 0) + (verificationFilter ? 1 : 0)}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={searchTerm}
+                onChange={event => setSearchTerm(event.target.value)}
+                placeholder="Search name, seller, category..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
             </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowMobileFilters(!showMobileFilters)}
-              className="h-10 w-full shrink-0 gap-2 rounded-2xl border-slate-200 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 sm:w-auto xl:hidden"
-            >
-              <Settings2 className="h-4 w-4 text-slate-500" />
-              <span>Filters {showMobileFilters ? '(Hide)' : '(Show)'}</span>
-            </Button>
-
-            <div className={cn(
-              "grid gap-3 items-center",
-              showMobileFilters ? "grid grid-cols-2 sm:grid-cols-3" : "hidden xl:grid xl:grid-cols-[140px_160px_150px_150px_150px] xl:justify-between"
-            )}>
-              <select value={kindFilter} onChange={event => setKindFilter(event.target.value as FilterKind)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="all">All types</option>
-                <option value="product">Products</option>
-                <option value="service">Services</option>
-              </select>
-              <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="">All categories</option>
-                {categories.map(category => <option key={category} value={category}>{category}</option>)}
-              </select>
-              <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="">All statuses</option>
-                {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
-              </select>
-              <select value={priceFilter} onChange={event => setPriceFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="">All prices</option>
-                <option value="high">Above Rs. 10k</option>
-                <option value="mid">Rs. 1k to 10k</option>
-                <option value="low">Below Rs. 1k</option>
-              </select>
-              {mode !== 'seller' && (
-                <select value={verificationFilter} onChange={event => setVerificationFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 w-full">
-                  <option value="">All sellers</option>
-                  <option value="verified">Verified sellers</option>
-                  <option value="unverified">Pending sellers</option>
+          }
+          filters={
+            <>
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <select
+                  value={kindFilter}
+                  onChange={event => setKindFilter(event.target.value as FilterKind)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="all">All types</option>
+                  <option value="product">Products</option>
+                  <option value="service">Services</option>
                 </select>
+              </div>
+
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={categoryFilter}
+                  onChange={event => setCategoryFilter(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All categories</option>
+                  {categories.map(category => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </div>
+
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <select
+                  value={statusFilter}
+                  onChange={event => setStatusFilter(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All statuses</option>
+                  {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
+                </select>
+              </div>
+
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <select
+                  value={priceFilter}
+                  onChange={event => setPriceFilter(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All prices</option>
+                  <option value="high">Above Rs. 10k</option>
+                  <option value="mid">Rs. 1k to 10k</option>
+                  <option value="low">Below Rs. 1k</option>
+                </select>
+              </div>
+
+              {mode !== 'seller' && (
+                <div className="w-full sm:w-auto sm:min-w-[140px]">
+                  <select
+                    value={verificationFilter}
+                    onChange={event => setVerificationFilter(event.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  >
+                    <option value="">All sellers</option>
+                    <option value="verified">Verified sellers</option>
+                    <option value="unverified">Pending sellers</option>
+                  </select>
+                </div>
               )}
 
-
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              {(searchTerm || kindFilter !== 'all' || categoryFilter || statusFilter || priceFilter || verificationFilter) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setKindFilter('all');
+                    setCategoryFilter('');
+                    setStatusFilter('');
+                    setPriceFilter('');
+                    setVerificationFilter('');
+                  }}
+                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                >
+                  Reset
+                </Button>
+              )}
+            </>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
+      </div>
 
       {isInitialLoading ? (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">

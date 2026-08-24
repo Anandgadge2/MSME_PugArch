@@ -23,6 +23,7 @@ import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureState
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
+import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
@@ -366,77 +367,55 @@ export default function SellerDeliveryManagementPage() {
                 />
             </div>
 
-            {/* Filter Bar */}
-            <ResponsiveFilterBar
-                activeFilterCount={(statusFilter ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0)}
-                searchInput={
-                    <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search by delivery #, PO #, buyer, tracking..."
-                            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                        />
-                    </div>
-                }
-                filters={
-                    <>
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                        >
-                            {STATUS_OPTIONS.map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                </option>
-                            ))}
-                        </select>
+            {/* ── Search + Filter + View Toggle Toolbar ── */}
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+                <ResponsiveFilterBar
+                    activeFilterCount={(statusFilter ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0)}
+                    searchInput={
+                        <div className="relative w-full">
+                            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search by delivery #, PO #, buyer, tracking..."
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                            />
+                        </div>
+                    }
+                    filters={
+                        <>
+                            <div className="w-full sm:w-auto sm:min-w-[150px]">
+                                <select
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                                >
+                                    {STATUS_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
 
-                        <select
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value)}
-                            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                        >
-                            <option value="newest">Newest First</option>
-                            <option value="oldest">Oldest First</option>
-                            <option value="value-desc">Value: High to Low</option>
-                            <option value="value-asc">Value: Low to High</option>
-                        </select>
-                    </>
-                }
-                endContent={
-                    <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
-                        <button
-                            type="button"
-                            onClick={() => setViewMode('list')}
-                            title="List view"
-                            aria-label="List view"
-                            className={`flex h-8 w-8 items-center justify-center rounded-md transition-all duration-150 ${
-                                viewMode === 'list'
-                                    ? 'bg-slate-100 text-[#12335f] shadow-sm'
-                                    : 'text-slate-500 hover:text-[#12335f]'
-                            }`}
-                        >
-                            <List className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setViewMode('grid')}
-                            title="Grid view"
-                            aria-label="Grid view"
-                            className={`flex h-8 w-8 items-center justify-center rounded-md transition-all duration-150 ${
-                                viewMode === 'grid'
-                                    ? 'bg-slate-100 text-[#12335f] shadow-sm'
-                                    : 'text-slate-500 hover:text-[#12335f]'
-                            }`}
-                        >
-                            <Grid3x3 className="h-3.5 w-3.5" />
-                        </button>
-                    </div>
-                }
-            />
+                            <div className="w-full sm:w-auto sm:min-w-[140px]">
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value)}
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                                >
+                                    <option value="newest">Newest First</option>
+                                    <option value="oldest">Oldest First</option>
+                                    <option value="value-desc">Value: High to Low</option>
+                                    <option value="value-asc">Value: Low to High</option>
+                                </select>
+                            </div>
+                        </>
+                    }
+                    endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+                />
+            </div>
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => refetch()} /> :
                 isLoading ? <LoadingState label="Loading deliveries..." /> :

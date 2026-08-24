@@ -308,60 +308,70 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         </div>
       )}
 
-      {/* Responsive Filter Bar */}
-      <ResponsiveFilterBar
-        activeFilterCount={(statusFilter ? 1 : 0) + (gatewayFilter ? 1 : 0) + (escrowFilter ? 1 : 0)}
-        searchInput={
-          <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={searchTerm}
-              onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
-              placeholder="Search reference, invoice, PO..."
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            />
-          </div>
-        }
-        filters={
-          <>
-            <select
-              value={statusFilter}
-              onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-              className="h-10 min-w-[140px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
-            >
-              <option value="">All statuses</option>
-              <option value="initiated">Initiated</option>
-              <option value="gateway_order_created">Gateway order</option>
-              <option value="success">Success</option>
-              <option value="escrow_released">Escrow released</option>
-              <option value="failed">Failed</option>
-              <option value="refunded">Refunded</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(statusFilter ? 1 : 0) + (gatewayFilter ? 1 : 0) + (escrowFilter ? 1 : 0)}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
+                placeholder="Search reference, invoice, PO..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
+            </div>
+          }
+          filters={
+            <>
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={statusFilter}
+                  onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All statuses</option>
+                  <option value="initiated">Initiated</option>
+                  <option value="gateway_order_created">Gateway order</option>
+                  <option value="success">Success</option>
+                  <option value="escrow_released">Escrow released</option>
+                  <option value="failed">Failed</option>
+                  <option value="refunded">Refunded</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
 
-            <select
-              value={gatewayFilter}
-              onChange={e => { setGatewayFilter(e.target.value); setPage(1); }}
-              className="h-10 min-w-[140px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
-            >
-              <option value="">Gateway / any</option>
-              <option value="bank_transfer">Bank transfer</option>
-              <option value="razorpay">Razorpay</option>
-              <option value="cashfree">Cashfree</option>
-            </select>
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={gatewayFilter}
+                  onChange={e => { setGatewayFilter(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">Gateway / any</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="razorpay">Razorpay</option>
+                  <option value="cashfree">Cashfree</option>
+                </select>
+              </div>
 
-            <select
-              value={escrowFilter}
-              onChange={e => { setEscrowFilter(e.target.value); setPage(1); }}
-              className="h-10 min-w-[140px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
-            >
-              <option value="">Escrow / any</option>
-              <option value="funded">Funded</option>
-              <option value="not_funded">Not funded</option>
-            </select>
-          </>
-        }
-      />
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={escrowFilter}
+                  onChange={e => { setEscrowFilter(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">Escrow / any</option>
+                  <option value="funded">Funded</option>
+                  <option value="not_funded">Not funded</option>
+                </select>
+              </div>
+            </>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
+      </div>
 
       {loading && filtered.length === 0 ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">

@@ -371,105 +371,117 @@ const Vendors = () => {
         />
       </div>
 
-      {/* Inline Filters Bar */}
-      <ResponsiveFilterBar
-        activeFilterCount={
-          (searchTerm ? 1 : 0) +
-          (selectedCategory !== 'All categories' ? 1 : 0) +
-          (selectedSize !== 'All MSME categories' ? 1 : 0) +
-          (selectedStateFilter !== 'All states' ? 1 : 0) +
-          (selectedDistrictFilter !== 'All districts' ? 1 : 0) +
-          (verifiedOnly ? 1 : 0)
-        }
-        searchInput={
-          <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by vendor name, city, keyword..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            />
-          </div>
-        }
-        filters={
-          <>
-            <select
-              value={selectedCategory}
-              onChange={e => setSelectedCategory(e.target.value)}
-              className="h-10 min-w-0 w-full sm:min-w-[120px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            >
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-
-            <select
-              value={selectedStateFilter}
-              onChange={e => {
-                setSelectedStateFilter(e.target.value);
-                setSelectedDistrictFilter('All districts');
-              }}
-              className="h-10 min-w-0 w-full sm:min-w-[120px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            >
-              {statesList.map(st => (
-                <option key={st} value={st}>{st}</option>
-              ))}
-            </select>
-
-            {selectedStateFilter !== 'All states' && (
-              <select
-                value={selectedDistrictFilter}
-                onChange={e => setSelectedDistrictFilter(e.target.value)}
-                className="h-10 min-w-0 w-full sm:min-w-[120px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-              >
-                <option value="All districts">All Districts</option>
-                {districtOptions.map(district => (
-                  <option key={district} value={district}>{district}</option>
-                ))}
-              </select>
-            )}
-
-            <select
-              value={selectedSize}
-              onChange={e => setSelectedSize(e.target.value)}
-              className="h-10 min-w-0 w-full sm:min-w-[140px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            >
-              {msmeCategories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-
-            <button
-              onClick={() => setVerifiedOnly(!verifiedOnly)}
-              className="flex items-center gap-2 h-10 px-3 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm"
-            >
-              <div className={cn("h-4 w-4 rounded border flex items-center justify-center transition-all", verifiedOnly ? "bg-[#12335f] border-[#12335f]" : "border-slate-300")}>
-                {verifiedOnly && <CheckCircle2 className="h-3 w-3 text-white" />}
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={
+            (searchTerm ? 1 : 0) +
+            (selectedCategory !== 'All categories' ? 1 : 0) +
+            (selectedSize !== 'All MSME categories' ? 1 : 0) +
+            (selectedStateFilter !== 'All states' ? 1 : 0) +
+            (selectedDistrictFilter !== 'All districts' ? 1 : 0) +
+            (verifiedOnly ? 1 : 0)
+          }
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by vendor name, city, keyword..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
+            </div>
+          }
+          filters={
+            <>
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <select
+                  value={selectedCategory}
+                  onChange={e => setSelectedCategory(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
               </div>
-              <span className="text-xs font-bold text-slate-700 uppercase">Verified Only</span>
-            </button>
-            {(searchTerm || selectedCategory !== 'All categories' || selectedSize !== 'All MSME categories' || selectedStateFilter !== 'All states' || !verifiedOnly) && (
-              <Button
+
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <select
+                  value={selectedStateFilter}
+                  onChange={e => {
+                    setSelectedStateFilter(e.target.value);
+                    setSelectedDistrictFilter('All districts');
+                  }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  {statesList.map(st => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedStateFilter !== 'All states' && (
+                <div className="w-full sm:w-auto sm:min-w-[130px]">
+                  <select
+                    value={selectedDistrictFilter}
+                    onChange={e => setSelectedDistrictFilter(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  >
+                    <option value="All districts">All Districts</option>
+                    {districtOptions.map(district => (
+                      <option key={district} value={district}>{district}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={selectedSize}
+                  onChange={e => setSelectedSize(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  {msmeCategories.map(category => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
                 type="button"
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm('');
-                  setSelectedCategory('All categories');
-                  setSelectedSize('All MSME categories');
-                  setSelectedStateFilter('All states');
-                  setSelectedDistrictFilter('All districts');
-                  setVerifiedOnly(false);
-                }}
-                className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50 w-full sm:w-auto"
+                onClick={() => setVerifiedOnly(!verifiedOnly)}
+                className="flex items-center gap-2 h-10 px-3.5 bg-white border border-slate-200 rounded-xl hover:border-slate-300 shadow-xs cursor-pointer transition-colors"
               >
-                Clear
-              </Button>
-            )}
-          </>
-        }
-      />
+                <div className={cn("h-4 w-4 rounded-md border flex items-center justify-center transition-all", verifiedOnly ? "bg-[#12335f] border-[#12335f]" : "border-slate-300")}>
+                  {verifiedOnly && <CheckCircle2 className="h-3 w-3 text-white" />}
+                </div>
+                <span className="text-xs font-bold text-slate-700 uppercase">Verified Only</span>
+              </button>
+
+              {(searchTerm || selectedCategory !== 'All categories' || selectedSize !== 'All MSME categories' || selectedStateFilter !== 'All states' || verifiedOnly) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedCategory('All categories');
+                    setSelectedSize('All MSME categories');
+                    setSelectedStateFilter('All states');
+                    setSelectedDistrictFilter('All districts');
+                    setVerifiedOnly(false);
+                  }}
+                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                >
+                  Clear
+                </Button>
+              )}
+            </>
+          }
+        />
+      </div>
 
       {/* Results Space */}
       <div className="w-full">

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { api, resolveMediaUrl } from '../lib/api';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import {
   Building2,
   MapPin,
@@ -30,7 +31,6 @@ import { toast } from 'sonner';
 import { downloadCsv } from '../features/shared/exportUtils';
 import { Pagination } from '../features/shared/Pagination';
 import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
-import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { KpiCard } from '../features/shared/KpiCard';
 
 type RequirementSortKey = 'serialNo' | 'itemDescription' | 'category' | 'estimatedMonthlyRequirement' | 'unit' | 'remarks';
@@ -489,39 +489,54 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
                   </Button>
                 </div>
 
-                {/* Filter and Search Controls */}
+                {/* ── Search + Filter Toolbar ── */}
                 <div className="space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="relative sm:col-span-2">
-                      <Search className="absolute left-3.5 top-3 h-4 w-4 text-blue-500 pointer-events-none" />
-                      <input
-                        type="text"
-                        placeholder="Search items by description or keyword..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-10 rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder-slate-400 shadow-xs"
-                      />
-                      {searchTerm && (
-                        <button
-                          onClick={() => setSearchTerm('')}
-                          className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="relative">
-                      <select
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all shadow-xs cursor-pointer"
-                      >
-                        <option value="">All Categories ({categories.length})</option>
-                        {categories.map((cat) => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-sm">
+                    <ResponsiveFilterBar
+                      activeFilterCount={(searchTerm ? 1 : 0) + (selectedCategory ? 1 : 0)}
+                      searchInput={
+                        <div className="relative w-full">
+                          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search items by description or keyword..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                          />
+                        </div>
+                      }
+                      filters={
+                        <>
+                          <div className="w-full sm:w-auto sm:min-w-[180px]">
+                            <select
+                              value={selectedCategory}
+                              onChange={(e) => setSelectedCategory(e.target.value)}
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                            >
+                              <option value="">All Categories ({categories.length})</option>
+                              {categories.map((cat) => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {(searchTerm || selectedCategory) && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setSearchTerm('');
+                                setSelectedCategory('');
+                              }}
+                              className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                            >
+                              Reset
+                            </Button>
+                          )}
+                        </>
+                      }
+                    />
                   </div>
 
                   {/* Category Quick Filter Chips */}

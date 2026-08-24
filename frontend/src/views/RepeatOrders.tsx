@@ -357,33 +357,38 @@ export default function RepeatOrders() {
         />
       </div>
 
-      {/* Inline Filters Bar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Search PO number, supplier, title..."
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          />
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value)}
-            className="h-10 min-w-[130px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          >
-            <option value="newest">Newest</option>
-            <option value="value_high">Value High</option>
-            <option value="value_low">Value Low</option>
-            <option value="title_asc">Title A-Z</option>
-            <option value="party_asc">Supplier A-Z</option>
-          </select>
-
-          <ViewModeToggle value={viewMode} onChange={setViewMode} className="ml-auto sm:ml-0" />
-        </div>
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(searchTerm ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0)}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Search PO number, supplier, title..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
+            </div>
+          }
+          filters={
+            <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+              >
+                <option value="newest">Newest</option>
+                <option value="value_high">Value High</option>
+                <option value="value_low">Value Low</option>
+                <option value="title_asc">Title A-Z</option>
+                <option value="party_asc">Supplier A-Z</option>
+              </select>
+            </div>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
       </div>
 
       {/* Content */}

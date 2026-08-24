@@ -8,7 +8,7 @@
  *   - Detail: thread + evidence + status updater (admin)
  */
 import { useState } from 'react';
-import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, Plus, RefreshCw, Send, Shield, X, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, Plus, RefreshCw, Send, Shield, X, XCircle, Search } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
@@ -17,6 +17,7 @@ import { KpiCard } from '../../shared/KpiCard';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { Pagination } from '../../shared/Pagination';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { usePagination } from '../../shared/hooks';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
@@ -189,66 +190,76 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
                 />
             </div>
 
-            {/* Filter Bar */}
-            <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="relative flex-1 min-w-[220px] max-w-sm">
-                        <FileText className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Search dispute #, PO #, party name..."
-                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-                        />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2.5">
-                        <select
-                            value={selectedCategoryFilter}
-                            onChange={e => setSelectedCategoryFilter(e.target.value)}
-                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-xs cursor-pointer"
-                        >
-                            <option value="">All Categories</option>
-                            <option value="PAYMENT_NOT_RELEASED">Payment Not Released</option>
-                            <option value="QUALITY_DEFECT">Quality Defect</option>
-                            <option value="SHORT_DELIVERY">Short Delivery</option>
-                            <option value="LATE_DELIVERY">Late Delivery</option>
-                            <option value="SPECIFICATION_MISMATCH">Specification Mismatch</option>
-                            <option value="INVOICE_DISPUTE">Invoice Dispute</option>
-                            <option value="OTHER">Other</option>
-                        </select>
+            {/* ── Search + Filter + View Toggle Toolbar ── */}
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+                <ResponsiveFilterBar
+                    activeFilterCount={(searchQuery ? 1 : 0) + (selectedCategoryFilter ? 1 : 0) + (selectedStatusFilter ? 1 : 0)}
+                    searchInput={
+                        <div className="relative w-full">
+                            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="Search dispute #, PO #, party name..."
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                            />
+                        </div>
+                    }
+                    filters={
+                        <>
+                            <div className="w-full sm:w-auto sm:min-w-[150px]">
+                                <select
+                                    value={selectedCategoryFilter}
+                                    onChange={e => setSelectedCategoryFilter(e.target.value)}
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                                >
+                                    <option value="">All Categories</option>
+                                    <option value="PAYMENT_NOT_RELEASED">Payment Not Released</option>
+                                    <option value="QUALITY_DEFECT">Quality Defect</option>
+                                    <option value="SHORT_DELIVERY">Short Delivery</option>
+                                    <option value="LATE_DELIVERY">Late Delivery</option>
+                                    <option value="SPECIFICATION_MISMATCH">Specification Mismatch</option>
+                                    <option value="INVOICE_DISPUTE">Invoice Dispute</option>
+                                    <option value="OTHER">Other</option>
+                                </select>
+                            </div>
 
-                        <select
-                            value={selectedStatusFilter}
-                            onChange={e => setSelectedStatusFilter(e.target.value)}
-                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-xs cursor-pointer"
-                        >
-                            <option value="">All Statuses</option>
-                            <option value="open">Open</option>
-                            <option value="under_review">Under Review</option>
-                            <option value="clarification_requested">Clarification Requested</option>
-                            <option value="responded">Responded</option>
-                            <option value="escalated">Escalated</option>
-                            <option value="resolved">Resolved</option>
-                            <option value="rejected">Rejected</option>
-                            <option value="closed">Closed</option>
-                        </select>
+                            <div className="w-full sm:w-auto sm:min-w-[140px]">
+                                <select
+                                    value={selectedStatusFilter}
+                                    onChange={e => setSelectedStatusFilter(e.target.value)}
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                                >
+                                    <option value="">All Statuses</option>
+                                    <option value="open">Open</option>
+                                    <option value="under_review">Under Review</option>
+                                    <option value="clarification_requested">Clarification Requested</option>
+                                    <option value="responded">Responded</option>
+                                    <option value="escalated">Escalated</option>
+                                    <option value="resolved">Resolved</option>
+                                    <option value="rejected">Rejected</option>
+                                    <option value="closed">Closed</option>
+                                </select>
+                            </div>
 
-                        {(searchQuery || selectedCategoryFilter || selectedStatusFilter) && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setSearchQuery('');
-                                    setSelectedCategoryFilter('');
-                                    setSelectedStatusFilter('');
-                                }}
-                                className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-                            >
-                                Reset
-                            </button>
-                        )}
-                    </div>
-                </div>
+                            {(searchQuery || selectedCategoryFilter || selectedStatusFilter) && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setSearchQuery('');
+                                        setSelectedCategoryFilter('');
+                                        setSelectedStatusFilter('');
+                                    }}
+                                    className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                                >
+                                    Reset
+                                </Button>
+                            )}
+                        </>
+                    }
+                />
             </div>
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => refetch()} /> :

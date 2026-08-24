@@ -615,58 +615,65 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
       {error && <InlineError message={error} onRetry={reload} />}
 
-      {/* Responsive Filter Bar */}
-      <ResponsiveFilterBar
-        activeFilterCount={(statusFilter ? 1 : 0) + (acceptedPoOnly ? 1 : 0) + (invoiceScope !== 'all' ? 1 : 0)}
-        endContent={<ViewModeToggle className="flex justify-end" value={viewMode} onChange={setViewMode} />}
-        searchInput={
-          <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={searchTerm}
-              onChange={event => setSearchTerm(event.target.value)}
-              placeholder="Search invoice, PO, buyer, seller..."
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            />
-          </div>
-        }
-        filters={
-          <>
-            <select
-              value={statusFilter}
-              onChange={event => setStatusFilter(event.target.value)}
-              className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full sm:w-auto"
-            >
-              <option value="">All statuses</option>
-              {statuses.map(status => (
-                <option key={status} value={status}>
-                  {status.replace(/_/g, ' ')}
-                </option>
-              ))}
-            </select>
-
-            <label className="flex items-center justify-center gap-2 h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 w-full sm:w-auto cursor-pointer select-none">
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(statusFilter ? 1 : 0) + (acceptedPoOnly ? 1 : 0) + (invoiceScope !== 'all' ? 1 : 0)}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                type="checkbox"
-                checked={acceptedPoOnly}
-                onChange={event => setAcceptedPoOnly(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/50"
+                type="text"
+                value={searchTerm}
+                onChange={event => setSearchTerm(event.target.value)}
+                placeholder="Search invoice, PO, buyer, seller..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
-              Accepted PO only
-            </label>
+            </div>
+          }
+          filters={
+            <>
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={statusFilter}
+                  onChange={event => setStatusFilter(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All statuses</option>
+                  {statuses.map(status => (
+                    <option key={status} value={status}>
+                      {status.replace(/_/g, ' ')}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <select
-              value={invoiceScope}
-              onChange={event => setInvoiceScope(event.target.value as 'all' | 'interstate' | 'domestic')}
-              className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full sm:w-auto"
-            >
-              <option value="all">All invoices</option>
-              <option value="interstate">Interstate only</option>
-              <option value="domestic">Domestic only</option>
-            </select>
-          </>
-        }
-      />
+              <label className="flex items-center justify-center gap-2 h-10 w-full sm:w-auto px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:border-slate-300 shadow-xs cursor-pointer select-none transition-colors">
+                <input
+                  type="checkbox"
+                  checked={acceptedPoOnly}
+                  onChange={event => setAcceptedPoOnly(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/50"
+                />
+                Accepted PO only
+              </label>
+
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={invoiceScope}
+                  onChange={event => setInvoiceScope(event.target.value as 'all' | 'interstate' | 'domestic')}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="all">All invoices</option>
+                  <option value="interstate">Interstate only</option>
+                  <option value="domestic">Domestic only</option>
+                </select>
+              </div>
+            </>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
+      </div>
 
       {loading && pagedInvoices.length === 0 ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">

@@ -47,6 +47,7 @@ import { useDeliveryList, useDeliveryReport } from '../hooks';
 import type { DeliveryDetailDto, DeliveryStatus } from '../types';
 import { DeliveryDetailPage } from './DeliveryDetailPage';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
+import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import GrnListPage from '../../grn/pages/GrnListPage';
 
 const STATUS_OPTIONS = Object.keys(DELIVERY_STATUS_LABELS) as DeliveryStatus[];
@@ -298,48 +299,54 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
             />
           )}
 
-          {/* Responsive Filter Bar */}
-          <ResponsiveFilterBar
-            activeFilterCount={statusFilter !== '' ? 1 : 0}
-            searchInput={
-              <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-                <Search className="pointer-events-none absolute inset-y-0 left-3 h-full w-4 text-slate-400" />
-                <Input
-                  value={search}
-                  onChange={event => setSearch(event.target.value)}
-                  placeholder="Search PO, vendor, tracking number..."
-                  className="pl-10 bg-white"
-                />
-              </div>
-            }
-            filters={
-              <>
-                <Select
-                  value={statusFilter}
-                  onChange={event => setStatusFilter(event.target.value as DeliveryStatus | '')}
-                  className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full sm:w-auto"
-                >
-                  <option value="">All statuses</option>
-                  {STATUS_OPTIONS.map(status => (
-                    <option key={status} value={status}>{DELIVERY_STATUS_LABELS[status]}</option>
-                  ))}
-                </Select>
+          {/* ── Search + Filter + View Toggle Toolbar ── */}
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+            <ResponsiveFilterBar
+              activeFilterCount={statusFilter !== '' ? 1 : 0}
+              searchInput={
+                <div className="relative w-full">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={event => setSearch(event.target.value)}
+                    placeholder="Search PO, vendor, tracking number..."
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                  />
+                </div>
+              }
+              filters={
+                <>
+                  <div className="w-full sm:w-auto sm:min-w-[150px]">
+                    <select
+                      value={statusFilter}
+                      onChange={event => setStatusFilter(event.target.value as DeliveryStatus | '')}
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                    >
+                      <option value="">All statuses</option>
+                      {STATUS_OPTIONS.map(status => (
+                        <option key={status} value={status}>{DELIVERY_STATUS_LABELS[status]}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                {(search || statusFilter) && (
-                  <Button
-                    variant="outline"
-                    className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm"
-                    onClick={() => {
-                      setSearch('');
-                      setStatusFilter('');
-                    }}
-                  >
-                    Reset
-                  </Button>
-                )}
-              </>
-            }
-          />
+                  {(search || statusFilter) && (
+                    <Button
+                      variant="outline"
+                      className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                      onClick={() => {
+                        setSearch('');
+                        setStatusFilter('');
+                      }}
+                    >
+                      Reset
+                    </Button>
+                  )}
+                </>
+              }
+              endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+            />
+          </div>
 
           {isInitialLoading ? (
             viewMode === 'list' ? <TableSkeleton rows={6} cols={8} /> : <ListSkeleton rows={4} />
