@@ -16,14 +16,14 @@ export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFi
 
   return (
     <div className={cn(
-      "flex flex-col sm:items-center gap-2 sm:gap-3 py-2 border-y border-slate-100 overflow-x-hidden",
-      singleRowDesktop ? "sm:flex-row sm:flex-nowrap" : "sm:flex-row sm:flex-wrap",
+      "flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full overflow-x-hidden",
+      singleRowDesktop ? "sm:flex-nowrap" : "sm:flex-wrap",
       className
     )}>
-      {/* Row 1: Search bar + FILTERS toggle side-by-side on mobile (single row on desktop) */}
-      <div className="flex items-center gap-2 w-full min-w-0 sm:contents">
-        {/* Search: flexible on mobile, flex-1 on desktop */}
-        <div className="flex-1 min-w-0 sm:min-w-[200px]">
+      {/* Row 1: Search bar + FILTERS toggle side-by-side on mobile (contained width on desktop) */}
+      <div className="flex items-center gap-2 w-full min-w-0 sm:w-auto sm:shrink-0">
+        {/* Search: flexible on mobile, contained fixed width on desktop */}
+        <div className="flex-1 min-w-0 sm:w-72 md:w-80 sm:shrink-0">
           {searchInput}
         </div>
 
@@ -34,7 +34,7 @@ export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFi
             onClick={() => setIsOpen(!isOpen)}
             aria-expanded={isOpen}
             className={cn(
-              "flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-[10px] font-black tracking-wider uppercase transition-all duration-200",
+              "flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-[10px] font-black tracking-wider uppercase transition-all duration-200",
               activeFilterCount > 0 || isOpen
                 ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm"
                 : "border-slate-200 bg-slate-50 text-slate-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.1)] active:scale-[0.98]"
@@ -51,9 +51,9 @@ export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFi
         </div>
       </div>
 
-      {/* Filters Container (Hidden on mobile unless opened, always flex on sm+) */}
+      {/* Filters Container (Hidden on mobile unless opened, always flex next to search on sm+) */}
       <div className={cn(
-        "w-full sm:flex sm:items-center gap-3",
+        "w-full sm:flex sm:items-center gap-2.5 sm:gap-3",
         singleRowDesktop ? "sm:flex-nowrap sm:w-auto" : "sm:flex-wrap sm:w-auto",
         // On mobile, if open, make it a stacked list and force direct children to take full width.
         isOpen ? "flex flex-col [&>div]:!w-full [&>div]:!max-w-none [&>div>select]:w-full [&>select]:w-full [&>label]:w-full pb-2" : "hidden sm:flex"
@@ -70,7 +70,7 @@ export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFi
 
       {/* Desktop End Content */}
       {endContent && (
-        <div className="hidden sm:flex ml-auto items-center gap-3">
+        <div className="hidden sm:flex sm:ml-auto items-center gap-2.5 shrink-0">
           {endContent}
         </div>
       )}

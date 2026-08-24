@@ -11,6 +11,7 @@ import { money } from '../data';
 import { procurementOrderApi } from '../orderApi';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
+import { Button } from '../../../components/ui/button';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
@@ -149,41 +150,45 @@ export default function ProcurementOrdersPage() {
               </div>
             )}
             {orders.length > 0 && (
-              <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
                 <ResponsiveFilterBar
-                  className="border-none"
-                  activeFilterCount={(statusFilter ? 1 : 0)}
+                  activeFilterCount={(statusFilter ? 1 : 0) + (query ? 1 : 0)}
                   searchInput={
-                    <div className="relative min-w-0 w-full sm:flex-1">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <div className="relative w-full">
+                      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <input
                         value={query}
                         onChange={event => { setQuery(event.target.value); setPage(1); }}
                         placeholder="Search PO, buyer, seller, delivery, invoice..."
-                        className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm outline-none focus:border-[#0b2447]"
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
                       />
                     </div>
                   }
                   filters={
                     <>
-                      <select
-                        value={statusFilter}
-                        onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
-                        className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none min-w-0 w-full sm:w-auto"
-                      >
-                        <option value="">All statuses</option>
-                        {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => { setQuery(''); setStatusFilter(''); setPage(1); }}
-                        className="h-10 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 whitespace-nowrap"
-                      >
-                        Reset
-                      </button>
+                      <div className="w-full sm:w-auto sm:min-w-[150px]">
+                        <select
+                          value={statusFilter}
+                          onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
+                          className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                        >
+                          <option value="">All statuses</option>
+                          {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
+                        </select>
+                      </div>
+                      {(query || statusFilter) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => { setQuery(''); setStatusFilter(''); setPage(1); }}
+                          className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                        >
+                          Reset
+                        </Button>
+                      )}
                     </>
                   }
-                  endContent={<ViewModeToggle className="flex justify-end" value={viewMode} onChange={setViewMode} />}
+                  endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
                 />
               </div>
             )}

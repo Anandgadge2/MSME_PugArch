@@ -12,9 +12,7 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
-import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
-import { useResponsiveViewMode } from '../../shared/hooks';
 import { ListSkeleton } from '../../../components/ui/skeleton';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
 import { useAuth } from '../../../hooks/useAuth';
@@ -59,7 +57,6 @@ export default function RateContractsPage() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('ACTIVE');
   const [q, setQ] = useState('');
-  const [viewMode, setViewMode] = useResponsiveViewMode('list');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [loading, setLoading] = useState(true);
@@ -242,7 +239,6 @@ export default function RateContractsPage() {
               </Button>
             ) : null
           }
-          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
         />
       </div>
 

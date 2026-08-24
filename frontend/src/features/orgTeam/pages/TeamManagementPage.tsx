@@ -24,6 +24,7 @@ import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { validateRequiredText } from '../../../lib/validation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -383,58 +384,62 @@ export default function TeamManagementPage() {
             {membersError && <InlineError message={membersError} onRetry={reloadMembers} />}
 
             {activeTab === 'members' && (
-                <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="relative min-w-[220px] flex-1 max-w-sm">
-                            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                                value={searchTerm}
-                                onChange={event => { setSearchTerm(event.target.value); setPage(1); }}
-                                placeholder="Search member name, email, mobile, role..."
-                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-                            />
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2.5">
-                            <div className="w-40">
-                                <select
-                                    value={roleFilter}
-                                    onChange={event => { setRoleFilter(event.target.value); setPage(1); }}
-                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
-                                >
-                                    <option value="">All roles</option>
-                                    {roleOptions.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
-                                </select>
+                <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+                    <ResponsiveFilterBar
+                        activeFilterCount={(searchTerm ? 1 : 0) + (roleFilter ? 1 : 0) + (statusFilter ? 1 : 0)}
+                        searchInput={
+                            <div className="relative w-full">
+                                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    value={searchTerm}
+                                    onChange={event => { setSearchTerm(event.target.value); setPage(1); }}
+                                    placeholder="Search member name, email, mobile, role..."
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                                />
                             </div>
-                            <div className="w-36">
-                                <select
-                                    value={statusFilter}
-                                    onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
-                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
-                                >
-                                    <option value="">Any status</option>
-                                    <option value="active">Active</option>
-                                    <option value="inactive">Inactive</option>
-                                </select>
-                            </div>
-                            {(searchTerm || roleFilter || statusFilter) && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSearchTerm('');
-                                        setRoleFilter('');
-                                        setStatusFilter('');
-                                        setPage(1);
-                                    }}
-                                    className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700 hover:bg-rose-100 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-                                >
-                                    Reset
-                                </button>
-                            )}
-                            <div className="ml-auto pl-2">
-                                <ViewModeToggle value={viewMode} onChange={setViewMode} />
-                            </div>
-                        </div>
-                    </div>
+                        }
+                        filters={
+                            <>
+                                <div className="w-full sm:w-auto sm:min-w-[150px]">
+                                    <select
+                                        value={roleFilter}
+                                        onChange={event => { setRoleFilter(event.target.value); setPage(1); }}
+                                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                                    >
+                                        <option value="">All roles</option>
+                                        {roleOptions.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
+                                    </select>
+                                </div>
+                                <div className="w-full sm:w-auto sm:min-w-[140px]">
+                                    <select
+                                        value={statusFilter}
+                                        onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
+                                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                                    >
+                                        <option value="">Any status</option>
+                                        <option value="active">Active</option>
+                                        <option value="inactive">Inactive</option>
+                                    </select>
+                                </div>
+                                {(searchTerm || roleFilter || statusFilter) && (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => {
+                                            setSearchTerm('');
+                                            setRoleFilter('');
+                                            setStatusFilter('');
+                                            setPage(1);
+                                        }}
+                                        className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                                    >
+                                        Reset
+                                    </Button>
+                                )}
+                            </>
+                        }
+                        endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+                    />
                 </div>
             )}
 

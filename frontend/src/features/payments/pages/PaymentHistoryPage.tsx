@@ -199,7 +199,6 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           >
             <Upload className="mr-2 h-4 w-4" /> Upload Payment Proof
           </Button>
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
             <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} /> Refresh
           </Button>

@@ -204,7 +204,6 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
         </div>
         {activeTab === 'tracking' && (
           <div className="flex items-center gap-2">
-            <ViewToggle viewMode={viewMode} onChange={setViewMode} />
             <Button
               variant="outline"
               onClick={() => listQuery.refetch()}

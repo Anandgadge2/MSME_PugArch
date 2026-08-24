@@ -1515,9 +1515,6 @@ export default function AdminOnboarding() {
                           </Button>
                         </>
                       }
-                      endContent={
-                        <ViewModeToggle value={viewMode} onChange={setViewMode} />
-                      }
                     />
                   </div>
 

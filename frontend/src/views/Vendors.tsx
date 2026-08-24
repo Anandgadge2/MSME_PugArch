@@ -326,10 +326,6 @@ const Vendors = () => {
             Locate and engage verified MSME vendors across nationwide sectors.
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
-        </div>
       </div>
 
       {/* KPI Cards Grid */}
@@ -480,6 +476,7 @@ const Vendors = () => {
               )}
             </>
           }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
         />
       </div>
 
