@@ -153,7 +153,7 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/seller/settings': () => import('../../views/SellerSettings'),
   '/buyer/profile': () => import('../../views/BuyerProfile'),
   '/user-guide': () => import('../../views/PortalDocumentation'),
-  '/help': () => import('../../views/HelpPage'),
+  // '/help': () => import('../../views/HelpPage'),
   '/profile': () => import('../../views/Profile'),
 };
 
@@ -632,7 +632,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
 
     // Common items
     { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin'] },
-    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin'] },
+    // { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin'] },
     { label: 'Disputes', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
     ...(!isShgAccount ? [{ label: 'Onboarding Hub', path: user ? getSellerPortalPath(user) : '/seller/onboarding', icon: Store, roles: ['seller'] }] : []),
     { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
