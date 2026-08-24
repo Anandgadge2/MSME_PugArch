@@ -866,11 +866,11 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           }
           filters={
             <>
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[125px]">
                 <select
                   value={kindFilter}
                   onChange={event => setKindFilter(event.target.value as FilterKind)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                 >
                   <option value="all">All types</option>
                   <option value="product">Products</option>
@@ -878,33 +878,33 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                 </select>
               </div>
 
-              <div className="w-full sm:w-auto sm:min-w-[140px]">
+              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[140px]">
                 <select
                   value={categoryFilter}
                   onChange={event => setCategoryFilter(event.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                 >
                   <option value="">All categories</option>
                   {categories.map(category => <option key={category} value={category}>{category}</option>)}
                 </select>
               </div>
 
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[130px]">
                 <select
                   value={statusFilter}
                   onChange={event => setStatusFilter(event.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                 >
                   <option value="">All statuses</option>
                   {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
 
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[125px]">
                 <select
                   value={priceFilter}
                   onChange={event => setPriceFilter(event.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                 >
                   <option value="">All prices</option>
                   <option value="high">Above Rs. 10k</option>
@@ -914,11 +914,11 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
               </div>
 
               {mode !== 'seller' && (
-                <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
                   <select
                     value={verificationFilter}
                     onChange={event => setVerificationFilter(event.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   >
                     <option value="">All sellers</option>
                     <option value="verified">Verified sellers</option>

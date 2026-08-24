@@ -11,19 +11,18 @@ interface ResponsiveFilterBarProps {
   className?: string;
 }
 
-export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFilterCount = 0, singleRowDesktop, className }: ResponsiveFilterBarProps) {
+export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFilterCount = 0, singleRowDesktop = true, className }: ResponsiveFilterBarProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className={cn(
-      "flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full overflow-x-hidden",
-      singleRowDesktop ? "sm:flex-nowrap" : "sm:flex-wrap",
+      "flex flex-col sm:flex-row sm:items-center sm:flex-nowrap gap-2 sm:gap-2.5 w-full min-w-0 overflow-x-auto scrollbar-none",
       className
     )}>
-      {/* Row 1: Search bar + FILTERS toggle side-by-side on mobile (contained width on desktop) */}
+      {/* Row 1: Search bar + FILTERS toggle side-by-side on mobile (compact contained width on desktop) */}
       <div className="flex items-center gap-2 w-full min-w-0 sm:w-auto sm:shrink-0">
-        {/* Search: flexible on mobile, contained fixed width on desktop */}
-        <div className="flex-1 min-w-0 sm:w-72 md:w-80 sm:shrink-0">
+        {/* Search: flexible on mobile, compact fixed width on desktop */}
+        <div className="flex-1 min-w-0 sm:w-52 md:w-60 lg:w-64 xl:w-72 sm:shrink-0">
           {searchInput}
         </div>
 
@@ -51,10 +50,9 @@ export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFi
         </div>
       </div>
 
-      {/* Filters Container (Hidden on mobile unless opened, always flex next to search on sm+) */}
+      {/* Filters Container (Hidden on mobile unless opened, always in-line on sm+) */}
       <div className={cn(
-        "w-full sm:flex sm:items-center gap-2.5 sm:gap-3",
-        singleRowDesktop ? "sm:flex-nowrap sm:w-auto" : "sm:flex-wrap sm:w-auto",
+        "w-full sm:w-auto sm:flex sm:items-center sm:flex-nowrap gap-2 sm:gap-2.5 min-w-0",
         // On mobile, if open, make it a stacked list and force direct children to take full width.
         isOpen ? "flex flex-col [&>div]:!w-full [&>div]:!max-w-none [&>div>select]:w-full [&>select]:w-full [&>label]:w-full pb-2" : "hidden sm:flex"
       )}>
@@ -68,9 +66,9 @@ export function ResponsiveFilterBar({ searchInput, filters, endContent, activeFi
         </div>
       )}
 
-      {/* Desktop End Content */}
+      {/* Desktop End Content (Pinned to right side) */}
       {endContent && (
-        <div className="hidden sm:flex sm:ml-auto items-center gap-2.5 shrink-0">
+        <div className="hidden sm:flex sm:ml-auto items-center gap-2 shrink-0">
           {endContent}
         </div>
       )}

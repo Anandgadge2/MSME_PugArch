@@ -1002,11 +1002,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             <>
               {/* Type Dropdown */}
               {!subRouteType && (
-                <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[130px]">
                   <select
                     value={type}
                     onChange={e => { setType(e.target.value as OpportunityType | ''); setPage(1); }}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   >
                     <option value="">All Types</option>
                     {typeOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
@@ -1015,11 +1015,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               )}
 
               {/* Category Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[145px]">
                 <select
                   value={category}
                   onChange={e => { setCategory(e.target.value); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                 >
                   <option value="">All Categories</option>
                   {categoryOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
@@ -1027,11 +1027,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Buyer Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
                 <select
                   value={buyerFilter}
                   onChange={e => { setBuyerFilter(e.target.value); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                 >
                   <option value="">All Buyers</option>
                   {buyerOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
@@ -1039,11 +1039,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Location Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
                 <select
                   value={location}
                   onChange={e => { setLocation(e.target.value); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                 >
                   <option value="">All Locations</option>
                   {locationOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
@@ -1051,11 +1051,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Closing Date Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[130px]">
                 <select
                   value={closingDate}
                   onChange={e => { setClosingDate(e.target.value); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                 >
                   <option value="">Closing Date</option>
                   <option value="7">Next 7 days</option>
