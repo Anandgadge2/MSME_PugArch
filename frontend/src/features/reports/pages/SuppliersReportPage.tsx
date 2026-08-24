@@ -43,11 +43,11 @@ export default function SuppliersReportPage() {
                 isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#12335f]" /></div>
                 ) : data ? (
-                    <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
-                        <KpiCard label="Sellers" value={data.sellers} icon={Store} tone="emerald" />
-                        <KpiCard label="Products" value={data.products} icon={Package} tone="blue" />
-                        <KpiCard label="Services" value={data.services} icon={Wrench} tone="purple" />
-                        <KpiCard label="Ratings" value={data.ratings} icon={Star} tone="amber" />
+                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <KpiCard label="Sellers" value={data.sellers} subtext="Onboarded vendor base" icon={Store} tone="emerald" />
+                        <KpiCard label="Products" value={data.products} subtext="Active catalogue items" icon={Package} tone="blue" />
+                        <KpiCard label="Services" value={data.services} subtext="Published service listings" icon={Wrench} tone="purple" />
+                        <KpiCard label="Ratings" value={data.ratings} subtext="Submitted reviews" icon={Star} tone="amber" />
                     </div>
                 ) : null
             }

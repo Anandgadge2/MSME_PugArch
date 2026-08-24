@@ -48,10 +48,10 @@ import {
   MethodBadge,
   SectionCard
 } from '../../procurementWizard/components/SourcingWizardComponents';
+import { KpiCard } from '../../shared/KpiCard';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
-import { KpiCard } from '../../shared/KpiCard';
 
 interface NormalizedProcurement {
   id: number;
@@ -463,10 +463,10 @@ export default function BuyerProcurementHub() {
     const pendingActions = (summary?.pendingApprovalsCount || 0) + (summary?.grnsToApproveCount || 0) + (listResponse?.kpis?.pendingApproval || 0);
 
     return [
-      { label: 'Total Procurements', value: totalCount, change: `${activeCount} live in progress`, icon: FolderOpen, color: 'text-indigo-600 bg-indigo-50 border-indigo-150' },
-      { label: 'Awarded Value', value: formatAwardedValue(awardedSum), change: `${awardedCount} award${awardedCount === 1 ? '' : 's'} granted`, icon: Award, color: 'text-emerald-600 bg-emerald-50 border-emerald-150' },
-      { label: 'Pending Actions', value: pendingActions, change: 'Approvals & reviews pending', icon: CheckSquare, color: 'text-amber-600 bg-amber-50 border-amber-150' },
-      { label: 'Active Purchase Orders', value: summary?.myActivePOsCount || 0, change: 'Sent to sellers', icon: ShoppingCart, color: 'text-sky-600 bg-sky-50 border-sky-150' },
+      { label: 'Total Procurements', value: totalCount, change: `${activeCount} live in progress`, icon: FolderOpen, tone: 'indigo' },
+      { label: 'Awarded Value', value: formatAwardedValue(awardedSum), change: `${awardedCount} award${awardedCount === 1 ? '' : 's'} granted`, icon: Award, tone: 'green' },
+      { label: 'Pending Actions', value: pendingActions, change: 'Approvals & reviews pending', icon: CheckSquare, tone: 'amber' },
+      { label: 'Active Purchase Orders', value: summary?.myActivePOsCount || 0, change: 'Sent to sellers', icon: ShoppingCart, tone: 'sky' },
     ];
   }, [allProcurements, listResponse?.kpis, summary]);
 
@@ -621,38 +621,18 @@ export default function BuyerProcurementHub() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi, idx) => {
-          const Icon = kpi.icon;
-          const bottomStripeColor =
-            idx === 0 ? 'bg-[#12335f]' :
-            idx === 1 ? 'bg-emerald-500' :
-            idx === 2 ? 'bg-amber-500' : 'bg-sky-500';
-
-          return (
-            <Card key={idx} className="group relative overflow-hidden rounded-[22px] border-0 bg-white/90 shadow-[0_10px_35px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,23,42,0.1)]">
-              <CardContent className="flex h-full min-h-[112px] flex-col justify-between p-4">
-                <div className="flex justify-between items-start gap-1">
-                  <span className="text-[9px] font-black uppercase text-slate-450 tracking-widest leading-normal">
-                    {kpi.label}
-                  </span>
-                   <span className={`p-1.5 rounded-full border shrink-0 transition-transform group-hover:scale-105 duration-200 ${kpi.color}`}>
-                    <Icon className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-                <div className="mt-2 relative z-10">
-                  <span className="text-2xl font-black text-slate-950 block tracking-tight">
-                    {isSummaryLoading ? '...' : kpi.value}
-                  </span>
-                  <span className="text-[8.5px] font-black text-slate-450 mt-1 block tracking-wider uppercase">
-                    {kpi.change}
-                  </span>
-                </div>
-                <div className={`absolute bottom-0 left-0 right-0 h-1 ${bottomStripeColor}`} />
-              </CardContent>
-            </Card>
-          );
-        })}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {kpis.map((kpi, idx) => (
+          <KpiCard
+            key={idx}
+            label={kpi.label}
+            value={kpi.value}
+            subtext={kpi.change}
+            icon={kpi.icon}
+            tone={kpi.tone}
+            loading={isSummaryLoading}
+          />
+        ))}
       </div>
 
       {/* Modern Sourcing Filters & Controls Panel */}

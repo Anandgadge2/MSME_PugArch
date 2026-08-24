@@ -41,6 +41,7 @@ import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { SellerQuotationReviewModal, QuotationComparisonModal, SelectQuotationsToCompareModal } from '../components/ProcurementDetailUnifiedView';
 import ClarificationPanel from '../components/ClarificationPanel';
+import { KpiCard } from '../../shared/KpiCard';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
 type Tone = 'slate' | 'emerald' | 'rose' | 'amber' | 'sky' | 'indigo' | 'violet';
@@ -684,24 +685,22 @@ function MetricCard({
   value,
   icon: Icon,
   tone,
+  subtext,
 }: {
   label: string;
   value: React.ReactNode;
   icon: IconComponent;
   tone: Tone;
+  subtext?: string;
 }) {
-  const styles = toneStyles[tone] || toneStyles.slate;
-
   return (
-    <article className={cn('rounded-xl border p-3.5 shadow-2xs flex flex-col justify-between transition-all hover:shadow-xs', styles.card)}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 truncate">{label}</p>
-        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-2xs', styles.icon)}>
-          <Icon className="h-3.5 w-3.5" />
-        </span>
-      </div>
-      <div className={cn('mt-2 text-sm font-black tracking-tight break-words leading-tight', styles.text)}>{value}</div>
-    </article>
+    <KpiCard
+      label={label}
+      value={value as any}
+      icon={Icon}
+      tone={tone as any}
+      subtext={subtext || 'Procurement details'}
+    />
   );
 }
 
@@ -1949,7 +1948,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const buyerContactDisplay = buyerPhoneNum ? `${buyerContactPerson} (${buyerPhoneNum})` : buyerContactPerson;
 
   const summaryCards = [
-    { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: getStatusTone(statusLabel) },
+    { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: getStatusTone(statusLabel), subtext: 'Current lifecycle state' },
     {
       label: 'Submission Deadline',
       value: (
@@ -1964,12 +1963,13 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       ),
       icon: Clock,
       tone: 'rose' as Tone,
+      subtext: 'Bidding window closing'
     },
-    { label: 'Estimated Value', value: formatCurrency(estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone },
+    { label: 'Estimated Value', value: formatCurrency(estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' },
     // { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
-    { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactDisplay, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone },
-    { label: 'Evaluation', value: formatPrimitiveValue(evaluationMethod, 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone },
-    ...(isBuyerOrAdmin ? [{ label: 'Responses', value: totalResponses.toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone }] : []),
+    { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactDisplay, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: 'Procurement officer' },
+    { label: 'Evaluation', value: formatPrimitiveValue(evaluationMethod, 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone, subtext: 'Selection criteria' },
+    ...(isBuyerOrAdmin ? [{ label: 'Responses', value: totalResponses.toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone, subtext: 'Proposals submitted' }] : []),
   ];
 
   const procurementInfo = compactObject({

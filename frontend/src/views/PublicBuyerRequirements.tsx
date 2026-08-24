@@ -31,6 +31,7 @@ import { downloadCsv } from '../features/shared/exportUtils';
 import { Pagination } from '../features/shared/Pagination';
 import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
 import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
+import { KpiCard } from '../features/shared/KpiCard';
 
 type RequirementSortKey = 'serialNo' | 'itemDescription' | 'category' | 'estimatedMonthlyRequirement' | 'unit' | 'remarks';
 
@@ -275,48 +276,35 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 sm:mt-8 relative z-10">
         
         {/* Quick Stats & Highlights Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-blue-100 shadow-sm flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <PackageCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Total Requirements</span>
-              <span className="text-lg font-black text-slate-900">{items.length} Items</span>
-            </div>
-          </div>
-
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-purple-100 shadow-sm flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-              <Tag className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Categories</span>
-              <span className="text-lg font-black text-slate-900">{categories.length || 'General'}</span>
-            </div>
-          </div>
-
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-teal-100 shadow-sm flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-              <Briefcase className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Org Type</span>
-              <span className="text-sm font-black text-slate-900 truncate block max-w-[130px]" title={profile.organizationType}>
-                {profile.organizationType?.replace(/_/g, ' ') || 'Enterprise'}
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-emerald-100 shadow-sm flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Verification</span>
-              <span className="text-sm font-black text-emerald-700">Verified Buyer</span>
-            </div>
-          </div>
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+          <KpiCard
+            label="Total Requirements"
+            value={`${items.length} Items`}
+            subtext="Published buyer items"
+            icon={PackageCheck}
+            tone="blue"
+          />
+          <KpiCard
+            label="Categories"
+            value={categories.length || 'General'}
+            subtext="Product & service fields"
+            icon={Tag}
+            tone="purple"
+          />
+          <KpiCard
+            label="Org Type"
+            value={profile.organizationType?.replace(/_/g, ' ') || 'Enterprise'}
+            subtext="Buyer organization tier"
+            icon={Briefcase}
+            tone="teal"
+          />
+          <KpiCard
+            label="Verification"
+            value="Verified Buyer"
+            subtext="KYC & compliance valid"
+            icon={CheckCircle2}
+            tone="green"
+          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">

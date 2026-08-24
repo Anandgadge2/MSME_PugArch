@@ -58,6 +58,7 @@ type ActionCardConfig = {
     tone: KpiCardTone | string;
     show: boolean;
     priority: boolean;
+    subtext: string;
     isCurrency?: boolean;
 };
 
@@ -111,7 +112,8 @@ function RoleAwareActionCards() {
             icon: ClipboardList,
             tone: 'indigo',
             show: isBuyer,
-            priority: false
+            priority: false,
+            subtext: 'Published requisitions'
         },
         {
             label: 'Procurement Bids',
@@ -120,7 +122,8 @@ function RoleAwareActionCards() {
             icon: Gavel,
             tone: 'purple',
             show: isBuyer,
-            priority: false
+            priority: false,
+            subtext: 'Active market bids'
         },
         {
             label: 'Procurement Spend',
@@ -130,7 +133,8 @@ function RoleAwareActionCards() {
             tone: 'emerald',
             show: isBuyer,
             priority: false,
-            isCurrency: true
+            isCurrency: true,
+            subtext: 'Cumulative purchase value'
         },
         {
             label: 'Active Orders',
@@ -139,7 +143,8 @@ function RoleAwareActionCards() {
             icon: Package,
             tone: 'emerald',
             show: isBuyer,
-            priority: false
+            priority: false,
+            subtext: 'Orders in fulfillment'
         },
         {
             label: 'Supplier Responses',
@@ -148,7 +153,8 @@ function RoleAwareActionCards() {
             icon: Send,
             tone: 'blue',
             show: isBuyer,
-            priority: false
+            priority: false,
+            subtext: 'Bids & quotes submitted'
         },
         {
             label: 'Negotiate Price',
@@ -157,7 +163,8 @@ function RoleAwareActionCards() {
             icon: Gavel,
             tone: 'amber',
             show: isBuyer,
-            priority: false
+            priority: false,
+            subtext: 'Live reverse auctions'
         },
         {
             label: 'Pending Payments',
@@ -166,7 +173,8 @@ function RoleAwareActionCards() {
             icon: Receipt,
             tone: 'rose',
             show: isBuyer,
-            priority: false
+            priority: false,
+            subtext: 'Awaiting clearance'
         },
         {
             label: 'Delivery Confirmation',
@@ -175,7 +183,8 @@ function RoleAwareActionCards() {
             icon: ClipboardCheck,
             tone: 'teal',
             show: isBuyer && hasPermission('inspection.view'),
-            priority: false
+            priority: false,
+            subtext: 'GRNs awaiting approval'
         },
         {
             label: 'Carts to Approve',
@@ -184,7 +193,8 @@ function RoleAwareActionCards() {
             icon: ClipboardCheck,
             tone: 'cyan',
             show: isBuyer && hasPermission('checkout.approve'),
-            priority: false
+            priority: false,
+            subtext: 'Direct purchase checks'
         },
         {
             label: 'Approvals Pending',
@@ -193,7 +203,8 @@ function RoleAwareActionCards() {
             icon: Inbox,
             tone: 'amber',
             show: isBuyer && hasPermission('approval.view'),
-            priority: (data.pendingApprovalsCount || 0) > 0
+            priority: (data.pendingApprovalsCount || 0) > 0,
+            subtext: (data.pendingApprovalsCount || 0) > 0 ? 'Requires your review' : 'No pending items'
         },
 
         // ─── Seller baseline tiles ───
@@ -204,7 +215,8 @@ function RoleAwareActionCards() {
             icon: ClipboardList,
             tone: 'indigo',
             show: isSeller,
-            priority: false
+            priority: false,
+            subtext: 'Open opportunities available'
         },
         {
             label: 'Public Tenders',
@@ -213,7 +225,8 @@ function RoleAwareActionCards() {
             icon: Gavel,
             tone: 'blue',
             show: isSeller,
-            priority: false
+            priority: false,
+            subtext: 'Live open tenders'
         },
         {
             label: 'My Bids / Quotations',
@@ -222,7 +235,8 @@ function RoleAwareActionCards() {
             icon: ClipboardCheck,
             tone: 'purple',
             show: isSeller,
-            priority: false
+            priority: false,
+            subtext: 'Submitted proposals'
         },
         {
             label: 'Orders Received',
@@ -231,7 +245,8 @@ function RoleAwareActionCards() {
             icon: Package,
             tone: 'emerald',
             show: isSeller,
-            priority: false
+            priority: false,
+            subtext: 'Orders to fulfill'
         },
         {
             label: 'Catalogue Items',
@@ -240,7 +255,8 @@ function RoleAwareActionCards() {
             icon: Store,
             tone: 'cyan',
             show: isSeller,
-            priority: false
+            priority: false,
+            subtext: 'Listed products & services'
         },
         {
             label: 'Active Deliveries',
@@ -249,7 +265,8 @@ function RoleAwareActionCards() {
             icon: Truck,
             tone: 'teal',
             show: isSeller,
-            priority: false
+            priority: false,
+            subtext: 'Shipments in transit'
         },
         {
             label: 'Payment Status',
@@ -258,7 +275,8 @@ function RoleAwareActionCards() {
             icon: Receipt,
             tone: 'rose',
             show: isSeller,
-            priority: false
+            priority: false,
+            subtext: 'Invoices under settlement'
         },
         {
             label: 'Request Quotations',
@@ -267,7 +285,8 @@ function RoleAwareActionCards() {
             icon: FileText,
             tone: 'purple',
             show: isSeller,
-            priority: false
+            priority: false,
+            subtext: 'Buyer RFQ requests'
         },
         {
             label: 'Live Auctions',
@@ -276,7 +295,8 @@ function RoleAwareActionCards() {
             icon: Gavel,
             tone: 'amber',
             show: isSeller,
-            priority: false
+            priority: false,
+            subtext: 'Real-time bidding events'
         },
         {
             label: 'Invoice Factoring',
@@ -285,7 +305,8 @@ function RoleAwareActionCards() {
             icon: Landmark,
             tone: 'slate',
             show: isSeller,
-            priority: false
+            priority: false,
+            subtext: 'Early payment financing'
         }
     ], [data, isBuyer, isSeller, hasPermission]);
 
@@ -308,7 +329,7 @@ function RoleAwareActionCards() {
                         icon={card.icon}
                         tone={card.tone}
                         loading={isLoading}
-                        subtext={card.priority && card.count > 0 ? 'Pending Review' : 'View records'}
+                        subtext={card.subtext}
                         onClick={() => openCard(card.href)}
                     />
                 ))}

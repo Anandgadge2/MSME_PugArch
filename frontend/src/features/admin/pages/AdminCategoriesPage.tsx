@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit2, Trash2, Search, RefreshCw, FolderPlus, CheckCircle2, AlertTriangle, Layers, Tag, ArrowUp, ArrowDown, ArrowUpDown, Upload, Image as ImageIcon, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, RefreshCw, FolderPlus, CheckCircle2, AlertTriangle, Layers, Tag, ArrowUp, ArrowDown, ArrowUpDown, Upload, Image as ImageIcon, X, Package, Wrench, Boxes } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../../lib/api';
 import { Button } from '../../../components/ui/button';
@@ -8,6 +8,7 @@ import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { getCategoryImageUrl } from '../../marketplace/utils/categoryImages';
+import { KpiCard } from '../../shared/KpiCard';
 
 export interface Category {
   id: number;
@@ -289,27 +290,42 @@ export default function AdminCategoriesPage() {
       </div>
 
       {/* KPI Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Categories</div>
-          <div className="text-2xl font-black text-slate-900 mt-1">{stats.total}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Product Only</div>
-          <div className="text-2xl font-black text-slate-900 mt-1">{stats.product}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-purple-600">Service Only</div>
-          <div className="text-2xl font-black text-slate-900 mt-1">{stats.service}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">Both (Hybrid)</div>
-          <div className="text-2xl font-black text-slate-900 mt-1">{stats.both}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs col-span-2 sm:col-span-1">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Active Status</div>
-          <div className="text-2xl font-black text-slate-900 mt-1">{stats.active}</div>
-        </div>
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <KpiCard
+          label="Total Categories"
+          value={stats.total}
+          subtext="Configured marketplace groups"
+          icon={Layers}
+          tone="blue"
+        />
+        <KpiCard
+          label="Product Only"
+          value={stats.product}
+          subtext="Physical merchandise items"
+          icon={Package}
+          tone="green"
+        />
+        <KpiCard
+          label="Service Only"
+          value={stats.service}
+          subtext="Professional services"
+          icon={Wrench}
+          tone="purple"
+        />
+        <KpiCard
+          label="Both (Hybrid)"
+          value={stats.both}
+          subtext="Dual supply & services"
+          icon={Boxes}
+          tone="indigo"
+        />
+        <KpiCard
+          label="Active Status"
+          value={stats.active}
+          subtext="Live on buyer portal"
+          icon={CheckCircle2}
+          tone="cyan"
+        />
       </div>
 
       {/* Search & Filter Bar */}
