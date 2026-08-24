@@ -711,7 +711,6 @@ export default function MyProcurementsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <Button
             type="button"
             variant="outline"
@@ -795,6 +794,7 @@ export default function MyProcurementsPage() {
 
       {/* ── Floating Filters Bar ── */}
       <PageToolbar
+        singleRowDesktop={true}
         search={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder="Search by Title, Ref No, Category, or Type..."
@@ -828,6 +828,7 @@ export default function MyProcurementsPage() {
             placeholder: 'All Time'
           }
         ]}
+        actions={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
         onReset={hasActiveFilters ? () => {
           setTypeFilter('');
           setStatusFilter('');
@@ -964,7 +965,7 @@ export default function MyProcurementsPage() {
 
           {/* ═══ GRID VIEW ═══ */}
           {viewMode === 'grid' && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {pagedProcurements.map(p => {
                 const typeVal = getConsolidatedType(p);
                 return (
@@ -972,74 +973,69 @@ export default function MyProcurementsPage() {
                     key={`${p.type}-${p.id}`}
                     onClick={() => openDetail(p)}
                     className={cn(
-                      "group rounded-2xl border bg-white p-5 shadow-2xs hover:shadow-lg transition-all duration-300 ease-out hover:-translate-y-1 border-slate-200/80 hover:border-blue-300 flex flex-col justify-between min-h-[220px] cursor-pointer"
+                      "group flex flex-col justify-between rounded-2xl border bg-slate-50/60 p-4 shadow-xs hover:shadow-md transition-all duration-300 ease-out hover:-translate-y-1 border-[#12335f]/10 hover:border-[#12335f]/30 h-full cursor-pointer"
                     )}
                   >
-                    <div className="space-y-3">
-                      {/* Top row: Badges */}
-                      <div className="flex items-center justify-between">
+                    <div className="flex flex-col flex-1">
+                      {/* Top row: Badges & Reference */}
+                      <div className="flex items-start justify-between mb-3 gap-2">
                         <span className={cn(
-                          "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border whitespace-nowrap transition-transform group-hover:scale-105",
-                          TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
+                          "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border whitespace-nowrap transition-transform group-hover:scale-105 shrink-0 bg-white",
+                          TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 text-slate-700'
                         )}>
                           {typeVal}
                         </span>
-                        <span className="text-[10px] font-mono font-semibold text-slate-400 tabular-nums">
+                        <span className="text-[10px] font-mono font-semibold text-slate-400 tabular-nums text-right break-all">
                           {p.referenceNumber}
                         </span>
                       </div>
 
                       {/* Title */}
-                      <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+                      <h3 className="text-sm font-black text-slate-900 leading-snug line-clamp-2 group-hover:text-[#12335f] transition-colors mb-2">
                         {p.title}
                       </h3>
 
                       {/* Source Ref & Category */}
-                      <div className="text-[11px] text-slate-500 font-bold space-y-1">
+                      <div className="text-[11px] text-slate-500 font-bold space-y-1 mb-4">
                         {p.category && <p className="line-clamp-1">Category: {p.category}</p>}
                         {p.description && <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
                       </div>
                     </div>
 
-                    <div className="pt-4 border-t border-slate-100 mt-4 space-y-3">
-                      {/* Timeline & Commercials */}
-                      <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="pt-3 border-t border-slate-200/70 mt-auto flex flex-col gap-4">
+                      {/* Status & Commercials */}
+                      <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Status</p>
-                          <div className="mt-1">
-                            <span className={cn(
-                              'inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
-                              p.statusGroup === 'draft' ? 'border-slate-200 bg-slate-50 text-slate-600' :
-                              p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                              p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
-                              p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                              'border-red-200 bg-red-50 text-red-700'
-                            )}>
-                              {p.statusLabel}
-                            </span>
-                          </div>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none mb-1.5">Status</p>
+                          <span className={cn(
+                            'inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
+                            p.statusGroup === 'draft' ? 'border-slate-200 bg-white text-slate-600' :
+                            p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                            p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
+                            p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                            'border-red-200 bg-red-50 text-red-700'
+                          )}>
+                            {p.statusLabel}
+                          </span>
                         </div>
 
-                        <div>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Est. Value</p>
-                          <div className="mt-1">
-                            <span className="text-xs font-extrabold text-slate-900 block">
-                              {formatCurrency(p.estimatedValue)}
-                            </span>
-                          </div>
+                        <div className="text-right">
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none mb-1.5">Est. Value</p>
+                          <span className="text-sm font-extrabold text-slate-900 block tabular-nums">
+                            {formatCurrency(p.estimatedValue)}
+                          </span>
                         </div>
                       </div>
 
                       {/* Action Button */}
-                      <div className="flex justify-end pt-1">
-                        <button
-                          type="button"
-                          onClick={e => openDetail(p, e)}
-                          className="inline-flex h-8 w-full items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
-                        >
-                          View Details
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={e => openDetail(p, e)}
+                        className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#12335f] px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-[#0b2445] hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
+                      >
+                        View Details
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
                 );

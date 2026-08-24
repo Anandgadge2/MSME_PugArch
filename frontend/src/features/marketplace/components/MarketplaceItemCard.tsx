@@ -97,7 +97,7 @@ export function MarketplaceItemCard({
     return (
         <article
             className={cn(
-                'group relative flex w-[180px] sm:w-[200px] shrink-0 snap-start flex-col overflow-hidden rounded-xl bg-white p-3 border border-slate-200 shadow-sm transition-all duration-200 ease-out hover:shadow-md hover:border-slate-300',
+                'group relative flex w-[190px] sm:w-[215px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white p-3.5 border border-slate-200/80 shadow-sm hover:shadow-xl hover:border-blue-200/80 transition-all duration-300 ease-out hover:-translate-y-1',
                 className
             )}
         >
@@ -106,7 +106,7 @@ export function MarketplaceItemCard({
                 <Link
                     href={detailHref}
                     onClick={cacheDetail}
-                    className="relative block h-[150px] w-full overflow-hidden rounded-lg bg-slate-50 flex items-center justify-center shrink-0 cursor-pointer"
+                    className="relative block h-[155px] sm:h-[165px] w-full overflow-hidden rounded-xl bg-gradient-to-br from-slate-50 via-blue-50/25 to-slate-100 border border-slate-100/90 flex items-center justify-center shrink-0 cursor-pointer shadow-inner transition-all duration-300 group-hover:border-blue-200"
                 >
                     {imageUrl ? (
                         <img
@@ -114,29 +114,37 @@ export function MarketplaceItemCard({
                             alt={item.name}
                             loading="lazy"
                             onError={() => setImageFailed(true)}
-                            className="h-full w-full object-contain p-2 mix-blend-multiply transition-transform duration-300 ease-out group-hover:scale-[1.03]"
+                            className="h-full w-full object-contain p-2 mix-blend-multiply transition-transform duration-300 ease-out group-hover:scale-108"
                         />
                     ) : (
                         <span className="flex h-full w-full items-center justify-center text-slate-300">
-                            {type === 'service' ? <Wrench className="h-10 w-10" /> : <Package className="h-10 w-10" />}
+                            {type === 'service' ? <Wrench className="h-10 w-10 text-indigo-400" /> : <Package className="h-10 w-10 text-blue-400" />}
                         </span>
                     )}
                 </Link>
 
-                {/* ── Star Rating Row ── */}
-                <div className="mt-2.5 flex items-center gap-1.5">
-                    <span className="flex items-center text-[11px] font-black text-amber-500">
-                        <span className="mr-0.5 text-[13px] leading-none">★</span> {ratingStr}
-                    </span>
-                    <span className="text-[10px] font-medium text-slate-400">
-                        ({reviewCount} Reviews)
-                    </span>
+                {/* ── Star Rating & Discount Pill Row ── */}
+                <div className="mt-3 flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1">
+                        <span className="flex items-center text-xs font-black text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200/60">
+                            <span className="mr-0.5 text-xs leading-none">★</span> {ratingStr}
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-400">
+                            ({reviewCount})
+                        </span>
+                    </div>
+
+                    {user && discountPercent > 0 && (
+                        <span className="inline-flex rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
+                            {discountPercent}% OFF
+                        </span>
+                    )}
                 </div>
 
                 {/* ── Product Title ── */}
-                <Link href={detailHref} onClick={cacheDetail} className="block mt-1 mb-2">
+                <Link href={detailHref} onClick={cacheDetail} className="block mt-1.5 mb-2">
                     <h3
-                        className="line-clamp-2 text-xs font-semibold leading-relaxed text-slate-800 transition-colors duration-200 group-hover:text-[#0b2447]"
+                        className="line-clamp-2 text-xs sm:text-[13px] font-bold leading-snug text-slate-800 transition-colors duration-200 group-hover:text-blue-600"
                         title={item.name}
                     >
                         {item.name}
@@ -144,32 +152,24 @@ export function MarketplaceItemCard({
                 </Link>
 
                 <div className="mt-auto">
-                    {/* ── Offer / Discount ── */}
-                    {user && discountPercent > 0 && (
-                        <div className="mb-1.5">
-                            <span className="inline-flex rounded-sm bg-green-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-green-700">
-                                {discountPercent}% OFF
-                            </span>
-                        </div>
-                    )}
-
                     {/* ── Seller Info ── */}
                     {sellerName && (
-                        <div className="mb-2.5 text-[10px] font-medium text-slate-500 truncate" title={`Sold by ${sellerName}`}>
-                            Sold by <span className="text-slate-700">{sellerName}</span>
+                        <div className="mb-2 text-[10px] font-medium text-slate-500 truncate" title={`Sold by ${sellerName}`}>
+                            Sold by <span className="text-slate-700 font-semibold">{sellerName}</span>
                         </div>
                     )}
                 </div>
             </div>
 
             {/* ── Action Button ── */}
-            <div className="mt-1 pt-1">
+            <div className="mt-1 pt-1.5 border-t border-slate-100">
                 <Link
                     href={detailHref}
                     onClick={cacheDetail}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-[0_1px_2px_rgba(0,0,0,0.02)] transition-all duration-200 hover:bg-slate-50 hover:text-[#0b2447] hover:border-slate-300 active:scale-[0.98]"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#0b2447] via-[#123668] to-[#0b2447] hover:from-blue-600 hover:via-indigo-600 hover:to-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:shadow-blue-500/25 transition-all duration-300 active:scale-[0.98]"
                 >
-                    View Product <span className="text-slate-400">&rarr;</span>
+                    <span>View Product</span>
+                    <span className="text-blue-200 transition-transform duration-200 group-hover:translate-x-0.5">&rarr;</span>
                 </Link>
             </div>
         </article>

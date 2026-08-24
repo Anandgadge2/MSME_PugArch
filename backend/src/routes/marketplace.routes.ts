@@ -1016,14 +1016,14 @@ const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketpl
     const categories = await db.category.findMany({
         where: { isActive: true },
         orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
-        take: 24,
         select: {
             id: true,
             name: true,
             slug: true,
             type: true,
             displayOrder: true,
-            imageUrl: true
+            imageUrl: true,
+            _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
         }
     }).catch(() => []);
     return (categories || []).map((category: any) => ({
@@ -1033,11 +1033,11 @@ const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketpl
         icon: category.slug,
         imageUrl: category.imageUrl || null,
         type: category.type,
-        productCount: 0,
-        serviceCount: 0,
+        productCount: category._count?.products || 0,
+        serviceCount: category._count?.services || 0,
         displayOrder: category.displayOrder
     }));
-}, 600);
+}, 300);
 
 const purchaseCompletionWhere = {
     OR: [

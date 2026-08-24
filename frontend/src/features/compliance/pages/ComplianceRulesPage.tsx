@@ -26,7 +26,7 @@ import { Button } from '../../../components/ui/button';
 import { Input, Select } from '../../../components/ui/input';
 import { Pagination } from '../../shared/Pagination';
 import { PageToolbar } from '../../shared/PageToolbar';
-import { KpiTile } from '../../shared/KpiTile';
+import { KpiCard } from '../../shared/KpiCard';
 import { ViewModeToggle, type ViewMode } from '../../shared/ViewModeToggle';
 import { ListSkeleton } from '../../../components/ui/skeleton';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
@@ -226,7 +226,7 @@ export default function ComplianceRulesPage() {
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 {tiles.map(tile => (
-                    <KpiTile
+                    <KpiCard
                         key={tile.key}
                         label={tile.label}
                         value={tile.value}
@@ -914,5 +914,5 @@ function ModalFooter({
     );
 }
 
-// MetricCard removed in favor of the shared <KpiTile> component.
+// MetricCard removed in favor of the shared <KpiCard> component.
 

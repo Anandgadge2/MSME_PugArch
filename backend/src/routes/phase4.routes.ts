@@ -1,4 +1,5 @@
 import { Router, type Response } from 'express';
+import fs from 'fs';
 import path from 'path';
 import { Prisma } from '@prisma/client';
 import https from 'https';
@@ -6,7 +7,7 @@ import { z } from 'zod';
 import prisma from '../lib/prisma.js';
 import { permanentlyDeleteUser } from './master-admin.routes.js';
 import { env } from '../config/env.js';
-import { getGCSBucket } from '../config/gcs.js';
+import { getGCSBucket, getGCSBucketName } from '../config/gcs.js';
 import { getFileContent, getSignedUrl, uploadFile } from '../services/storage/storage.service.js';
 import { authenticate, optionalAuthenticate, authorize, authorizeAdmin, requireAccountType, requirePermission, type AuthRequest } from '../middleware/auth.js';
 import { verifyAccessToken } from '../services/token.service.js';
@@ -2666,27 +2667,63 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
   const rawKey = req.params.key;
   if (!rawKey) throw new ApiError(400, 'Key is required', 'KEY_REQUIRED');
 
+  const ext = path.extname(rawKey).toLowerCase();
+  const contentType = RAW_MIME_TYPES[ext] || 'application/octet-stream';
+
+  // 1. Check local candidate paths (local disk fallback)
+  const localCandidates = [
+    path.resolve(process.cwd(), 'uploads', rawKey),
+    path.resolve(process.cwd(), 'backend/uploads', rawKey),
+    path.resolve(process.cwd(), 'public', rawKey),
+    path.resolve(process.cwd(), 'backend/public', rawKey),
+    path.resolve(process.cwd(), rawKey)
+  ];
+
+  for (const cand of localCandidates) {
+    try {
+      if (cand && fs.existsSync(cand) && !fs.statSync(cand).isDirectory()) {
+        const buffer = fs.readFileSync(cand);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', buffer.length);
+        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        return res.end(buffer);
+      }
+    } catch {}
+  }
+
+  // 2. Try fetching public storage URL
+  try {
+    const bucketName = getGCSBucketName();
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${rawKey}`;
+    const response = await fetch(publicUrl);
+    if (response.ok) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const headerContentType = response.headers.get('content-type') || contentType;
+      res.setHeader('Content-Type', headerContentType);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.end(buffer);
+    }
+  } catch {}
+
+  // 3. Try authenticated GCS client if configured
   try {
     const bucket = getGCSBucket();
     const file = bucket.file(rawKey);
     const [exists] = await file.exists();
-    if (!exists) {
-      throw new ApiError(404, 'File not found in storage', 'FILE_NOT_FOUND');
+    if (exists) {
+      const [buffer] = await file.download();
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.end(buffer);
     }
+  } catch {}
 
-    const ext = path.extname(rawKey).toLowerCase();
-    const contentType = RAW_MIME_TYPES[ext] || 'application/octet-stream';
-    const [buffer] = await file.download();
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Length', buffer.length);
-    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    return res.end(buffer);
-  } catch (err: any) {
-    if (err instanceof ApiError) throw err;
-    throw new ApiError(500, `Storage read error: ${err?.message || 'failed'}`, 'STORAGE_READ_ERROR');
-  }
+  throw new ApiError(404, 'File not found in storage', 'FILE_NOT_FOUND');
 }));
 
 router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {

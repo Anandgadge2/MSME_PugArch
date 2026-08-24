@@ -375,7 +375,7 @@ export function MarketplaceHeader({ user }: Props) {
                                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 mb-1.5">Explore Marketplace</p>
                                 
                                 <Link
-                                    href="/marketplace/categories"
+                                    href="/marketplace/products"
                                     onClick={() => setMobileMenuOpen(false)}
                                     className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
                                 >
@@ -383,7 +383,7 @@ export function MarketplaceHeader({ user }: Props) {
                                         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
                                             <Layers className="h-3.5 w-3.5" />
                                         </span>
-                                        <span>All Categories</span>
+                                        <span>All Products & Categories</span>
                                     </span>
                                     <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
                                 </Link>

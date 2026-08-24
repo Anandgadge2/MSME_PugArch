@@ -44,16 +44,20 @@ export function MarketplaceSectionCarousel({
     if (!loading && items.length === 0 && !emptyState) return null;
 
     return (
-        <section className={cn('bg-white/70 py-2', className)} data-section={sectionKey}>
-            <div className="mx-auto max-w-[1680px] px-4 pt-4 sm:px-6 2xl:px-8">
-                <div className="mb-3 flex items-end justify-between gap-3">
-                    <div className="min-w-0">
-                        <h2 className="text-sm font-black text-[#0b2447] sm:text-base">{title}</h2>
-                        {subtitle && <p className="mt-0.5 text-[11px] font-semibold text-slate-500">{subtitle}</p>}
+        <section className={cn('py-4 sm:py-6 relative overflow-hidden', className)} data-section={sectionKey}>
+            <div className="mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
+                <div className="mb-4 sm:mb-5 flex items-end justify-between gap-3 border-b border-slate-200/60 pb-3">
+                    <div className="flex items-center gap-3">
+                        <div className="h-6 w-1.5 rounded-full bg-gradient-to-b from-blue-600 via-indigo-600 to-blue-700 shadow-sm" />
+                        <div className="min-w-0">
+                            <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900">{title}</h2>
+                            {subtitle && <p className="mt-0.5 text-xs font-semibold text-slate-500">{subtitle}</p>}
+                        </div>
                     </div>
                     {viewAllUrl && (
-                        <Link href={viewAllUrl} className="shrink-0 text-[11px] font-black text-[#0b2447] hover:underline flex items-center gap-1">
-                            View all <span>&rarr;</span>
+                        <Link href={viewAllUrl} className="shrink-0 text-xs font-black text-blue-600 hover:text-indigo-700 hover:underline flex items-center gap-1 group transition-colors">
+                            <span>View all</span>
+                            <span className="transition-transform duration-200 group-hover:translate-x-1">&rarr;</span>
                         </Link>
                     )}
                 </div>
@@ -64,7 +68,7 @@ export function MarketplaceSectionCarousel({
                     <button
                         type="button"
                         onClick={() => scroll('left')}
-                        className="absolute -left-3 lg:-left-5 top-1/2 z-30 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/90 bg-white/95 shadow-lg backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] hover:shadow-xl active:scale-95 lg:flex text-slate-700 cursor-pointer"
+                        className="absolute -left-2 lg:-left-4 top-1/2 z-30 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200/90 bg-white/95 text-slate-800 shadow-xl backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] hover:shadow-2xl active:scale-95 lg:flex cursor-pointer"
                         aria-label={`Scroll ${title} left`}
                     >
                         <ChevronLeft className="h-5 w-5" />

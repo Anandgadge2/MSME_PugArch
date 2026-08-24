@@ -1,107 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">
   <defs>
-    <!-- Studio Lighting Backdrop -->
-    <radialGradient id="studioBg" cx="50%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="#ffffff" />
-      <stop offset="70%" stop-color="#f8fafc" />
-      <stop offset="100%" stop-color="#f1f5f9" />
-    </radialGradient>
-    
-    <!-- Realistic Ground Contact Shadow -->
-    <radialGradient id="contactShadow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="rgba(15, 23, 42, 0.28)" />
-      <stop offset="50%" stop-color="rgba(15, 23, 42, 0.12)" />
-      <stop offset="100%" stop-color="rgba(15, 23, 42, 0)" />
-    </radialGradient>
-    
-    <!-- Chrome / Metallic Highlights -->
-    <linearGradient id="chromeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f1f5f9" />
-      <stop offset="25%" stop-color="#94a3b8" />
-      <stop offset="50%" stop-color="#ffffff" />
-      <stop offset="75%" stop-color="#64748b" />
-      <stop offset="100%" stop-color="#cbd5e1" />
+    <linearGradient id="pbg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#e2e8f0" />
     </linearGradient>
-
-    <!-- Copper / Brass Metallic Gradient -->
-    <linearGradient id="copperGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fdba74" />
-      <stop offset="35%" stop-color="#ea580c" />
-      <stop offset="70%" stop-color="#fed7aa" />
-      <stop offset="100%" stop-color="#c2410c" />
+    <linearGradient id="pgrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e40af" />
+      <stop offset="100%" stop-color="#64748b" />
     </linearGradient>
-
-    <!-- Steel / Dark Metal Gradient -->
-    <linearGradient id="darkMetal" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#475569" />
-      <stop offset="50%" stop-color="#1e293b" />
-      <stop offset="100%" stop-color="#0f172a" />
-    </linearGradient>
-
-    <!-- Blue Industrial Power Tool Paint -->
-    <linearGradient id="toolBlue" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#38bdf8" />
-      <stop offset="40%" stop-color="#0284c7" />
-      <stop offset="100%" stop-color="#0369a1" />
-    </linearGradient>
-
-    <!-- Orange Industrial Paint -->
-    <linearGradient id="safetyOrange" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fb923c" />
-      <stop offset="50%" stop-color="#ea580c" />
-      <stop offset="100%" stop-color="#c2410c" />
-    </linearGradient>
-
-    <!-- Red Industrial Paint -->
-    <linearGradient id="dangerRed" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f87171" />
-      <stop offset="50%" stop-color="#dc2626" />
-      <stop offset="100%" stop-color="#991b1b" />
-    </linearGradient>
-
-    <!-- Yellow Industrial Paint -->
-    <linearGradient id="cautionYellow" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fde047" />
-      <stop offset="40%" stop-color="#eab308" />
-      <stop offset="100%" stop-color="#ca8a04" />
-    </linearGradient>
-
-    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.16"/>
-    </filter>
   </defs>
 
-  <!-- Clean Studio Background -->
-  <rect width="500" height="500" rx="16" fill="url(#studioBg)" />
+  <rect width="600" height="600" fill="url(#pbg)" />
 
-  <!-- Ground Contact Shadow -->
-  <ellipse cx="250" cy="425" rx="180" ry="24" fill="url(#contactShadow)" />
-  <ellipse cx="250" cy="422" rx="120" ry="14" fill="url(#contactShadow)" opacity="0.8" />
-
-  <!-- Realistic Product Artwork Container -->
-  <g filter="url(#softGlow)">
-    
-    <g transform="translate(130, 60)">
-      <!-- Blue Steel 180kg Barrel -->
-      <rect x="30" y="70" width="180" height="260" rx="20" fill="url(#toolBlue)" stroke="#0369a1" stroke-width="4" />
-      <!-- Chimes & Rings -->
-      <line x1="30" y1="130" x2="210" y2="130" stroke="#0f172a" stroke-width="6" />
-      <line x1="30" y1="210" x2="210" y2="210" stroke="#0f172a" stroke-width="6" />
-      <line x1="30" y1="270" x2="210" y2="270" stroke="#0f172a" stroke-width="6" />
-      <ellipse cx="120" cy="70" rx="90" ry="25" fill="#0284c7" stroke="#0369a1" stroke-width="3" />
-      <!-- Top Bung Holes -->
-      <circle cx="80" cy="70" r="10" fill="url(#chromeGrad)" stroke="#1e293b" stroke-width="2" />
-      <circle cx="160" cy="70" r="6" fill="url(#chromeGrad)" stroke="#1e293b" stroke-width="2" />
-      <!-- Lithograph Brand Label -->
-      <rect x="45" y="145" width="150" height="55" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
-      <text x="120" y="165" font-family="sans-serif" font-size="13" font-weight="900" fill="#dc2626" text-anchor="middle">EP-2 GREASE</text>
-      <text x="120" y="180" font-family="sans-serif" font-size="10" font-weight="800" fill="#0f172a" text-anchor="middle">HEAVY INDUSTRIAL 180 KG</text>
-      <text x="120" y="193" font-family="sans-serif" font-size="8" font-weight="700" fill="#0284c7" text-anchor="middle">Lithium Complex • MoS2</text>
-    </g>
-  
+  <g transform="translate(150, 120)">
+    <rect width="300" height="280" rx="24" fill="url(#pgrad)" stroke="rgba(255,255,255,0.4)" stroke-width="4" filter="drop-shadow(0 20px 30px rgba(0,0,0,0.15))" />
+    <circle cx="150" cy="140" r="80" fill="rgba(255,255,255,0.15)" />
+    <circle cx="150" cy="140" r="55" fill="rgba(255,255,255,0.25)" />
+    <text x="150" y="150" font-family="sans-serif" font-size="28" font-weight="900" text-anchor="middle" fill="#ffffff">PROD</text>
   </g>
 
+  <rect x="40" y="440" width="520" height="120" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
   
+  <text x="70" y="480" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="900" fill="#0f172a">
+    Viton &amp; NBR Double Lip Rotary Shaf...
+  </text>
   
-  
+  <text x="70" y="508" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="600" fill="#64748b">
+    Category: Industrial Consumables • Jharsuguda MSME Supply
+  </text>
+
+  <g transform="translate(70, 524)">
+    <rect width="130" height="22" rx="11" fill="#ecfdf5" stroke="#a7f3d0" />
+    <text x="12" y="15" font-family="sans-serif" font-size="10" font-weight="800" fill="#065f46">COMMERCIAL GRADE</text>
+  </g>
 </svg>

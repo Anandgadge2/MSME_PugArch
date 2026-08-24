@@ -1,12 +1,12 @@
 export const DEFAULT_MARKETPLACE_BANNERS = [
-  // --- Clean hero banners hosted on GCP Cloud Storage ---
+  // --- High-resolution curated hero banners for Jharsuguda industrial ecosystem ---
   {
     id: -9001,
     title: 'Steel & Metal Fabrication\nPowering Jharsuguda Industry',
     subtitle: 'Source verified steel, TMT bars, industrial castings, and metal components from local manufacturers across the district.',
     ctaText: 'Browse Steel & Metal',
     ctaLink: '#products',
-    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/jharsuguda-steel-industry.jpg',
+    imageUrl: 'https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?w=1920&q=90&auto=format&fit=crop',
     displayOrder: 1,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -17,7 +17,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'Compare quotations, track orders, and manage your procurement from verified district suppliers — all in one dashboard.',
     ctaText: 'Start Buying',
     ctaLink: '/buyer/register',
-    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/digital-procurement.jpg',
+    imageUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1920&q=90&auto=format&fit=crop',
     displayOrder: 2,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -28,7 +28,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'Sambalpuri textiles, Dhokra brass, terracotta, tribal jewelry — discover authentic Odisha craftsmanship from self-help groups.',
     ctaText: 'Explore SHG Products',
     ctaLink: '#categories',
-    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/odisha-handicraft-shg.jpg',
+    imageUrl: 'https://images.unsplash.com/photo-1606744824163-985d376605aa?w=1920&q=90&auto=format&fit=crop',
     displayOrder: 3,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -39,7 +39,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'Thermal power, aluminum smelting, coal logistics — connecting the industrial backbone of Jharsuguda with verified digital procurement.',
     ctaText: 'Explore Ecosystem',
     ctaLink: '#categories',
-    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/thermal-power-plant.jpg',
+    imageUrl: 'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=1920&q=90&auto=format&fit=crop',
     displayOrder: 4,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -50,7 +50,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'List your products, get GST & Udyam verified, receive orders directly from government agencies and industrial conglomerates.',
     ctaText: 'Register as Seller',
     ctaLink: '/seller/register',
-    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/seller-mobile-orders.jpg',
+    imageUrl: 'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=1920&q=90&auto=format&fit=crop',
     displayOrder: 5,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -61,7 +61,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'Refractories, chemicals, electrical components, hydraulics — everything major industries need, sourced from verified local suppliers.',
     ctaText: 'Find Suppliers',
     ctaLink: '#products',
-    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/vedanta-industrial-hub.jpg',
+    imageUrl: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1920&q=90&auto=format&fit=crop',
     displayOrder: 6,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
