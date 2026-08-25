@@ -18,6 +18,7 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
         )}
         <div className="relative min-w-0">
           <input
+            suppressHydrationWarning
             id={id}
             type={isPassword ? (showPassword ? "text" : "password") : type}
             required={required}
@@ -34,6 +35,7 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
           />
           {isPassword && (
             <button
+              suppressHydrationWarning
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors focus:outline-none"
@@ -61,6 +63,7 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
           </label>
         )}
         <select
+          suppressHydrationWarning
           id={id}
           required={required}
           className={cn(

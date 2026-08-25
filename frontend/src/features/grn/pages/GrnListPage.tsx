@@ -210,7 +210,7 @@ export default function GrnListPage() {
             {isLoading ? (
                 <LoadingState label="Loading GRNs..." />
             ) : grns.length === 0 ? (
-                <EmptyState title="No GRNs found" description="Create one against an active Purchase Order to record the receipt of goods." />
+                <EmptyState title="No GRNs found" description={canCreate ? "Create one against an active Purchase Order to record the receipt of goods." : "No goods receipt notes recorded yet."} />
             ) : pageItems.length === 0 ? (
                 <EmptyState title="No GRNs match these filters" description="Clear the search or status card filter to see all goods receipt notes." />
             ) : viewMode === 'grid' ? (

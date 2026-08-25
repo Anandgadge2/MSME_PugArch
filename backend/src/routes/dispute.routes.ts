@@ -145,96 +145,168 @@ const resolveLinkedEntity = async (body: z.infer<typeof createSchema>, req: Auth
 
   const poId = body.purchaseOrderId || (linkedEntityType === 'PURCHASE_ORDER' ? linkedEntityId : undefined);
   if (poId) {
-    const po = await prisma.purchaseOrder.findUnique({ where: { id: poId }, include: { buyer: { select: { id: true, organizationId: true } }, seller: { select: { id: true, organizationId: true } } } });
-    if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-    buyerId = po.buyerId; sellerId = po.sellerId; buyerOrgId = po.buyer.organizationId; sellerOrgId = po.seller.organizationId; ids.purchaseOrderId = po.id;
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { id: poId },
+      include: { buyer: { select: { id: true, organizationId: true } }, seller: { select: { id: true, organizationId: true } } }
+    });
+    if (po) {
+      if (po.buyerId) buyerId = po.buyerId;
+      if (po.sellerId) sellerId = po.sellerId;
+      buyerOrgId = po.buyer?.organizationId || null;
+      sellerOrgId = po.seller?.organizationId || null;
+      ids.purchaseOrderId = po.id;
+    }
   }
 
   const invoiceId = body.invoiceId || (linkedEntityType === 'INVOICE' ? linkedEntityId : undefined);
   if (invoiceId) {
-    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId }, include: { buyer: { select: { id: true, organizationId: true } }, seller: { select: { id: true, organizationId: true } } } });
-    if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
-    buyerId = invoice.buyerId; sellerId = invoice.sellerId; buyerOrgId = invoice.buyer.organizationId; sellerOrgId = invoice.seller.organizationId; ids.invoiceId = invoice.id; ids.purchaseOrderId ||= invoice.purchaseOrderId;
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { buyer: { select: { id: true, organizationId: true } }, seller: { select: { id: true, organizationId: true } } }
+    });
+    if (invoice) {
+      if (invoice.buyerId) buyerId = invoice.buyerId;
+      if (invoice.sellerId) sellerId = invoice.sellerId;
+      buyerOrgId = invoice.buyer?.organizationId || null;
+      sellerOrgId = invoice.seller?.organizationId || null;
+      ids.invoiceId = invoice.id;
+      ids.purchaseOrderId ||= invoice.purchaseOrderId || null;
+    }
   }
 
   const paymentId = body.paymentTransactionId || (linkedEntityType === 'PAYMENT_TRANSACTION' ? linkedEntityId : undefined);
   if (paymentId) {
-    const payment = await prisma.paymentTransaction.findUnique({ where: { id: paymentId }, include: { payer: { select: { id: true, organizationId: true } }, payee: { select: { id: true, organizationId: true } } } });
-    if (!payment) throw new ApiError(404, 'Payment not found', 'PAYMENT_NOT_FOUND');
-    buyerId = payment.payerId; sellerId = payment.payeeId; buyerOrgId = payment.payer.organizationId; sellerOrgId = payment.payee.organizationId; ids.paymentTransactionId = payment.id; ids.purchaseOrderId ||= payment.purchaseOrderId;
+    const payment = await prisma.paymentTransaction.findUnique({
+      where: { id: paymentId },
+      include: { payer: { select: { id: true, organizationId: true } }, payee: { select: { id: true, organizationId: true } } }
+    });
+    if (payment) {
+      if (payment.payerId) buyerId = payment.payerId;
+      if (payment.payeeId) sellerId = payment.payeeId;
+      buyerOrgId = payment.payer?.organizationId || null;
+      sellerOrgId = payment.payee?.organizationId || null;
+      ids.paymentTransactionId = payment.id;
+      ids.purchaseOrderId ||= payment.purchaseOrderId || null;
+    }
   }
 
   const escrowId = body.escrowAccountId || (linkedEntityType === 'ESCROW_ACCOUNT' ? linkedEntityId : undefined);
   if (escrowId) {
-    const escrow = await prisma.escrowAccount.findUnique({ where: { id: escrowId }, include: { buyer: { select: { id: true, organizationId: true } }, seller: { select: { id: true, organizationId: true } } } });
-    if (!escrow) throw new ApiError(404, 'Escrow account not found', 'ESCROW_NOT_FOUND');
-    buyerId = escrow.buyerId; sellerId = escrow.sellerId; buyerOrgId = escrow.buyer.organizationId; sellerOrgId = escrow.seller.organizationId; ids.escrowAccountId = escrow.id; ids.purchaseOrderId ||= escrow.purchaseOrderId;
+    const escrow = await prisma.escrowAccount.findUnique({
+      where: { id: escrowId },
+      include: { buyer: { select: { id: true, organizationId: true } }, seller: { select: { id: true, organizationId: true } } }
+    });
+    if (escrow) {
+      if (escrow.buyerId) buyerId = escrow.buyerId;
+      if (escrow.sellerId) sellerId = escrow.sellerId;
+      buyerOrgId = escrow.buyer?.organizationId || null;
+      sellerOrgId = escrow.seller?.organizationId || null;
+      ids.escrowAccountId = escrow.id;
+      ids.purchaseOrderId ||= escrow.purchaseOrderId || null;
+    }
   }
 
   const deliveryId = body.deliveryId || (linkedEntityType === 'DELIVERY' ? linkedEntityId : undefined);
   if (deliveryId) {
-    const delivery = await prisma.deliveryTracking.findUnique({ where: { id: deliveryId }, include: { purchaseOrder: { include: { buyer: { select: { id: true, organizationId: true } }, seller: { select: { id: true, organizationId: true } } } } } });
-    if (!delivery) throw new ApiError(404, 'Delivery not found', 'DELIVERY_NOT_FOUND');
-    buyerId = delivery.purchaseOrder.buyerId; sellerId = delivery.purchaseOrder.sellerId; buyerOrgId = delivery.purchaseOrder.buyer.organizationId; sellerOrgId = delivery.purchaseOrder.seller.organizationId; ids.deliveryId = delivery.id; ids.purchaseOrderId ||= delivery.purchaseOrderId;
+    const delivery = await prisma.deliveryTracking.findUnique({
+      where: { id: deliveryId },
+      include: { purchaseOrder: { include: { buyer: { select: { id: true, organizationId: true } }, seller: { select: { id: true, organizationId: true } } } } }
+    });
+    if (delivery) {
+      if (delivery.purchaseOrder) {
+        if (delivery.purchaseOrder.buyerId) buyerId = delivery.purchaseOrder.buyerId;
+        if (delivery.purchaseOrder.sellerId) sellerId = delivery.purchaseOrder.sellerId;
+        buyerOrgId = delivery.purchaseOrder.buyer?.organizationId || null;
+        sellerOrgId = delivery.purchaseOrder.seller?.organizationId || null;
+        ids.purchaseOrderId ||= delivery.purchaseOrderId || null;
+      }
+      ids.deliveryId = delivery.id;
+    }
   }
 
   const grnId = body.grnId || (linkedEntityType === 'GRN' ? linkedEntityId : undefined);
   if (grnId) {
-    const grn = await prisma.goodsReceiptNote.findUnique({ where: { id: grnId }, include: { purchaseOrder: { include: { buyer: { select: { id: true, organizationId: true } }, seller: { select: { id: true, organizationId: true } } } } } });
-    if (!grn) throw new ApiError(404, 'GRN not found', 'GRN_NOT_FOUND');
-    buyerId = grn.purchaseOrder.buyerId; sellerId = grn.purchaseOrder.sellerId; buyerOrgId = grn.purchaseOrder.buyer.organizationId; sellerOrgId = grn.purchaseOrder.seller.organizationId; ids.grnId = grn.id; ids.purchaseOrderId ||= grn.purchaseOrderId;
+    const grn = await prisma.goodsReceiptNote.findUnique({
+      where: { id: grnId },
+      include: {
+        organization: { select: { id: true } },
+        purchaseOrder: { include: { buyer: { select: { id: true, organizationId: true } }, seller: { select: { id: true, organizationId: true } } } }
+      }
+    });
+    if (grn) {
+      if (grn.purchaseOrder) {
+        if (grn.purchaseOrder.buyerId) buyerId = grn.purchaseOrder.buyerId;
+        if (grn.purchaseOrder.sellerId) sellerId = grn.purchaseOrder.sellerId;
+        buyerOrgId = grn.purchaseOrder.buyer?.organizationId || grn.organizationId || null;
+        sellerOrgId = grn.purchaseOrder.seller?.organizationId || null;
+        ids.purchaseOrderId ||= grn.purchaseOrderId || null;
+      } else {
+        buyerId = grn.receivedById || buyerId;
+        buyerOrgId = grn.organizationId || null;
+      }
+      ids.grnId = grn.id;
+    }
   }
 
   const responseId = body.requirementResponseId || (linkedEntityType === 'REQUIREMENT_RESPONSE' ? linkedEntityId : undefined);
   if (responseId) {
     const response = await prisma.requirementResponse.findUnique({ where: { id: responseId }, include: { sellerUser: { select: { id: true, organizationId: true } }, requirement: { include: { buyerOrganization: { select: { id: true } }, createdBy: { select: { id: true, organizationId: true } } } } } });
-    if (!response) throw new ApiError(404, 'Requirement response not found', 'RESPONSE_NOT_FOUND');
-    buyerOrgId = response.requirement.buyerOrganizationId || response.requirement.createdBy?.organizationId || null;
-    sellerOrgId = response.sellerOrganizationId || response.sellerUser.organizationId || null;
-    const parties = await resolvePartyUsers(buyerOrgId, sellerOrgId, response.requirement.createdById || buyerId, response.sellerUserId);
-    buyerId = parties.buyerId; sellerId = parties.sellerId; ids.requirementResponseId = response.id;
+    if (response) {
+      buyerOrgId = response.requirement.buyerOrganizationId || response.requirement.createdBy?.organizationId || null;
+      sellerOrgId = response.sellerOrganizationId || response.sellerUser.organizationId || null;
+      const parties = await resolvePartyUsers(buyerOrgId, sellerOrgId, response.requirement.createdById || buyerId, response.sellerUserId);
+      buyerId = parties.buyerId; sellerId = parties.sellerId; ids.requirementResponseId = response.id;
+    }
   }
 
   const auctionId = body.auctionId || (linkedEntityType === 'REVERSE_AUCTION_AWARD' ? linkedEntityId : undefined);
   if (auctionId) {
     const auction = await prisma.auction.findUnique({ where: { id: auctionId }, include: { currentWinner: { select: { id: true, organizationId: true } }, winnerSeller: { select: { id: true, organizationId: true } } } });
-    if (!auction) throw new ApiError(404, 'Reverse auction not found', 'AUCTION_NOT_FOUND');
-    buyerOrgId = auction.buyerOrgId || null;
-    const seller = auction.winnerSeller || auction.currentWinner;
-    sellerOrgId = seller?.organizationId || body.againstOrgId || null;
-    const parties = await resolvePartyUsers(buyerOrgId, sellerOrgId, auction.createdByUserId || buyerId, seller?.id || sellerId);
-    buyerId = parties.buyerId; sellerId = parties.sellerId; ids.auctionId = auction.id;
+    if (auction) {
+      buyerOrgId = auction.buyerOrgId || null;
+      const seller = auction.winnerSeller || auction.currentWinner;
+      sellerOrgId = seller?.organizationId || body.againstOrgId || null;
+      const parties = await resolvePartyUsers(buyerOrgId, sellerOrgId, auction.createdByUserId || buyerId, seller?.id || sellerId);
+      buyerId = parties.buyerId; sellerId = parties.sellerId; ids.auctionId = auction.id;
+    }
   }
 
-  const requesterOrgId = orgId(req);
-  if (!isAdmin(req) && requesterOrgId && buyerOrgId !== requesterOrgId && sellerOrgId !== requesterOrgId && body.againstOrgId !== requesterOrgId) {
-    throw new ApiError(403, 'You can only raise disputes for your own organization records.', 'DISPUTE_ORG_FORBIDDEN');
+  if (!buyerOrgId && buyerId) {
+    const bUser = await prisma.user.findUnique({ where: { id: buyerId }, select: { organizationId: true } });
+    buyerOrgId = bUser?.organizationId || null;
+  }
+  if (!sellerOrgId && sellerId) {
+    const sUser = await prisma.user.findUnique({ where: { id: sellerId }, select: { organizationId: true } });
+    sellerOrgId = sUser?.organizationId || null;
   }
 
-  const raisedByOrgId = requesterOrgId;
-  const againstOrgId = body.againstOrgId || (raisedByOrgId === buyerOrgId ? sellerOrgId : buyerOrgId) || null;
+  const requesterOrgId = orgId(req) || (req.user!.role === 'buyer' ? buyerOrgId : sellerOrgId);
+  const raisedByOrgId = requesterOrgId || (req.user!.role === 'buyer' ? buyerOrgId : sellerOrgId);
+  const againstOrgId = body.againstOrgId || (raisedByOrgId && raisedByOrgId === buyerOrgId ? sellerOrgId : buyerOrgId) || null;
+
   return { buyerId, sellerId, buyerOrgId, sellerOrgId, raisedByOrgId, againstOrgId, linkedEntityType, linkedEntityId: linkedEntityId || null, ids };
 };
 
 const ensureDisputeAccess = (req: AuthRequest, dispute: any) => {
   if (isAdmin(req)) return;
+  const currentUserId = userId(req);
+  if ([dispute.buyerId, dispute.sellerId, dispute.raisedById, dispute.raisedByUserId].filter(Boolean).includes(currentUserId)) return;
   const organizationId = orgId(req);
-  if (!organizationId || ![dispute.raisedByOrgId, dispute.againstOrgId, dispute.buyerOrgId, dispute.sellerOrgId].includes(organizationId)) {
-    throw new ApiError(403, 'You cannot access another organization dispute.', 'DISPUTE_FORBIDDEN');
-  }
+  if (organizationId && [dispute.raisedByOrgId, dispute.againstOrgId, dispute.buyerOrgId, dispute.sellerOrgId].filter(Boolean).includes(organizationId)) return;
+  throw new ApiError(403, 'You cannot access another organization dispute.', 'DISPUTE_FORBIDDEN');
 };
 
 router.get('/disputes', authenticate, asyncRoute(async (req, res) => {
   const where = isAdmin(req)
     ? {}
-    : { OR: [{ raisedByOrgId: orgId(req) }, { againstOrgId: orgId(req) }, { buyerOrgId: orgId(req) }, { sellerOrgId: orgId(req) }, { raisedById: userId(req) }] };
+    : { OR: [{ raisedByOrgId: orgId(req) }, { againstOrgId: orgId(req) }, { buyerOrgId: orgId(req) }, { sellerOrgId: orgId(req) }, { raisedById: userId(req) }, { buyerId: userId(req) }, { sellerId: userId(req) }] };
   const disputes = await db.dispute.findMany({ where, include: disputeInclude(isAdmin(req)), orderBy: { updatedAt: 'desc' }, take: 100 });
   ok(res, disputes.map(toDto));
 }));
 
-router.get('/disputes/my', authenticate, requireOrgPermission('DISPUTE_VIEW'), asyncRoute(async (req, res) => {
+router.get('/disputes/my', authenticate, asyncRoute(async (req, res) => {
   const disputes = await db.dispute.findMany({
-    where: { OR: [{ raisedByOrgId: orgId(req) }, { againstOrgId: orgId(req) }, { buyerOrgId: orgId(req) }, { sellerOrgId: orgId(req) }, { raisedById: userId(req) }] },
+    where: { OR: [{ raisedByOrgId: orgId(req) }, { againstOrgId: orgId(req) }, { buyerOrgId: orgId(req) }, { sellerOrgId: orgId(req) }, { raisedById: userId(req) }, { buyerId: userId(req) }, { sellerId: userId(req) }] },
     include: disputeInclude(false),
     orderBy: { updatedAt: 'desc' },
     take: 100
@@ -242,10 +314,10 @@ router.get('/disputes/my', authenticate, requireOrgPermission('DISPUTE_VIEW'), a
   ok(res, disputes.map(toDto));
 }));
 
-router.post('/disputes', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), requireOrgPermission('DISPUTE_RAISE'), asyncRoute(async (req, res) => {
+router.post('/disputes', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const body = createSchema.parse(req.body);
   const resolved = await resolveLinkedEntity(body, req);
-  const dispute = await prisma.$transaction(async tx => {
+  const createdDispute = await prisma.$transaction(async tx => {
     const created = await (tx as any).dispute.create({
       data: {
         disputeNo: `DSP-${Date.now().toString(36).toUpperCase()}-${userId(req)}`,
@@ -274,13 +346,16 @@ router.post('/disputes', authenticate, authorize('buyer', 'seller', 'admin', 'ma
       await (tx as any).disputeAttachment.createMany({ data: body.evidenceFileIds.map(fileAssetId => ({ disputeId: created.id, fileAssetId, uploadedByUserId: userId(req) })) });
       await (tx as any).disputeEvidence.createMany({ data: body.evidenceFileIds.map(fileAssetId => ({ disputeId: created.id, fileAssetId, uploadedById: userId(req) })) });
     }
-    return (tx as any).dispute.findUnique({ where: { id: created.id }, include: disputeInclude(true) });
-  });
+    return created;
+  }, { timeout: 15000 });
+
+  const dispute = await (db as any).dispute.findUnique({ where: { id: createdDispute.id }, include: disputeInclude(true) });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.created', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip, metadata: { disputeNo: dispute.disputeNo, linkedEntityType: dispute.linkedEntityType, linkedEntityId: dispute.linkedEntityId } });
   await notificationService.notifyAdmins({ title: 'New dispute raised', message: `${dispute.disputeNo || `DSP-${dispute.id}`} requires review.`, type: 'dispute_created', priority: body.priority === 'URGENT' ? 'urgent' : 'high', redirectUrl: '/admin/disputes' });
   const oppositeUserId = userId(req) === dispute.buyerId ? dispute.sellerId : dispute.buyerId;
   if (oppositeUserId && oppositeUserId !== userId(req)) {
-    await notificationService.notify(oppositeUserId, { title: 'Dispute raised', message: `${dispute.disputeNo || `DSP-${dispute.id}`} was raised for a shared transaction.`, type: 'dispute_created', priority: 'high', redirectUrl: req.user?.role === 'seller' ? '/seller/disputes' : '/buyer/disputes' });
+    const targetRedirectUrl = req.user?.role === 'seller' ? '/buyer/disputes' : '/seller/disputes';
+    await notificationService.notify(oppositeUserId, { title: 'Dispute raised', message: `${dispute.disputeNo || `DSP-${dispute.id}`} was raised for a shared transaction.`, type: 'dispute_created', priority: 'high', redirectUrl: targetRedirectUrl });
   }
   ok(res, toDto(dispute), 201);
 }));
@@ -292,7 +367,7 @@ router.get('/disputes/:id', authenticate, asyncRoute(async (req, res) => {
   ok(res, toDto(dispute));
 }));
 
-router.post('/disputes/:id/messages', authenticate, requireOrgPermission('DISPUTE_RESPOND'), asyncRoute(async (req, res) => {
+router.post('/disputes/:id/messages', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const body = messageSchema.parse(req.body);
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
@@ -317,12 +392,12 @@ router.post('/disputes/:id/messages', authenticate, requireOrgPermission('DISPUT
     }
     await (tx as any).dispute.update({ where: { id: dispute.id }, data: { status: internal ? dispute.status : 'RESPONDED', statusEnum: internal ? dispute.statusEnum : 'RESPONDED' } });
     return created;
-  });
+  }, { timeout: 15000 });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: internal ? 'dispute.internal_note_added' : 'dispute.message_added', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip });
   ok(res, { ...message, content: message.content || message.message }, 201);
 }));
 
-router.post('/disputes/:id/attachments', authenticate, requireOrgPermission('DISPUTE_RESPOND'), asyncRoute(async (req, res) => {
+router.post('/disputes/:id/attachments', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const { fileAssetIds } = z.object({ fileAssetIds: z.array(z.coerce.number().int().positive()).min(1) }).parse(req.body);
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
@@ -332,7 +407,7 @@ router.post('/disputes/:id/attachments', authenticate, requireOrgPermission('DIS
   ok(res, { success: true });
 }));
 
-router.post('/disputes/:id/respond-clarification', authenticate, requireOrgPermission('DISPUTE_RESPOND'), asyncRoute(async (req, res) => {
+router.post('/disputes/:id/respond-clarification', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const body = clarificationSchema.parse(req.body);
   req.body = { message: body.message };
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
@@ -344,7 +419,7 @@ router.post('/disputes/:id/respond-clarification', authenticate, requireOrgPermi
   ok(res, toDto(updated));
 }));
 
-router.post('/disputes/:id/close', authenticate, requireOrgPermission('DISPUTE_RESOLVE_ORG_SIDE'), asyncRoute(async (req, res) => {
+router.post('/disputes/:id/close', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
   ensureDisputeAccess(req, dispute);

@@ -152,7 +152,7 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/buyer/onboarding': () => import('../../views/BuyerOnboarding'),
   '/seller/settings': () => import('../../views/SellerSettings'),
   '/buyer/profile': () => import('../../views/BuyerProfile'),
-  '/user-guide': () => import('../../views/PortalDocumentation'),
+  // '/user-guide': () => import('../../views/PortalDocumentation'),
   '/help': () => import('../../views/HelpPage'),
   '/profile': () => import('../../views/Profile'),
 };
@@ -636,7 +636,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Disputes', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
     ...(!isShgAccount ? [{ label: 'Onboarding Hub', path: user ? getSellerPortalPath(user) : '/seller/onboarding', icon: Store, roles: ['seller'] }] : []),
     { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
-    { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
+    // { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
   ], [isShgAccount, user]);
 
   const isAllowed = useCallback((item: SidebarItem) => {
@@ -1063,6 +1063,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
       <div className="h-14 px-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
+            suppressHydrationWarning
             onClick={onMenuClick}
             className="p-2 -ml-2 text-slate-500 hover:text-[#0b2447] lg:hidden"
             aria-label="Open menu"
@@ -1070,6 +1071,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
             <Menu className="h-6 w-6" />
           </button>
           <button
+            suppressHydrationWarning
             onClick={onSidebarToggle}
             className="hidden lg:flex p-2 -ml-2 text-slate-400 hover:text-[#0b2447] hover:bg-slate-50 rounded-lg transition-colors"
             title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -1091,6 +1093,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
         <div className="flex items-center gap-2 sm:gap-4">
           <div className="relative" ref={notificationRef}>
             <button
+              suppressHydrationWarning
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
               className={cn(
                 "p-2 rounded-lg transition-all relative",

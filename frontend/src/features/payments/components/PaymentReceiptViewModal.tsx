@@ -71,12 +71,18 @@ export function PaymentReceiptViewModal({
         if (invoiceId) {
           const res = await getApi<any>(`/api/payments/invoice/${invoiceId}/offline-proof`);
           data = res?.proof;
-        } else if (orderId) {
+        }
+        if (!data && orderId) {
           const res = await getApi<any>(`/api/payments/${orderId}/offline-proof`);
-          data = res?.proof;
-        } else if (proofId) {
+          data = res?.proof || (res?.proofs || [])[0];
+        }
+        if (!data && proofId) {
           const res = await getApi<any>(`/api/payments/offline-proofs`);
           data = (res?.proofs || []).find((p: any) => p.id === proofId);
+        }
+        if (!data && (paymentId || orderId)) {
+          const res = await getApi<any>(`/api/payments/offline-proofs`);
+          data = (res?.proofs || []).find((p: any) => (paymentId && p.paymentTransactionId === paymentId) || (orderId && p.purchaseOrderId === orderId));
         }
         setProof(data || null);
       } catch (err: any) {

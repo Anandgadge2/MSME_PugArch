@@ -11,6 +11,8 @@ export interface MessageUserDto {
     email?: string;
     role: MessageRole;
     organization?: { id: number; organizationName?: string; name?: string } | null;
+    buyerProfile?: { id?: number; organizationName?: string } | null;
+    sellerProfile?: { id?: number; businessName?: string } | null;
     company?: { id: number; name?: string; portalDisplayName?: string } | null;
 }
 

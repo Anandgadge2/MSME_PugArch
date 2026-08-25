@@ -17,6 +17,9 @@ export interface DeliveryDto {
     carrierName?: string | null;
     logisticsPartnerName?: string | null;
     logisticsPartnerId?: number | null;
+    packageWeightKg?: number | null;
+    packageDimensions?: string | null;
+    packageCount?: number | null;
     ewayBillNumber?: string | null;
     courierReceiptNumber?: string | null;
     expectedDelivery?: string | null;

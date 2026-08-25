@@ -10627,6 +10627,13 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
   const dir = sortDir === 'asc' ? 1 : -1;
   const key = sortBy || 'updatedAt';
   filtered.sort((a: any, b: any) => {
+    if (key === 'updatedAt' || key === 'createdAt') {
+      const da = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const dbVal = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      const numA = isNaN(da) ? 0 : da;
+      const numB = isNaN(dbVal) ? 0 : dbVal;
+      return (numA - numB) * dir;
+    }
     const va = a[key] ?? '';
     const vb = b[key] ?? '';
     if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;

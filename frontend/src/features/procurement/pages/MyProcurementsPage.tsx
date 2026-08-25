@@ -546,7 +546,8 @@ export default function MyProcurementsPage() {
       return payload;
     },
     initialData: getCachedProcurementsData,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 10 * 1000,
+    refetchOnMount: true,
   });
 
   const kpis = queryData?.kpis || initialKpis;
@@ -660,8 +661,10 @@ export default function MyProcurementsPage() {
         va = Number(a.estimatedValue || 0);
         vb = Number(b.estimatedValue || 0);
       } else if (sortKey === 'updatedAt') {
-        va = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-        vb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        const da = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const dbVal = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        va = isNaN(da) ? 0 : da;
+        vb = isNaN(dbVal) ? 0 : dbVal;
       }
       if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
       return String(va).localeCompare(String(vb)) * dir;

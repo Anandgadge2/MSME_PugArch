@@ -8,7 +8,7 @@
  *   - Detail: thread + evidence + status updater (admin)
  */
 import { useState } from 'react';
-import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, Plus, RefreshCw, Send, Shield, X, XCircle, Search } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, FileCheck, FileText, Paperclip, Plus, RefreshCw, Send, Shield, Trash2, X, XCircle, Search } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
@@ -18,7 +18,7 @@ import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { Pagination } from '../../shared/Pagination';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
-import { usePagination } from '../../shared/hooks';
+import { usePagination, useFeatureQuery } from '../../shared/hooks';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import { toast } from 'sonner';
@@ -26,6 +26,10 @@ import {
     useCreateDispute, useDispute, useDisputes, useSendDisputeMessage, useUpdateDisputeStatus
 } from '../hooks';
 import type { DisputeDto, DisputeStatus } from '../api';
+import { usePurchaseOrders } from '../../purchaseOrders/hooks';
+import { uploadDeliveryFile, type UploadedFileAsset } from '../../delivery/upload';
+import { openFileAsset } from '../../../lib/files';
+import type { PurchaseOrderDto } from '../../shared/types';
 
 const STATUS_TONE: Record<DisputeStatus, string> = {
     open: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -408,18 +412,48 @@ function DisputeDetail({ id, onBack, isAdmin }: { id: number; onBack: () => void
     const [internal, setInternal] = useState(false);
     const [showStatusModal, setShowStatusModal] = useState(false);
 
+    const [replyAttachments, setReplyAttachments] = useState<UploadedFileAsset[]>([]);
+    const [replyUploading, setReplyUploading] = useState(false);
+
     if (isLoading) return <LoadingState label="Loading dispute..." />;
     if (error) return <InlineError message={(error as Error).message} onRetry={() => refetch()} />;
     if (!dispute) return <InlineError message="Dispute not found" />;
 
+    const handleReplyFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        setReplyUploading(true);
+        try {
+            const newUploaded: UploadedFileAsset[] = [];
+            for (let i = 0; i < files.length; i++) {
+                const asset = await uploadDeliveryFile(files[i], { entityType: 'dispute' });
+                newUploaded.push(asset);
+            }
+            setReplyAttachments(prev => [...prev, ...newUploaded]);
+            toast.success('Evidence file attached');
+        } catch (err: any) {
+            toast.error('Failed to attach file');
+        } finally {
+            setReplyUploading(false);
+            e.target.value = '';
+        }
+    };
+
     const handleSend = async () => {
-        if (content.trim().length < 1) return;
+        if (content.trim().length < 1 && replyAttachments.length === 0) return;
         await runWithToast(() => sendMut.mutateAsync({
             id: dispute.id,
-            data: { content: content.trim(), internal: isAdmin && internal }
+            data: {
+                content: content.trim(),
+                internal: isAdmin && internal,
+                evidenceFileIds: replyAttachments.map(a => a.id)
+            }
         }), { loading: 'Sending...', success: 'Message sent', error: 'Send failed' });
         setContent('');
+        setReplyAttachments([]);
     };
+
+    const evidenceItems = [...(dispute.evidence || []), ...(dispute.attachments || [])];
 
     return (
         <div className="space-y-4">
@@ -474,6 +508,29 @@ function DisputeDetail({ id, onBack, isAdmin }: { id: number; onBack: () => void
                 </CardContent></Card>
             </div>
 
+            {/* Attached Evidence Section */}
+            {evidenceItems.length > 0 && (
+                <Card className="border-slate-200/80 bg-white shadow-sm">
+                    <CardContent className="p-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Evidence & Attachments ({evidenceItems.length})</p>
+                        <div className="flex flex-wrap gap-2">
+                            {evidenceItems.map((item, idx) => (
+                                <button
+                                    key={item.id || idx}
+                                    type="button"
+                                    onClick={() => openFileAsset(item.fileAssetId || item, 'Dispute Evidence')}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-[#12335f] transition-all cursor-pointer shadow-xs"
+                                >
+                                    <Paperclip className="h-3.5 w-3.5 text-[#12335f]" />
+                                    <span>Evidence File #{item.fileAssetId || item.id}</span>
+                                    <ExternalLink className="h-3 w-3 text-slate-400 ml-0.5" />
+                                </button>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
             {/* Thread */}
             <Card className="border-slate-200/80 shadow-sm">
                 <CardContent className="p-0">
@@ -516,25 +573,52 @@ function DisputeDetail({ id, onBack, isAdmin }: { id: number; onBack: () => void
                     </div>
 
                     {!['resolved', 'closed', 'rejected'].includes(dispute.status) && (
-                        <div className="border-t border-slate-100 p-4 space-y-2">
+                        <div className="border-t border-slate-100 p-4 space-y-3">
                             <textarea
                                 value={content}
                                 onChange={e => setContent(e.target.value)}
-                                placeholder={isAdmin ? 'Add admin reply or internal note...' : 'Reply...'}
+                                placeholder={isAdmin ? 'Add admin reply or internal note...' : 'Write your response...'}
                                 rows={3}
                                 maxLength={3000}
                                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
                             />
-                            <div className="flex items-center justify-between">
+
+                            {replyAttachments.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {replyAttachments.map(att => (
+                                        <span key={att.id} className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
+                                            <Paperclip className="h-3 w-3 text-slate-500" />
+                                            {att.originalName || `File #${att.id}`}
+                                            <button type="button" onClick={() => setReplyAttachments(prev => prev.filter(a => a.id !== att.id))} className="text-rose-600 hover:text-rose-800 ml-1">
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <label className="cursor-pointer inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100">
+                                    <Paperclip className="mr-1.5 h-3.5 w-3.5 text-[#12335f]" />
+                                    {replyUploading ? 'Attaching...' : 'Attach File'}
+                                    <input
+                                        type="file"
+                                        multiple
+                                        disabled={replyUploading}
+                                        onChange={handleReplyFileUpload}
+                                        className="hidden"
+                                        accept="image/*,application/pdf,.doc,.docx"
+                                    />
+                                </label>
                                 {isAdmin && (
                                     <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
                                         <input type="checkbox" checked={internal} onChange={e => setInternal(e.target.checked)} />
                                         Internal note (not visible to buyer/seller)
                                     </label>
                                 )}
-                                <Button onClick={handleSend} disabled={sendMut.isPending || content.trim().length < 1} className="ml-auto bg-[#12335f] text-white">
+                                <Button onClick={handleSend} disabled={sendMut.isPending || replyUploading || (content.trim().length < 1 && replyAttachments.length === 0)} className="ml-auto bg-[#12335f] text-white">
                                     {sendMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                                    Send
+                                    Send Reply
                                 </Button>
                             </div>
                         </div>
@@ -637,131 +721,439 @@ function StatusUpdateModal({ dispute, onClose, onSubmit, pending }: {
     );
 }
 
-// ─── Create Dispute Modal ────────────────────────────────────────────────────
-
 function CreateDisputeModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: number) => void }) {
-    const [linkedEntityType, setLinkedEntityType] = useState('PURCHASE_ORDER');
-    const [linkedEntityId, setLinkedEntityId] = useState<number | ''>('');
-    const [poId, setPoId] = useState<number | ''>('');
-    const [counterpartyId, setCounterpartyId] = useState<number | ''>('');
+    const { user } = useAuth();
+    const isBuyer = user?.role === 'buyer';
+
+    const [linkedEntityType, setLinkedEntityType] = useState<'PURCHASE_ORDER' | 'INVOICE' | 'DELIVERY' | 'GRN' | 'ESCROW_ACCOUNT'>('PURCHASE_ORDER');
+
+    // Fetch existing records for each record type
+    const { data: purchaseOrdersData, loading: loadingOrders } = usePurchaseOrders();
+    const { data: rawInvoices, loading: loadingInvoices } = useFeatureQuery<any>('/api/invoices', []);
+    const { data: rawDeliveries, loading: loadingDeliveries } = useFeatureQuery<any>('/api/deliveries', []);
+    const { data: rawGrns, loading: loadingGrns } = useFeatureQuery<any>('/api/grn', []);
+    const { data: rawEscrows, loading: loadingEscrows } = useFeatureQuery<any>('/api/escrow/accounts', []);
+
+    const ordersList = Array.isArray(purchaseOrdersData) ? purchaseOrdersData : ((purchaseOrdersData as any)?.purchaseOrders || (purchaseOrdersData as any)?.items || (purchaseOrdersData as any)?.records || []);
+    const invoicesList = Array.isArray(rawInvoices) ? rawInvoices : ((rawInvoices as any)?.invoices || (rawInvoices as any)?.items || (rawInvoices as any)?.records || []);
+    const deliveriesList = Array.isArray(rawDeliveries) ? rawDeliveries : ((rawDeliveries as any)?.deliveries || (rawDeliveries as any)?.items || (rawDeliveries as any)?.records || []);
+    const grnsList = Array.isArray(rawGrns) ? rawGrns : ((rawGrns as any)?.grns || (rawGrns as any)?.items || (rawGrns as any)?.records || []);
+    const escrowsList = Array.isArray(rawEscrows) ? rawEscrows : ((rawEscrows as any)?.escrows || (rawEscrows as any)?.items || (rawEscrows as any)?.records || []);
+
+    const [selectedEntityId, setSelectedEntityId] = useState<number | ''>('');
+    const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
+
     const [category, setCategory] = useState('');
+    const [customCategory, setCustomCategory] = useState('');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [priority, setPriority] = useState('MEDIUM');
     const [amountInDispute, setAmountInDispute] = useState<number | ''>('');
+    const [uploadedAttachments, setUploadedAttachments] = useState<UploadedFileAsset[]>([]);
+    const [isUploading, setIsUploading] = useState(false);
+
     const mut = useCreateDispute();
 
+    // Active records list & loading based on selected linkedEntityType
+    const activeRecords: any[] = linkedEntityType === 'PURCHASE_ORDER' ? ordersList :
+        linkedEntityType === 'INVOICE' ? invoicesList :
+        linkedEntityType === 'DELIVERY' ? deliveriesList :
+        linkedEntityType === 'GRN' ? grnsList : escrowsList;
+
+    const activeLoading = linkedEntityType === 'PURCHASE_ORDER' ? loadingOrders :
+        linkedEntityType === 'INVOICE' ? loadingInvoices :
+        linkedEntityType === 'DELIVERY' ? loadingDeliveries :
+        linkedEntityType === 'GRN' ? loadingGrns : loadingEscrows;
+
+    const handleRecordTypeChange = (type: any) => {
+        setLinkedEntityType(type);
+        setSelectedEntityId('');
+        setSelectedRecord(null);
+        setAmountInDispute('');
+        setTitle('');
+    };
+
+    const handleSelectRecord = (idNum: number | '') => {
+        setSelectedEntityId(idNum);
+        if (idNum === '') {
+            setSelectedRecord(null);
+            setAmountInDispute('');
+            return;
+        }
+        const found = activeRecords.find((rec: any) => Number(rec.id) === Number(idNum));
+        if (found) {
+            setSelectedRecord(found);
+            const val = Number(found.amount || found.totalAmount || found.totalValue || found.taxableAmount || 0);
+            if (val > 0) setAmountInDispute(val);
+
+            const recLabel = linkedEntityType === 'PURCHASE_ORDER' ? `PO #${found.poNumber || found.id}` :
+                linkedEntityType === 'INVOICE' ? `Invoice #${found.invoiceNumber || found.id}` :
+                linkedEntityType === 'DELIVERY' ? `Delivery #${found.trackingNumber || found.id}` :
+                linkedEntityType === 'GRN' ? `GRN #${found.grnNumber || found.id}` :
+                `Escrow #${found.accountNumber || found.id}`;
+            setTitle(`Issue with ${recLabel}`);
+        }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        setIsUploading(true);
+        try {
+            const newUploaded: UploadedFileAsset[] = [];
+            for (let i = 0; i < files.length; i++) {
+                const asset = await uploadDeliveryFile(files[i], { entityType: 'dispute' });
+                newUploaded.push(asset);
+            }
+            setUploadedAttachments(prev => [...prev, ...newUploaded]);
+            toast.success(`${newUploaded.length} evidence file(s) uploaded successfully`);
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to upload evidence file');
+        } finally {
+            setIsUploading(false);
+            e.target.value = '';
+        }
+    };
+
+    const handleRemoveAttachment = (id: number) => {
+        setUploadedAttachments(prev => prev.filter(a => a.id !== id));
+    };
+
+    const finalCategory = category === 'Other' ? (customCategory.trim() || 'Other') : category;
+
+    const counterpartyRoleLabel = isBuyer ? 'Seller' : 'Buyer';
+    const counterpartyName = selectedRecord ? (
+        isBuyer
+            ? (selectedRecord.seller?.name || selectedRecord.seller?.email || (selectedRecord.purchaseOrder?.seller?.name) || `Seller #${selectedRecord.sellerId || selectedRecord.purchaseOrder?.sellerId || '-'}`)
+            : (selectedRecord.buyer?.name || selectedRecord.buyer?.email || (selectedRecord.purchaseOrder?.buyer?.name) || `Buyer #${selectedRecord.buyerId || selectedRecord.purchaseOrder?.buyerId || '-'}`)
+    ) : '-';
+
+    const counterpartyId = selectedRecord ? (
+        isBuyer
+            ? (selectedRecord.sellerId || selectedRecord.seller?.id || selectedRecord.purchaseOrder?.sellerId || selectedRecord.purchaseOrder?.seller?.id)
+            : (selectedRecord.buyerId || selectedRecord.buyer?.id || selectedRecord.purchaseOrder?.buyerId || selectedRecord.purchaseOrder?.buyer?.id)
+    ) : undefined;
+
+    const purchaseOrderId = selectedRecord ? (selectedRecord.purchaseOrderId || (linkedEntityType === 'PURCHASE_ORDER' ? selectedRecord.id : undefined)) : undefined;
+
+    const handleSubmit = async () => {
+        if (!selectedEntityId || !selectedRecord) {
+            toast.error(`Please select a ${linkedEntityType.replace(/_/g, ' ').toLowerCase()} from the dropdown list`);
+            return;
+        }
+        if (!finalCategory) {
+            toast.error('Please select a dispute category');
+            return;
+        }
+        if (title.trim().length < 4) {
+            toast.error('Title must be at least 4 characters');
+            return;
+        }
+        if (description.trim().length < 10) {
+            toast.error('Detailed description must be at least 10 characters');
+            return;
+        }
+
+        const notifyPartyLabel = isBuyer ? 'seller' : 'buyer';
+
+        const result = await runWithToast(() => mut.mutateAsync({
+            linkedEntityType,
+            linkedEntityId: Number(selectedRecord.id),
+            purchaseOrderId: purchaseOrderId ? Number(purchaseOrderId) : undefined,
+            invoiceId: linkedEntityType === 'INVOICE' ? Number(selectedRecord.id) : selectedRecord.invoiceId,
+            deliveryId: linkedEntityType === 'DELIVERY' ? Number(selectedRecord.id) : selectedRecord.deliveryId,
+            grnId: linkedEntityType === 'GRN' ? Number(selectedRecord.id) : selectedRecord.grnId,
+            escrowAccountId: linkedEntityType === 'ESCROW_ACCOUNT' ? Number(selectedRecord.id) : selectedRecord.escrowAccountId,
+            counterpartyId: counterpartyId ? Number(counterpartyId) : undefined,
+            category: finalCategory,
+            title: title.trim(),
+            description: description.trim(),
+            reason: description.trim(),
+            amountInDispute: amountInDispute === '' ? undefined : Number(amountInDispute),
+            priority,
+            evidenceFileIds: uploadedAttachments.map(a => a.id)
+        }), {
+            loading: 'Submitting dispute...',
+            success: `Dispute raised & ${notifyPartyLabel} notified`,
+            error: (err: any) => err?.message || 'Failed to raise dispute'
+        });
+
+        if (result?.id) onCreated(result.id);
+    };
+
+    const sellerCategories = [
+        'Payment Not Received',
+        'Payment Delay',
+        'Wrong Deduction/Penalty',
+        'Order Cancellation',
+        'Delivery/Acceptance Issue',
+        'Buyer Non-Compliance',
+        'PO Terms Violation',
+        'Other'
+    ];
+
+    const buyerCategories = [
+        'Wrong Product/Specification',
+        'Short Quantity',
+        'Damaged/Defective Goods',
+        'Late Delivery',
+        'Delivery Not Received',
+        'Seller Non-Compliance',
+        'Invoice/Payment Issue',
+        'PO Terms Violation',
+        'Other'
+    ];
+
+    const activeCategories = isBuyer ? buyerCategories : sellerCategories;
+
+    const recordTypeLabel = linkedEntityType === 'PURCHASE_ORDER' ? 'Purchase Order' :
+        linkedEntityType === 'INVOICE' ? 'Invoice' :
+        linkedEntityType === 'DELIVERY' ? 'Delivery' :
+        linkedEntityType === 'GRN' ? 'GRN' : 'Escrow Account';
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
-            <div className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 overflow-y-auto">
+            <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl my-8">
                 <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-red-700 to-red-800 px-5 py-4 text-white">
-                    <h3 className="text-sm font-black uppercase tracking-widest">Raise Dispute</h3>
+                    <div>
+                        <h3 className="text-sm font-black uppercase tracking-widest">Raise Dispute</h3>
+                        <p className="text-[11px] font-semibold opacity-90">{isBuyer ? 'Buyer Procurement Resolution' : 'Seller Resolution Center'}</p>
+                    </div>
                     <button onClick={onClose} className="rounded-md p-1 text-white/80 hover:bg-white/10"><X className="h-4 w-4" /></button>
                 </div>
-                <div className="p-5 space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
+                <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+                    {/* Linked Record Type & Dynamic Record Select */}
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <Field label="Linked Record Type">
-                            <select value={linkedEntityType} onChange={e => setLinkedEntityType(e.target.value)} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-bold">
+                            <select
+                                value={linkedEntityType}
+                                onChange={e => handleRecordTypeChange(e.target.value as any)}
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#12335f]"
+                            >
                                 <option value="PURCHASE_ORDER">Purchase Order</option>
                                 <option value="INVOICE">Invoice</option>
-                                <option value="PAYMENT_TRANSACTION">Payment</option>
                                 <option value="DELIVERY">Delivery</option>
                                 <option value="GRN">GRN</option>
-                                <option value="ESCROW_ACCOUNT">Escrow</option>
-                                <option value="REQUIREMENT_RESPONSE">Requirement Response</option>
-                                <option value="REVERSE_AUCTION_AWARD">Reverse Auction Award</option>
-                                <option value="OTHER">Other</option>
+                                <option value="ESCROW_ACCOUNT">Escrow Account</option>
                             </select>
                         </Field>
-                        <Field label="Linked Record ID">
-                            <input type="number" value={linkedEntityId} onChange={e => setLinkedEntityId(e.target.value === '' ? '' : Number(e.target.value))} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold" />
-                        </Field>
-                        <Field label="Purchase Order ID">
-                            <input type="number" value={poId} onChange={e => setPoId(e.target.value === '' ? '' : Number(e.target.value))} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold" />
-                        </Field>
-                        <Field label="Counterparty User ID">
-                            <input type="number" value={counterpartyId} onChange={e => setCounterpartyId(e.target.value === '' ? '' : Number(e.target.value))} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold" />
+
+                        <Field label={`Select ${recordTypeLabel}`}>
+                            <select
+                                value={selectedEntityId}
+                                onChange={e => handleSelectRecord(e.target.value === '' ? '' : Number(e.target.value))}
+                                disabled={activeLoading}
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#12335f]"
+                            >
+                                <option value="">{activeLoading ? `Loading ${recordTypeLabel.toLowerCase()}s...` : `-- Select ${recordTypeLabel} --`}</option>
+                                {activeRecords.map((rec: any) => {
+                                    const displayNo = rec.poNumber || rec.invoiceNumber || rec.trackingNumber || rec.grnNumber || rec.accountNumber || `ID-${rec.id}`;
+                                    const displayTitle = rec.title || rec.purchaseOrder?.title || rec.carrierName || 'Record';
+                                    const val = Number(rec.amount || rec.totalAmount || rec.totalValue || rec.taxableAmount || 0);
+                                    const valStr = val > 0 ? ` (${formatCurrency(val)})` : '';
+                                    return (
+                                        <option key={rec.id} value={rec.id}>
+                                            {displayNo} — {displayTitle}{valStr}
+                                        </option>
+                                    );
+                                })}
+                            </select>
                         </Field>
                     </div>
-                    <Field label="Category">
+
+                    {activeRecords.length === 0 && !activeLoading && (
+                        <p className="text-[11px] font-semibold text-amber-600">No {recordTypeLabel.toLowerCase()}s found in your account.</p>
+                    )}
+
+                    {/* Read-Only Summary Box when Record is selected */}
+                    {selectedRecord && (
+                        <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3.5 space-y-2 text-xs">
+                            <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-blue-900 flex items-center gap-1">
+                                    <FileCheck className="h-3.5 w-3.5 text-blue-700" /> Linked Record Details
+                                </span>
+                                <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-800 uppercase">
+                                    {selectedRecord.status || selectedRecord.poStatus || selectedRecord.invoiceStatus || 'Active'}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-slate-700">
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{recordTypeLabel}</p>
+                                    <p className="font-extrabold text-slate-900">
+                                        {selectedRecord.poNumber || selectedRecord.invoiceNumber || selectedRecord.trackingNumber || selectedRecord.grnNumber || selectedRecord.accountNumber || `ID-${selectedRecord.id}`}
+                                    </p>
+                                    <p className="text-[11px] text-slate-600 line-clamp-1">{selectedRecord.title || selectedRecord.purchaseOrder?.title || '-'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{counterpartyRoleLabel}</p>
+                                    <p className="font-extrabold text-slate-900">{counterpartyName}</p>
+                                    <p className="text-[11px] text-blue-800 font-bold">
+                                        Total: {formatCurrency(selectedRecord.amount || selectedRecord.totalAmount || selectedRecord.totalValue || 0)}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Category Selection */}
+                    <Field label="Dispute Category">
                         <select
-                            value={['PAYMENT_DELAY', 'PAYMENT_MISMATCH', 'QUALITY_ISSUE', 'QUANTITY_MISMATCH', 'DELIVERY_DELAY', 'DAMAGED_GOODS', 'WRONG_ITEM', 'INVOICE_MISMATCH', 'GRN_REJECTION', 'ESCROW_RELEASE_ISSUE', 'ORDER_CANCELLATION'].includes(category) ? category : (category ? 'OTHER' : '')}
+                            value={category}
                             onChange={e => setCategory(e.target.value)}
-                            className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-bold"
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#12335f]"
                         >
-                            <option value="">Select category...</option>
-                            <option value="PAYMENT_DELAY">Payment delay</option>
-                            <option value="PAYMENT_MISMATCH">Payment mismatch</option>
-                            <option value="QUALITY_ISSUE">Quality issue</option>
-                            <option value="QUANTITY_MISMATCH">Quantity mismatch</option>
-                            <option value="DELIVERY_DELAY">Delivery delay</option>
-                            <option value="DAMAGED_GOODS">Damaged goods</option>
-                            <option value="WRONG_ITEM">Wrong item</option>
-                            <option value="INVOICE_MISMATCH">Invoice mismatch</option>
-                            <option value="GRN_REJECTION">GRN rejection</option>
-                            <option value="ESCROW_RELEASE_ISSUE">Escrow release issue</option>
-                            <option value="ORDER_CANCELLATION">Order cancellation</option>
-                            <option value="OTHER">Other</option>
+                            <option value="">-- Select Category --</option>
+                            {activeCategories.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                            ))}
                         </select>
                     </Field>
-                    {!['PAYMENT_DELAY', 'PAYMENT_MISMATCH', 'QUALITY_ISSUE', 'QUANTITY_MISMATCH', 'DELIVERY_DELAY', 'DAMAGED_GOODS', 'WRONG_ITEM', 'INVOICE_MISMATCH', 'GRN_REJECTION', 'ESCROW_RELEASE_ISSUE', 'ORDER_CANCELLATION', ''].includes(category) && (
-                        <Field label="Specify Custom Category">
+
+                    {category === 'Other' && (
+                        <Field label="Specify Category">
                             <input
-                                required
-                                value={category === 'OTHER' ? '' : category}
-                                onChange={e => setCategory(e.target.value)}
-                                placeholder="Type custom category here..."
-                                className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold"
+                                value={customCategory}
+                                onChange={e => setCustomCategory(e.target.value)}
+                                placeholder="Enter custom category details..."
+                                className="h-9 w-full rounded-xl border border-slate-200 px-3 text-xs font-semibold"
                             />
                         </Field>
                     )}
-                    <Field label="Title">
-                        <input value={title} onChange={e => setTitle(e.target.value)} maxLength={180} placeholder="Short dispute title" className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
+
+                    {/* Title */}
+                    <Field label="Dispute Title">
+                        <input
+                            value={title}
+                            onChange={e => setTitle(e.target.value)}
+                            maxLength={180}
+                            placeholder="Brief dispute title"
+                            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f]"
+                        />
                     </Field>
-                    <div className="grid grid-cols-2 gap-2">
+
+                    {/* Priority & Amount */}
+                    <div className="grid grid-cols-2 gap-3">
                         <Field label="Priority">
-                            <select value={priority} onChange={e => setPriority(e.target.value)} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-bold">
+                            <select
+                                value={priority}
+                                onChange={e => setPriority(e.target.value)}
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#12335f]"
+                            >
                                 <option value="LOW">Low</option>
                                 <option value="MEDIUM">Medium</option>
                                 <option value="HIGH">High</option>
                                 <option value="URGENT">Urgent</option>
                             </select>
                         </Field>
-                        <Field label="Amount in Dispute">
-                            <input type="number" value={amountInDispute} onChange={e => setAmountInDispute(e.target.value === '' ? '' : Number(e.target.value))} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-mono font-semibold" />
+                        <Field label="Amount in Dispute (₹)">
+                            <input
+                                type="number"
+                                value={amountInDispute}
+                                onChange={e => setAmountInDispute(e.target.value === '' ? '' : Number(e.target.value))}
+                                placeholder="0.00"
+                                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-mono font-bold text-slate-900 outline-none focus:border-[#12335f]"
+                            />
                         </Field>
                     </div>
+
+                    {/* Description */}
                     <Field label="Detailed Description">
-                        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} maxLength={4000} placeholder="Describe the issue in detail..." className="w-full rounded border border-slate-200 px-3 py-2 text-xs font-semibold" />
-                        <p className="text-[10px] text-slate-400">Minimum 10 characters. Be specific; admin will review.</p>
+                        <textarea
+                            value={description}
+                            onChange={e => setDescription(e.target.value)}
+                            rows={4}
+                            maxLength={4000}
+                            placeholder="Describe the issue, defect, timeline, and requested resolution in detail..."
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-[#12335f]"
+                        />
+                        <p className="text-[10px] text-slate-400">Minimum 10 characters. Be specific for prompt review.</p>
                     </Field>
-                    <div className="flex justify-end gap-2 pt-2">
-                        <Button variant="outline" onClick={onClose}>Cancel</Button>
+
+                    {/* Evidence File Upload */}
+                    <Field label="Evidence / Attachments">
+                        <div className="flex items-center gap-3">
+                            <label className="cursor-pointer inline-flex items-center rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors">
+                                <Paperclip className="mr-1.5 h-4 w-4 text-[#12335f]" />
+                                {isUploading ? 'Uploading...' : 'Upload Invoices / Photos / Docs'}
+                                <input
+                                    type="file"
+                                    multiple
+                                    disabled={isUploading}
+                                    onChange={handleFileUpload}
+                                    className="hidden"
+                                    accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                                />
+                            </label>
+                            <span className="text-[10px] font-semibold text-slate-400">PDF, Photos, Docs (Max 10MB)</span>
+                        </div>
+
+                        {uploadedAttachments.length > 0 && (
+                            <div className="mt-2 space-y-1.5 max-h-32 overflow-y-auto">
+                                {uploadedAttachments.map(att => (
+                                    <div key={att.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-xs">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                            <Paperclip className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                                            <span className="font-semibold text-slate-800 truncate">{att.originalName || `File #${att.id}`}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveAttachment(att.id)}
+                                            className="text-slate-400 hover:text-rose-600 p-1"
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </Field>
+
+                    {/* Pre-Submission Summary Card */}
+                    {selectedRecord && finalCategory && description.trim().length >= 10 && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 space-y-2 text-xs">
+                            <div className="flex items-center justify-between border-b border-amber-200/60 pb-1.5">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1">
+                                    <AlertTriangle className="h-3.5 w-3.5 text-amber-700" /> Pre-Submission Summary
+                                </span>
+                                <span className="text-[10px] font-extrabold text-amber-800 uppercase">
+                                    Ready to File
+                                </span>
+                            </div>
+                            <div className="space-y-1.5 text-slate-800 text-[11px]">
+                                <div className="flex items-center gap-1.5 flex-wrap font-bold">
+                                    <span className="rounded bg-amber-200/80 px-2 py-0.5 font-mono text-amber-900">
+                                        {recordTypeLabel}: #{selectedRecord.poNumber || selectedRecord.invoiceNumber || selectedRecord.trackingNumber || selectedRecord.grnNumber || selectedRecord.accountNumber || selectedRecord.id}
+                                    </span>
+                                    <span className="text-slate-400">→</span>
+                                    <span className="rounded bg-white px-2 py-0.5 border border-amber-200 text-slate-900">
+                                        {counterpartyName}
+                                    </span>
+                                    <span className="text-slate-400">→</span>
+                                    <span className="rounded bg-white px-2 py-0.5 border border-amber-200 text-purple-900">
+                                        {finalCategory}
+                                    </span>
+                                    <span className="text-slate-400">→</span>
+                                    <span className="rounded bg-white px-2 py-0.5 border border-amber-200 font-mono text-red-700">
+                                        {amountInDispute ? formatCurrency(amountInDispute) : 'Full Value'}
+                                    </span>
+                                </div>
+                                <p className="text-slate-600 line-clamp-2 italic bg-white/60 p-2 rounded border border-amber-100/80 mt-1">
+                                    "{description.trim()}"
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                        <Button variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
                         <Button
-                            onClick={async () => {
-                                if (!category) { toast.error('Choose a category'); return; }
-                                if (title.trim().length < 4) { toast.error('Title must be at least 4 chars'); return; }
-                                if (description.trim().length < 10) { toast.error('Description must be at least 10 chars'); return; }
-                                if (!linkedEntityId && !poId && !counterpartyId) { toast.error('Provide a linked record, PO, or counterparty'); return; }
-                                const result = await runWithToast(() => mut.mutateAsync({
-                                    linkedEntityType,
-                                    linkedEntityId: linkedEntityId === '' ? undefined : linkedEntityId,
-                                    purchaseOrderId: poId === '' ? undefined : poId,
-                                    counterpartyId: counterpartyId === '' ? undefined : counterpartyId,
-                                    category,
-                                    title: title.trim(),
-                                    description: description.trim(),
-                                    reason: description.trim(),
-                                    amountInDispute: amountInDispute === '' ? undefined : amountInDispute,
-                                    priority
-                                }), { loading: 'Creating...', success: 'Dispute raised', error: 'Failed' });
-                                if (result?.id) onCreated(result.id);
-                            }}
-                            disabled={mut.isPending}
-                            className="bg-red-600 text-white"
+                            onClick={handleSubmit}
+                            disabled={mut.isPending || isUploading || !selectedEntityId}
+                            className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold"
                         >
                             {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <AlertTriangle className="mr-2 h-4 w-4" />}
-                            Raise Dispute
+                            Raise Dispute & Notify {counterpartyRoleLabel}
                         </Button>
                     </div>
                 </div>
@@ -769,6 +1161,7 @@ function CreateDisputeModal({ onClose, onCreated }: { onClose: () => void; onCre
         </div>
     );
 }
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div className="space-y-1">

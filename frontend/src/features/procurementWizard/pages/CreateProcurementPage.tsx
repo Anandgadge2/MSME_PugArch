@@ -1778,6 +1778,13 @@ export default function CreateProcurementPage() {
         await submitProcurementDraft(withoutServerDraftId(payload));
       }
       localStorage.removeItem(DRAFT_KEY);
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem('buyer_my_procurements_cached_data_v1');
+          localStorage.removeItem('buyer_my_procurements_cached_data_v1');
+        } catch {}
+      }
+      api.invalidate('/api/buyer/my-procurements');
       toast.success('Procurement request submitted successfully');
       router.push(`/buyer/my-procurements`);
     } catch (err: any) {

@@ -41,6 +41,7 @@ export function Pagination({
       <div className="flex flex-wrap items-center gap-2">
         {onPageSizeChange && (
           <select
+            suppressHydrationWarning
             value={safePageSize}
             onChange={event => onPageSizeChange(Number(event.target.value))}
             aria-label="Records per page"

@@ -285,17 +285,16 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
                 <LiquidatedDamagesCard deliveryId={delivery.id} />
               </div>
 
-              <DocumentsPanel docs={docs} deliveryId={delivery.id} accessRole={accessRole} />
+              {/* <DocumentsPanel docs={docs} deliveryId={delivery.id} accessRole={accessRole} /> */}
             </>
           )}
         </div>
 
         <aside className="space-y-5 xl:sticky xl:top-4 xl:self-start">
-          {accessRole === 'seller' ? (
+          {accessRole === 'seller' && (
             <ManualTrackingActions delivery={delivery} latestManual={latestManual} />
-          ) : (
-            <EmailOtpVerificationCard delivery={delivery} accessRole={accessRole} />
           )}
+          {/* <EmailOtpVerificationCard delivery={delivery} accessRole={accessRole} /> */}
           {(accessRole === 'buyer' || accessRole === 'consignee') && (
             <BuyerActions delivery={delivery} />
           )}
@@ -1275,11 +1274,12 @@ function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: Delivery
   const [otp, setOtp] = useState('');
 
   const isVerified = Boolean(delivery.deliveryOtpVerifiedAt);
-  const canVerifyRole = accessRole === 'buyer' || accessRole === 'consignee' || accessRole === 'admin';
+  const isSellerOrCourier = accessRole === 'seller' || accessRole === 'logistics' || accessRole === 'admin';
+  const canVerifyRole = ['buyer', 'seller', 'consignee', 'logistics', 'admin'].includes(accessRole || '');
 
   const handleSend = () => {
     runWithToast(() => sendOtpMut.mutateAsync(undefined), {
-      loading: 'Sending OTP to email...',
+      loading: 'Sending OTP to buyer...',
       success: '6-digit OTP emailed to buyer!',
       error: 'Failed to send OTP'
     });
@@ -1311,30 +1311,93 @@ function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: Delivery
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-xs font-semibold text-slate-600">
-              Confirm physical receipt of goods by generating a 6-digit OTP sent to the buyer's registered email.
-            </p>
-            <div className="flex gap-2">
-              <Button variant="outline" className="h-10 text-xs font-black uppercase" onClick={handleSend} disabled={sendOtpMut.isPending}>
-                {sendOtpMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Key className="mr-2 h-4 w-4" />} Send OTP to Email
-              </Button>
-            </div>
-            <div className="flex gap-2 items-center">
-              <Input
-                placeholder="Enter 6-digit OTP"
-                value={otp}
-                maxLength={6}
-                onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-                className="font-mono text-center tracking-widest text-base font-bold"
-              />
-              <Button
-                className="h-10 bg-[#0f766e] text-xs font-black uppercase text-white shrink-0 px-4 hover:bg-[#0d665f]"
-                disabled={otp.length !== 6 || verifyOtpMut.isPending}
-                onClick={handleVerify}
-              >
-                Verify
-              </Button>
-            </div>
+            {isSellerOrCourier ? (
+              <>
+                <p className="text-xs font-semibold text-slate-600">
+                  Verify physical delivery handover: Click below to email the 6-digit OTP to the buyer, then enter the OTP provided by the buyer upon handover.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-10 text-xs font-black uppercase"
+                    onClick={handleSend}
+                    disabled={sendOtpMut.isPending}
+                  >
+                    {sendOtpMut.isPending ? (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Key className="mr-2 h-4 w-4 text-[#0f766e]" />
+                    )}
+                    Send OTP to Buyer
+                  </Button>
+                </div>
+                <div className="flex gap-2 items-center">
+                  <Input
+                    placeholder="Enter Buyer's 6-digit OTP"
+                    value={otp}
+                    maxLength={6}
+                    onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                    className="font-mono text-center tracking-widest text-base font-bold"
+                  />
+                  <Button
+                    className="h-10 bg-[#0f766e] text-xs font-black uppercase text-white shrink-0 px-4 hover:bg-[#0d665f]"
+                    disabled={otp.length !== 6 || verifyOtpMut.isPending}
+                    onClick={handleVerify}
+                  >
+                    Verify Handover
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="rounded-xl border border-[#0f766e]/20 bg-[#0f766e]/5 p-3 space-y-1 text-xs text-slate-700">
+                  <p className="font-bold text-[#0f766e] flex items-center gap-1.5">
+                    <Key className="h-4 w-4" /> Delivery Handover Instructions
+                  </p>
+                  <p className="text-slate-600 font-semibold leading-relaxed">
+                    A 6-digit OTP is sent to your registered email when physical delivery is initiated. <strong>Share this OTP with the seller or delivery agent</strong> upon receiving your goods so they can verify handover.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <Button
+                    variant="outline"
+                    className="h-10 text-xs font-black uppercase"
+                    onClick={handleSend}
+                    disabled={sendOtpMut.isPending}
+                  >
+                    {sendOtpMut.isPending ? (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Key className="mr-2 h-4 w-4 text-[#0f766e]" />
+                    )}
+                    Resend OTP to My Email
+                  </Button>
+                </div>
+                {/* 
+                <div className="border-t border-slate-100 pt-2 space-y-1.5">
+                  <p className="text-[11px] font-bold text-slate-500">
+                    Alternatively, confirm delivery receipt directly on your portal:
+                  </p>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      placeholder="Enter 6-digit OTP from email"
+                      value={otp}
+                      maxLength={6}
+                      onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                      className="font-mono text-center tracking-widest text-base font-bold"
+                    />
+                    <Button
+                      className="h-10 bg-[#0f766e] text-xs font-black uppercase text-white shrink-0 px-4 hover:bg-[#0d665f]"
+                      disabled={otp.length !== 6 || verifyOtpMut.isPending}
+                      onClick={handleVerify}
+                    >
+                      Verify Receipt
+                    </Button>
+                  </div>
+                </div>
+                */}
+              </>
+            )}
           </div>
         )}
       </div>
