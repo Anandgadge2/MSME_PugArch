@@ -244,6 +244,8 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
             <img
               src={resolveMediaUrl(profile.bannerUrl) || ''}
               alt={`${profile.organizationName} Banner`}
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
               className="w-full h-full object-cover sm:object-contain md:object-cover max-h-[440px] transition-transform duration-700"
             />
             {/* Very subtle edge gradient to ensure smooth transition to page content */}

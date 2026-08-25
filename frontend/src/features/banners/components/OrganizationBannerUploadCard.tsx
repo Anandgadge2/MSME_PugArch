@@ -309,7 +309,14 @@ export function OrganizationBannerUploadCard() {
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm">
               <div className="relative aspect-[16/7] w-full overflow-hidden sm:aspect-[16/6]">
                 {preview && !previewError ? (
-                  <img src={preview} alt="Banner preview" onError={() => setPreviewError(true)} className="h-full w-full object-cover" />
+                  <img
+                    src={preview}
+                    alt="Banner preview"
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
+                    onError={() => setPreviewError(true)}
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 bg-slate-900/40">
                     <UploadCloud className="h-8 w-8 opacity-40 animate-pulse text-slate-400" />
@@ -317,8 +324,8 @@ export function OrganizationBannerUploadCard() {
                   </div>
                 )}
 
-                {/* Navy Gradient Overlay to match HeroBanner.tsx */}
-                <div className="absolute inset-0 bg-gradient-to-r from-[#07172e]/95 via-[#0b2447]/80 to-transparent" />
+                {/* Clean Contrast Overlay for text readability */}
+                <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/45 to-transparent w-[80%]" />
                 
                 {/* Content overlaid on the image */}
                 <div className="absolute inset-0 flex flex-col justify-between p-4 sm:p-5 select-none text-left">

@@ -1481,6 +1481,8 @@ export default function BuyerProfile() {
                                   <img
                                     src={resolveMediaUrl(showcaseProfile.bannerUrl) || ''}
                                     alt="Org Banner"
+                                    referrerPolicy="no-referrer"
+                                    crossOrigin="anonymous"
                                     className="w-full h-28 object-cover"
                                   />
                                   <button

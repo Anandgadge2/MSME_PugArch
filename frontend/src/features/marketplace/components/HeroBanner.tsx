@@ -54,9 +54,9 @@ export function HeroBanner({ banners }: Props) {
         return () => clearInterval(t);
     }, [next]);
 
-    const slide = slides[current];
-    const ctaLink = slide.ctaLink || slide.targetUrl;
-    const ctaText = slide.ctaText || (ctaLink ? 'View Details' : '');
+    const slide = slides[current] || slides[0] || (DEFAULT_MARKETPLACE_BANNERS[0] as unknown as MarketplaceBanner);
+    const ctaLink = slide?.ctaLink || slide?.targetUrl;
+    const ctaText = slide?.ctaText || (ctaLink ? 'View Details' : '');
     const activeImageSrc = currentImg || resolveImageSrc(slide?.imageUrl, current);
 
     const handleCtaClick = (e: React.MouseEvent<HTMLAnchorElement>, link: string) => {
@@ -84,25 +84,27 @@ export function HeroBanner({ banners }: Props) {
 
     return (
         <section
-            className="group/hero relative overflow-hidden bg-slate-950 min-h-[300px] sm:min-h-[500px] lg:min-h-[580px] flex items-center"
+            className="group/hero relative overflow-hidden bg-slate-950 min-h-[320px] sm:min-h-[500px] lg:min-h-[560px] flex items-center"
             aria-label="Hero Banner"
         >
             {/* Background image — Vibrant, rich 100% full coverage */}
-            <div className="absolute inset-0 z-0 overflow-hidden">
+            <div className="absolute inset-0 z-0 overflow-hidden bg-slate-900">
                 {activeImageSrc ? (
                     <img
-                        key={`${slide.id}-${current}`}
+                        key={`${slide?.id ?? 'slide'}-${current}`}
                         src={activeImageSrc}
-                        alt={slide.title || 'Marketplace Hero Banner'}
+                        alt={slide?.title || 'Marketplace Hero Banner'}
                         loading="eager"
+                        referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
                         onError={() => {
                             setCurrentImg(DEFAULT_IMAGES[current % DEFAULT_IMAGES.length]);
                         }}
-                        className={`w-full h-full object-cover object-center scale-[1.3] sm:scale-100 origin-center transition-all duration-500 ease-out brightness-[1.03] contrast-[1.05] ${fading ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}
+                        className={`w-full h-full object-cover object-center transition-all duration-500 ease-out brightness-[1.02] contrast-[1.05] ${fading ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}
                     />
                 ) : null}
 
-                {/* Crystal-clear focused contrast overlay: Rich black gradient behind text on left, 100% transparent on right to show pure photo vibrance */}
+                {/* Focused contrast overlay: Soft dark gradient behind text for crisp readability while preserving photo clarity */}
                 <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/45 to-transparent sm:w-[75%] lg:w-[65%]" />
                 <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/40 to-transparent" />
             </div>
@@ -157,7 +159,7 @@ export function HeroBanner({ banners }: Props) {
 
                         {/* Title */}
                         <h1 className="mb-2 sm:mb-3.5 text-xl sm:text-4xl md:text-5xl lg:text-[3.2rem] font-black leading-[1.15] tracking-tight text-white drop-shadow-[0_3px_8px_rgba(0,0,0,0.9)]">
-                            {slide.title.split('\n').map((line, i) => (
+                            {(slide?.title || 'MSME Marketplace').split('\n').map((line, i) => (
                                 <React.Fragment key={i}>
                                     {i > 0 && (
                                         <>

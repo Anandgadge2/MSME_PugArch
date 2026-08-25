@@ -408,6 +408,8 @@ export default function AdminBannerManagementPage() {
                       <img
                         src={imageSrc(form.imageUrl)}
                         alt="Banner Preview"
+                        referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
                         className="h-full w-full object-cover"
                       />
                     ) : (
@@ -417,7 +419,7 @@ export default function AdminBannerManagementPage() {
                       </div>
                     )}
                     {form.imageUrl && (
-                      <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-r from-[#07172e]/90 via-[#0b2447]/60 to-transparent p-3">
+                      <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-r from-black/85 via-black/45 to-transparent p-3">
                         <h4 className="line-clamp-1 max-w-md text-xs font-black leading-tight text-white drop-shadow-sm">
                           {form.title || 'Headline Title Preview'}
                         </h4>
@@ -651,6 +653,8 @@ function BannerAdminCard({
             <img
               src={src}
               alt={banner.title}
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
             />
           ) : (

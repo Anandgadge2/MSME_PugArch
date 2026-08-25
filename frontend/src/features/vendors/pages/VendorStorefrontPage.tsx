@@ -71,6 +71,8 @@ export default function VendorStorefrontPage({ id }: Props) {
                         <img
                             src={resolveMediaUrl(v.bannerUrl) || ''}
                             alt="Seller Banner"
+                            referrerPolicy="no-referrer"
+                            crossOrigin="anonymous"
                             className="w-full h-full object-cover opacity-90"
                         />
                     ) : (

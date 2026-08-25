@@ -45,14 +45,16 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     const cardInner = (
         <div className="flex flex-col items-center justify-between text-center w-full h-full group select-none p-3 sm:p-3.5">
             {/* Category Image with soft subtle backdrop */}
-            <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 md:h-18 md:w-18 items-center justify-center mb-1.5 rounded-2xl bg-gradient-to-br from-blue-50/90 via-slate-50 to-indigo-50/70 shadow-inner border border-slate-200/80 p-1.5 transition-all duration-300 group-hover:scale-110 group-hover:shadow-md group-hover:border-blue-400">
+            <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 md:h-18 md:w-18 items-center justify-center mb-1.5 rounded-2xl bg-gradient-to-br from-blue-50/90 via-slate-50 to-indigo-50/70 shadow-inner border border-slate-200/80 overflow-hidden transition-all duration-300 group-hover:scale-110 group-hover:shadow-md group-hover:border-blue-400">
                 <img
                     src={imgSrc}
                     alt={category.name}
                     loading="lazy"
                     decoding="async"
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
                     onError={handleImageError}
-                    className="h-full w-full object-contain drop-shadow-sm transition-transform duration-300 ease-out"
+                    className="h-full w-full object-cover transition-transform duration-300 ease-out"
                 />
             </div>
 
@@ -166,15 +168,15 @@ export function CategoryCatalogueStrip({
                 <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-800 border border-blue-200/80 shadow-xs backdrop-blur-md">
-                                <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-white/15 text-cyan-300 border border-cyan-400/30 shadow-xs backdrop-blur-md">
+                                <Sparkles className="h-3.5 w-3.5 text-cyan-300 animate-pulse" />
                                 {categories.length} Industrial Sectors &amp; Work Categories
                             </span>
                         </div>
-                        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-[#0b2447] leading-tight">
+                        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white leading-tight drop-shadow-sm">
                             {title}
                         </h2>
-                        <p className="mt-1.5 text-xs sm:text-base font-semibold text-slate-600 max-w-3xl">
+                        <p className="mt-1.5 text-xs sm:text-base font-semibold text-blue-100/90 max-w-3xl">
                             {subtitle}
                         </p>
                     </div>

@@ -780,6 +780,8 @@ export default function SellerSettings() {
                           <img
                             src={resolveMediaUrl(bannerUrl) || ''}
                             alt="Storefront Cover Banner"
+                            referrerPolicy="no-referrer"
+                            crossOrigin="anonymous"
                             className="h-full w-full object-cover"
                             onError={(e) => {
                               console.warn('Failed to load banner image:', bannerUrl);

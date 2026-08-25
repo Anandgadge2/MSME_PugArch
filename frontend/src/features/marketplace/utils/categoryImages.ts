@@ -84,6 +84,76 @@ export const buildCategoryFallbackSvg = (categoryName: string, accentColor?: str
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.replace(/\s+/g, ' ').trim())}`;
 };
 
+const CATEGORY_STOCK_IMAGES: Record<string, string> = {
+    'electrical-and-electronics': 'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?w=360&q=85&auto=format&fit=crop',
+    'mechanical-and-engineering': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=360&q=85&auto=format&fit=crop',
+    'construction-and-building-materials': 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=360&q=85&auto=format&fit=crop',
+    'industrial-chemicals': 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=360&q=85&auto=format&fit=crop',
+    'refractories': 'https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?w=360&q=85&auto=format&fit=crop',
+    'automobile-parts-and-services': 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=360&q=85&auto=format&fit=crop',
+    'tyres-and-rubber-products': 'https://images.unsplash.com/photo-1578844251758-2f71da64c96f?w=360&q=85&auto=format&fit=crop',
+    'it-and-computer-equipment': 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=360&q=85&auto=format&fit=crop',
+    'office-equipment-and-stationery': 'https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=360&q=85&auto=format&fit=crop',
+    'medical-and-healthcare-supplies': 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=360&q=85&auto=format&fit=crop',
+    'agriculture-and-nursery': 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=360&q=85&auto=format&fit=crop',
+    'safety-equipment-and-industrial-safety': 'https://images.unsplash.com/photo-1618090584176-7132b9911657?w=360&q=85&auto=format&fit=crop',
+    'fuel-oil-and-gas': 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=360&q=85&auto=format&fit=crop',
+    'hydraulics-and-pneumatics': 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=360&q=85&auto=format&fit=crop',
+    'steel-and-metal-products': 'https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?w=360&q=85&auto=format&fit=crop',
+    'cement-and-concrete-products': 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=360&q=85&auto=format&fit=crop',
+    'pipes-tiles-and-hardware': 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=360&q=85&auto=format&fit=crop',
+    'industrial-machinery-and-spare-parts': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=360&q=85&auto=format&fit=crop',
+    'automation-and-robotics': 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=360&q=85&auto=format&fit=crop',
+    'fabrication-and-welding-services': 'https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?w=360&q=85&auto=format&fit=crop',
+    'bearings-and-mechanical-components': 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=360&q=85&auto=format&fit=crop',
+    'electrical-cables-and-power-equipment': 'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?w=360&q=85&auto=format&fit=crop',
+    'industrial-consumables': 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=360&q=85&auto=format&fit=crop',
+    'packaging-and-printing': 'https://images.unsplash.com/photo-1530587191325-3db32d826c18?w=360&q=85&auto=format&fit=crop',
+    'polymer-and-plastic-products': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=360&q=85&auto=format&fit=crop',
+    'trading-and-distribution': 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=360&q=85&auto=format&fit=crop',
+    'logistics-and-supply-services': 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=360&q=85&auto=format&fit=crop',
+    'tools-and-industrial-hardware': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=360&q=85&auto=format&fit=crop',
+    'laboratory-equipment-and-chemicals': 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=360&q=85&auto=format&fit=crop',
+    'engineering-consultancy-services': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=360&q=85&auto=format&fit=crop',
+    'industrial-maintenance-services': 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=360&q=85&auto=format&fit=crop',
+    'construction-and-civil-work-services': 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=360&q=85&auto=format&fit=crop',
+    'environmental-and-waste-management': 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=360&q=85&auto=format&fit=crop',
+    'telecom-and-communication-equipment': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=360&q=85&auto=format&fit=crop',
+    'furniture-and-interior-supplies': 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=360&q=85&auto=format&fit=crop',
+    'general-industrial-supplier': 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=360&q=85&auto=format&fit=crop',
+    'mining-and-coal-equipment': 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=360&q=85&auto=format&fit=crop',
+    'power-and-energy-equipment': 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=360&q=85&auto=format&fit=crop',
+    'gas-equipment-and-cylinders': 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=360&q=85&auto=format&fit=crop',
+    'conveyor-and-material-handling-equipment': 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=360&q=85&auto=format&fit=crop',
+    'pumps-motors-and-hydraulics': 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=360&q=85&auto=format&fit=crop',
+    'industrial-seals-and-gaskets': 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=360&q=85&auto=format&fit=crop',
+    'welding-and-cutting-equipment': 'https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?w=360&q=85&auto=format&fit=crop',
+    'industrial-fasteners-and-components': 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=360&q=85&auto=format&fit=crop',
+    'retail-and-commercial-supply': 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=360&q=85&auto=format&fit=crop',
+    'fmcg-and-daily-utility-supply': 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=360&q=85&auto=format&fit=crop',
+    'textile-and-garments-supply': 'https://images.unsplash.com/photo-1606744824163-985d376605aa?w=360&q=85&auto=format&fit=crop',
+    'oem-manufacturing-vendor': 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=360&q=85&auto=format&fit=crop',
+    'repair-and-service-provider': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=360&q=85&auto=format&fit=crop',
+    'multi-category-industrial-vendor': 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=360&q=85&auto=format&fit=crop'
+};
+
+const findCuratedStockImage = (name: string, slug?: string): string | null => {
+    const cleanSlug = (slug || '').toLowerCase().trim();
+    if (cleanSlug && CATEGORY_STOCK_IMAGES[cleanSlug]) {
+        return CATEGORY_STOCK_IMAGES[cleanSlug];
+    }
+    const cleanName = (name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
+    if (CATEGORY_STOCK_IMAGES[cleanName]) {
+        return CATEGORY_STOCK_IMAGES[cleanName];
+    }
+    for (const [key, url] of Object.entries(CATEGORY_STOCK_IMAGES)) {
+        if (cleanSlug.includes(key) || cleanName.includes(key) || key.includes(cleanSlug) || key.includes(cleanName)) {
+            return url;
+        }
+    }
+    return null;
+};
+
 export const normalizeDataUri = (url: unknown): string => {
     if (!url || typeof url !== 'string') return '';
     const trimmed = url.trim();
@@ -95,6 +165,7 @@ export const normalizeDataUri = (url: unknown): string => {
 
 export const getCategoryVisualMeta = (category: MarketplaceCategory | string): CategoryVisualMeta => {
     const rawName = typeof category === 'string' ? category : category?.name || '';
+    const rawSlug = typeof category === 'string' ? '' : category?.slug || '';
     const cleanName = rawName.trim().toLowerCase();
     const hash = hashString(cleanName || 'category');
     const palette = DYNAMIC_PALETTES[hash % DYNAMIC_PALETTES.length];
@@ -112,7 +183,17 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
         }
     }
 
-    // 2. Fallback to dynamically generated unique SVG tailored to this category name
+    // 2. Curated stock photo mapping for crisp industrial visual clarity
+    const curatedImage = findCuratedStockImage(rawName, rawSlug);
+    if (curatedImage) {
+        return {
+            imageUrl: curatedImage,
+            accentColor: palette.stroke,
+            categoryTag: rawName,
+        };
+    }
+
+    // 3. Fallback to dynamically generated unique SVG tailored to this category name
     return {
         imageUrl: buildCategoryFallbackSvg(rawName, palette.stroke),
         accentColor: palette.stroke,
@@ -128,6 +209,11 @@ export const getCategoryImageUrl = (category: MarketplaceCategory | string): str
         if (iconProp && (iconProp.startsWith('data:image/') || iconProp.startsWith('http://') || iconProp.startsWith('https://') || iconProp.startsWith('/'))) {
             return iconProp;
         }
+        const curated = findCuratedStockImage(category.name, category.slug);
+        if (curated) return curated;
+    } else if (typeof category === 'string') {
+        const curated = findCuratedStockImage(category);
+        if (curated) return curated;
     }
     return getCategoryVisualMeta(category).imageUrl;
 };

@@ -1037,7 +1037,7 @@ const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketpl
         serviceCount: category._count?.services || 0,
         displayOrder: category.displayOrder
     }));
-}, 300);
+}, 60); // 60s cache TTL for marketplace categories
 
 const purchaseCompletionWhere = {
     OR: [

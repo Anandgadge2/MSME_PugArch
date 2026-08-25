@@ -174,6 +174,8 @@ export default function MarketplaceSellerStore() {
                             <img
                                 src={resolveMediaUrl(vendor.bannerUrl) || ''}
                                 alt={`${name} Banner`}
+                                referrerPolicy="no-referrer"
+                                crossOrigin="anonymous"
                                 className="w-full h-full object-cover"
                             />
                         ) : (
