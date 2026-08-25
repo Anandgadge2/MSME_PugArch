@@ -25,6 +25,7 @@ configureGCS().then(ok => {
 import { upload } from './src/config/storage.js';
 import { errorHandler } from './src/middleware/errorHandler.js';
 import { checkOwnership } from './src/middleware/ownership.js';
+import { handleUpgrade } from './src/services/websocket.service.js';
 import { safeAsync } from './src/utils/safeAsync.js';
 import { TimeConstants } from './src/constants/time.js';
 import {
@@ -6223,6 +6224,14 @@ const startListening = (port: number) => {
       logger.info(`Wrote backend port ${port} to ${portFilePath}`);
     } catch (err) {
       logger.warn({ err }, 'Failed to write backend port file');
+    }
+  });
+
+  server.on('upgrade', (request, socket, head) => {
+    if (request.url?.startsWith('/api/ws')) {
+      handleUpgrade(request, socket, head);
+    } else {
+      socket.destroy();
     }
   });
 

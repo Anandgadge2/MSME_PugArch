@@ -52,6 +52,10 @@ export interface DisputeDto {
     resolvedAt?: string | null;
     createdAt: string;
     updatedAt: string;
+    responseRequestedAt?: string | null;
+    responseDueAt?: string | null;
+    escalatedAt?: string | null;
+    withdrawnAt?: string | null;
     buyer?: { id: number; name: string; role: string };
     seller?: { id: number; name: string; role: string };
     messages?: DisputeMessage[];
@@ -84,3 +88,5 @@ export const sendDisputeMessage = (id: number, data: {
 
 export const updateDisputeStatus = (id: number, data: { status: DisputeStatus | string; remarks?: string; adminRemarks?: string }) =>
     postApi<DisputeDto>(`/api/admin/disputes/${id}/status`, data);
+
+export const withdrawDispute = (id: number) => postApi<DisputeDto>(`/api/disputes/${id}/withdraw`, {});

@@ -4,7 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     createDispute, fetchDispute, fetchDisputes,
-    sendDisputeMessage, updateDisputeStatus
+    sendDisputeMessage, updateDisputeStatus, withdrawDispute
 } from './api';
 
 const KEY = ['disputes'] as const;
@@ -48,3 +48,12 @@ export const useUpdateDisputeStatus = () => {
         onSuccess: () => { void invalidate(qc); }
     });
 };
+
+export const useWithdrawDispute = () => {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: withdrawDispute,
+        onSuccess: () => { void invalidate(qc); }
+    });
+};
+

@@ -282,13 +282,13 @@ export default function TeamManagementPage() {
         <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
             {/* Header */}
             <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">ORGANISATION</p>
+                {/* <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">ORGANISATION</p> */}
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div>
                         <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">Team Management</h1>
-                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                        {/* <p className="mt-1 text-sm font-semibold text-slate-500">
                             {orgStatus?.organization?.organizationName ? `${orgStatus.organization.organizationName} — ` : ''}Manage members, roles, permissions, and access transfers for your organisation.
-                        </p>
+                        </p> */}
                     </div>
                     <div className="flex items-center gap-2">
                         <Button
@@ -589,25 +589,31 @@ export default function TeamManagementPage() {
                             </Button>
                         </div>
                         {rolesLoading ? <LoadingState label="Loading roles..." /> : (
-                            <div className="grid gap-3 p-4 lg:grid-cols-2">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 items-start">
                                 {roles.map(role => {
                                     const permissions = (role.permissions || []).filter(p => p.allowed).map(p => p.permissionKey);
                                     return (
-                                        <article key={role.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                                        <article key={role.id} className="rounded-2xl border border-slate-200/80 bg-slate-50/30 p-4 sm:p-5 shadow-sm hover:shadow hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-start">
                                             <div className="flex items-start justify-between gap-3">
-                                                <div>
-                                                    <p className="text-sm font-black text-slate-950">{role.name}</p>
-                                                    <p className="mt-1 text-xs font-semibold text-slate-500">{role.description || 'Custom organization role'}</p>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-black text-[#12335f] truncate">{role.name}</p>
+                                                    <p className="mt-1 text-[11px] font-semibold text-slate-500 leading-snug">{role.description || 'Custom organization role'}</p>
                                                 </div>
-                                                <span className={`rounded border px-2 py-0.5 text-[10px] font-black uppercase ${role.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+                                                <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider shadow-2xs ${role.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
                                                     {role.isSystemRole ? 'Template' : role.isActive ? 'Active' : 'Inactive'}
                                                 </span>
                                             </div>
-                                            <div className="mt-3 flex flex-wrap gap-1.5">
+                                            <div className="mt-3.5 flex flex-wrap gap-1.5">
                                                 {permissions.slice(0, 10).map(permission => (
-                                                    <span key={permission} className="rounded bg-slate-100 px-2 py-1 text-[9px] font-black uppercase text-slate-600">{permission.replace(/_/g, ' ')}</span>
+                                                    <span key={permission} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[9px] font-bold uppercase tracking-tight text-[#12335f] shadow-2xs">
+                                                        {permission.replace(/_/g, ' ')}
+                                                    </span>
                                                 ))}
-                                                {permissions.length > 10 && <span className="rounded bg-slate-900 px-2 py-1 text-[9px] font-black uppercase text-white">+{permissions.length - 10}</span>}
+                                                {permissions.length > 10 && (
+                                                    <span className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[9px] font-black uppercase tracking-tight text-white shadow-2xs">
+                                                        +{permissions.length - 10}
+                                                    </span>
+                                                )}
                                             </div>
                                         </article>
                                     );

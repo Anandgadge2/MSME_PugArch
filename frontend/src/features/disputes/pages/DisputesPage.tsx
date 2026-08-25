@@ -23,8 +23,9 @@ import { formatCurrency, formatDateTime, formatRelative } from '../../shared/for
 import { runWithToast } from '../../../lib/toast';
 import { toast } from 'sonner';
 import {
-    useCreateDispute, useDispute, useDisputes, useSendDisputeMessage, useUpdateDisputeStatus
+    useCreateDispute, useDispute, useDisputes, useSendDisputeMessage, useUpdateDisputeStatus, useWithdrawDispute
 } from '../hooks';
+import { useDisputeWebSocket, type WebSocketStatus } from '../hooks/useDisputeWebSocket';
 import type { DisputeDto, DisputeStatus } from '../api';
 import { usePurchaseOrders } from '../../purchaseOrders/hooks';
 import { uploadDeliveryFile, type UploadedFileAsset } from '../../delivery/upload';
@@ -290,11 +291,18 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
                                 </div>
                                 <div className="divide-y divide-slate-100">
                                     {pagedItems.map(d => (
-                                        <button
+                                        <div
                                             key={d.id}
-                                            type="button"
+                                            role="button"
+                                            tabIndex={0}
                                             onClick={() => onSelect(d.id)}
-                                            className="w-full text-left px-5 py-4 hover:bg-slate-50/70 transition-colors cursor-pointer"
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    onSelect(d.id);
+                                                }
+                                            }}
+                                            className="w-full text-left px-5 py-4 hover:bg-slate-50/70 transition-colors cursor-pointer outline-none focus-visible:bg-slate-50/70 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#12335f]/20 block"
                                         >
                                             <div className="flex items-start justify-between gap-4">
                                                 <div className="min-w-0 flex-1">
@@ -328,7 +336,7 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
                                                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{formatRelative(d.updatedAt)}</p>
                                                 </div>
                                             </div>
-                                        </button>
+                                        </div>
                                     ))}
                                 </div>
                                 <div className="border-t border-slate-100 bg-white">
@@ -408,6 +416,8 @@ function DisputeDetail({ id, onBack, isAdmin }: { id: number; onBack: () => void
     const { data: dispute, isLoading, error, refetch } = useDispute(id);
     const sendMut = useSendDisputeMessage();
     const statusMut = useUpdateDisputeStatus();
+    const withdrawMut = useWithdrawDispute();
+    const wsStatus = useDisputeWebSocket(id);
     const [content, setContent] = useState('');
     const [internal, setInternal] = useState(false);
     const [showStatusModal, setShowStatusModal] = useState(false);
@@ -432,7 +442,8 @@ function DisputeDetail({ id, onBack, isAdmin }: { id: number; onBack: () => void
             setReplyAttachments(prev => [...prev, ...newUploaded]);
             toast.success('Evidence file attached');
         } catch (err: any) {
-            toast.error('Failed to attach file');
+            console.error('Upload Error:', err);
+            toast.error(`Failed to attach file: ${err.message || 'Unknown error'}`);
         } finally {
             setReplyUploading(false);
             e.target.value = '';
@@ -456,56 +467,123 @@ function DisputeDetail({ id, onBack, isAdmin }: { id: number; onBack: () => void
     const evidenceItems = [...(dispute.evidence || []), ...(dispute.attachments || [])];
 
     return (
-        <div className="space-y-4">
-            <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
-                <div className="min-w-0">
-                    <button onClick={onBack} className="inline-flex items-center text-[10px] font-black uppercase tracking-widest text-[#12335f] hover:underline">
-                        <ArrowLeft className="mr-1 h-3 w-3" /> Back to Disputes
+        <div className="space-y-5">
+            {/* Page Header */}
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0 space-y-1.5">
+                    <button onClick={onBack} className="inline-flex items-center text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-[#12335f] transition-colors mb-1">
+                        <ArrowLeft className="mr-1.5 h-3 w-3" /> Back to Disputes
                     </button>
-                    <div className="mt-1 flex items-center gap-2 flex-wrap">
-                        <h1 className="text-2xl font-black text-slate-950">{dispute.disputeNo || `DSP-${dispute.id}`}</h1>
-                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-black uppercase ${STATUS_TONE[dispute.status]}`}>
-                            {dispute.status.replace(/_/g, ' ')}
-                        </span>
-                        <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black uppercase text-slate-700">
-                            {dispute.category}
-                        </span>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                        <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
+                            {dispute.disputeNo || `DSP-${dispute.id}`}
+                        </h1>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${STATUS_TONE[dispute.status]}`}>
+                                {dispute.status.replace(/_/g, ' ')}
+                            </span>
+                            <span className="inline-flex rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-700 shadow-2xs">
+                                {dispute.category.replace(/_/g, ' ')}
+                            </span>
+                            
+                            {/* WebSocket Real-time Indicator */}
+                            <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
+                                wsStatus === 'CONNECTED' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                wsStatus === 'RECONNECTING' || wsStatus === 'CONNECTING' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                                'bg-slate-50 text-slate-500 border border-slate-200'
+                            }`}>
+                                {wsStatus === 'CONNECTED' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>}
+                                {wsStatus === 'RECONNECTING' || wsStatus === 'CONNECTING' ? <RefreshCw className="h-2 w-2 animate-spin" /> : null}
+                                {wsStatus === 'CONNECTED' ? 'Live' : wsStatus === 'RECONNECTING' || wsStatus === 'CONNECTING' ? 'Connecting...' : 'Offline'}
+                            </span>
+                        </div>
                     </div>
-                    <p className="mt-1 text-xs font-semibold text-slate-500 text-wrap-anywhere">
-                        Raised {formatDateTime(dispute.createdAt)} · Last update {formatRelative(dispute.updatedAt)}
-                    </p>
+                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 pt-1">
+                        <span>Raised {formatDateTime(dispute.createdAt)}</span>
+                        <span className="h-1 w-1 rounded-full bg-slate-300"></span>
+                        <span>Last updated {formatRelative(dispute.updatedAt)}</span>
+                    </div>
                 </div>
                 {isAdmin && !['resolved', 'closed', 'rejected'].includes(dispute.status) && (
-                    <Button onClick={() => setShowStatusModal(true)} className="bg-[#12335f] text-white">
+                    <Button onClick={() => setShowStatusModal(true)} className="bg-[#12335f] text-white shadow-sm mt-2 md:mt-6 shrink-0">
                         <Shield className="mr-2 h-4 w-4" /> Update Status
+                    </Button>
+                )}
+                {!isAdmin && !['resolved', 'closed', 'rejected'].includes(dispute.status) && (
+                    <Button 
+                        onClick={() => {
+                            if (window.confirm('Are you sure you want to withdraw this dispute?')) {
+                                runWithToast(() => withdrawMut.mutateAsync(dispute.id), { loading: 'Withdrawing...', success: 'Dispute withdrawn', error: 'Withdrawal failed' });
+                            }
+                        }} 
+                        disabled={withdrawMut.isPending}
+                        variant="outline"
+                        className="text-slate-600 border-slate-300 shadow-sm mt-2 md:mt-6 shrink-0"
+                    >
+                        <XCircle className="mr-2 h-4 w-4" /> Withdraw Dispute
                     </Button>
                 )}
             </div>
 
-            {/* Original reason */}
-            <Card className="border-amber-200 bg-amber-50/40 shadow-sm">
-                <CardContent className="p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Original Reason</p>
-                    <p className="mt-1 text-base font-black text-slate-900 text-wrap-anywhere">{dispute.title || 'Dispute'}</p>
-                    <p className="mt-2 text-sm font-semibold text-slate-900 text-wrap-anywhere whitespace-pre-wrap">{dispute.description || dispute.reason}</p>
-                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-black uppercase text-slate-600">
-                        {dispute.linkedEntityType && <span className="rounded border border-slate-200 bg-white px-2 py-1">{dispute.linkedEntityType.replace(/_/g, ' ')} #{dispute.linkedEntityId || '-'}</span>}
-                        {dispute.priority && <span className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">{dispute.priority}</span>}
-                        {dispute.amountInDispute && <span className="rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700">{formatCurrency(dispute.amountInDispute)}</span>}
+            {/* Original Reason */}
+            <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50/50 to-orange-50/20 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-800/80">Original Reason</p>
+                    {dispute.priority && (
+                        <span className="rounded-md bg-amber-100/80 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-900">
+                            {dispute.priority} Priority
+                        </span>
+                    )}
+                </div>
+                <h3 className="text-base font-black text-slate-900 mb-2">{dispute.title || 'Dispute'}</h3>
+                {dispute.responseDueAt && !['resolved', 'closed', 'rejected'].includes(dispute.status) && (
+                    <div className="mb-4 rounded bg-rose-50 border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700">
+                        Response is required by: {formatDateTime(dispute.responseDueAt)}
                     </div>
-                </CardContent>
-            </Card>
+                )}
+                {dispute.escalatedAt && (
+                    <div className="mb-4 rounded bg-red-100 border border-red-300 px-3 py-2 text-xs font-bold text-red-800">
+                        Dispute automatically escalated on {formatDateTime(dispute.escalatedAt)} due to lack of response.
+                    </div>
+                )}
+                <p className="text-sm font-semibold text-slate-700 whitespace-pre-wrap mb-4 leading-relaxed">
+                    {dispute.description || dispute.reason}
+                </p>
+                <div className="flex flex-wrap gap-2 pt-4 border-t border-amber-200/40">
+                    {dispute.linkedEntityType && (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200/60 bg-white/60 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-amber-900 shadow-2xs backdrop-blur-sm">
+                            <FileText className="h-3 w-3 text-amber-600" />
+                            {dispute.linkedEntityType.replace(/_/g, ' ')} #{dispute.linkedEntityId || '-'}
+                        </span>
+                    )}
+                    {dispute.amountInDispute && (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-red-200/60 bg-white/60 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-red-900 shadow-2xs backdrop-blur-sm">
+                            Amount: {formatCurrency(dispute.amountInDispute)}
+                        </span>
+                    )}
+                </div>
+            </div>
 
             {/* Parties */}
-            <div className="grid gap-3 md:grid-cols-2">
-                <Card><CardContent className="p-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Buyer</p>
-                    <p className="mt-1 text-sm font-black text-slate-900 text-wrap-anywhere">{dispute.buyer?.name || `#${dispute.buyerId}`}</p>
-                </CardContent></Card>
-                <Card><CardContent className="p-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Seller</p>
-                    <p className="mt-1 text-sm font-black text-slate-900 text-wrap-anywhere">{dispute.seller?.name || `#${dispute.sellerId}`}</p>
-                </CardContent></Card>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-4 shadow-sm hover:bg-blue-50/50 transition-colors flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#12335f]/10 text-lg font-black text-[#12335f]">
+                        {(dispute.buyer?.name || 'B').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-blue-600/80">Buyer</p>
+                        <p className="truncate text-sm font-black text-slate-900 mt-0.5">{dispute.buyer?.name || `User #${dispute.buyerId}`}</p>
+                    </div>
+                </div>
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4 shadow-sm hover:bg-emerald-50/50 transition-colors flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600/10 text-lg font-black text-emerald-700">
+                        {(dispute.seller?.name || 'S').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600/80">Seller</p>
+                        <p className="truncate text-sm font-black text-slate-900 mt-0.5">{dispute.seller?.name || `User #${dispute.sellerId}`}</p>
+                    </div>
+                </div>
             </div>
 
             {/* Attached Evidence Section */}
@@ -531,65 +609,85 @@ function DisputeDetail({ id, onBack, isAdmin }: { id: number; onBack: () => void
                 </Card>
             )}
 
-            {/* Thread */}
-            <Card className="border-slate-200/80 shadow-sm">
-                <CardContent className="p-0">
-                    <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-3">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                            Conversation ({dispute.messages?.length || 0})
-                        </p>
+            {/* Conversation Thread */}
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/50 px-5 py-4">
+                    <div>
+                        <h2 className="text-sm font-black text-slate-900 tracking-tight">Conversation</h2>
+                        <div className="flex items-center gap-1.5 mt-1">
+                            {!['resolved', 'closed', 'rejected'].includes(dispute.status) ? (
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                </span>
+                            ) : (
+                                <span className="h-2 w-2 rounded-full bg-slate-300 shrink-0" />
+                            )}
+                            <span className="text-[11px] font-semibold text-slate-500">
+                                {dispute.messages?.length || 0} {(dispute.messages?.length === 1) ? 'message' : 'messages'}
+                            </span>
+                        </div>
                     </div>
-                    <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
-                        {!dispute.messages || dispute.messages.length === 0 ? (
-                            <p className="p-8 text-center text-xs font-semibold text-slate-500">No messages yet. Add the first one below.</p>
-                        ) : dispute.messages.map(m => {
-                            const isMe = m.senderId === Number(user?.id);
-                            return (
-                                <div key={m.id} className={`px-4 py-3 ${m.internal ? 'bg-amber-50/30' : ''}`}>
-                                    <div className="flex items-start gap-2 justify-between">
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className={`text-xs font-black ${isMe ? 'text-[#12335f]' : 'text-slate-700'}`}>
-                                                    {m.sender?.name || `User #${m.senderId}`}
-                                                </span>
-                                                {m.sender?.role && (
-                                                    <span className="inline-flex rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-600">
-                                                        {m.sender.role}
-                                                    </span>
-                                                )}
-                                                {m.internal && (
-                                                    <span className="inline-flex rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-800">
-                                                        Internal
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className="mt-1 text-xs font-semibold text-slate-800 text-wrap-anywhere whitespace-pre-wrap">{m.content}</p>
-                                        </div>
-                                        <p className="text-[10px] text-slate-400 shrink-0">{formatRelative(m.createdAt)}</p>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                </div>
 
-                    {!['resolved', 'closed', 'rejected'].includes(dispute.status) && (
-                        <div className="border-t border-slate-100 p-4 space-y-3">
+                <div className="max-h-[500px] overflow-y-auto p-5 space-y-4 bg-slate-50/30">
+                    {!dispute.messages || dispute.messages.length === 0 ? (
+                        <div className="py-12 text-center text-sm font-semibold text-slate-400">
+                            No messages yet. Send a message to start the conversation.
+                        </div>
+                    ) : dispute.messages.map(m => {
+                        const isBuyer = m.sender?.role === 'buyer';
+                        const isSeller = m.sender?.role === 'seller';
+                        
+                        const alignRight = isBuyer; 
+                        
+                        return (
+                            <div key={m.id} className={`flex w-full ${alignRight ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`flex flex-col max-w-[90%] md:max-w-[75%] ${alignRight ? 'items-end' : 'items-start'}`}>
+                                    <div className="mb-1.5 flex items-center gap-1.5">
+                                        <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                                            {m.sender?.name || `User #${m.senderId}`}
+                                        </span>
+                                        {m.sender?.role && (
+                                            <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${isBuyer ? 'bg-blue-100/80 text-blue-800' : isSeller ? 'bg-emerald-100/80 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>
+                                                {m.sender.role}
+                                            </span>
+                                        )}
+                                        {m.internal && (
+                                            <span className="inline-flex rounded-md bg-amber-100 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-amber-800">
+                                                Internal
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className={`rounded-2xl px-4 py-3 shadow-sm ${m.internal ? 'bg-amber-50 border border-amber-200/60 rounded-tl-sm' : alignRight ? 'bg-[#12335f]/[0.03] border border-[#12335f]/10 rounded-tr-sm' : 'bg-white border border-slate-200/80 rounded-tl-sm'}`}>
+                                        <p className="text-sm font-semibold text-slate-800 whitespace-pre-wrap leading-relaxed">{m.content}</p>
+                                    </div>
+                                    <p className="mt-1 text-[9px] font-bold text-slate-400 px-1">{formatRelative(m.createdAt)}</p>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {!['resolved', 'closed', 'rejected'].includes(dispute.status) && (
+                    <div className="border-t border-slate-200 bg-white p-4 sm:p-5">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50/50 shadow-sm focus-within:bg-white focus-within:ring-2 focus-within:ring-[#12335f]/20 focus-within:border-[#12335f] transition-all">
                             <textarea
                                 value={content}
                                 onChange={e => setContent(e.target.value)}
                                 placeholder={isAdmin ? 'Add admin reply or internal note...' : 'Write your response...'}
                                 rows={3}
                                 maxLength={3000}
-                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                                className="w-full resize-none rounded-t-xl bg-transparent px-4 py-3 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none"
                             />
-
+                            
                             {replyAttachments.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5">
+                                <div className="flex flex-wrap gap-2 px-4 pb-2">
                                     {replyAttachments.map(att => (
-                                        <span key={att.id} className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
-                                            <Paperclip className="h-3 w-3 text-slate-500" />
-                                            {att.originalName || `File #${att.id}`}
-                                            <button type="button" onClick={() => setReplyAttachments(prev => prev.filter(a => a.id !== att.id))} className="text-rose-600 hover:text-rose-800 ml-1">
+                                        <span key={att.id} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-slate-700 shadow-2xs">
+                                            <Paperclip className="h-3 w-3 text-slate-400" />
+                                            <span className="truncate max-w-[150px]">{att.originalName || `File #${att.id}`}</span>
+                                            <button type="button" onClick={() => setReplyAttachments(prev => prev.filter(a => a.id !== att.id))} className="text-rose-500 hover:text-rose-700 ml-0.5 rounded-full hover:bg-rose-50 p-0.5 transition-colors">
                                                 <X className="h-3 w-3" />
                                             </button>
                                         </span>
@@ -597,34 +695,40 @@ function DisputeDetail({ id, onBack, isAdmin }: { id: number; onBack: () => void
                                 </div>
                             )}
 
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                                <label className="cursor-pointer inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100">
-                                    <Paperclip className="mr-1.5 h-3.5 w-3.5 text-[#12335f]" />
-                                    {replyUploading ? 'Attaching...' : 'Attach File'}
-                                    <input
-                                        type="file"
-                                        multiple
-                                        disabled={replyUploading}
-                                        onChange={handleReplyFileUpload}
-                                        className="hidden"
-                                        accept="image/*,application/pdf,.doc,.docx"
-                                    />
-                                </label>
-                                {isAdmin && (
-                                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                                        <input type="checkbox" checked={internal} onChange={e => setInternal(e.target.checked)} />
-                                        Internal note (not visible to buyer/seller)
+                            <div className="flex items-center justify-between gap-3 border-t border-slate-200/80 px-3 py-2.5 bg-slate-100/50 rounded-b-xl">
+                                <div className="flex items-center gap-3">
+                                    <label className="cursor-pointer inline-flex items-center rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200/60 hover:text-slate-900 transition-colors">
+                                        <Paperclip className="mr-1.5 h-4 w-4 text-slate-500" />
+                                        {replyUploading ? 'Attaching...' : 'Attach File'}
+                                        <input
+                                            type="file"
+                                            multiple
+                                            disabled={replyUploading}
+                                            onChange={handleReplyFileUpload}
+                                            className="hidden"
+                                            accept="image/*,application/pdf,.doc,.docx"
+                                        />
                                     </label>
-                                )}
-                                <Button onClick={handleSend} disabled={sendMut.isPending || replyUploading || (content.trim().length < 1 && replyAttachments.length === 0)} className="ml-auto bg-[#12335f] text-white">
-                                    {sendMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                                    {isAdmin && (
+                                        <label className="flex items-center gap-2 text-[11px] font-bold text-slate-600 cursor-pointer select-none">
+                                            <input type="checkbox" checked={internal} onChange={e => setInternal(e.target.checked)} className="rounded border-slate-300 text-amber-600 focus:ring-amber-600/30" />
+                                            Internal note
+                                        </label>
+                                    )}
+                                </div>
+                                <Button 
+                                    onClick={handleSend} 
+                                    disabled={sendMut.isPending || replyUploading || (content.trim().length < 1 && replyAttachments.length === 0)} 
+                                    className="h-9 shrink-0 bg-[#12335f] text-white font-black uppercase tracking-wider text-[10px] hover:bg-[#0b2447] shadow-sm transition-all"
+                                >
+                                    {sendMut.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                                     Send Reply
                                 </Button>
                             </div>
                         </div>
-                    )}
-                </CardContent>
-            </Card>
+                    </div>
+                )}
+            </div>
 
             {/* Resolution remarks */}
             {dispute.remarks && ['resolved', 'rejected', 'closed'].includes(dispute.status) && (

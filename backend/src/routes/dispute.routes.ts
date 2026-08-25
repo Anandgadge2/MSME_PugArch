@@ -8,6 +8,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { notificationService } from '../services/notification.service.js';
+import { broadcastToDispute } from '../services/websocket.service.js';
 
 const router = Router();
 const db = prisma as any;
@@ -390,11 +391,28 @@ router.post('/disputes/:id/messages', authenticate, authorize('buyer', 'seller',
     if (body.evidenceFileIds.length) {
       await (tx as any).disputeAttachment.createMany({ data: body.evidenceFileIds.map(fileAssetId => ({ disputeId: dispute.id, fileAssetId, uploadedByUserId: userId(req) })) });
     }
-    await (tx as any).dispute.update({ where: { id: dispute.id }, data: { status: internal ? dispute.status : 'RESPONDED', statusEnum: internal ? dispute.statusEnum : 'RESPONDED' } });
+    let updateData: any = {};
+    if (!internal && (dispute.status === 'CLARIFICATION_REQUESTED' || dispute.statusEnum === 'CLARIFICATION_REQUESTED')) {
+      updateData = { status: 'RESPONDED', statusEnum: 'RESPONDED', responseDueAt: null };
+    }
+    if (Object.keys(updateData).length > 0) {
+      await (tx as any).dispute.update({ where: { id: dispute.id }, data: updateData });
+    }
     return created;
   }, { timeout: 15000 });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: internal ? 'dispute.internal_note_added' : 'dispute.message_added', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip });
-  ok(res, { ...message, content: message.content || message.message }, 201);
+  
+  const responseData = { ...message, content: message.content || message.message };
+  
+  if (!internal) {
+    broadcastToDispute(dispute.id, {
+      type: 'DISPUTE_MESSAGE_CREATED',
+      disputeId: dispute.id,
+      message: responseData
+    });
+  }
+  
+  ok(res, responseData, 201);
 }));
 
 router.post('/disputes/:id/attachments', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
@@ -404,6 +422,13 @@ router.post('/disputes/:id/attachments', authenticate, authorize('buyer', 'selle
   ensureDisputeAccess(req, dispute);
   await db.disputeAttachment.createMany({ data: fileAssetIds.map((fileAssetId: number) => ({ disputeId: dispute.id, fileAssetId, uploadedByUserId: userId(req) })) });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.attachments_added', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip, metadata: { count: fileAssetIds.length } });
+  
+  broadcastToDispute(dispute.id, {
+    type: 'DISPUTE_EVIDENCE_ADDED',
+    disputeId: dispute.id,
+    evidence: { count: fileAssetIds.length } // Minimal evidence struct, ideally we'd broadcast full evidence
+  });
+
   ok(res, { success: true });
 }));
 
@@ -414,17 +439,22 @@ router.post('/disputes/:id/respond-clarification', authenticate, authorize('buye
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
   ensureDisputeAccess(req, dispute);
   await db.disputeMessage.create({ data: { disputeId: dispute.id, senderId: userId(req), senderOrgId: orgId(req), message: body.message, content: body.message, visibility: 'PUBLIC_TO_PARTIES' } });
-  const updated = await db.dispute.update({ where: { id: dispute.id }, data: { status: 'RESPONDED', statusEnum: 'RESPONDED' }, include: disputeInclude(false) });
+  const updated = await db.dispute.update({ where: { id: dispute.id }, data: { status: 'RESPONDED', statusEnum: 'RESPONDED', responseDueAt: null }, include: disputeInclude(false) });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.clarification_responded', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip });
   ok(res, toDto(updated));
 }));
 
-router.post('/disputes/:id/close', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
+router.post('/disputes/:id/withdraw', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
   ensureDisputeAccess(req, dispute);
-  const updated = await db.dispute.update({ where: { id: dispute.id }, data: { status: 'CLOSED', statusEnum: 'CLOSED', closedAt: new Date() }, include: disputeInclude(false) });
-  await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.closed_by_party', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip });
+  
+  if (['RESOLVED', 'REJECTED', 'CLOSED'].includes(normalizeStatus(dispute.statusEnum || dispute.status))) {
+    throw new ApiError(400, 'Cannot withdraw a finalized dispute', 'DISPUTE_FINALIZED');
+  }
+
+  const updated = await db.dispute.update({ where: { id: dispute.id }, data: { status: 'CLOSED', statusEnum: 'CLOSED', closedAt: new Date(), withdrawnAt: new Date() }, include: disputeInclude(false) });
+  await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.withdrawn', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip });
   ok(res, toDto(updated));
 }));
 
@@ -462,13 +492,31 @@ router.post('/admin/disputes/:id/assign', authenticate, authorizeAdmin, asyncRou
 
 router.post('/admin/disputes/:id/status', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const body = adminStatusSchema.parse(req.body);
+  const updateData: any = { status: body.status, statusEnum: body.status, adminRemarks: body.adminRemarks || body.remarks || null };
+  if (body.status === 'CLARIFICATION_REQUESTED') {
+    const responseDueAt = new Date();
+    responseDueAt.setDate(responseDueAt.getDate() + 5);
+    updateData.responseRequestedAt = new Date();
+    updateData.responseDueAt = responseDueAt;
+  } else {
+    updateData.responseDueAt = null; // Clear if transitioned out
+  }
   const updated = await db.dispute.update({
     where: { id: Number(req.params.id) },
-    data: { status: body.status, statusEnum: body.status, adminRemarks: body.adminRemarks || body.remarks || null },
+    data: updateData,
     include: disputeInclude(true)
   });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.status_updated', entityType: 'dispute', entityId: updated.id, ipAddress: req.ip, metadata: { status: body.status } });
   if (updated.raisedById) await notificationService.notify(updated.raisedById, { title: 'Dispute status updated', message: `${updated.disputeNo || `DSP-${updated.id}`} is now ${body.status.replace(/_/g, ' ')}.`, type: 'dispute_status_updated', priority: 'medium', redirectUrl: '/buyer/disputes' });
+  
+  broadcastToDispute(updated.id, {
+    type: 'DISPUTE_STATUS_CHANGED',
+    disputeId: updated.id,
+    status: body.status,
+    previousStatus: String(updateData.statusEnum || 'UNKNOWN'),
+    updatedBy: 'Admin'
+  });
+
   ok(res, toDto(updated));
 }));
 
@@ -480,16 +528,38 @@ router.put('/disputes/:id/status', authenticate, authorizeAdmin, asyncRoute(asyn
     include: disputeInclude(true)
   });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.status_updated_legacy', entityType: 'dispute', entityId: updated.id, ipAddress: req.ip, metadata: { status: body.status } });
+  
+  broadcastToDispute(updated.id, {
+    type: 'DISPUTE_STATUS_CHANGED',
+    disputeId: updated.id,
+    status: body.status,
+    previousStatus: 'UNKNOWN',
+    updatedBy: 'Admin'
+  });
+
   ok(res, toDto(updated));
 }));
 
 router.post('/admin/disputes/:id/request-clarification', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const body = clarificationSchema.parse(req.body);
-  const dispute = await db.dispute.update({ where: { id: Number(req.params.id) }, data: { status: 'CLARIFICATION_REQUESTED', statusEnum: 'CLARIFICATION_REQUESTED' }, include: disputeInclude(true) });
+  const responseDueAt = new Date();
+  responseDueAt.setDate(responseDueAt.getDate() + 5);
+  const dispute = await db.dispute.update({ where: { id: Number(req.params.id) }, data: { status: 'CLARIFICATION_REQUESTED', statusEnum: 'CLARIFICATION_REQUESTED', responseRequestedAt: new Date(), responseDueAt }, include: disputeInclude(true) });
   await db.disputeMessage.create({ data: { disputeId: dispute.id, senderId: userId(req), message: body.message, content: body.message, visibility: 'PUBLIC_TO_PARTIES' } });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.clarification_requested', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip });
   if (dispute.raisedById) await notificationService.notify(dispute.raisedById, { title: 'Clarification requested', message: body.message, type: 'dispute_clarification_requested', priority: 'high', redirectUrl: '/buyer/disputes' });
-  ok(res, toDto(await db.dispute.findUnique({ where: { id: dispute.id }, include: disputeInclude(true) })));
+  
+  const updatedDto = toDto(await db.dispute.findUnique({ where: { id: dispute.id }, include: disputeInclude(true) }));
+  
+  broadcastToDispute(dispute.id, {
+    type: 'DISPUTE_STATUS_CHANGED',
+    disputeId: dispute.id,
+    status: 'CLARIFICATION_REQUESTED',
+    previousStatus: 'UNKNOWN',
+    updatedBy: 'Admin'
+  });
+
+  ok(res, updatedDto);
 }));
 
 router.post('/admin/disputes/:id/resolve', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
@@ -497,6 +567,15 @@ router.post('/admin/disputes/:id/resolve', authenticate, authorizeAdmin, asyncRo
   const updated = await db.dispute.update({ where: { id: Number(req.params.id) }, data: { status: 'RESOLVED', statusEnum: 'RESOLVED', resolutionSummary: body.resolutionSummary, resolutionRemarks: body.resolutionSummary, adminRemarks: body.adminRemarks || null, resolvedById: userId(req), resolvedAt: new Date() }, include: disputeInclude(true) });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.resolved', entityType: 'dispute', entityId: updated.id, ipAddress: req.ip });
   if (updated.raisedById) await notificationService.notify(updated.raisedById, { title: 'Dispute resolved', message: body.resolutionSummary, type: 'dispute_resolved', priority: 'medium', redirectUrl: '/buyer/disputes' });
+  
+  broadcastToDispute(updated.id, {
+    type: 'DISPUTE_STATUS_CHANGED',
+    disputeId: updated.id,
+    status: 'RESOLVED',
+    previousStatus: 'UNKNOWN',
+    updatedBy: 'Admin'
+  });
+
   ok(res, toDto(updated));
 }));
 
@@ -504,12 +583,30 @@ router.post('/admin/disputes/:id/reject', authenticate, authorizeAdmin, asyncRou
   const body = resolveSchema.parse({ resolutionSummary: req.body?.reason || req.body?.resolutionSummary, adminRemarks: req.body?.adminRemarks });
   const updated = await db.dispute.update({ where: { id: Number(req.params.id) }, data: { status: 'REJECTED', statusEnum: 'REJECTED', resolutionSummary: body.resolutionSummary, resolutionRemarks: body.resolutionSummary, resolvedById: userId(req), resolvedAt: new Date() }, include: disputeInclude(true) });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.rejected', entityType: 'dispute', entityId: updated.id, ipAddress: req.ip });
+  
+  broadcastToDispute(updated.id, {
+    type: 'DISPUTE_STATUS_CHANGED',
+    disputeId: updated.id,
+    status: 'REJECTED',
+    previousStatus: 'UNKNOWN',
+    updatedBy: 'Admin'
+  });
+
   ok(res, toDto(updated));
 }));
 
 router.post('/admin/disputes/:id/escalate', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const updated = await db.dispute.update({ where: { id: Number(req.params.id) }, data: { status: 'ESCALATED', statusEnum: 'ESCALATED', adminRemarks: String(req.body?.reason || req.body?.adminRemarks || '') }, include: disputeInclude(true) });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.escalated', entityType: 'dispute', entityId: updated.id, ipAddress: req.ip });
+  
+  broadcastToDispute(updated.id, {
+    type: 'DISPUTE_STATUS_CHANGED',
+    disputeId: updated.id,
+    status: 'ESCALATED',
+    previousStatus: 'UNKNOWN',
+    updatedBy: 'Admin'
+  });
+
   ok(res, toDto(updated));
 }));
 
