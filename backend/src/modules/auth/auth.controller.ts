@@ -1832,20 +1832,23 @@ export const authController = {
 
   getPublicFeatures: async (req: Request, res: Response) => {
     try {
-      const company = await (prisma as any).company.findFirst({
-        where: { isActive: true },
-        select: { id: true }
-      });
-      let activeCodes: string[] = [];
-      if (company) {
-        const features = await (prisma as any).platformFeature.findMany({
-          where: {  enabled: true },
-          include: { feature: true }
-        });
-        activeCodes = features.map((row: any) => row.feature.code);
-      } else {
-        const allFeatures = await prisma.feature.findMany({ select: { code: true } });
+      const allFeatures = await prisma.feature.findMany({ select: { id: true, code: true } }).catch(() => []);
+      const platformFeatures = await prisma.platformFeature.findMany({
+        select: { featureId: true, enabled: true, feature: { select: { code: true } } }
+      }).catch(() => []);
+
+      let activeCodes: string[];
+      if (platformFeatures.length > 0) {
+        const disabledIds = new Set(
+          platformFeatures.filter(pf => !pf.enabled).map(pf => pf.featureId)
+        );
+        activeCodes = allFeatures.length > 0
+          ? allFeatures.filter(f => !disabledIds.has(f.id)).map(f => f.code)
+          : platformFeatures.filter(pf => pf.enabled && pf.feature?.code).map(pf => pf.feature!.code);
+      } else if (allFeatures.length > 0) {
         activeCodes = allFeatures.map(f => f.code);
+      } else {
+        activeCodes = ['sms', 'aadhaar-kyc', 'meripehchaan', 'marketplace', 'procurement'];
       }
 
       res.json({ enabledFeatures: activeCodes });
