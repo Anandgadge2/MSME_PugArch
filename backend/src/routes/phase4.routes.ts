@@ -7270,7 +7270,6 @@ router.get('/invoices/:id', authenticate, asyncRoute(async (req, res) => {
       payments: true,
       purchaseOrder: {
         include: {
-          deliveryAddress: true,
           items: true
         }
       },

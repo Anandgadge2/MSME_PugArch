@@ -268,8 +268,12 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.8);
+  const effectiveShipAddress = data.shipTo.address && data.shipTo.address.trim() !== 'INDIA'
+    ? data.shipTo.address
+    : (data.billTo.address || 'Amravati O&M Phase1, Amravati Thermal Power Plant, Phase I Plot no. D-2 & D-2 (PART), Additional Industrial area, MIDC, Nandgaon peth, Amravati 444901 AMRAVATI INDIA');
+
   const shipAddressLines = doc.splitTextToSize(
-    data.shipTo.address || data.billTo.address || 'Amravati O&M Phase1, Amravati Thermal Power Plant, Phase I Plot no. D-2 & D-2 (PART), Additional Industrial area, MIDC, Nandgaon peth, Amravati 444901 AMRAVATI INDIA',
+    effectiveShipAddress,
     (contentWidth / 2) + 4
   );
   doc.text(shipAddressLines, midX - 6.5, sY);

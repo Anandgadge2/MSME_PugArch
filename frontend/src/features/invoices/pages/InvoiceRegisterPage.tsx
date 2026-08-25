@@ -397,9 +397,46 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     const billToGstin = buyerOrg?.gstin || buyerProfile?.gstNumber || buyerProfile?.gstMasked || buyerReg?.gstin || buyerReg?.gst || '27AALCS2063D1ZG';
 
     const poDeliv = det?.purchaseOrder?.deliveryAddress;
-    const shipToName = poDeliv?.recipientName || buyerOrg?.organizationName || billToName || 'RattanIndia Power Limited';
+    const poDelivParts = [
+      poDeliv?.addressLine1,
+      poDeliv?.addressLine2,
+      poDeliv?.city,
+      poDeliv?.state,
+      poDeliv?.pincode
+    ].filter((p) => p && typeof p === 'string' && p.trim().length > 0);
 
-    const shipToAddress = formatAddress(poDeliv?.addressLine1, poDeliv?.addressLine2, poDeliv?.city, poDeliv?.state, poDeliv?.pincode, poDeliv?.country || 'INDIA') || buyerOrg?.deliveryAddresses?.[0]?.addressLine1 || 'Amravati O&M Phase1\nAmravati Thermal Power Plant, Phase I Plot no. D-2 & D-2 (PART), Additional Industrial area, MIDC\nNandgaon peth, Amravati 444901 AMRAVATI INDIA';
+    const shipToName =
+      poDeliv?.recipientName ||
+      buyerOrg?.organizationName ||
+      billToName ||
+      'RattanIndia Power Limited';
+
+    let shipToAddress = '';
+    if (poDelivParts.length >= 2) {
+      shipToAddress = formatAddress(
+        poDeliv?.addressLine1,
+        poDeliv?.addressLine2,
+        poDeliv?.city,
+        poDeliv?.state,
+        poDeliv?.pincode,
+        poDeliv?.country || 'INDIA'
+      );
+    } else if (buyerOrg?.deliveryAddresses?.[0]?.addressLine1) {
+      const orgDeliv = buyerOrg.deliveryAddresses[0];
+      shipToAddress = formatAddress(
+        orgDeliv.addressLine1,
+        orgDeliv.addressLine2,
+        orgDeliv.city,
+        orgDeliv.state,
+        orgDeliv.pincode,
+        orgDeliv.country || 'INDIA'
+      );
+    } else if (billToAddress && billToAddress !== 'Plot no. D-2 & D-2 (PART) , Additional Industrial area, MIDC\nNandgaon peth Amravati Maharashtra') {
+      shipToAddress = billToAddress;
+    } else {
+      shipToAddress =
+        'Amravati O&M Phase1\nAmravati Thermal Power Plant, Phase I Plot no. D-2 & D-2 (PART), Additional Industrial area, MIDC\nNandgaon peth, Amravati 444901 AMRAVATI INDIA';
+    }
 
     const bankName = sellerProfile?.bankName || sellerProfile?.bankAccounts?.[0]?.bankName || sellerReg?.bankName || 'State Bank of India';
 

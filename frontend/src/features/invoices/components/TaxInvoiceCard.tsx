@@ -198,7 +198,7 @@ export function TaxInvoiceCard({
           </p>
           <p className="font-black text-xs text-slate-900">{shipTo.name || billTo.name || 'RattanIndia Power Limited'}</p>
           <p className="text-[11px] font-medium text-slate-700 leading-relaxed whitespace-pre-line">
-            {shipTo.address || billTo.address || 'Amravati O&M Phase1\nAmravati Thermal Power Plant, Phase I Plot no. D-2 & D-2 (PART), Additional Industrial area, MIDC\nNandgaon peth, Amravati 444901 AMRAVATI INDIA'}
+            {shipTo.address && shipTo.address.trim() !== 'INDIA' ? shipTo.address : (billTo.address || 'Amravati O&M Phase1\nAmravati Thermal Power Plant, Phase I Plot no. D-2 & D-2 (PART), Additional Industrial area, MIDC\nNandgaon peth, Amravati 444901 AMRAVATI INDIA')}
           </p>
         </div>
       </div>
