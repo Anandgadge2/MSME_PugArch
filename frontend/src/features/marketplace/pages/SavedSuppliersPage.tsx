@@ -44,13 +44,13 @@ export default function SavedSuppliersPage() {
         <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
             {/* ── Header ── */}
             <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">Supplier Access</p>
+                {/* <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">Supplier Access</p> */}
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div>
                         <h1 className="text-2xl font-black tracking-tight text-slate-950">Saved Suppliers</h1>
-                        <p className="mt-1 max-w-2xl text-sm font-semibold text-slate-500">
+                        {/* <p className="mt-1 max-w-2xl text-sm font-semibold text-slate-500">
                             Keep verified suppliers ready for RFQ, direct purchase, and secure platform messaging.
-                        </p>
+                        </p> */}
                     </div>
                     <Link href="/buyer/vendors" className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-black uppercase tracking-wide text-[#12335f] shadow-sm hover:bg-slate-50 transition">
                         Supplier Directory

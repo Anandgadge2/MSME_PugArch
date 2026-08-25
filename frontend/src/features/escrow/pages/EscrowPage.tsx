@@ -158,9 +158,9 @@ export default function EscrowPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#12335f]">Escrow Control</p>
+          {/* <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#12335f]">Escrow Control</p> */}
           <h1 className="mt-1 text-2xl font-black text-slate-950">Escrow & Milestones</h1>
-          <p className="mt-1 text-xs font-semibold text-slate-500">Held funds, freeze state, milestone completion, approval, and release events.</p>
+          {/* <p className="mt-1 text-xs font-semibold text-slate-500">Held funds, freeze state, milestone completion, approval, and release events.</p> */}
         </div>
         <Button onClick={load} className="w-fit bg-[#12335f] text-white hover:bg-[#0b2445]"><RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />Refresh</Button>
       </div>

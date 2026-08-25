@@ -123,7 +123,7 @@ export default function MessagesPage() {
             <div className="brand-tricolor-strip rounded-full" />
             <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Communication control</p>
+                    {/* <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Communication control</p> */}
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                         <h1 className="text-2xl font-black text-slate-950">Messages</h1>
                         {isAdminRole(user?.role) && (
