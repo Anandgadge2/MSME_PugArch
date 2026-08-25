@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, MapPin, Star, Building2, ChevronDown, CheckCircle2, X, Phone, Mail, Globe, Briefcase, FileText, Send, Info, ShieldCheck, Clock, Upload, Paperclip, LayoutGrid, List, Filter, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare } from 'lucide-react';
+import { Search, MapPin, Star, Building2, ChevronDown, CheckCircle2, X, Phone, Mail, Globe, Briefcase, FileText, Send, Info, ShieldCheck, Clock, Upload, Paperclip, LayoutGrid, List, Filter, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, MoreVertical } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -62,6 +62,14 @@ const Vendors = () => {
   const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
   const [fetchingDetails, setFetchingDetails] = useState(false);
   const [pressedAction, setPressedAction] = useState<string | null>(null);
+  const [openKebabId, setOpenKebabId] = useState<string | number | null>(null);
+
+  useEffect(() => {
+    if (!openKebabId) return;
+    const handleClickOutside = () => setOpenKebabId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [openKebabId]);
 
   // Quote form state
   const [quoteForm, setQuoteForm] = useState({
@@ -639,26 +647,48 @@ const Vendors = () => {
                           ))}
                         </div>
                       </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="relative inline-flex items-center justify-end">
                           <button
-                            onClick={() => handleViewProfile(vendor)}
-                            className={cn(
-                              "h-7 px-3 border border-[#dadce0] text-[#12335f] rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#f8f9fa] hover:border-[#12335f]/40 hover:-translate-y-0.5 active:scale-95 active:translate-y-px transition-all duration-200",
-                              vendorActionClass(vendor, 'info')
-                            )}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const vid = vendor.id || vendor._id;
+                              setOpenKebabId(openKebabId === vid ? null : vid);
+                            }}
+                            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+                            title="Actions"
                           >
-                            Info
+                            <MoreVertical className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => handleOpenQuoteModal(vendor)}
-                            className={cn(
-                              "h-7 px-3 bg-[#12335f] text-white rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#0b2445] hover:-translate-y-0.5 active:scale-95 active:translate-y-px transition-all duration-200 shadow-sm shadow-[#12335f]/20",
-                              vendorActionClass(vendor, 'quote')
-                            )}
-                          >
-                            Quote
-                          </button>
+
+                          {openKebabId === (vendor.id || vendor._id) && (
+                            <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  handleViewProfile(vendor);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                              >
+                                <Info className="h-3.5 w-3.5 text-slate-500" />
+                                <span>View Info</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  handleOpenQuoteModal(vendor);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+                              >
+                                <FileText className="h-3.5 w-3.5 text-[#12335f]" />
+                                <span>Request Quote</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>

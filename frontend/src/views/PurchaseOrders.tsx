@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer } from 'lucide-react';
+import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
 
 const moneyPdf = (val: any, currency = 'INR') => {
@@ -106,6 +106,15 @@ export default function PurchaseOrders() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [confirming, setConfirming] = useState<{ action: 'acknowledge' | 'cancel'; order: PurchaseOrderDto } | null>(null);
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrderDto | null>(null);
+  const [openKebabId, setOpenKebabId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!openKebabId) return;
+    const handleClickOutside = () => setOpenKebabId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [openKebabId]);
+
   const { data: activeDelivery } = useDeliveryByPO(viewingOrder?.id);
 
   const [repeatingOrder, setRepeatingOrder] = useState<PurchaseOrderDto | null>(null);
@@ -343,138 +352,102 @@ export default function PurchaseOrders() {
     const isDelivered = statusLower === 'delivered' || statusLower === 'completed';
     const isCancelled = statusLower === 'cancelled' || statusLower === 'rejected';
 
-    const baseActionClass = 'h-8 justify-center rounded-lg px-3 text-[10px] font-black uppercase tracking-wide shadow-none border flex items-center gap-1.5 transition-all';
-
-    if (isSeller) {
-      if (isIssued) {
-        return (
-          <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-[280px]">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setViewingOrder(order)}
-              className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
-            >
-              <Eye className="h-3.5 w-3.5" /> View
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => handleAcceptOrder(order)}
-              className={cn(baseActionClass, "bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700 shadow-xs")}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" /> Accept
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleRejectOrder(order)}
-              className={cn(baseActionClass, "border-rose-200 text-rose-600 hover:bg-rose-50")}
-            >
-              <XCircle className="h-3.5 w-3.5" /> Reject
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => exportInvoicePdf(order, 'print')}
-              className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
-            >
-              <Printer className="h-3.5 w-3.5" /> Print
-            </Button>
-          </div>
-        );
-      }
-
-      if (isAccepted || isDelivered) {
-        return (
-          <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-[240px]">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setViewingOrder(order)}
-              className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
-            >
-              <Eye className="h-3.5 w-3.5" /> View
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => handleOpenDelivery(order)}
-              className={cn(baseActionClass, "bg-[#12335f] border-[#12335f] text-white hover:bg-[#0b2445] shadow-xs")}
-            >
-              <Truck className="h-3.5 w-3.5" /> Delivery
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => exportInvoicePdf(order, 'print')}
-              className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
-            >
-              <Printer className="h-3.5 w-3.5" /> Print
-            </Button>
-          </div>
-        );
-      }
-
-      if (isCancelled) {
-        return (
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setViewingOrder(order)}
-              className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
-            >
-              <Eye className="h-3.5 w-3.5" /> View
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => exportInvoicePdf(order, 'print')}
-              className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
-            >
-              <Printer className="h-3.5 w-3.5" /> Print
-            </Button>
-          </div>
-        );
-      }
-    }
-
-    // Buyer / Admin view
     return (
-      <div className="flex flex-wrap items-center justify-end gap-1.5">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setViewingOrder(order)}
-          className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
+      <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpenKebabId(openKebabId === order.id ? null : order.id);
+          }}
+          className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+          title="Actions"
         >
-          <Eye className="h-3.5 w-3.5" /> View
-        </Button>
-        {isAccepted && (
-          <Button
-            size="sm"
-            onClick={() => handleOpenDelivery(order)}
-            className={cn(baseActionClass, "bg-[#12335f] border-[#12335f] text-white hover:bg-[#0b2445]")}
-          >
-            <Truck className="h-3.5 w-3.5" /> Delivery
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => exportInvoicePdf(order, 'print')}
-          className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
-        >
-          <Printer className="h-3.5 w-3.5" /> Print
-        </Button>
-        {isBuyer && !isCancelled && !isDelivered && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setConfirming({ action: 'cancel', order })}
-            className={cn(baseActionClass, "border-rose-200 text-rose-600 hover:bg-rose-50")}
-          >
-            <XCircle className="h-3.5 w-3.5" /> Cancel
-          </Button>
+          <MoreVertical className="h-4 w-4" />
+        </button>
+
+        {openKebabId === order.id && (
+          <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+            <button
+              type="button"
+              onClick={() => {
+                setOpenKebabId(null);
+                setViewingOrder(order);
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+            >
+              <Eye className="h-3.5 w-3.5 text-slate-500" />
+              <span>View</span>
+            </button>
+
+            {isSeller && isIssued && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenKebabId(null);
+                    handleAcceptOrder(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Accept</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenKebabId(null);
+                    handleRejectOrder(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
+                >
+                  <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                  <span>Reject</span>
+                </button>
+              </>
+            )}
+
+            {(isAccepted || isDelivered) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenKebabId(null);
+                  handleOpenDelivery(order);
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+              >
+                <Truck className="h-3.5 w-3.5 text-blue-600" />
+                <span>Delivery</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpenKebabId(null);
+                exportInvoicePdf(order, 'print');
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+            >
+              <Printer className="h-3.5 w-3.5 text-slate-500" />
+              <span>Print</span>
+            </button>
+
+            {isBuyer && !isCancelled && !isDelivered && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenKebabId(null);
+                  setConfirming({ action: 'cancel', order });
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
+              >
+                <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                <span>Cancel</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
     );

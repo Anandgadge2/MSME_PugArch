@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2,
   Clock3,
@@ -24,7 +24,8 @@ import {
   FileCheck,
   RotateCcw,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  MoreVertical
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -92,6 +93,14 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
   const [selectedProofPayment, setSelectedProofPayment] = useState<PaymentRow | null>(null);
   const [viewProofModalOpen, setViewProofModalOpen] = useState(false);
   const [viewProofPayment, setViewProofPayment] = useState<PaymentRow | null>(null);
+  const [openKebabId, setOpenKebabId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!openKebabId) return;
+    const handleClickOutside = () => setOpenKebabId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [openKebabId]);
 
   const { records: payments, warning, loading, refreshing, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<PaymentRow>('/api/payments', {
     ...(searchTerm.trim() ? { q: searchTerm.trim() } : {}),
@@ -570,62 +579,75 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                         {formatDate(payment.completedAt || payment.createdAt)}
                       </td>
                       <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        {(() => {
-                          const hasUploadedProof = Boolean(
-                            payment.metadata?.offlineProofId ||
-                            payment.metadata?.receiptFileUrl ||
-                            ['offline_proof_uploaded', 'offline_proof_verified', 'under_review', 'payment_initiated'].includes(String(payment.status || '').toLowerCase())
-                          );
-                          return (
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                variant="outline"
-                                onClick={() => { setViewProofPayment(payment); setViewProofModalOpen(true); }}
-                                className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100 shadow-none"
-                                title="View Payment Proof"
-                              >
-                                <FileCheck className="mr-1 h-3.5 w-3.5" /> Proof
-                              </Button>
-                              <Button
-                                variant="outline"
+                        <div className="relative inline-flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenKebabId(openKebabId === payment.id ? null : payment.id);
+                            }}
+                            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+                            title="Actions"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+
+                          {openKebabId === payment.id && (
+                            <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+                              <button
+                                type="button"
                                 onClick={() => {
-                                  if (hasUploadedProof) {
-                                    setViewProofPayment(payment);
-                                    setViewProofModalOpen(true);
-                                  } else {
-                                    setSelectedProofPayment(payment);
-                                    setUploadProofModalOpen(true);
-                                  }
+                                  setOpenKebabId(null);
+                                  setViewProofPayment(payment);
+                                  setViewProofModalOpen(true);
                                 }}
-                                className={cn(
-                                  "h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none",
-                                  hasUploadedProof
-                                    ? "text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100"
-                                    : "text-slate-700 border-slate-200 hover:bg-slate-50"
-                                )}
-                                title={hasUploadedProof ? "View Buyer Uploaded Payment Slip" : "Upload Slip"}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
                               >
-                                <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Slip
-                              </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => { setDetailTab('receipt'); setSelected(payment); }}
-                                className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 border-slate-200 hover:bg-slate-50 shadow-none"
-                                title="View Receipt"
+                                <FileCheck className="h-3.5 w-3.5 text-blue-600" />
+                                <span>View Proof</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  setSelectedProofPayment(payment);
+                                  setUploadProofModalOpen(true);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
                               >
-                                <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                onClick={() => { setDetailTab('timeline'); setSelected(payment); }}
-                                className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-100 shadow-none"
-                                title="Track Timeline"
+                                <Upload className="h-3.5 w-3.5 text-blue-600" />
+                                <span>Upload Slip</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  setDetailTab('receipt');
+                                  setSelected(payment);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
                               >
-                                <Clock3 className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
-                              </Button>
+                                <Eye className="h-3.5 w-3.5 text-slate-500" />
+                                <span>View Receipt</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  setDetailTab('timeline');
+                                  setSelected(payment);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                              >
+                                <Clock3 className="h-3.5 w-3.5 text-slate-500" />
+                                <span>Track Timeline</span>
+                              </button>
                             </div>
-                          );
-                        })()}
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

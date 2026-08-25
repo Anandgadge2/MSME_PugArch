@@ -21,7 +21,8 @@ import {
   Building2,
   BarChart3,
   PackageCheck,
-  TrendingUp
+  TrendingUp,
+  MoreVertical
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
@@ -62,6 +63,14 @@ export default function RepeatOrders() {
 
   // Detail modal
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrderDto | null>(null);
+  const [openKebabId, setOpenKebabId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!openKebabId) return;
+    const handleClickOutside = () => setOpenKebabId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [openKebabId]);
 
   useEffect(() => {
     const handler = setTimeout(() => setDebouncedSearch(searchTerm), 400);
@@ -534,14 +543,47 @@ export default function RepeatOrders() {
                       <td className="p-3 text-slate-900">{Number(item.quantity || 0).toLocaleString()}</td>
                       <td className="p-3 font-bold text-slate-900">{formatCurrency(order.amount || order.totalValue)}</td>
                       <td className="p-3 text-slate-500">{formatDate(order.updatedAt)}</td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button variant="outline" onClick={() => setViewingOrder(order)} className="h-8 text-[10px] font-black uppercase rounded-lg">
-                            <Eye className="mr-1 h-3.5 w-3.5 text-[#12335f]" /> View
-                          </Button>
-                          <Button onClick={() => handleOpenRepeatModal(order)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg">
-                            <RotateCcw className="mr-1 h-3.5 w-3.5" /> Repeat
-                          </Button>
+                      <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="relative inline-flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenKebabId(openKebabId === order.id ? null : order.id);
+                            }}
+                            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+                            title="Actions"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+
+                          {openKebabId === order.id && (
+                            <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  setViewingOrder(order);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                              >
+                                <Eye className="h-3.5 w-3.5 text-slate-500" />
+                                <span>View Details</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  handleOpenRepeatModal(order);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5 text-[#12335f]" />
+                                <span>Repeat Order</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
