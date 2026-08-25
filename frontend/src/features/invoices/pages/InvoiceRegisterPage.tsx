@@ -549,13 +549,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       {/* Transparent Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
-          <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">
+          {/* <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">
             {role === 'seller' ? 'Seller Finance' : role === 'admin' ? 'Admin Finance' : 'Buyer Finance'}
-          </span>
+          </span> */}
           <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Invoices</h1>
-          <p className="text-xs font-semibold text-slate-500 mt-1">
+          {/* <p className="text-xs font-semibold text-slate-500 mt-1">
             Invoice register with PO linkage, GST/TDS values, due dates, and payment workflows.
-          </p>
+          </p> */}
         </div>
         <div className="flex items-center gap-2">
           {role === 'seller' && (
@@ -711,22 +711,21 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           }
         />
       ) : viewMode === 'list' ? (
-        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[1140px] border-collapse text-left text-xs">
+        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm flex flex-col">
+          <div className="overflow-x-auto w-full min-h-[260px]">
+            <table data-ux-wrapped="true" className="w-full min-w-[1140px] border-collapse text-left text-xs mb-6">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-                  <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
+                  <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-12">Sr. No</th>
                   <th className="p-3 w-40"><SortHeader label="Invoice" field="invoiceNumber" /></th>
-                  <th className="p-3 w-36"><SortHeader label="PO" field="poNumber" /></th>
-                  <th className="p-3"><SortHeader label="Party" field="party" /></th>
-                  <th className="p-3 w-28"><SortHeader label="Taxable" field="taxableAmount" /></th>
-                  <th className="p-3 w-28"><SortHeader label="GST" field="totalTaxAmount" /></th>
-                  <th className="p-3 w-24"><SortHeader label="TDS" field="tdsAmount" /></th>
-                  <th className="p-3 w-32"><SortHeader label="Total" field="totalAmount" /></th>
-                  <th className="p-3 w-32"><SortHeader label="Status" field="status" /></th>
-                  <th className="p-3 text-right w-80 min-w-[320px] text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>
+                  <th className="p-3 w-40"><SortHeader label="PO" field="poNumber" /></th>
+                  <th className="p-3 w-40"><SortHeader label="Party" field="party" /></th>
+                  <th className="p-3 w-32 whitespace-nowrap"><SortHeader label="Taxable" field="taxableAmount" /></th>
+                  <th className="p-3 w-32 whitespace-nowrap"><SortHeader label="GST" field="totalTaxAmount" /></th>
+                  <th className="p-3 w-32 whitespace-nowrap"><SortHeader label="TDS" field="tdsAmount" /></th>
+                  <th className="p-3 w-36 whitespace-nowrap"><SortHeader label="Total" field="totalAmount" /></th>
+                  <th className="p-3 w-32 whitespace-nowrap"><SortHeader label="Status" field="status" /></th>
+                  <th className="p-3 text-right w-16 whitespace-nowrap text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
@@ -737,7 +736,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                   const rowIndex = (page - 1) * pageSize + index + 1;
 
                   return (
-                    <tr key={invoice.id} className="hover:bg-slate-50">
+                    <tr key={invoice.id} className={cn("hover:bg-slate-50", openKebabId === invoice.id ? "relative z-50" : "relative z-0 hover:z-10")}>
                       <td className="p-3 text-xs font-black text-slate-600">{rowIndex}</td>
                       <td className="p-3">
                         <EntityIdLink label={invoice.invoiceNumber || `INV-${invoice.id}`} id={invoice.id} size="sm" onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }} />
@@ -750,11 +749,11 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                       <td className="p-3 text-xs font-bold text-slate-600">
                         {role === 'seller' ? invoice.buyer?.name || `Buyer #${invoice.buyerId || '-'}` : invoice.seller?.name || `Seller #${invoice.sellerId || '-'}`}
                       </td>
-                      <td className="p-3 text-xs font-bold text-slate-600">{formatCurrency(invoice.taxableAmount || 0)}</td>
-                      <td className="p-3 text-xs font-bold text-slate-600">{formatCurrency(invoice.totalTaxAmount || 0)}</td>
-                      <td className="p-3 text-xs font-bold text-slate-600">{formatCurrency(invoice.tdsAmount || 0)}</td>
-                      <td className="p-3 text-xs font-black text-slate-950">{formatCurrency(invoice.amount || invoice.totalAmount)}</td>
-                      <td className="p-3">
+                      <td className="p-3 text-xs font-bold text-slate-600 whitespace-nowrap">{formatCurrency(invoice.taxableAmount || 0)}</td>
+                      <td className="p-3 text-xs font-bold text-slate-600 whitespace-nowrap">{formatCurrency(invoice.totalTaxAmount || 0)}</td>
+                      <td className="p-3 text-xs font-bold text-slate-600 whitespace-nowrap">{formatCurrency(invoice.tdsAmount || 0)}</td>
+                      <td className="p-3 text-xs font-black text-slate-950 whitespace-nowrap">{formatCurrency(invoice.amount || invoice.totalAmount)}</td>
+                      <td className="p-3 whitespace-nowrap">
                         <span className={`rounded-lg border px-2.5 py-0.5 text-[9px] font-black uppercase ${state === 'paid'
                           ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                           : state === 'approved'
@@ -781,7 +780,10 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           </button>
 
                           {openKebabId === invoice.id && (
-                            <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+                            <div className={cn(
+                              "absolute right-0 z-50 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100",
+                              pagedInvoices.length > 2 && index >= pagedInvoices.length - 2 ? "bottom-full mb-1.5 origin-bottom-right" : "top-full mt-1.5 origin-top-right"
+                            )}>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -873,7 +875,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                 })}
               </tbody>
             </table>
-</div>
           </div>
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="invoices" />
         </div>
