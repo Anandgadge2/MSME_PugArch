@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="fi_wood" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#b45309"/></linearGradient>
+    <linearGradient id="fi_chair" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#334155"/><stop offset="100%" stop-color="#0f172a"/></linearGradient>
+    <filter id="fi_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.18"/></filter>
+  </defs>
+  <!-- Modern Modular Wooden Office Desk -->
+  <g filter="url(#fi_shadow)">
+    <!-- Desk Top -->
+    <polygon points="55,54 118,54 112,62 48,62" fill="url(#fi_wood)" stroke="#78350f" stroke-width="1.5"/>
+    <!-- Metal legs & modesty panel -->
+    <rect x="52" y="62" width="6" height="34" rx="1" fill="#475569"/>
+    <rect x="108" y="62" width="6" height="34" rx="1" fill="#475569"/>
+    <rect x="88" y="62" width="22" height="28" rx="2" fill="url(#fi_wood)" stroke="#78350f" stroke-width="1"/>
+    <!-- Drawer handle -->
+    <line x1="94" y1="72" x2="104" y2="72" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+    <line x1="94" y1="82" x2="104" y2="82" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <!-- Ergonomic Executive Mesh Office Chair -->
+  <g filter="url(#fi_shadow)">
+    <!-- High Headrest -->
+    <rect x="30" y="24" width="20" height="10" rx="4" fill="url(#fi_chair)"/>
+    <!-- Contoured Backrest -->
+    <path d="M28 36 C28 36, 26 58, 28 62 L52 62 C54 58, 52 36, 52 36 Z" fill="url(#fi_chair)" stroke="#475569" stroke-width="1"/>
+    <line x1="32" y1="42" x2="48" y2="42" stroke="#64748b" stroke-width="1"/>
+    <line x1="32" y1="48" x2="48" y2="48" stroke="#64748b" stroke-width="1"/>
+    <line x1="32" y1="54" x2="48" y2="54" stroke="#64748b" stroke-width="1"/>
+    <!-- Seat Cushion -->
+    <rect x="24" y="62" width="32" height="10" rx="3" fill="#1e293b"/>
+    <!-- Armrest -->
+    <path d="M22 50 L22 62" stroke="#64748b" stroke-width="3" stroke-linecap="round"/>
+    <!-- Hydraulic Gas Lift & Base Castor Wheels -->
+    <rect x="38" y="72" width="4" height="16" fill="#94a3b8"/>
+    <!-- 5-Star Wheel Base -->
+    <line x1="20" y1="92" x2="60" y2="92" stroke="#334155" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="20" cy="94" r="3" fill="#0f172a"/>
+    <circle cx="40" cy="94" r="3" fill="#0f172a"/>
+    <circle cx="60" cy="94" r="3" fill="#0f172a"/>
+  </g>
+</svg>

@@ -71,7 +71,7 @@ export const resolveMediaUrl = (url: string | null | undefined): string | null =
   if (cleanPath.startsWith('/banners/')) {
     return `${BASE_URL}/api/files/raw${cleanPath}`;
   }
-  if (cleanPath.startsWith('/org-logos/') || cleanPath.startsWith('/products/')) {
+  if (cleanPath.startsWith('/org-logos/') || cleanPath.startsWith('/products/') || cleanPath.startsWith('/categories/')) {
     return cleanPath;
   }
   return `${BASE_URL}${cleanPath}`;

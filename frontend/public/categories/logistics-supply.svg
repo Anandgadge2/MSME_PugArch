@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="ls_cab" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#16a34a"/><stop offset="100%" stop-color="#15803d"/></linearGradient>
+    <linearGradient id="ls_box" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f8fafc"/><stop offset="100%" stop-color="#cbd5e1"/></linearGradient>
+    <filter id="ls_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.18"/></filter>
+  </defs>
+  <!-- Global Route Map & Geo Pin in background -->
+  <g opacity="0.3" transform="translate(75, 25)">
+    <circle cx="20" cy="20" r="18" fill="none" stroke="#16a34a" stroke-width="2" stroke-dasharray="4 3"/>
+    <ellipse cx="20" cy="20" rx="18" ry="7" fill="none" stroke="#16a34a" stroke-width="1.5"/>
+  </g>
+  <!-- Semi Logistics Cargo Truck -->
+  <g filter="url(#ls_shadow)">
+    <!-- Cargo Container Body -->
+    <rect x="20" y="44" width="65" height="42" rx="3" fill="url(#ls_box)" stroke="#475569" stroke-width="1.5"/>
+    <!-- Container Corrugations -->
+    <line x1="32" y1="44" x2="32" y2="86" stroke="#94a3b8" stroke-width="1.5"/>
+    <line x1="44" y1="44" x2="44" y2="86" stroke="#94a3b8" stroke-width="1.5"/>
+    <line x1="56" y1="44" x2="56" y2="86" stroke="#94a3b8" stroke-width="1.5"/>
+    <line x1="68" y1="44" x2="68" y2="86" stroke="#94a3b8" stroke-width="1.5"/>
+    <!-- Green Truck Cab -->
+    <path d="M85 58 L104 58 L114 72 L114 86 L85 86 Z" fill="url(#ls_cab)" stroke="#14532d" stroke-width="1.5"/>
+    <!-- Cab Windshield -->
+    <polygon points="90,62 102,62 110,72 90,72" fill="#e0f2fe" stroke="#0284c7" stroke-width="1"/>
+    <!-- Headlight -->
+    <rect x="110" y="78" width="5" height="4" rx="1" fill="#facc15"/>
+    <!-- Wheels -->
+    <circle cx="36" cy="88" r="9" fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+    <circle cx="36" cy="88" r="3.5" fill="#f8fafc"/>
+    <circle cx="54" cy="88" r="9" fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+    <circle cx="54" cy="88" r="3.5" fill="#f8fafc"/>
+    <circle cx="102" cy="88" r="9" fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+    <circle cx="102" cy="88" r="3.5" fill="#f8fafc"/>
+  </g>
+  <!-- Fast Motion Speed Trails -->
+  <g>
+    <line x1="12" y1="62" x2="17" y2="62" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="8" y1="72" x2="16" y2="72" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -43,9 +43,9 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     };
 
     const cardInner = (
-        <div className="flex flex-col items-center justify-between text-center w-full h-full group select-none p-3 sm:p-3.5">
-            {/* Category Image with soft subtle backdrop */}
-            <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 md:h-18 md:w-18 items-center justify-center mb-1.5 rounded-2xl bg-gradient-to-br from-blue-50/90 via-slate-50 to-indigo-50/70 shadow-inner border border-slate-200/80 overflow-hidden transition-all duration-300 group-hover:scale-110 group-hover:shadow-md group-hover:border-blue-400">
+        <div className="flex flex-col items-center justify-between text-center w-full h-full group select-none p-3 sm:p-4">
+            {/* Category 3D Vector Icon Box with soft subtle backdrop */}
+            <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 md:h-18 md:w-18 items-center justify-center mb-2 rounded-2xl bg-gradient-to-br from-blue-50/90 via-sky-50/50 to-indigo-50/70 border border-blue-100/90 p-2.5 transition-all duration-300 group-hover:scale-110 group-hover:shadow-md group-hover:border-blue-400 group-hover:bg-blue-50">
                 <img
                     src={imgSrc}
                     alt={category.name}
@@ -54,7 +54,7 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
                     referrerPolicy="no-referrer"
                     crossOrigin="anonymous"
                     onError={handleImageError}
-                    className="h-full w-full object-cover transition-transform duration-300 ease-out"
+                    className="h-full w-full object-contain drop-shadow-sm transition-transform duration-300 ease-out"
                 />
             </div>
 
@@ -73,8 +73,8 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     );
 
     const containerClassName = cn(
-        'group relative flex flex-col items-center justify-between bg-white rounded-2xl sm:rounded-3xl transition-all duration-300 text-center cursor-pointer overflow-hidden border border-white/90 shadow-md hover:shadow-2xl hover:-translate-y-1.5 hover:border-blue-300 w-full min-h-[135px] sm:min-h-[150px] md:min-h-[160px]',
-        selected && 'shadow-2xl ring-2 ring-blue-500 scale-[1.03] bg-blue-50/80 border-blue-400'
+        'group relative flex flex-col items-center justify-between bg-white rounded-2xl sm:rounded-3xl transition-all duration-300 text-center cursor-pointer overflow-hidden border border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-blue-300 w-full min-h-[135px] sm:min-h-[150px] md:min-h-[160px]',
+        selected && 'shadow-xl ring-2 ring-blue-500 scale-[1.02] bg-blue-50/60 border-blue-400'
     );
 
     if (onSelect) {
@@ -155,28 +155,25 @@ export function CategoryCatalogueStrip({
         <section
             ref={sectionRef}
             className={cn(
-                'relative overflow-hidden py-9 sm:py-12 border-t border-slate-200/80 bg-gradient-to-br from-[#0e2554] via-[#133878] to-[#0c1e44] bg-[radial-gradient(ellipse_80%_80%_at_50%_-10%,rgba(96,165,250,0.35),rgba(15,37,84,0))]',
+                'relative overflow-hidden py-10 sm:py-14 border-y border-slate-200/70 bg-gradient-to-b from-blue-50/60 via-slate-50/80 to-blue-50/40',
                 className
             )}
             id="categories"
         >
-            {/* Top Luminous Shimmer Line */}
-            <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-400/80 via-blue-400/80 to-transparent" />
-
             <div className="relative mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
                 {/* Header Section */}
-                <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="mb-7 sm:mb-9 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-white/15 text-cyan-300 border border-cyan-400/30 shadow-xs backdrop-blur-md">
-                                <Sparkles className="h-3.5 w-3.5 text-cyan-300 animate-pulse" />
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-200/80 shadow-xs">
+                                <Sparkles className="h-3.5 w-3.5 text-blue-600" />
                                 {categories.length} Industrial Sectors &amp; Work Categories
                             </span>
                         </div>
-                        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white leading-tight drop-shadow-sm">
+                        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-slate-950 leading-tight">
                             {title}
                         </h2>
-                        <p className="mt-1.5 text-xs sm:text-base font-semibold text-blue-100/90 max-w-3xl">
+                        <p className="mt-1.5 text-xs sm:text-base font-semibold text-slate-500 max-w-3xl">
                             {subtitle}
                         </p>
                     </div>

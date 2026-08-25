@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140">
+  <defs>
+    <linearGradient id="gi_fac" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#1e40af"/></linearGradient>
+    <linearGradient id="gi_gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fde047"/><stop offset="100%" stop-color="#ca8a04"/></linearGradient>
+    <filter id="gi_shadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.18"/></filter>
+  </defs>
+  <!-- Industrial Manufacturing Factory Silhouette -->
+  <g filter="url(#gi_shadow)">
+    <polygon points="25,92 25,54 45,40 45,54 65,40 65,92" fill="url(#gi_fac)" stroke="#1e3a8a" stroke-width="1.5"/>
+    <!-- Factory Chimney / Smokestack -->
+    <rect x="70" y="32" width="14" height="60" fill="#475569" stroke="#334155" stroke-width="1"/>
+    <!-- Windows -->
+    <rect x="32" y="62" width="8" height="8" rx="1" fill="#e0f2fe"/>
+    <rect x="48" y="62" width="8" height="8" rx="1" fill="#e0f2fe"/>
+    <rect x="32" y="76" width="8" height="8" rx="1" fill="#e0f2fe"/>
+    <rect x="48" y="76" width="8" height="8" rx="1" fill="#e0f2fe"/>
+    <!-- Factory Door -->
+    <rect x="58" y="74" width="7" height="18" fill="#1e293b"/>
+  </g>
+  <!-- Universal Supplier Star Shield / Quality Badge -->
+  <g filter="url(#gi_shadow)" transform="translate(90, 60)">
+    <circle cx="0" cy="0" r="22" fill="url(#gi_gold)" stroke="#854d0e" stroke-width="1.5"/>
+    <circle cx="0" cy="0" r="17" fill="#ffffff"/>
+    <!-- 5-pointed star -->
+    <polygon points="0,-12 3.5,-3 12,-3 5,2 8,11 0,6 -8,11 -5,2 -12,-3 -3.5,-3" fill="#ca8a04"/>
+  </g>
+</svg>
