@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Clock, FileText, IndianRupee, RefreshCw, Search, Building2, CreditCard, Lock, ShieldCheck, Sparkles, Terminal, ArrowRight, AlertCircle, X, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown, Filter, LayoutGrid, List, Upload, Eye, Maximize2, Minimize2 } from 'lucide-react';
+import { CheckCircle2, Clock, FileText, IndianRupee, RefreshCw, Search, Building2, CreditCard, Lock, ShieldCheck, Sparkles, Terminal, ArrowRight, AlertCircle, X, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown, Filter, LayoutGrid, List, Upload, Eye, Maximize2, Minimize2, MoreVertical } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -168,6 +168,14 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [cardName, setCardName] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
+  const [openKebabId, setOpenKebabId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!openKebabId) return;
+    const handleClickOutside = () => setOpenKebabId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [openKebabId]);
 
   // Seller invoice creation modal state
   const [createInvoiceModalOpen, setCreateInvoiceModalOpen] = useState(false);
@@ -615,58 +623,65 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
       {error && <InlineError message={error} onRetry={reload} />}
 
-      {/* Responsive Filter Bar */}
-      <ResponsiveFilterBar
-        activeFilterCount={(statusFilter ? 1 : 0) + (acceptedPoOnly ? 1 : 0) + (invoiceScope !== 'all' ? 1 : 0)}
-        endContent={<ViewModeToggle className="flex justify-end" value={viewMode} onChange={setViewMode} />}
-        searchInput={
-          <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={searchTerm}
-              onChange={event => setSearchTerm(event.target.value)}
-              placeholder="Search invoice, PO, buyer, seller..."
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            />
-          </div>
-        }
-        filters={
-          <>
-            <select
-              value={statusFilter}
-              onChange={event => setStatusFilter(event.target.value)}
-              className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full sm:w-auto"
-            >
-              <option value="">All statuses</option>
-              {statuses.map(status => (
-                <option key={status} value={status}>
-                  {status.replace(/_/g, ' ')}
-                </option>
-              ))}
-            </select>
-
-            <label className="flex items-center justify-center gap-2 h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 w-full sm:w-auto cursor-pointer select-none">
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(statusFilter ? 1 : 0) + (acceptedPoOnly ? 1 : 0) + (invoiceScope !== 'all' ? 1 : 0)}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                type="checkbox"
-                checked={acceptedPoOnly}
-                onChange={event => setAcceptedPoOnly(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/50"
+                type="text"
+                value={searchTerm}
+                onChange={event => setSearchTerm(event.target.value)}
+                placeholder="Search invoice, PO, buyer, seller..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
-              Accepted PO only
-            </label>
+            </div>
+          }
+          filters={
+            <>
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={statusFilter}
+                  onChange={event => setStatusFilter(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All statuses</option>
+                  {statuses.map(status => (
+                    <option key={status} value={status}>
+                      {status.replace(/_/g, ' ')}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <select
-              value={invoiceScope}
-              onChange={event => setInvoiceScope(event.target.value as 'all' | 'interstate' | 'domestic')}
-              className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full sm:w-auto"
-            >
-              <option value="all">All invoices</option>
-              <option value="interstate">Interstate only</option>
-              <option value="domestic">Domestic only</option>
-            </select>
-          </>
-        }
-      />
+              <label className="flex items-center justify-center gap-2 h-10 w-full sm:w-auto px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:border-slate-300 shadow-xs cursor-pointer select-none transition-colors">
+                <input
+                  type="checkbox"
+                  checked={acceptedPoOnly}
+                  onChange={event => setAcceptedPoOnly(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/50"
+                />
+                Accepted PO only
+              </label>
+
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={invoiceScope}
+                  onChange={event => setInvoiceScope(event.target.value as 'all' | 'interstate' | 'domestic')}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="all">All invoices</option>
+                  <option value="interstate">Interstate only</option>
+                  <option value="domestic">Domestic only</option>
+                </select>
+              </div>
+            </>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
+      </div>
 
       {loading && pagedInvoices.length === 0 ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
@@ -751,66 +766,105 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           {state.replace(/_/g, ' ')}
                         </span>
                       </td>
-                      <td className="p-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }}
-                            className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50 shadow-none"
-                            title="View Invoice Details"
+                      <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="relative inline-flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenKebabId(openKebabId === invoice.id ? null : invoice.id);
+                            }}
+                            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+                            title="Actions"
                           >
-                            <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('track'); }}
-                            className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50 shadow-none"
-                            title="Track Status Workflow"
-                          >
-                            <Clock className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
-                          </Button>
-                          {(state === 'paid' || state === 'payment_initiated') && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setViewProofInvoiceId(invoice.id)}
-                              className="h-8 rounded-lg border-blue-200 bg-blue-50/60 px-2.5 text-[10px] font-black uppercase tracking-wide text-blue-700 hover:bg-blue-100 shadow-none"
-                              title="View Payment Proof & Slip"
-                            >
-                              <FileText className="mr-1 h-3.5 w-3.5 text-blue-600" /> Receipt
-                            </Button>
-                          )}
-                          {role === 'buyer' && isSubmitted && (
-                            <Button
-                              size="sm"
-                              disabled={submitting}
-                              onClick={() => handleApproveInvoice(invoice.id)}
-                              className="h-8 rounded-lg bg-[#12335f] px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-slate-800 shadow-xs"
-                            >
-                              <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
-                            </Button>
-                          )}
-                          {role === 'buyer' && isPayable && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setUploadProofInvoice(invoice)}
-                                className="h-8 rounded-lg border-slate-300 bg-white px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-100 shadow-none"
-                                title="Upload Bank Transfer Receipt & UTR"
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+
+                          {openKebabId === invoice.id && (
+                            <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  setSelectedInvoice(invoice);
+                                  setInvoiceModalMode('view');
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
                               >
-                                <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Upload Slip
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleOpenCheckout(invoice)}
-                                className="h-8 rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-emerald-700 shadow-xs"
+                                <Eye className="h-3.5 w-3.5 text-slate-500" />
+                                <span>View</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  setSelectedInvoice(invoice);
+                                  setInvoiceModalMode('track');
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
                               >
-                                <CreditCard className="mr-1 h-3.5 w-3.5" /> Pay Now
-                              </Button>
-                            </>
+                                <Clock className="h-3.5 w-3.5 text-slate-500" />
+                                <span>Track</span>
+                              </button>
+
+                              {(state === 'paid' || state === 'payment_initiated') && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenKebabId(null);
+                                    setViewProofInvoiceId(invoice.id);
+                                  }}
+                                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+                                >
+                                  <FileText className="h-3.5 w-3.5 text-blue-600" />
+                                  <span>Receipt</span>
+                                </button>
+                              )}
+
+                              {role === 'buyer' && isSubmitted && (
+                                <button
+                                  type="button"
+                                  disabled={submitting}
+                                  onClick={() => {
+                                    setOpenKebabId(null);
+                                    handleApproveInvoice(invoice.id);
+                                  }}
+                                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-white bg-[#12335f] hover:bg-slate-800 transition-colors text-left"
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  <span>Approve</span>
+                                </button>
+                              )}
+
+                              {role === 'buyer' && isPayable && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenKebabId(null);
+                                      setUploadProofInvoice(invoice);
+                                    }}
+                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left"
+                                  >
+                                    <Upload className="h-3.5 w-3.5 text-blue-600" />
+                                    <span>Upload Slip</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenKebabId(null);
+                                      handleOpenCheckout(invoice);
+                                    }}
+                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left"
+                                  >
+                                    <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
+                                    <span>Pay Now</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           )}
                         </div>
                       </td>

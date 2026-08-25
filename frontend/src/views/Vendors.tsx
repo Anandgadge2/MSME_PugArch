@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, MapPin, Star, Building2, ChevronDown, CheckCircle2, X, Phone, Mail, Globe, Briefcase, FileText, Send, Info, ShieldCheck, Clock, Upload, Paperclip, LayoutGrid, List, Filter, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare } from 'lucide-react';
+import { Search, MapPin, Star, Building2, ChevronDown, CheckCircle2, X, Phone, Mail, Globe, Briefcase, FileText, Send, Info, ShieldCheck, Clock, Upload, Paperclip, LayoutGrid, List, Filter, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, MoreVertical } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -62,6 +62,14 @@ const Vendors = () => {
   const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
   const [fetchingDetails, setFetchingDetails] = useState(false);
   const [pressedAction, setPressedAction] = useState<string | null>(null);
+  const [openKebabId, setOpenKebabId] = useState<string | number | null>(null);
+
+  useEffect(() => {
+    if (!openKebabId) return;
+    const handleClickOutside = () => setOpenKebabId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [openKebabId]);
 
   // Quote form state
   const [quoteForm, setQuoteForm] = useState({
@@ -326,10 +334,6 @@ const Vendors = () => {
             Locate and engage verified MSME vendors across nationwide sectors.
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
-        </div>
       </div>
 
       {/* KPI Cards Grid */}
@@ -371,105 +375,118 @@ const Vendors = () => {
         />
       </div>
 
-      {/* Inline Filters Bar */}
-      <ResponsiveFilterBar
-        activeFilterCount={
-          (searchTerm ? 1 : 0) +
-          (selectedCategory !== 'All categories' ? 1 : 0) +
-          (selectedSize !== 'All MSME categories' ? 1 : 0) +
-          (selectedStateFilter !== 'All states' ? 1 : 0) +
-          (selectedDistrictFilter !== 'All districts' ? 1 : 0) +
-          (verifiedOnly ? 1 : 0)
-        }
-        searchInput={
-          <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by vendor name, city, keyword..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            />
-          </div>
-        }
-        filters={
-          <>
-            <select
-              value={selectedCategory}
-              onChange={e => setSelectedCategory(e.target.value)}
-              className="h-10 min-w-0 w-full sm:min-w-[120px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            >
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-
-            <select
-              value={selectedStateFilter}
-              onChange={e => {
-                setSelectedStateFilter(e.target.value);
-                setSelectedDistrictFilter('All districts');
-              }}
-              className="h-10 min-w-0 w-full sm:min-w-[120px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            >
-              {statesList.map(st => (
-                <option key={st} value={st}>{st}</option>
-              ))}
-            </select>
-
-            {selectedStateFilter !== 'All states' && (
-              <select
-                value={selectedDistrictFilter}
-                onChange={e => setSelectedDistrictFilter(e.target.value)}
-                className="h-10 min-w-0 w-full sm:min-w-[120px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-              >
-                <option value="All districts">All Districts</option>
-                {districtOptions.map(district => (
-                  <option key={district} value={district}>{district}</option>
-                ))}
-              </select>
-            )}
-
-            <select
-              value={selectedSize}
-              onChange={e => setSelectedSize(e.target.value)}
-              className="h-10 min-w-0 w-full sm:min-w-[140px] sm:w-auto rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            >
-              {msmeCategories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-
-            <button
-              onClick={() => setVerifiedOnly(!verifiedOnly)}
-              className="flex items-center gap-2 h-10 px-3 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm"
-            >
-              <div className={cn("h-4 w-4 rounded border flex items-center justify-center transition-all", verifiedOnly ? "bg-[#12335f] border-[#12335f]" : "border-slate-300")}>
-                {verifiedOnly && <CheckCircle2 className="h-3 w-3 text-white" />}
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={
+            (searchTerm ? 1 : 0) +
+            (selectedCategory !== 'All categories' ? 1 : 0) +
+            (selectedSize !== 'All MSME categories' ? 1 : 0) +
+            (selectedStateFilter !== 'All states' ? 1 : 0) +
+            (selectedDistrictFilter !== 'All districts' ? 1 : 0) +
+            (verifiedOnly ? 1 : 0)
+          }
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by vendor name, city, keyword..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
+            </div>
+          }
+          filters={
+            <>
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <select
+                  value={selectedCategory}
+                  onChange={e => setSelectedCategory(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
               </div>
-              <span className="text-xs font-bold text-slate-700 uppercase">Verified Only</span>
-            </button>
-            {(searchTerm || selectedCategory !== 'All categories' || selectedSize !== 'All MSME categories' || selectedStateFilter !== 'All states' || !verifiedOnly) && (
-              <Button
+
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <select
+                  value={selectedStateFilter}
+                  onChange={e => {
+                    setSelectedStateFilter(e.target.value);
+                    setSelectedDistrictFilter('All districts');
+                  }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  {statesList.map(st => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedStateFilter !== 'All states' && (
+                <div className="w-full sm:w-auto sm:min-w-[130px]">
+                  <select
+                    value={selectedDistrictFilter}
+                    onChange={e => setSelectedDistrictFilter(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  >
+                    <option value="All districts">All Districts</option>
+                    {districtOptions.map(district => (
+                      <option key={district} value={district}>{district}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={selectedSize}
+                  onChange={e => setSelectedSize(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  {msmeCategories.map(category => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
                 type="button"
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm('');
-                  setSelectedCategory('All categories');
-                  setSelectedSize('All MSME categories');
-                  setSelectedStateFilter('All states');
-                  setSelectedDistrictFilter('All districts');
-                  setVerifiedOnly(false);
-                }}
-                className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50 w-full sm:w-auto"
+                onClick={() => setVerifiedOnly(!verifiedOnly)}
+                className="flex items-center gap-2 h-10 px-3.5 bg-white border border-slate-200 rounded-xl hover:border-slate-300 shadow-xs cursor-pointer transition-colors"
               >
-                Clear
-              </Button>
-            )}
-          </>
-        }
-      />
+                <div className={cn("h-4 w-4 rounded-md border flex items-center justify-center transition-all", verifiedOnly ? "bg-[#12335f] border-[#12335f]" : "border-slate-300")}>
+                  {verifiedOnly && <CheckCircle2 className="h-3 w-3 text-white" />}
+                </div>
+                <span className="text-xs font-bold text-slate-700 uppercase">Verified Only</span>
+              </button>
+
+              {(searchTerm || selectedCategory !== 'All categories' || selectedSize !== 'All MSME categories' || selectedStateFilter !== 'All states' || verifiedOnly) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedCategory('All categories');
+                    setSelectedSize('All MSME categories');
+                    setSelectedStateFilter('All states');
+                    setSelectedDistrictFilter('All districts');
+                    setVerifiedOnly(false);
+                  }}
+                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                >
+                  Clear
+                </Button>
+              )}
+            </>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
+      </div>
 
       {/* Results Space */}
       <div className="w-full">
@@ -630,26 +647,48 @@ const Vendors = () => {
                           ))}
                         </div>
                       </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="relative inline-flex items-center justify-end">
                           <button
-                            onClick={() => handleViewProfile(vendor)}
-                            className={cn(
-                              "h-7 px-3 border border-[#dadce0] text-[#12335f] rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#f8f9fa] hover:border-[#12335f]/40 hover:-translate-y-0.5 active:scale-95 active:translate-y-px transition-all duration-200",
-                              vendorActionClass(vendor, 'info')
-                            )}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const vid = vendor.id || vendor._id;
+                              setOpenKebabId(openKebabId === vid ? null : vid);
+                            }}
+                            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+                            title="Actions"
                           >
-                            Info
+                            <MoreVertical className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => handleOpenQuoteModal(vendor)}
-                            className={cn(
-                              "h-7 px-3 bg-[#12335f] text-white rounded text-[9px] font-black uppercase tracking-wider hover:bg-[#0b2445] hover:-translate-y-0.5 active:scale-95 active:translate-y-px transition-all duration-200 shadow-sm shadow-[#12335f]/20",
-                              vendorActionClass(vendor, 'quote')
-                            )}
-                          >
-                            Quote
-                          </button>
+
+                          {openKebabId === (vendor.id || vendor._id) && (
+                            <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  handleViewProfile(vendor);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                              >
+                                <Info className="h-3.5 w-3.5 text-slate-500" />
+                                <span>View Info</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  handleOpenQuoteModal(vendor);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+                              >
+                                <FileText className="h-3.5 w-3.5 text-[#12335f]" />
+                                <span>Request Quote</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>

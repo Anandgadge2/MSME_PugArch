@@ -661,98 +661,104 @@ export default function ProcurementDraftsPage() {
         />
       </div>
 
-      {/* Inline Filters Bar */}
-      <div className="border-y border-slate-200 bg-slate-50/50 py-3 px-1">
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
         <ResponsiveFilterBar
           activeFilterCount={(methodFilter ? 1 : 0) + (sourceFilter ? 1 : 0) + (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (dateFilter ? 1 : 0) + (valueFilter ? 1 : 0) + (activeKpi ? 1 : 0)}
           searchInput={
-            <div className="relative min-w-0 w-full" style={{ flex: '2 1 250px' }}>
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search drafts by title, category, item..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
             </div>
           }
           filters={
             <>
-              <select
-                value={methodFilter}
-                onChange={e => setMethodFilter(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
-                style={{ flex: '1 1 120px' }}
-              >
-                <option value="">All Types</option>
-                <option value="direct-purchase">Cart Checkout</option>
-                <option value="rfq">RFQ</option>
-                <option value="tender">OpenTender</option>
-                <option value="reverse-auction">Reverse Auction</option>
-                <option value="rate-contract">Rate Contract</option>
-                <option value="limited-tender">Limited Tender</option>
-                <option value="repeat-order">Repeat order</option>
-              </select>
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <select
+                  value={methodFilter}
+                  onChange={e => setMethodFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All Types</option>
+                  <option value="direct-purchase">Cart Checkout</option>
+                  <option value="rfq">RFQ</option>
+                  <option value="tender">OpenTender</option>
+                  <option value="reverse-auction">Reverse Auction</option>
+                  <option value="rate-contract">Rate Contract</option>
+                  <option value="limited-tender">Limited Tender</option>
+                  <option value="repeat-order">Repeat order</option>
+                </select>
+              </div>
 
-              <select
-                value={categoryFilter}
-                onChange={e => setCategoryFilter(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
-                style={{ flex: '1 1 120px' }}
-              >
-                <option value="">All Categories</option>
-                {availableCategories.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <select
+                  value={categoryFilter}
+                  onChange={e => setCategoryFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All Categories</option>
+                  {availableCategories.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
 
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
-                style={{ flex: '1 1 120px' }}
-              >
-                <option value="">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-              </select>
+              <div className="w-full sm:w-auto sm:min-w-[120px]">
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                </select>
+              </div>
 
-              <select
-                value={sourceFilter}
-                onChange={e => setSourceFilter(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
-                style={{ flex: '1 1 120px' }}
-              >
-                <option value="">All Sources</option>
-                <option value="local">Local Drafts</option>
-                <option value="server">Server Drafts</option>
-              </select>
+              <div className="w-full sm:w-auto sm:min-w-[120px]">
+                <select
+                  value={sourceFilter}
+                  onChange={e => setSourceFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All Sources</option>
+                  <option value="local">Local Drafts</option>
+                  <option value="server">Server Drafts</option>
+                </select>
+              </div>
 
-              <select
-                value={valueFilter}
-                onChange={e => setValueFilter(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
-                style={{ flex: '1 1 120px' }}
-              >
-                <option value="">All Values</option>
-                <option value="under-1l">Under ₹1 Lakh</option>
-                <option value="1l-10l">₹1L - ₹10L</option>
-                <option value="10l-50l">₹10L - ₹50L</option>
-                <option value="above-50l">Above ₹50L</option>
-              </select>
+              <div className="w-full sm:w-auto sm:min-w-[120px]">
+                <select
+                  value={valueFilter}
+                  onChange={e => setValueFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All Values</option>
+                  <option value="under-1l">Under ₹1 Lakh</option>
+                  <option value="1l-10l">₹1L - ₹10L</option>
+                  <option value="10l-50l">₹10L - ₹50L</option>
+                  <option value="above-50l">Above ₹50L</option>
+                </select>
+              </div>
 
-              <select
-                value={dateFilter}
-                onChange={e => setDateFilter(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-[120px]"
-                style={{ flex: '1 1 120px' }}
-              >
-                <option value="">All Time</option>
-                <option value="today">Today</option>
-                <option value="7days">Last 7 Days</option>
-                <option value="30days">Last 30 Days</option>
-              </select>
+              <div className="w-full sm:w-auto sm:min-w-[120px]">
+                <select
+                  value={dateFilter}
+                  onChange={e => setDateFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All Time</option>
+                  <option value="today">Today</option>
+                  <option value="7days">Last 7 Days</option>
+                  <option value="30days">Last 30 Days</option>
+                </select>
+              </div>
 
               {(searchQuery || methodFilter || sourceFilter || categoryFilter || statusFilter || dateFilter || valueFilter || activeKpi) && (
                 <Button
@@ -768,7 +774,7 @@ export default function ProcurementDraftsPage() {
                     setValueFilter('');
                     setActiveKpi(null);
                   }}
-                  className="h-10 border-red-200 text-xs font-black uppercase text-red-600 hover:bg-red-50 min-w-[80px]"
+                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
                 >
                   Clear
                 </Button>

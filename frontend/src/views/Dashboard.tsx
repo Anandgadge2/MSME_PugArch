@@ -704,7 +704,7 @@ export default function Dashboard() {
                   <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                 </Button>
               </Link>
-              <Link href="/bids">
+              <Link href="/buyer/procurement/responses">
                 <Button variant="ghost" className="h-8 rounded px-3 text-[10px] font-bold uppercase tracking-wide text-[#12335f] bg-slate-50 hover:bg-slate-100 transition ring-1 ring-slate-200/70">
                   Manage Bids
                 </Button>

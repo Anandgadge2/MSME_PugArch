@@ -1440,80 +1440,83 @@ export default function AdminOnboarding() {
                     )}
                   </p>
 
-                  {/* Toolbar — search + filters share one bar. On mobile the
-                      search box and a compact "Filters" button sit side-by-side;
-                      tapping the button reveals every filter below. */}
-                  <ResponsiveFilterBar
-                    className="border-none"
-                    activeFilterCount={[statusFilter !== "all", progressFilter !== "all", sortBy !== "newest"].filter(Boolean).length}
-                    searchInput={
-                      <div className="relative min-w-0 w-full sm:flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <input
-                          placeholder="Search by company, PAN, GST, state, or applicant name..."
-                          className="w-full pl-10 pr-4 h-11 rounded-xl border border-slate-200 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          aria-label="Search applications"
-                        />
-                      </div>
-                    }
-                    filters={
-                      <>
-                        <select
-                          value={statusFilter}
-                          onChange={(e) => setStatusFilter(e.target.value)}
-                          aria-label="Status filter"
-                          className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
-                        >
-                          <option value="all">All Status</option>
-                          <option value="pending">Pending / Review</option>
-                          <option value="approved">Approved</option>
-                          <option value="resubmission">Correction Required</option>
-                          <option value="rejected">Rejected</option>
-                        </select>
-                        <select
-                          value={progressFilter}
-                          onChange={(e) => setProgressFilter(e.target.value)}
-                          aria-label="Progress filter"
-                          className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
-                        >
-                          <option value="all">All Progress</option>
-                          <option value="not_started">0% Verified</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="complete">100% Verified</option>
-                        </select>
-                        <select
-                          value={sortBy}
-                          onChange={(e) => setSortBy(e.target.value)}
-                          aria-label="Sort"
-                          className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 min-w-0 w-full sm:w-auto"
-                        >
-                          <option value="newest">Newest First</option>
-                          <option value="oldest">Oldest First</option>
-                          <option value="progress">Progress High</option>
-                          <option value="entity">Entity A-Z</option>
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSearchTerm("");
-                            setStatusFilter("all");
-                            setProgressFilter("all");
-                            setSortBy("newest");
-                          }}
-                          className="h-11 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wide text-slate-600 hover:text-[#12335f] shrink-0"
-                          title="Reset filters"
-                        >
-                          <RefreshCw className="h-3.5 w-3.5" />
-                          <span className="hidden lg:inline">Reset</span>
-                        </button>
-                      </>
-                    }
-                    endContent={
-                      <ViewModeToggle className="flex justify-end" value={viewMode} onChange={setViewMode} />
-                    }
-                  />
+                  {/* ── Search + Filter + View Toggle Toolbar ── */}
+                  <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+                    <ResponsiveFilterBar
+                      activeFilterCount={[statusFilter !== "all", progressFilter !== "all", sortBy !== "newest"].filter(Boolean).length}
+                      searchInput={
+                        <div className="relative w-full">
+                          <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                          <input
+                            placeholder="Search by company, PAN, GST, state, or applicant name..."
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            aria-label="Search applications"
+                          />
+                        </div>
+                      }
+                      filters={
+                        <>
+                          <div className="w-full sm:w-auto sm:min-w-[130px]">
+                            <select
+                              value={statusFilter}
+                              onChange={(e) => setStatusFilter(e.target.value)}
+                              aria-label="Status filter"
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                            >
+                              <option value="all">All Status</option>
+                              <option value="pending">Pending / Review</option>
+                              <option value="approved">Approved</option>
+                              <option value="resubmission">Correction Required</option>
+                              <option value="rejected">Rejected</option>
+                            </select>
+                          </div>
+                          <div className="w-full sm:w-auto sm:min-w-[130px]">
+                            <select
+                              value={progressFilter}
+                              onChange={(e) => setProgressFilter(e.target.value)}
+                              aria-label="Progress filter"
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                            >
+                              <option value="all">All Progress</option>
+                              <option value="not_started">0% Verified</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="complete">100% Verified</option>
+                            </select>
+                          </div>
+                          <div className="w-full sm:w-auto sm:min-w-[130px]">
+                            <select
+                              value={sortBy}
+                              onChange={(e) => setSortBy(e.target.value)}
+                              aria-label="Sort"
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                            >
+                              <option value="newest">Newest First</option>
+                              <option value="oldest">Oldest First</option>
+                              <option value="progress">Progress High</option>
+                              <option value="entity">Entity A-Z</option>
+                            </select>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setSearchTerm("");
+                              setStatusFilter("all");
+                              setProgressFilter("all");
+                              setSortBy("newest");
+                            }}
+                            className="h-10 rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 shrink-0"
+                            title="Reset filters"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                            <span>Reset</span>
+                          </Button>
+                        </>
+                      }
+                    />
+                  </div>
 
                   {adminView !== "applications" && (
                     <div className="flex flex-wrap gap-2">

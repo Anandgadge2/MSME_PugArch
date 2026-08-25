@@ -15,7 +15,8 @@ import {
   FileCheck,
   CheckCircle2,
   Clock,
-  Info
+  Info,
+  Search
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { BidCard, EmptyState, PageShell, ProcurementEmptyState, ProcurementErrorState, ProcurementHero, ProcurementLoadingState, StatusBadge } from '../components';
@@ -309,15 +310,29 @@ export default function BidsListingPage() {
         <div className="mt-5 grid gap-5 lg:grid-cols-[280px_1fr]">
           <div className="hidden lg:block">{filterPanel}</div>
           <section className="min-w-0 space-y-4">
-            <div className="rounded-lg border border-slate-200 bg-white p-3">
-              <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-                <input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Search by bid ID, buyer, category, item or location" className="h-10 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#0b2447]" />
-                <ViewModeToggle value={viewMode} onChange={setViewMode} />
-                <button onClick={() => setMobileFilters(v => !v)} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 px-4 text-xs font-black text-slate-700 lg:hidden">
-                  <SlidersHorizontal className="h-4 w-4" /> Filters
-                </button>
+            {/* ── Search + View Toggle Toolbar ── */}
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
+                <div className="relative flex-1 min-w-0">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={query}
+                    onChange={event => { setQuery(event.target.value); setPage(1); }}
+                    placeholder="Search by bid ID, buyer, category, item or location..."
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                  />
+                </div>
+                <div className="flex items-center gap-2 justify-between sm:justify-end">
+                  <button
+                    onClick={() => setMobileFilters(v => !v)}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 lg:hidden shadow-xs hover:border-slate-300 transition-colors"
+                  >
+                    <SlidersHorizontal className="h-4 w-4" /> Filters
+                  </button>
+                  <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                </div>
               </div>
-              {mobileFilters && <div className="mt-3 lg:hidden">{filterPanel}</div>}
+              {mobileFilters && <div className="mt-3 lg:hidden pt-3 border-t border-slate-100">{filterPanel}</div>}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3">

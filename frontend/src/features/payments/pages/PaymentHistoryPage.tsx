@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2,
   Clock3,
@@ -24,7 +24,8 @@ import {
   FileCheck,
   RotateCcw,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  MoreVertical
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -92,6 +93,14 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
   const [selectedProofPayment, setSelectedProofPayment] = useState<PaymentRow | null>(null);
   const [viewProofModalOpen, setViewProofModalOpen] = useState(false);
   const [viewProofPayment, setViewProofPayment] = useState<PaymentRow | null>(null);
+  const [openKebabId, setOpenKebabId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!openKebabId) return;
+    const handleClickOutside = () => setOpenKebabId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [openKebabId]);
 
   const { records: payments, warning, loading, refreshing, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<PaymentRow>('/api/payments', {
     ...(searchTerm.trim() ? { q: searchTerm.trim() } : {}),
@@ -199,7 +208,6 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           >
             <Upload className="mr-2 h-4 w-4" /> Upload Payment Proof
           </Button>
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
             <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} /> Refresh
           </Button>
@@ -308,60 +316,70 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         </div>
       )}
 
-      {/* Responsive Filter Bar */}
-      <ResponsiveFilterBar
-        activeFilterCount={(statusFilter ? 1 : 0) + (gatewayFilter ? 1 : 0) + (escrowFilter ? 1 : 0)}
-        searchInput={
-          <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={searchTerm}
-              onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
-              placeholder="Search reference, invoice, PO..."
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-            />
-          </div>
-        }
-        filters={
-          <>
-            <select
-              value={statusFilter}
-              onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-              className="h-10 min-w-[140px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
-            >
-              <option value="">All statuses</option>
-              <option value="initiated">Initiated</option>
-              <option value="gateway_order_created">Gateway order</option>
-              <option value="success">Success</option>
-              <option value="escrow_released">Escrow released</option>
-              <option value="failed">Failed</option>
-              <option value="refunded">Refunded</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(statusFilter ? 1 : 0) + (gatewayFilter ? 1 : 0) + (escrowFilter ? 1 : 0)}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
+                placeholder="Search reference, invoice, PO..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
+            </div>
+          }
+          filters={
+            <>
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={statusFilter}
+                  onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All statuses</option>
+                  <option value="initiated">Initiated</option>
+                  <option value="gateway_order_created">Gateway order</option>
+                  <option value="success">Success</option>
+                  <option value="escrow_released">Escrow released</option>
+                  <option value="failed">Failed</option>
+                  <option value="refunded">Refunded</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
 
-            <select
-              value={gatewayFilter}
-              onChange={e => { setGatewayFilter(e.target.value); setPage(1); }}
-              className="h-10 min-w-[140px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
-            >
-              <option value="">Gateway / any</option>
-              <option value="bank_transfer">Bank transfer</option>
-              <option value="razorpay">Razorpay</option>
-              <option value="cashfree">Cashfree</option>
-            </select>
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={gatewayFilter}
+                  onChange={e => { setGatewayFilter(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">Gateway / any</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="razorpay">Razorpay</option>
+                  <option value="cashfree">Cashfree</option>
+                </select>
+              </div>
 
-            <select
-              value={escrowFilter}
-              onChange={e => { setEscrowFilter(e.target.value); setPage(1); }}
-              className="h-10 min-w-[140px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 min-w-0 w-full sm:w-auto"
-            >
-              <option value="">Escrow / any</option>
-              <option value="funded">Funded</option>
-              <option value="not_funded">Not funded</option>
-            </select>
-          </>
-        }
-      />
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={escrowFilter}
+                  onChange={e => { setEscrowFilter(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">Escrow / any</option>
+                  <option value="funded">Funded</option>
+                  <option value="not_funded">Not funded</option>
+                </select>
+              </div>
+            </>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
+      </div>
 
       {loading && filtered.length === 0 ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
@@ -561,62 +579,75 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                         {formatDate(payment.completedAt || payment.createdAt)}
                       </td>
                       <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        {(() => {
-                          const hasUploadedProof = Boolean(
-                            payment.metadata?.offlineProofId ||
-                            payment.metadata?.receiptFileUrl ||
-                            ['offline_proof_uploaded', 'offline_proof_verified', 'under_review', 'payment_initiated'].includes(String(payment.status || '').toLowerCase())
-                          );
-                          return (
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                variant="outline"
-                                onClick={() => { setViewProofPayment(payment); setViewProofModalOpen(true); }}
-                                className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100 shadow-none"
-                                title="View Payment Proof"
-                              >
-                                <FileCheck className="mr-1 h-3.5 w-3.5" /> Proof
-                              </Button>
-                              <Button
-                                variant="outline"
+                        <div className="relative inline-flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenKebabId(openKebabId === payment.id ? null : payment.id);
+                            }}
+                            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+                            title="Actions"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+
+                          {openKebabId === payment.id && (
+                            <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+                              <button
+                                type="button"
                                 onClick={() => {
-                                  if (hasUploadedProof) {
-                                    setViewProofPayment(payment);
-                                    setViewProofModalOpen(true);
-                                  } else {
-                                    setSelectedProofPayment(payment);
-                                    setUploadProofModalOpen(true);
-                                  }
+                                  setOpenKebabId(null);
+                                  setViewProofPayment(payment);
+                                  setViewProofModalOpen(true);
                                 }}
-                                className={cn(
-                                  "h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none",
-                                  hasUploadedProof
-                                    ? "text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100"
-                                    : "text-slate-700 border-slate-200 hover:bg-slate-50"
-                                )}
-                                title={hasUploadedProof ? "View Buyer Uploaded Payment Slip" : "Upload Slip"}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
                               >
-                                <Upload className="mr-1 h-3.5 w-3.5 text-blue-600" /> Slip
-                              </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => { setDetailTab('receipt'); setSelected(payment); }}
-                                className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 border-slate-200 hover:bg-slate-50 shadow-none"
-                                title="View Receipt"
+                                <FileCheck className="h-3.5 w-3.5 text-blue-600" />
+                                <span>View Proof</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  setSelectedProofPayment(payment);
+                                  setUploadProofModalOpen(true);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
                               >
-                                <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                onClick={() => { setDetailTab('timeline'); setSelected(payment); }}
-                                className="h-8 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:bg-slate-100 shadow-none"
-                                title="Track Timeline"
+                                <Upload className="h-3.5 w-3.5 text-blue-600" />
+                                <span>Upload Slip</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  setDetailTab('receipt');
+                                  setSelected(payment);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
                               >
-                                <Clock3 className="mr-1 h-3.5 w-3.5 text-slate-500" /> Track
-                              </Button>
+                                <Eye className="h-3.5 w-3.5 text-slate-500" />
+                                <span>View Receipt</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenKebabId(null);
+                                  setDetailTab('timeline');
+                                  setSelected(payment);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                              >
+                                <Clock3 className="h-3.5 w-3.5 text-slate-500" />
+                                <span>Track Timeline</span>
+                              </button>
                             </div>
-                          );
-                        })()}
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

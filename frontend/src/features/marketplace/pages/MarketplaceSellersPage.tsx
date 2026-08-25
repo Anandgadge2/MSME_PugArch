@@ -23,7 +23,9 @@ import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { marketplaceApi, type MarketplaceSeller } from '../api';
 import { resolveMediaUrl } from '../../../lib/api';
 import { saveSupplier } from '../utils/savedSuppliers';
+import { Button } from '../../../components/ui/button';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 
@@ -326,96 +328,76 @@ export default function MarketplaceSellersPage() {
                         </div>
                     </div>
 
-                    {/* Integrated Search & Filter Controls */}
-                    <div className="p-3.5 sm:p-4 space-y-3">
-                        <div className="grid gap-2.5 md:grid-cols-12">
-                            {/* Search Input */}
-                            <div className="md:col-span-5 relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                                <input
-                                    type="text"
-                                    value={search}
-                                    onChange={event => setSearch(event.target.value)}
-                                    placeholder="Search by seller name, category, or location…"
-                                    className="w-full h-9.5 rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-8 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#0b2447] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0b2447]/10 transition-all"
-                                />
-                                {search && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setSearch('')}
-                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-                                    >
-                                        <X className="h-3.5 w-3.5" />
-                                    </button>
-                                )}
-                            </div>
+                    {/* ── Search + Filter + View Toggle Toolbar ── */}
+                    <div className="p-3.5 sm:p-4">
+                        <ResponsiveFilterBar
+                            activeFilterCount={(search ? 1 : 0) + (locationFilter ? 1 : 0) + (categoryFilter ? 1 : 0) + (sortBy !== 'name' ? 1 : 0)}
+                            searchInput={
+                                <div className="relative w-full">
+                                    <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        value={search}
+                                        onChange={event => setSearch(event.target.value)}
+                                        placeholder="Search by seller name, category, or location…"
+                                        className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                                    />
+                                </div>
+                            }
+                            filters={
+                                <>
+                                    <div className="w-full sm:w-auto sm:min-w-[140px]">
+                                        <select
+                                            value={locationFilter}
+                                            onChange={event => setLocationFilter(event.target.value)}
+                                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                                        >
+                                            <option value="">All Locations ({locations.length})</option>
+                                            {locations.map(location => (
+                                                <option key={location} value={location}>{location}</option>
+                                            ))}
+                                        </select>
+                                    </div>
 
-                            {/* Location Filter */}
-                            <div className="md:col-span-3 relative">
-                                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                                <select
-                                    value={locationFilter}
-                                    onChange={event => setLocationFilter(event.target.value)}
-                                    className="w-full h-9.5 rounded-xl border border-slate-200 bg-white pl-9 pr-7 text-xs font-medium text-slate-700 outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10 transition-all appearance-none cursor-pointer"
-                                >
-                                    <option value="">All Locations ({locations.length})</option>
-                                    {locations.map(location => (
-                                        <option key={location} value={location}>{location}</option>
-                                    ))}
-                                </select>
-                            </div>
+                                    <div className="w-full sm:w-auto sm:min-w-[150px]">
+                                        <select
+                                            value={categoryFilter}
+                                            onChange={event => setCategoryFilter(event.target.value)}
+                                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                                        >
+                                            <option value="">All Categories ({categories.length})</option>
+                                            {categories.map(category => (
+                                                <option key={category} value={category}>{category}</option>
+                                            ))}
+                                        </select>
+                                    </div>
 
-                            {/* Category Filter (Fully Populated) */}
-                            <div className="md:col-span-2 relative">
-                                <SlidersHorizontal className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                                <select
-                                    value={categoryFilter}
-                                    onChange={event => setCategoryFilter(event.target.value)}
-                                    className="w-full h-9.5 rounded-xl border border-slate-200 bg-white pl-9 pr-7 text-xs font-medium text-slate-700 outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10 transition-all appearance-none cursor-pointer"
-                                >
-                                    <option value="">All Categories ({categories.length})</option>
-                                    {categories.map(category => (
-                                        <option key={category} value={category}>{category}</option>
-                                    ))}
-                                </select>
-                            </div>
+                                    <div className="w-full sm:w-auto sm:min-w-[140px]">
+                                        <select
+                                            value={sortBy}
+                                            onChange={event => setSortBy(event.target.value as 'name' | 'location' | 'latest')}
+                                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                                        >
+                                            <option value="name">Sort: A to Z</option>
+                                            <option value="location">Sort: Location</option>
+                                            <option value="latest">Sort: Latest</option>
+                                        </select>
+                                    </div>
 
-                            {/* Sort Option */}
-                            <div className="md:col-span-2 relative">
-                                <Package className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                                <select
-                                    value={sortBy}
-                                    onChange={event => setSortBy(event.target.value as 'name' | 'location' | 'latest')}
-                                    className="w-full h-9.5 rounded-xl border border-slate-200 bg-white pl-9 pr-7 text-xs font-medium text-slate-700 outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10 transition-all appearance-none cursor-pointer"
-                                >
-                                    <option value="name">Sort: A to Z</option>
-                                    <option value="location">Sort: Location</option>
-                                    <option value="latest">Sort: Latest</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* Status & View Toolbar */}
-                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                            <div className="flex items-center gap-2 min-w-0">
-                                <p className="text-xs font-semibold text-slate-500">
-                                    Showing <span className="font-bold text-slate-800">{filteredSellers.length}</span> of {displaySellers.length} suppliers
-                                </p>
-                                {hasActiveFilters && (
-                                    <button
-                                        type="button"
-                                        onClick={clearFilters}
-                                        className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100 transition-colors"
-                                    >
-                                        <X className="h-3 w-3" /> Clear Filters
-                                    </button>
-                                )}
-                            </div>
-
-                            <div className="flex items-center gap-3 shrink-0">
-                                <ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />
-                            </div>
-                        </div>
+                                    {hasActiveFilters && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={clearFilters}
+                                            className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                                        >
+                                            Reset
+                                        </Button>
+                                    )}
+                                </>
+                            }
+                            endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+                        />
                     </div>
                 </section>
 

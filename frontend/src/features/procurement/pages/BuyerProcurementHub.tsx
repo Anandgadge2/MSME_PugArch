@@ -714,7 +714,7 @@ export default function BuyerProcurementHub() {
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value)}
-                className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
               >
                 <option value="">All Statuses</option>
                 <option value="draft">Draft</option>
@@ -733,7 +733,7 @@ export default function BuyerProcurementHub() {
               <select
                 value={valueRangeFilter}
                 onChange={e => setValueRangeFilter(e.target.value)}
-                className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
               >
                 <option value="">All Values</option>
                 <option value="UNDER_1L">Under ₹1 Lakh (&lt; ₹1L)</option>
@@ -750,7 +750,7 @@ export default function BuyerProcurementHub() {
                 <select
                   value={departmentFilter}
                   onChange={e => setDepartmentFilter(e.target.value)}
-                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                 >
                   <option value="">All Departments</option>
                   {availableDepartments.map((dept, idx) => (
@@ -761,7 +761,7 @@ export default function BuyerProcurementHub() {
                 <input
                   value={departmentFilter}
                   onChange={e => setDepartmentFilter(e.target.value)}
-                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 text-xs font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 transition-all shadow-inner"
                   placeholder="Department name..."
                 />
               )}
@@ -773,7 +773,7 @@ export default function BuyerProcurementHub() {
               <select
                 value={categoryFilter}
                 onChange={e => setCategoryFilter(e.target.value)}
-                className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
               >
                 <option value="">All Categories</option>
                 {availableCategories.map((cat, idx) => (
@@ -790,7 +790,7 @@ export default function BuyerProcurementHub() {
                   type="date"
                   value={startDateFilter}
                   onChange={e => setStartDateFilter(e.target.value)}
-                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs"
                 />
               </div>
               <div>
@@ -799,7 +799,7 @@ export default function BuyerProcurementHub() {
                   type="date"
                   value={endDateFilter}
                   onChange={e => setEndDateFilter(e.target.value)}
-                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs"
                 />
               </div>
             </div>
@@ -808,17 +808,17 @@ export default function BuyerProcurementHub() {
           {/* Bottom Controls Bar: Search & Active Filters */}
           <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative flex-1 max-w-lg">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-9 pr-8 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-8 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
                 placeholder="Search by Title, Ref Number, ID, Category, or Department..."
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -831,7 +831,7 @@ export default function BuyerProcurementHub() {
                   variant="outline"
                   size="sm"
                   onClick={clearAllFilters}
-                  className="h-9 rounded-full text-rose-600 border-rose-200 bg-rose-50/60 hover:bg-rose-100 font-extrabold text-[10px] uppercase tracking-wider transition-all"
+                  className="h-10 rounded-xl text-rose-600 border-rose-200 bg-rose-50/60 hover:bg-rose-100 font-extrabold text-xs uppercase tracking-wider transition-all"
                 >
                   <X className="h-3.5 w-3.5 mr-1" /> Clear All Filters
                 </Button>

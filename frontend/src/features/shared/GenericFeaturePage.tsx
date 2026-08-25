@@ -180,7 +180,6 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
           <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">{description}</p>
         </div>
         <div className="flex items-center gap-2">
-          <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase"><RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />Refresh</Button>
         </div>
       </div>
@@ -193,37 +192,67 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
 
       {error && <InlineError message={error} onRetry={reload} />}
 
-      <Card className="border-slate-200/80 shadow-sm bg-white">
-        <CardContent className="p-4">
-          <ResponsiveFilterBar
-            className="border-none"
-            activeFilterCount={(statusFilter ? 1 : 0) + (valueFilter ? 1 : 0)}
-            searchInput={
-              <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input value={searchTerm} onChange={event => { setSearchTerm(event.target.value); setPage(1); }} placeholder={`Search ${title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(statusFilter ? 1 : 0) + (valueFilter ? 1 : 0) + (searchTerm ? 1 : 0)}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={searchTerm}
+                onChange={event => { setSearchTerm(event.target.value); setPage(1); }}
+                placeholder={`Search ${title.toLowerCase()}...`}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
+            </div>
+          }
+          filters={
+            <>
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={statusFilter}
+                  onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All statuses</option>
+                  {statusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
+                </select>
               </div>
-            }
-            filters={
-              <>
-                <div className="relative w-full">
-                  <SlidersHorizontal className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <select value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setPage(1); }} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-                    <option value="">All statuses</option>
-                    {statusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
-                  </select>
-                </div>
-                <select value={valueFilter} onChange={event => { setValueFilter(event.target.value); setPage(1); }} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
+
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={valueFilter}
+                  onChange={event => { setValueFilter(event.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
                   <option value="">All values</option>
                   <option value="high">Above Rs. 1 lakh</option>
                   <option value="medium">Rs. 25k to 1 lakh</option>
                   <option value="low">Below Rs. 25k</option>
                 </select>
-              </>
-            }
-          />
-        </CardContent>
-      </Card>
+              </div>
+
+              {(statusFilter || valueFilter || searchTerm) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setStatusFilter('');
+                    setValueFilter('');
+                    setSearchTerm('');
+                    setPage(1);
+                  }}
+                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                >
+                  Reset
+                </Button>
+              )}
+            </>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
+      </div>
 
       {filtered.length === 0 ? <EmptyState title={emptyTitle} /> : viewMode === 'grid' ? (
         <>

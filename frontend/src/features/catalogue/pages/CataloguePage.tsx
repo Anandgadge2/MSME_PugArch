@@ -16,6 +16,7 @@ import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import type { CatalogueItemDto, CategoryDto } from '../../shared/types';
 import { GstTaxPicker, calculateGstBreakdown } from '../../shared/gstTax';
 import { catalogueApi, downloadCatalogueFile } from '../api';
@@ -720,7 +721,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
     }
   };
 
-  const title = mode === 'seller' ? 'Seller Marketplace' : mode === 'admin' ? 'Marketplace Review' : 'Buyer Marketplace';
+  // const title = mode === 'seller' ? 'Seller Marketplace' : mode === 'admin' ? 'Marketplace Review' : 'Buyer Marketplace';
   const subtitle = mode === 'seller'
     ? 'Create and manage products and services after seller approval.'
     : mode === 'admin'
@@ -732,15 +733,15 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
   return (
     <div className="min-w-0 space-y-6">
       {/* Premium Dashboard Banner Header */}
-      <div className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_18%_18%,#1f6f63_0,#12335f_46%,#07172e_100%)] p-6 text-white shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+      <div className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_18%_18%,#1f6f63_0,#12335f_46%,#07172e_100%)] px-6 py-4 lg:py-3.5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
         <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-emerald-300/20 blur-3xl" />
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between relative z-10">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between relative z-10">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-100">
+            {/* <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-100">
               <Store className="h-3.5 w-3.5" /> {title}
-            </div>
-            <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">Marketplace Catalogue</h1>
-            <p className="mt-1 max-w-3xl text-xs font-semibold leading-relaxed text-blue-100/90">{subtitle}</p>
+            </div> */}
+            <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">Marketplace Catalogue</h1>
+            <p className="mt-0.5 max-w-3xl text-xs font-semibold leading-relaxed text-blue-100/90">{subtitle}</p>
           </div>
           
           <div className="flex flex-wrap gap-2.5">
@@ -766,7 +767,6 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
             <Button variant="outline" onClick={() => loadCatalogue(true)} className="h-10 rounded-2xl border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider text-white hover:bg-white/15">
               <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} /> Refresh
             </Button>
-            <ViewModeToggle value={viewMode} onChange={setViewMode} />
           </div>
         </div>
       </div>
@@ -848,63 +848,109 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
 
       {error && <InlineError message={error} onRetry={loadCatalogue} />}
 
-      <Card className="rounded-[24px] border-0 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row gap-2 items-center">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, seller, category..." className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10" />
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(searchTerm ? 1 : 0) + (kindFilter !== 'all' ? 1 : 0) + (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (priceFilter ? 1 : 0) + (verificationFilter ? 1 : 0)}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={searchTerm}
+                onChange={event => setSearchTerm(event.target.value)}
+                placeholder="Search name, seller, category..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
             </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowMobileFilters(!showMobileFilters)}
-              className="h-10 w-full shrink-0 gap-2 rounded-2xl border-slate-200 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 sm:w-auto xl:hidden"
-            >
-              <Settings2 className="h-4 w-4 text-slate-500" />
-              <span>Filters {showMobileFilters ? '(Hide)' : '(Show)'}</span>
-            </Button>
-
-            <div className={cn(
-              "grid gap-3 items-center",
-              showMobileFilters ? "grid grid-cols-2 sm:grid-cols-3" : "hidden xl:grid xl:grid-cols-[140px_160px_150px_150px_150px] xl:justify-between"
-            )}>
-              <select value={kindFilter} onChange={event => setKindFilter(event.target.value as FilterKind)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="all">All types</option>
-                <option value="product">Products</option>
-                <option value="service">Services</option>
-              </select>
-              <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="">All categories</option>
-                {categories.map(category => <option key={category} value={category}>{category}</option>)}
-              </select>
-              <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="">All statuses</option>
-                {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
-              </select>
-              <select value={priceFilter} onChange={event => setPriceFilter(event.target.value)} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10">
-                <option value="">All prices</option>
-                <option value="high">Above Rs. 10k</option>
-                <option value="mid">Rs. 1k to 10k</option>
-                <option value="low">Below Rs. 1k</option>
-              </select>
-              {mode !== 'seller' && (
-                <select value={verificationFilter} onChange={event => setVerificationFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 w-full">
-                  <option value="">All sellers</option>
-                  <option value="verified">Verified sellers</option>
-                  <option value="unverified">Pending sellers</option>
+          }
+          filters={
+            <>
+              <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[125px]">
+                <select
+                  value={kindFilter}
+                  onChange={event => setKindFilter(event.target.value as FilterKind)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                >
+                  <option value="all">All types</option>
+                  <option value="product">Products</option>
+                  <option value="service">Services</option>
                 </select>
+              </div>
+
+              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[140px]">
+                <select
+                  value={categoryFilter}
+                  onChange={event => setCategoryFilter(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                >
+                  <option value="">All categories</option>
+                  {categories.map(category => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </div>
+
+              <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[130px]">
+                <select
+                  value={statusFilter}
+                  onChange={event => setStatusFilter(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                >
+                  <option value="">All statuses</option>
+                  {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
+                </select>
+              </div>
+
+              <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[125px]">
+                <select
+                  value={priceFilter}
+                  onChange={event => setPriceFilter(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                >
+                  <option value="">All prices</option>
+                  <option value="high">Above Rs. 10k</option>
+                  <option value="mid">Rs. 1k to 10k</option>
+                  <option value="low">Below Rs. 1k</option>
+                </select>
+              </div>
+
+              {mode !== 'seller' && (
+                <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
+                  <select
+                    value={verificationFilter}
+                    onChange={event => setVerificationFilter(event.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  >
+                    <option value="">All sellers</option>
+                    <option value="verified">Verified sellers</option>
+                    <option value="unverified">Pending sellers</option>
+                  </select>
+                </div>
               )}
 
-
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              {(searchTerm || kindFilter !== 'all' || categoryFilter || statusFilter || priceFilter || verificationFilter) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setKindFilter('all');
+                    setCategoryFilter('');
+                    setStatusFilter('');
+                    setPriceFilter('');
+                    setVerificationFilter('');
+                  }}
+                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                >
+                  Reset
+                </Button>
+              )}
+            </>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
+      </div>
 
       {isInitialLoading ? (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
           {[1, 2, 3, 4, 5, 6].map(i => (
             <div key={i} className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-xs animate-pulse p-4 space-y-4">
               <div className="w-full h-48 bg-slate-100 rounded-xl" />
@@ -923,7 +969,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       ) : filtered.length === 0 ? <EmptyState title="No marketplace items found matching filters" /> : (
         <>
           {viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
               {pagedItems.map((item, index) => (
                 <CatalogueCard
                   key={`${item.itemKind}-${item.id}`}
@@ -944,12 +990,12 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
               ))}
             </div>
           ) : (
-            <div className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
-              <div className="relative overflow-x-auto bg-slate-50/70 p-2">
-                <table className={cn("w-full table-fixed border-separate border-spacing-y-2 text-left", mode === 'seller' ? "min-w-[1040px]" : "min-w-[900px]")}>
+            <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
+              <div className="relative overflow-x-auto">
+                <table className={cn("w-full table-fixed text-left text-sm", mode === 'seller' ? "min-w-[1040px]" : "min-w-[900px]")}>
                   <thead>
-                    <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                      <th className="px-2 py-3 w-10 text-center">
+                    <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      <th className="px-3 py-3 w-14 text-center">
                         <CatalogueSortHead label="Sr. No" field="sr" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
                       </th>
                       <th className="px-2 py-3 w-16 text-center">Image</th>
@@ -979,7 +1025,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                           <CatalogueSortHead label="Date & Time" field="createdAt" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
                         </th>
                       )}
-                      <th className="sticky right-0 z-10 bg-slate-50 px-2 py-3 w-[180px] min-w-[180px] text-right whitespace-nowrap shadow-[-6px_0_8px_-6px_rgba(15,23,42,0.12)]">Actions</th>
+                      <th className="sticky right-0 z-10 bg-slate-50 px-3 py-3 w-[160px] min-w-[160px] text-right whitespace-nowrap border-l border-slate-200 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.05)]">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -994,15 +1040,15 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                           ? `RFQ ${String(actionState.rfq.status || 'sent').replace(/_/g, ' ')}`
                           : '';
                       return (
-                        <tr key={`${item.itemKind}-${item.id}`} className="group bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] transition hover:shadow-sm">
-                          <td className="rounded-l-2xl px-3 py-3 text-center text-xs font-black text-slate-400">
+                        <tr key={`${item.itemKind}-${item.id}`} className="group border-b border-slate-100 bg-white transition hover:bg-slate-50/60 last:border-b-0">
+                          <td className="px-3 py-3 text-center text-xs font-medium text-slate-500 align-middle">
                             {String((page - 1) * pageSize + index + 1).padStart(2, '0')}
                           </td>
-                          <td className="px-2 py-3 text-center">
+                          <td className="px-2 py-3 text-center align-middle">
                             <button
                               type="button"
                               onClick={() => setSelectedDetailsItem(item)}
-                              className="inline-block h-10 w-10 rounded-md overflow-hidden border border-slate-200 bg-slate-50 hover:opacity-85 transition-opacity"
+                              className="inline-block h-8 w-8 rounded-md overflow-hidden border border-slate-200 bg-slate-50 hover:opacity-85 transition-opacity"
                               title="View details"
                             >
                               {imageSrc ? (
@@ -1095,7 +1141,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                               {formatDateTime(item.createdAt)}
                             </td>
                           )}
-                          <td className="sticky right-0 z-[5] w-[180px] min-w-[180px] rounded-r-2xl bg-white px-2 py-3 text-right align-top whitespace-nowrap shadow-[-6px_0_8px_-6px_rgba(15,23,42,0.12)] group-hover:bg-slate-50">
+                          <td className="sticky right-0 z-[5] w-[160px] min-w-[160px] bg-white px-3 py-3 text-right align-middle whitespace-nowrap border-l border-slate-100 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.05)] group-hover:bg-slate-50/60">
                             <div className="inline-flex items-center justify-end gap-1">
                               {mode === 'seller' && (
                                 <>
@@ -1797,10 +1843,10 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
 
   // Grid Layout - Spacious, prominent product images, clean hierarchy
   return (
-    <Card className="group relative flex flex-col h-full rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-xs hover:shadow-lg hover:border-emerald-500/30 transition-all duration-300">
+    <Card className="group relative flex flex-col h-full rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs hover:shadow-md hover:border-emerald-500/40 transition-all duration-300">
       
-      {/* Top Product Image Showcase Container (Large, Prominent 2X-3X Size) */}
-      <div className="relative w-full aspect-[16/10] sm:aspect-[4/3] max-h-56 bg-slate-50/90 overflow-hidden flex items-center justify-center p-3 border-b border-slate-100">
+      {/* Top Product Image Showcase Container (Compact, Prominent) */}
+      <div className="relative w-full h-40 sm:h-48 bg-slate-50 overflow-hidden flex items-center justify-center p-4 border-b border-slate-100">
         
         {/* Badges on top-left of image */}
         <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 flex-wrap">
@@ -1848,7 +1894,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
               {item.itemKind}
             </span>
             {item.category?.name && (
-              <span className="rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2 py-0.5 text-[9px] font-bold uppercase truncate max-w-[190px]">
+              <span className="rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2 py-0.5 text-[9px] font-bold uppercase truncate max-w-[130px]">
                 {item.category.name}
               </span>
             )}
@@ -1920,24 +1966,23 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
                 </Button>
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
+                  variant="outline"
                   onClick={() => onEdit(item)}
-                  disabled={status === 'ARCHIVED'}
                   className="flex-1 h-8 text-[11px] font-bold uppercase rounded-lg text-emerald-700 hover:bg-emerald-50 border-emerald-200"
                 >
-                  <Settings2 className="h-3 w-3 mr-1 text-emerald-600" />
+                  <Settings2 className="h-3 w-3 mr-1 text-emerald-500" />
                   Edit
                 </Button>
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => onDelete(item)}
-                  className="h-8 px-2.5 text-[11px] font-bold uppercase rounded-lg text-red-600 hover:bg-red-50 border-red-200"
+                  className="h-8 w-8 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-100 shrink-0 rounded-lg"
                   title="Delete item"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </>
             )}

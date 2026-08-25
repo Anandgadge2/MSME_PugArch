@@ -15,6 +15,7 @@ import { Pagination } from '../../shared/Pagination';
 import { useResponsiveViewMode, usePaginatedFeatureQuery } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 
 type Milestone = {
@@ -197,33 +198,53 @@ export default function EscrowPage() {
 
       {error && <InlineError message={error} onRetry={load} />}
 
-      <Card className="border-slate-200/80 shadow-sm bg-white">
-        <CardContent className="space-y-4 p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="grid gap-3 sm:grid-cols-[1.3fr_1fr_1fr] lg:grid-cols-[1.8fr_1fr_1fr]">
-              <div className="relative w-full">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Search escrow, payment reference, PO, buyer, seller..." className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20" />
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(query ? 1 : 0) + (status ? 1 : 0) + (fundingFilter ? 1 : 0)}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={event => { setQuery(event.target.value); setPage(1); }}
+                placeholder="Search escrow, payment reference, PO, buyer, seller..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
+            </div>
+          }
+          filters={
+            <>
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={status}
+                  onChange={event => { setStatus(event.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All statuses</option>
+                  <option value="held">Held</option>
+                  <option value="released">Released</option>
+                  <option value="frozen">Frozen</option>
+                  <option value="refunded">Refunded</option>
+                </select>
               </div>
-              <select value={status} onChange={event => { setStatus(event.target.value); setPage(1); }} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full">
-                <option value="">All statuses</option>
-                <option value="held">Held</option>
-                <option value="released">Released</option>
-                <option value="frozen">Frozen</option>
-                <option value="refunded">Refunded</option>
-              </select>
-              <select value={fundingFilter} onChange={event => { setFundingFilter(event.target.value); setPage(1); }} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 w-full">
-                <option value="">All fund states</option>
-                <option value="funded">Funded</option>
-                <option value="pending">Pending funding</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <ViewModeToggle value={viewMode} onChange={setViewMode} />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+
+              <div className="w-full sm:w-auto sm:min-w-[140px]">
+                <select
+                  value={fundingFilter}
+                  onChange={event => { setFundingFilter(event.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="">All fund states</option>
+                  <option value="funded">Funded</option>
+                  <option value="pending">Pending funding</option>
+                </select>
+              </div>
+            </>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
+      </div>
 
       {filtered.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center text-sm font-semibold text-slate-500">No escrow accounts match the current filters.</div> : (
         <div className="space-y-3">

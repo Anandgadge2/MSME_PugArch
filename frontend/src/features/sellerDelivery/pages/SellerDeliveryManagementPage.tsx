@@ -11,7 +11,7 @@
  */
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, CheckCircle2, Clock, FileText, Grid3x3, List, Package, Paperclip, RefreshCw, Search, Send, Truck, Upload, UploadCloud, X, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, FileText, Grid3x3, List, MoreVertical, Package, Paperclip, RefreshCw, Search, Send, Truck, Upload, UploadCloud, X, XCircle } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
@@ -25,6 +25,7 @@ import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureState
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
+import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { formatCurrency, formatDate, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
@@ -85,97 +86,130 @@ const readableStatus = (status: string) => status.replace(/_/g, ' ');
 
 function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction: (kind: string) => void }) {
     const router = useRouter();
+    const [open, setOpen] = useState(false);
     const status = String(delivery.status);
 
-    if (status === 'CREATED' || status === 'PENDING_ACCEPTANCE') {
-        return (
-            <div className="flex justify-end gap-1.5">
-                <button 
-                    onClick={() => onAction('accept')} 
-                    className="h-7 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase px-2.5 transition active:scale-95 shadow-sm"
-                >
-                    Accept
-                </button>
-                <button 
-                    onClick={() => onAction('reject')} 
-                    className="h-7 rounded-md border border-red-200 text-red-700 hover:bg-red-50 font-black text-[10px] uppercase px-2.5 transition active:scale-95"
-                >
-                    Reject
-                </button>
-            </div>
-        );
-    }
+    useEffect(() => {
+        if (!open) return;
+        const handleClickOutside = () => setOpen(false);
+        window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, [open]);
 
-    if (status === 'SELLER_ACCEPTED') {
-        return (
-            <button 
-                onClick={() => onAction('packed')} 
-                className="h-7 rounded-md bg-[#12335f] text-white hover:bg-brand-deep font-black text-[10px] uppercase px-3 transition active:scale-95 shadow-sm flex items-center gap-1 ml-auto"
+    const poId = delivery.purchaseOrder?.id || delivery.purchaseOrderId;
+    const amount = delivery.purchaseOrder?.amount;
+
+    return (
+        <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen(!open);
+                }}
+                className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+                title="Actions"
             >
-                <Package className="h-3 w-3" /> Pack
+                <MoreVertical className="h-4 w-4" />
             </button>
-        );
-    }
 
-    if (status === 'PACKED') {
-        return (
-            <button 
-                onClick={() => onAction('ready')} 
-                className="h-7 rounded-md bg-purple-600 hover:bg-purple-700 text-white font-black text-[10px] uppercase px-3 transition active:scale-95 shadow-sm flex items-center gap-1 ml-auto"
-            >
-                <Truck className="h-3 w-3" /> Ready for Pickup
-            </button>
-        );
-    }
+            {open && (
+                <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+                    {(status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => { setOpen(false); onAction('accept'); }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+                            >
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>Accept Order</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setOpen(false); onAction('reject'); }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
+                            >
+                                <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                                <span>Reject Order</span>
+                            </button>
+                        </>
+                    )}
 
-    if (['READY_FOR_PICKUP', 'PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status)) {
-        return (
-            <div className="flex justify-end gap-1.5">
-                {status === 'READY_FOR_PICKUP' && (
-                    <button
-                        onClick={() => onAction('dispatch-details')}
-                        className="h-7 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-black text-[10px] uppercase px-3 transition active:scale-95 flex items-center gap-1 shadow-sm"
-                    >
-                        <Send className="h-3 w-3 text-[#12335f]" /> Dispatch
-                    </button>
-                )}
-                <button
-                    onClick={() => onAction('track-info')}
-                    className="h-7 rounded-md bg-[#12335f] text-white hover:bg-brand-deep font-black text-[10px] uppercase px-3 transition active:scale-95 flex items-center gap-1 shadow-sm"
-                >
-                    <Truck className="h-3 w-3" /> Update Status
-                </button>
-            </div>
-        );
-    }
+                    {status === 'SELLER_ACCEPTED' && (
+                        <button
+                            type="button"
+                            onClick={() => { setOpen(false); onAction('packed'); }}
+                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+                        >
+                            <Package className="h-3.5 w-3.5 text-[#12335f]" />
+                            <span>Mark Packed</span>
+                        </button>
+                    )}
 
-    if (['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(status)) {
-        const poId = delivery.purchaseOrder?.id || delivery.purchaseOrderId;
-        const amount = delivery.purchaseOrder?.amount;
+                    {status === 'PACKED' && (
+                        <button
+                            type="button"
+                            onClick={() => { setOpen(false); onAction('ready'); }}
+                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left"
+                        >
+                            <Truck className="h-3.5 w-3.5 text-purple-600" />
+                            <span>Ready for Pickup</span>
+                        </button>
+                    )}
 
-        return (
-            <div className="flex justify-end gap-1.5 items-center">
-                {poId && (
-                    <button 
-                        type="button"
-                        onClick={() => router.push(`/seller/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`)} 
-                        className="h-7 rounded-md bg-[#12335f] hover:bg-[#0e2a4f] text-white font-black text-[10px] uppercase px-3 transition active:scale-95 flex items-center gap-1 shadow-sm"
-                    >
-                        <FileText className="h-3 w-3" /> Create Invoice
-                    </button>
-                )}
-                <button 
-                    type="button"
-                    onClick={() => onAction('upload-pod')} 
-                    className="h-7 rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black text-[10px] uppercase px-3 transition active:scale-95 flex items-center gap-1"
-                >
-                    <Upload className="h-3 w-3 text-emerald-600" /> Upload POD
-                </button>
-            </div>
-        );
-    }
+                    {['READY_FOR_PICKUP', 'PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status) && (
+                        <>
+                            {status === 'READY_FOR_PICKUP' && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setOpen(false); onAction('dispatch-details'); }}
+                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                                >
+                                    <Send className="h-3.5 w-3.5 text-[#12335f]" />
+                                    <span>Dispatch Order</span>
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => { setOpen(false); onAction('track-info'); }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+                            >
+                                <Truck className="h-3.5 w-3.5 text-[#12335f]" />
+                                <span>Update Status</span>
+                            </button>
+                        </>
+                    )}
 
-    return null;
+                    {['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(status) && (
+                        <>
+                            {poId && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setOpen(false);
+                                        router.push(`/seller/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`);
+                                    }}
+                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                                >
+                                    <FileText className="h-3.5 w-3.5 text-slate-500" />
+                                    <span>Create Invoice</span>
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => { setOpen(false); onAction('upload-pod'); }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+                            >
+                                <Upload className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>Upload POD</span>
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
+        </div>
+    );
 }
 
 export default function SellerDeliveryManagementPage() {
@@ -368,77 +402,70 @@ export default function SellerDeliveryManagementPage() {
                 />
             </div>
 
-            {/* Filter Bar */}
-            <ResponsiveFilterBar
-                activeFilterCount={(statusFilter ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0)}
-                searchInput={
-                    <div className="relative min-w-0 w-full sm:flex-1 max-w-md">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search by delivery #, PO #, buyer, tracking..."
-                            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                        />
-                    </div>
-                }
-                filters={
-                    <>
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                        >
-                            {STATUS_OPTIONS.map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                </option>
-                            ))}
-                        </select>
+            {/* ── Search + Filter + View Toggle Toolbar ── */}
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+                <ResponsiveFilterBar
+                    activeFilterCount={(statusFilter !== 'ALL' ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0)}
+                    searchInput={
+                        <div className="relative w-full">
+                            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search by delivery #, PO #, buyer, tracking..."
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                            />
+                        </div>
+                    }
+                    filters={
+                        <>
+                            <div className="w-full sm:w-auto sm:min-w-[150px]">
+                                <select
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                                >
+                                    {STATUS_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
 
-                        <select
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value)}
-                            className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                        >
-                            <option value="newest">Newest First</option>
-                            <option value="oldest">Oldest First</option>
-                            <option value="value-desc">Value: High to Low</option>
-                            <option value="value-asc">Value: Low to High</option>
-                        </select>
-                    </>
-                }
-                endContent={
-                    <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
-                        <button
-                            type="button"
-                            onClick={() => setViewMode('list')}
-                            title="List view"
-                            aria-label="List view"
-                            className={`flex h-8 w-8 items-center justify-center rounded-md transition-all duration-150 ${
-                                viewMode === 'list'
-                                    ? 'bg-slate-100 text-[#12335f] shadow-sm'
-                                    : 'text-slate-500 hover:text-[#12335f]'
-                            }`}
-                        >
-                            <List className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setViewMode('grid')}
-                            title="Grid view"
-                            aria-label="Grid view"
-                            className={`flex h-8 w-8 items-center justify-center rounded-md transition-all duration-150 ${
-                                viewMode === 'grid'
-                                    ? 'bg-slate-100 text-[#12335f] shadow-sm'
-                                    : 'text-slate-500 hover:text-[#12335f]'
-                            }`}
-                        >
-                            <Grid3x3 className="h-3.5 w-3.5" />
-                        </button>
-                    </div>
-                }
-            />
+                            <div className="w-full sm:w-auto sm:min-w-[140px]">
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value)}
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                                >
+                                    <option value="newest">Newest First</option>
+                                    <option value="oldest">Oldest First</option>
+                                    <option value="value-desc">Value: High to Low</option>
+                                    <option value="value-asc">Value: Low to High</option>
+                                </select>
+                            </div>
+
+                            {(searchQuery || statusFilter !== 'ALL' || sortBy !== 'newest') && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setSearchQuery('');
+                                        setStatusFilter('ALL');
+                                        setSortBy('newest');
+                                    }}
+                                    className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                                >
+                                    Reset
+                                </Button>
+                            )}
+                        </>
+                    }
+                    endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+                />
+            </div>
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => refetch()} /> :
                 isLoading ? <LoadingState label="Loading deliveries..." /> :

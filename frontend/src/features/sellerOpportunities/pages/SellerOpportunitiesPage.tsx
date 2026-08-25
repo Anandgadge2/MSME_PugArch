@@ -13,6 +13,7 @@ import { fetchQuoteRequests } from '../../rfq/api';
 import { reverseAuctionApi } from '../../reverseAuctions/api';
 import { fetchRateContracts } from '../../rateContract/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
@@ -982,97 +983,100 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         />
       </div>
 
-      {/* Dynamic Inline Selector Filters */}
-      <div className="flex flex-wrap items-center gap-3 py-2 border-y border-slate-100">
-        {/* Search bar */}
-        <div className="relative w-full sm:w-64">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={query}
-            onChange={event => { setQuery(event.target.value); setPage(1); }}
-            placeholder="Search opportunities..."
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 shadow-sm"
-          />
-        </div>
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(query ? 1 : 0) + (type ? 1 : 0) + (category ? 1 : 0) + (buyerFilter ? 1 : 0) + (location ? 1 : 0) + (closingDate ? 1 : 0)}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={event => { setQuery(event.target.value); setPage(1); }}
+                placeholder="Search opportunities..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
+            </div>
+          }
+          filters={
+            <>
+              {/* Type Dropdown */}
+              {!subRouteType && (
+                <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[130px]">
+                  <select
+                    value={type}
+                    onChange={e => { setType(e.target.value as OpportunityType | ''); setPage(1); }}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  >
+                    <option value="">All Types</option>
+                    {typeOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                  </select>
+                </div>
+              )}
 
-        {/* Type Dropdown */}
-        {!subRouteType && (
-          <div className="w-40">
-            <select
-              value={type}
-              onChange={e => { setType(e.target.value as OpportunityType | ''); setPage(1); }}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
-            >
-              <option value="">All Types</option>
-              {typeOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-            </select>
-          </div>
-        )}
+              {/* Category Dropdown */}
+              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[145px]">
+                <select
+                  value={category}
+                  onChange={e => { setCategory(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                >
+                  <option value="">All Categories</option>
+                  {categoryOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                </select>
+              </div>
 
-        {/* Category Dropdown */}
-        <div className="w-44">
-          <select
-            value={category}
-            onChange={e => { setCategory(e.target.value); setPage(1); }}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
-          >
-            <option value="">All Categories</option>
-            {categoryOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-          </select>
-        </div>
+              {/* Buyer Dropdown */}
+              <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
+                <select
+                  value={buyerFilter}
+                  onChange={e => { setBuyerFilter(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                >
+                  <option value="">All Buyers</option>
+                  {buyerOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                </select>
+              </div>
 
-        {/* Buyer Dropdown */}
-        <div className="w-44">
-          <select
-            value={buyerFilter}
-            onChange={e => { setBuyerFilter(e.target.value); setPage(1); }}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
-          >
-            <option value="">All Buyers</option>
-            {buyerOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-          </select>
-        </div>
+              {/* Location Dropdown */}
+              <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
+                <select
+                  value={location}
+                  onChange={e => { setLocation(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                >
+                  <option value="">All Locations</option>
+                  {locationOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                </select>
+              </div>
 
-        {/* Location Dropdown */}
-        <div className="w-40">
-          <select
-            value={location}
-            onChange={e => { setLocation(e.target.value); setPage(1); }}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
-          >
-            <option value="">All Locations</option>
-            {locationOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-          </select>
-        </div>
+              {/* Closing Date Dropdown */}
+              <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[130px]">
+                <select
+                  value={closingDate}
+                  onChange={e => { setClosingDate(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                >
+                  <option value="">Closing Date</option>
+                  <option value="7">Next 7 days</option>
+                </select>
+              </div>
 
-        {/* Closing Date Dropdown */}
-        <div className="w-40">
-          <select
-            value={closingDate}
-            onChange={e => { setClosingDate(e.target.value); setPage(1); }}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] shadow-sm cursor-pointer"
-          >
-            <option value="">Closing Date</option>
-            <option value="7">Next 7 days</option>
-          </select>
-        </div>
-
-        {/* Reset Trigger */}
-        <button
-          type="button"
-          onClick={reset}
-          className="text-xs font-black text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider pl-2"
-        >
-          Reset
-        </button>
-
-        {/* View Mode & Count */}
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs font-semibold text-slate-500">
-            {filtered.length} opportunity{filtered.length !== 1 ? 's' : ''}
-          </span>
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
-        </div>
+              {/* Reset Trigger */}
+              {(query || type || category || buyerFilter || location || closingDate) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={reset}
+                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                >
+                  Reset
+                </Button>
+              )}
+            </>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
       </div>
 
       {/* Main Content Area */}

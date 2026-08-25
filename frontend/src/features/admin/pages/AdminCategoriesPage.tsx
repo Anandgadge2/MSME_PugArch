@@ -328,35 +328,38 @@ export default function AdminCategoriesPage() {
         />
       </div>
 
-      {/* Search & Filter Bar */}
-      <div className="space-y-4">
+      {/* ── Search & Filter Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
         <ResponsiveFilterBar
-          className="border-none"
           activeFilterCount={typeFilter !== 'ALL' ? 1 : 0}
           searchInput={
-            <div className="relative min-w-0 w-full sm:flex-1">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-              <Input
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search categories by name or slug..."
-                className="pl-9 h-10 border-slate-200 text-xs bg-slate-50/50 focus:bg-white"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
             </div>
           }
           filters={
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="h-10 rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
-            >
-              <option value="ALL">All Types</option>
-              <option value="BOTH">Both (Product & Service)</option>
-              <option value="PRODUCT">Product Only</option>
-              <option value="SERVICE">Service Only</option>
-            </select>
+            <div className="w-full sm:w-auto sm:min-w-[160px]">
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+              >
+                <option value="ALL">All Types</option>
+                <option value="BOTH">Both (Product & Service)</option>
+                <option value="PRODUCT">Product Only</option>
+                <option value="SERVICE">Service Only</option>
+              </select>
+            </div>
           }
         />
+      </div>
 
         {/* Categories Table */}
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
@@ -538,7 +541,6 @@ export default function AdminCategoriesPage() {
             />
           </div>
         </div>
-      </div>
 
       {/* Add / Edit Category Modal */}
       {isAddModalOpen && (

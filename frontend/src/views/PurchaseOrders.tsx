@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer } from 'lucide-react';
+import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
 
 const moneyPdf = (val: any, currency = 'INR') => {
@@ -22,6 +22,7 @@ import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { postApi } from '../features/shared/apiClient';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
+import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { PageToolbar } from '../features/shared/PageToolbar';
 import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
@@ -105,6 +106,15 @@ export default function PurchaseOrders() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [confirming, setConfirming] = useState<{ action: 'acknowledge' | 'cancel'; order: PurchaseOrderDto } | null>(null);
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrderDto | null>(null);
+  const [openKebabId, setOpenKebabId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!openKebabId) return;
+    const handleClickOutside = () => setOpenKebabId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [openKebabId]);
+
   const { data: activeDelivery } = useDeliveryByPO(viewingOrder?.id);
 
   const [repeatingOrder, setRepeatingOrder] = useState<PurchaseOrderDto | null>(null);
@@ -342,138 +352,102 @@ export default function PurchaseOrders() {
     const isDelivered = statusLower === 'delivered' || statusLower === 'completed';
     const isCancelled = statusLower === 'cancelled' || statusLower === 'rejected';
 
-    const baseActionClass = 'h-8 justify-center rounded-lg px-3 text-[10px] font-black uppercase tracking-wide shadow-none border flex items-center gap-1.5 transition-all';
-
-    if (isSeller) {
-      if (isIssued) {
-        return (
-          <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-[280px]">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setViewingOrder(order)}
-              className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
-            >
-              <Eye className="h-3.5 w-3.5" /> View
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => handleAcceptOrder(order)}
-              className={cn(baseActionClass, "bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700 shadow-xs")}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" /> Accept
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleRejectOrder(order)}
-              className={cn(baseActionClass, "border-rose-200 text-rose-600 hover:bg-rose-50")}
-            >
-              <XCircle className="h-3.5 w-3.5" /> Reject
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => exportInvoicePdf(order, 'print')}
-              className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
-            >
-              <Printer className="h-3.5 w-3.5" /> Print
-            </Button>
-          </div>
-        );
-      }
-
-      if (isAccepted || isDelivered) {
-        return (
-          <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-[240px]">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setViewingOrder(order)}
-              className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
-            >
-              <Eye className="h-3.5 w-3.5" /> View
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => handleOpenDelivery(order)}
-              className={cn(baseActionClass, "bg-[#12335f] border-[#12335f] text-white hover:bg-[#0b2445] shadow-xs")}
-            >
-              <Truck className="h-3.5 w-3.5" /> Delivery
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => exportInvoicePdf(order, 'print')}
-              className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
-            >
-              <Printer className="h-3.5 w-3.5" /> Print
-            </Button>
-          </div>
-        );
-      }
-
-      if (isCancelled) {
-        return (
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setViewingOrder(order)}
-              className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
-            >
-              <Eye className="h-3.5 w-3.5" /> View
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => exportInvoicePdf(order, 'print')}
-              className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
-            >
-              <Printer className="h-3.5 w-3.5" /> Print
-            </Button>
-          </div>
-        );
-      }
-    }
-
-    // Buyer / Admin view
     return (
-      <div className="flex flex-wrap items-center justify-end gap-1.5">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setViewingOrder(order)}
-          className={cn(baseActionClass, "border-slate-200 text-[#12335f] hover:bg-slate-50")}
+      <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpenKebabId(openKebabId === order.id ? null : order.id);
+          }}
+          className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+          title="Actions"
         >
-          <Eye className="h-3.5 w-3.5" /> View
-        </Button>
-        {isAccepted && (
-          <Button
-            size="sm"
-            onClick={() => handleOpenDelivery(order)}
-            className={cn(baseActionClass, "bg-[#12335f] border-[#12335f] text-white hover:bg-[#0b2445]")}
-          >
-            <Truck className="h-3.5 w-3.5" /> Delivery
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => exportInvoicePdf(order, 'print')}
-          className={cn(baseActionClass, "border-slate-200 text-slate-700 hover:bg-slate-50")}
-        >
-          <Printer className="h-3.5 w-3.5" /> Print
-        </Button>
-        {isBuyer && !isCancelled && !isDelivered && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setConfirming({ action: 'cancel', order })}
-            className={cn(baseActionClass, "border-rose-200 text-rose-600 hover:bg-rose-50")}
-          >
-            <XCircle className="h-3.5 w-3.5" /> Cancel
-          </Button>
+          <MoreVertical className="h-4 w-4" />
+        </button>
+
+        {openKebabId === order.id && (
+          <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+            <button
+              type="button"
+              onClick={() => {
+                setOpenKebabId(null);
+                setViewingOrder(order);
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+            >
+              <Eye className="h-3.5 w-3.5 text-slate-500" />
+              <span>View</span>
+            </button>
+
+            {isSeller && isIssued && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenKebabId(null);
+                    handleAcceptOrder(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Accept</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenKebabId(null);
+                    handleRejectOrder(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
+                >
+                  <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                  <span>Reject</span>
+                </button>
+              </>
+            )}
+
+            {(isAccepted || isDelivered) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenKebabId(null);
+                  handleOpenDelivery(order);
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+              >
+                <Truck className="h-3.5 w-3.5 text-blue-600" />
+                <span>Delivery</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpenKebabId(null);
+                exportInvoicePdf(order, 'print');
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+            >
+              <Printer className="h-3.5 w-3.5 text-slate-500" />
+              <span>Print</span>
+            </button>
+
+            {isBuyer && !isCancelled && !isDelivered && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenKebabId(null);
+                  setConfirming({ action: 'cancel', order });
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
+              >
+                <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                <span>Cancel</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
@@ -577,9 +551,9 @@ export default function PurchaseOrders() {
       {/* Transparent Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
-          <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">Procurement Fulfilment</span>
+          {/* <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">Procurement Fulfilment</span> */}
           <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Purchase Orders</h1>
-          <p className="text-xs font-semibold text-slate-500 mt-1">Live PO register from backend procurement workflows.</p>
+          {/* <p className="text-xs font-semibold text-slate-500 mt-1">Live PO register from backend procurement workflows.</p> */}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={refreshPurchaseOrders} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
@@ -599,52 +573,37 @@ export default function PurchaseOrders() {
 
       {error && <InlineError message={error} onRetry={reload} />}
 
-      {/* Inline Filters Bar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between border-y border-slate-200 bg-slate-50/50 py-3 px-1">
-        <div className="relative min-w-0 flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={event => setSearchTerm(event.target.value)}
-            placeholder="Search PO, seller, buyer, status..."
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          />
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <select
-            value={sortBy}
-            onChange={event => setSortBy(event.target.value)}
-            className="h-10 min-w-[130px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-          >
-            <option value="newest">Newest</option>
-            <option value="value_high">Value High</option>
-            <option value="value_low">Value Low</option>
-            <option value="status">Status</option>
-          </select>
-
-          {/* Status tab filters commented out as requested
-          <div className="flex min-w-0 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
-            {(['Open', 'Delivered', 'Cancelled', 'All'] as const).map(tab => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-[10px] font-black uppercase transition-all duration-200',
-                  activeTab === tab
-                    ? 'bg-[#12335f] text-white shadow-sm shadow-[#12335f]/15'
-                    : 'text-slate-600 hover:text-[#12335f] hover:bg-slate-50'
-                )}
+      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(searchTerm ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0)}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={searchTerm}
+                onChange={event => setSearchTerm(event.target.value)}
+                placeholder="Search PO, seller, buyer, status..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
+            </div>
+          }
+          filters={
+            <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <select
+                value={sortBy}
+                onChange={event => setSortBy(event.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
               >
-                {tab}
-              </button>
-            ))}
-          </div>
-          */}
-
-          <ViewModeToggle value={viewMode} onChange={setViewMode} className="ml-auto sm:ml-0" />
-        </div>
+                <option value="newest">Newest</option>
+                <option value="value_high">Value High</option>
+                <option value="value_low">Value Low</option>
+                <option value="status">Status</option>
+              </select>
+            </div>
+          }
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
       </div>
 
       {loading && visibleOrders.length === 0 ? (
