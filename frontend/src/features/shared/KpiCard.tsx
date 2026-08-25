@@ -240,7 +240,7 @@ function KpiCardBase({
               </span>
             )}
           </div>
-          <div className={cn('mt-0.5 text-base sm:text-2xl font-black tracking-tight leading-none truncate', loading ? 'text-slate-300 animate-pulse' : 'text-slate-900')}>
+          <div className={cn('mt-0.5 text-base sm:text-xl lg:text-2xl font-black tracking-tight leading-snug break-words', loading ? 'text-slate-300 animate-pulse' : 'text-slate-900')}>
             {formattedValue}
           </div>
         </div>

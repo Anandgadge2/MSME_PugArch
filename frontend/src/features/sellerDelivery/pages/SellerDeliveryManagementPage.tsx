@@ -19,7 +19,7 @@ import { api } from '../../../lib/api';
 import { compressImage } from '../../../lib/compress';
 import { Button } from '../../../components/ui/button';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
-import { Card, CardContent, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../../components/ui/card';
+import { Card, CardContent } from '../../../components/ui/card';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
@@ -486,22 +486,22 @@ export default function SellerDeliveryManagementPage() {
                                 </div>
                             ) : (
                                 <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-                                    <div className="overflow-x-auto">
-                                        <Table className="min-w-[960px] border-collapse text-left text-xs">
-                                            <TableHeader>
-                                                <TableRow className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-                                                    <TableHead className="w-16 p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Sr. No</TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="Delivery ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="Purchase Order" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="Buyer" field="buyer" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="text-right p-3"><SortableHeader label="Value" field="amount" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="Carrier & Tracking" field="carrier" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="ETA / Expected" field="eta" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="text-right w-[200px] p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                                    <div className="overflow-x-auto w-full">
+                                        <table data-ux-wrapped="true" className="w-full border-collapse text-left text-xs">
+                                            <thead>
+                                                <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
+                                                    <th className="w-14 px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Sr. No</th>
+                                                    <th className="px-3 py-3 whitespace-nowrap"><SortableHeader label="Delivery ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                                    <th className="px-3 py-3 min-w-[160px] whitespace-nowrap"><SortableHeader label="Purchase Order" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                                    <th className="px-3 py-3 min-w-[120px] whitespace-nowrap"><SortableHeader label="Buyer" field="buyer" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                                    <th className="px-3 py-3 text-right whitespace-nowrap"><SortableHeader label="Value" field="amount" activeField={sortKey} direction={sortDirection} onSort={toggleSort} align="right" /></th>
+                                                    <th className="px-3 py-3 whitespace-nowrap"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                                    <th className="px-3 py-3 whitespace-nowrap"><SortableHeader label="Carrier & Tracking" field="carrier" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                                    <th className="px-3 py-3 whitespace-nowrap"><SortableHeader label="ETA / Expected" field="eta" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                                    <th className="w-16 px-3 py-3 pr-4 text-right text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700 bg-white">
                                                 {pagedDeliveries.map((delivery, index) => {
                                                     const status = String(delivery.status);
                                                     const rowNumber = (page - 1) * pageSize + index + 1;
@@ -519,12 +519,12 @@ export default function SellerDeliveryManagementPage() {
                                                     const { label: stageLabel } = stage(status);
 
                                                     return (
-                                                        <TableRow key={delivery.id} className="hover:bg-slate-50/50 transition">
-                                                            <TableCell className="p-3 font-mono text-xs text-slate-500">{rowNumber}</TableCell>
-                                                            <TableCell className="p-3">
+                                                        <tr key={delivery.id} className="hover:bg-slate-50/70 transition-colors">
+                                                            <td className="px-3 py-3 font-mono text-xs text-slate-500 text-center whitespace-nowrap">{rowNumber}</td>
+                                                            <td className="px-3 py-3 whitespace-nowrap">
                                                                 <EntityIdLink label={`DLV-${delivery.id}`} id={delivery.id} size="sm" to={`/delivery/${delivery.id}`} />
-                                                            </TableCell>
-                                                            <TableCell className="p-3">
+                                                            </td>
+                                                            <td className="px-3 py-3">
                                                                 <div className="font-semibold text-slate-900 max-w-[200px] truncate" title={delivery.purchaseOrder?.title || 'Delivery'}>
                                                                     {delivery.purchaseOrder?.title || 'Delivery'}
                                                                 </div>
@@ -533,22 +533,22 @@ export default function SellerDeliveryManagementPage() {
                                                                         <EntityIdLink label={delivery.purchaseOrder.poNumber} id={delivery.purchaseOrder.id} size="sm" to="/orders" />
                                                                     </div>
                                                                 )}
-                                                            </TableCell>
-                                                            <TableCell className="p-3">
+                                                            </td>
+                                                            <td className="px-3 py-3 whitespace-nowrap">
                                                                 <span className="font-bold text-slate-700">{delivery.purchaseOrder?.buyer?.name || `#${delivery.purchaseOrder?.buyerId}`}</span>
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-black text-slate-900 p-3">
+                                                            </td>
+                                                            <td className="text-right font-black text-slate-900 px-3 py-3 whitespace-nowrap">
                                                                 {delivery.purchaseOrder?.amount !== undefined ? formatCurrency(delivery.purchaseOrder.amount) : '—'}
-                                                            </TableCell>
-                                                            <TableCell className="p-3">
+                                                            </td>
+                                                            <td className="px-3 py-3 whitespace-nowrap">
                                                                 <div className="flex flex-col gap-0.5 items-start">
                                                                     <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[status] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
                                                                         {status.replace(/_/g, ' ')}
                                                                     </span>
                                                                     <span className="text-[9px] font-semibold text-slate-400">{stageLabel}</span>
                                                                 </div>
-                                                            </TableCell>
-                                                            <TableCell className="text-xs font-semibold text-slate-700 p-3">
+                                                            </td>
+                                                            <td className="text-xs font-semibold text-slate-700 px-3 py-3 whitespace-nowrap">
                                                                 {delivery.trackingNumber || delivery.carrierName ? (
                                                                     <div>
                                                                         {delivery.carrierName && <div className="font-bold text-slate-900">{delivery.carrierName}</div>}
@@ -557,8 +557,8 @@ export default function SellerDeliveryManagementPage() {
                                                                 ) : (
                                                                     <span className="text-slate-400 italic text-[11px]">No details</span>
                                                                 )}
-                                                            </TableCell>
-                                                            <TableCell className="text-xs font-semibold text-slate-700 p-3">
+                                                            </td>
+                                                            <td className="text-xs font-semibold text-slate-700 px-3 py-3 whitespace-nowrap">
                                                                 {delivery.expectedDelivery ? (
                                                                     <div>
                                                                         <div className="font-bold text-slate-900">{formatRelative(delivery.expectedDelivery)}</div>
@@ -567,15 +567,15 @@ export default function SellerDeliveryManagementPage() {
                                                                 ) : (
                                                                     <span className="text-slate-400 italic text-[11px]">—</span>
                                                                 )}
-                                                            </TableCell>
-                                                            <TableCell className="text-right p-3">
+                                                            </td>
+                                                            <td className="text-right px-3 py-3 pr-4 whitespace-nowrap">
                                                                 <ActionButtons delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
-                                                            </TableCell>
-                                                        </TableRow>
+                                                            </td>
+                                                        </tr>
                                                     );
                                                 })}
-                                            </TableBody>
-                                        </Table>
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             )}

@@ -394,26 +394,33 @@ function DetailValue({ value, valueKey }: { value: any; valueKey?: string }) {
   return <span>{String(value)}</span>;
 }
 
-function FieldCard({ label, value, className }: { label: string; value: any; className?: string }) {
+function FieldItem({ label, value, className, icon: Icon }: { label: string; value: any; className?: string; icon?: IconComponent }) {
   if (!hasDetailData(value)) return null;
   const isComplex = Array.isArray(value) || isPlainObject(value);
 
   return (
-    <article className={cn('min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-2xs', isComplex && 'sm:col-span-2 xl:col-span-3', className)}>
-      <p className="text-[10px] lg:text-[11px] font-black uppercase tracking-wider text-slate-400 truncate">{label}</p>
-      <div className="mt-1 text-xs lg:text-sm font-semibold leading-relaxed text-slate-900">
+    <div className={cn('min-w-0 py-1', isComplex && 'sm:col-span-2 lg:col-span-3', className)}>
+      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        {Icon && <Icon className="h-3 w-3 text-slate-400" />}
+        <span>{label}</span>
+      </div>
+      <div className="mt-0.5 text-xs lg:text-sm font-bold text-slate-900 leading-snug break-words">
         <DetailValue value={value} valueKey={label} />
       </div>
-    </article>
+    </div>
   );
+}
+
+function FieldCard({ label, value, className }: { label: string; value: any; className?: string }) {
+  return <FieldItem label={label} value={value} className={className} />;
 }
 
 function CompactField({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) {
   if (!hasDetailData(value)) return null;
 
   return (
-    <div className={cn('min-w-0 rounded-lg bg-slate-50/70 px-3 py-2 border border-slate-100', className)}>
-      <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 truncate">{label}</p>
+    <div className={cn('min-w-0 py-1', className)}>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">{label}</p>
       <div className="mt-0.5 text-xs font-bold text-slate-900 break-words leading-tight">
         <DetailValue value={value} valueKey={label} />
       </div>
@@ -439,28 +446,28 @@ function CompactSectionGrid({
   if (!entries.length) return null;
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
+    <section className="rounded-xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between p-3.5 text-left transition hover:bg-slate-50/80"
+        className="flex w-full items-center justify-between p-4 text-left transition hover:bg-slate-50/80"
       >
         <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-2xs">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 shadow-2xs">
             <Icon className="h-4 w-4" />
           </span>
           <h2 className="text-sm font-black uppercase tracking-wide text-slate-950 truncate">{title}</h2>
         </div>
-        <span className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500">
+        <span className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shadow-2xs">
           {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </span>
       </button>
 
       {isOpen && (
-        <div className="border-t border-slate-100 p-3.5 pt-3">
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="border-t border-slate-100 p-5 pt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3.5">
             {entries.map(([key, value]) => (
-              <FieldCard key={key} label={humanizeKey(key)} value={value} />
+              <FieldItem key={key} label={humanizeKey(key)} value={value} />
             ))}
           </div>
         </div>
@@ -473,23 +480,43 @@ function MetricCard({
   label,
   value,
   icon: Icon,
-  tone,
+  tone = 'slate',
   subtext,
+  badge,
 }: {
   label: string;
   value: React.ReactNode;
   icon: IconComponent;
-  tone: Tone;
+  tone?: Tone;
   subtext?: string;
+  badge?: React.ReactNode;
 }) {
+  const styles = toneStyles[tone] || toneStyles.slate;
   return (
-    <KpiCard
-      label={label}
-      value={value as any}
-      icon={Icon}
-      tone={tone as any}
-      subtext={subtext || 'Procurement details'}
-    />
+    <article className="group relative flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs hover:border-slate-300 hover:shadow-xs transition-all min-h-[96px]">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 truncate" title={label}>
+          {label}
+        </span>
+        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-2xs', styles.icon)}>
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+      </div>
+
+      <div className="my-1 min-w-0">
+        <div className="text-xs sm:text-sm lg:text-base font-black text-slate-950 leading-snug break-words">
+          {value}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-1 text-[11px] font-medium text-slate-500">
+        {badge ? (
+          <div className="min-w-0">{badge}</div>
+        ) : (
+          <span className="truncate text-slate-500" title={subtext}>{subtext || 'Procurement metric'}</span>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -616,6 +643,28 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
   );
 }
 
+function cleanAndFormatScopeText(raw?: string): string {
+  if (!raw) return '';
+  return String(raw)
+    .replace(/([^\n])\s*(Sourcing\s*Method:?)/gi, '$1\nSourcing Method: ')
+    .replace(/([^\n])\s*(RFP\s*Value:?)/gi, '$1\nRFP Value: ')
+    .replace(/([^\n])\s*(Estimated\s*Value:?)/gi, '$1\nEstimated Value: ')
+    .replace(/([^\n])\s*(Value:?)/gi, '$1\nValue: ')
+    .replace(/([^\n])\s*(Urgency:?)/gi, '$1\nUrgency: ')
+    .replace(/([^\n])\s*(Priority:?)/gi, '$1\nPriority: ')
+    .replace(/([^\n])\s*(Delivery\s*Location:?)/gi, '$1\nDelivery Location: ')
+    .replace(/([^\n])\s*(Project\s*Duration:?)/gi, '$1\nProject Duration: ')
+    .replace(/([^\n])\s*(Payment\s*Terms:?)/gi, '$1\nPayment Terms: ')
+    .replace(/OPEN_TENDER/g, 'Open Tender')
+    .replace(/DIRECT_PURCHASE/g, 'Direct Purchase')
+    .replace(/RATE_CONTRACT/g, 'Rate Contract')
+    .replace(/SINGLE_PACKET/g, 'Single Packet')
+    .replace(/TWO_PACKET/g, 'Two Packet')
+    .replace(/QCBS_SELECTION/g, 'QCBS Selection')
+    .replace(/L1_BASIS/g, 'L1 Basis')
+    .trim();
+}
+
 function ScopeSummaryCard({
   scopeText,
   procurementTypeLabel = "PROCUREMENT",
@@ -629,15 +678,7 @@ function ScopeSummaryCard({
   urgency?: string;
   procurementMethod?: string;
 }) {
-  const raw = String(scopeText || '');
-  const formatted = raw
-    .replace(/(Sourcing Method:?\s*)/gi, '\nSourcing Method: ')
-    .replace(/(RFP\s?Value:?\s*)/gi, '\nRFP Value: ')
-    .replace(/(Value:?\s*)/gi, '\nValue: ')
-    .replace(/(Urgency:?\s*)/gi, '\nUrgency: ')
-    .replace(/([a-z0-9])([A-Z][a-z])/g, '$1\n$2')
-    .replace(/(INR\s?[\d,]+)([A-Z])/g, '$1\n$2');
-
+  const formatted = cleanAndFormatScopeText(scopeText);
   const lines = formatted
     .split('\n')
     .map(l => l.trim())
@@ -651,7 +692,7 @@ function ScopeSummaryCard({
     if (colonIdx > 0 && colonIdx < line.length - 1) {
       const k = line.slice(0, colonIdx).trim();
       const v = line.slice(colonIdx + 1).trim();
-      if (k && v) {
+      if (k && v && k.length < 30) {
         parsedKeyValues.push({ label: humanizeKey(k), val: v });
       } else if (line) {
         textParts.push(line);
@@ -672,33 +713,36 @@ function ScopeSummaryCard({
     keyValues.push({ label: 'Value', val: valDisplay });
   }
 
-  const hasUrgency = parsedKeyValues.some(kv => kv.label.toLowerCase().includes('urgency'));
+  const hasUrgency = parsedKeyValues.some(kv => kv.label.toLowerCase().includes('urgency') || kv.label.toLowerCase().includes('priority'));
   if (!hasUrgency) {
     keyValues.push({ label: 'Urgency', val: urgency || 'Normal' });
   }
 
   const hasSourcingMethod = parsedKeyValues.some(kv => kv.label.toLowerCase().includes('sourcing'));
   if (!hasSourcingMethod) {
-    keyValues.push({ label: 'Sourcing Method', val: procurementMethod || procurementTypeLabel });
+    keyValues.push({ label: 'Sourcing Method', val: formatPrimitiveValue(procurementMethod || procurementTypeLabel, 'procurementMethod') });
   }
 
   keyValues.push(...parsedKeyValues);
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
       <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
         <FileText className="h-4 w-4 text-indigo-600" />
         {procurementTypeLabel.toUpperCase()} SCOPE &amp; SOURCING SUMMARY
       </h3>
-      <div className="grid gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {keyValues.map((kv, idx) => (
-          <CompactField key={idx} label={kv.label} value={kv.val} />
+          <div key={idx} className="rounded-lg border border-slate-200/80 bg-slate-50/70 p-3 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">{kv.label}</span>
+            <span className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">{kv.val}</span>
+          </div>
         ))}
       </div>
       {freeText && freeText !== 'No scope summary provided.' && (
-        <p className="text-xs font-medium text-slate-700 leading-relaxed bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 whitespace-pre-line">
+        <div className="text-xs font-medium text-slate-700 leading-relaxed bg-slate-50/80 p-3.5 rounded-lg border border-slate-200/70 whitespace-pre-line">
           {freeText}
-        </p>
+        </div>
       )}
     </div>
   );
@@ -1871,28 +1915,19 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   const buyerContactDisplay = buyerPhoneNum ? `${buyerContactPerson} (${buyerPhoneNum})` : buyerContactPerson;
 
   const summaryCards = [
-    { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: 'slate' as Tone, subtext: 'Current lifecycle state' },
+    { label: 'Status', value: <StatusBadge status={statusLabel} />, icon: ShieldCheck, tone: 'slate' as Tone, subtext: 'Lifecycle status' },
     {
-      label: 'Submission Deadline',
-      value: (
-        <div className="space-y-1">
-          <div>{closingDateFormatted}</div>
-          {props.deadlineDate && (
-            <div>
-              <DeadlineCountdown targetDate={props.deadlineDate} />
-            </div>
-          )}
-        </div>
-      ),
+      label: 'Deadline',
+      value: closingDateFormatted,
       icon: Clock,
       tone: 'rose' as Tone,
-      subtext: 'Bidding window closing'
+      subtext: 'Submission window closes',
+      badge: props.deadlineDate ? <DeadlineCountdown targetDate={props.deadlineDate} /> : undefined,
     },
-    { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' },
-    // { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
-    { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactDisplay, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: 'Procurement officer' },
-    { label: 'Evaluation', value: formatPrimitiveValue(props.evaluationMethod || 'L1', 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone, subtext: 'Selection criteria' },
-    ...(isBuyerOrAdmin ? [{ label: 'Responses', value: Math.max(props.participantsCount || 0, submittedParticipations.length).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone, subtext: 'Proposals submitted' }] : []),
+    { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Estimated total budget' },
+    { label: 'Buyer Contact', value: buyerContactPerson, icon: PhoneCall, tone: 'amber' as Tone, subtext: buyerPhoneNum || 'Procurement officer' },
+    { label: 'Evaluation', value: formatPrimitiveValue(props.evaluationMethod || 'L1 Basis', 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone, subtext: 'Selection method' },
+    ...(isBuyerOrAdmin ? [{ label: 'Responses', value: `${Math.max(props.participantsCount || 0, submittedParticipations.length)} Received`, icon: Users, tone: 'sky' as Tone, subtext: 'Proposals submitted' }] : []),
   ];
 
   const tabs = [
@@ -2110,7 +2145,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
         {/* EMD Section commented out */}
 
         {/* Summary Metrics */}
-        <section className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+        <section className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
           {summaryCards.map(card => (
             <MetricCard key={card.label} {...card} />
           ))}
@@ -2151,73 +2186,175 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
         {/* Tab 1: Overview & Dates */}
         {activeTab === 'overview' && (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-                <SectionHeader title={`BUYER ${procurementTypeLabel.toUpperCase()} PROCUREMENT INFORMATION`} icon={ClipboardList} />
-                <div className="grid gap-2.5 sm:grid-cols-2">
-                  <FieldCard label={`${procurementTypeLabel.toUpperCase()} NUMBER`} value={procurementNumber} />
-                  <FieldCard label="PROCUREMENT METHOD" value={procurementMethod} />
-                  <FieldCard label="BUYING TYPE" value={buyingType} />
-                  <FieldCard label="CATEGORY" value={category} />
-                  <FieldCard label="SUB CATEGORY" value={subCategory} />
-                  <FieldCard label="PUBLISHED DATE" value={publishedDateFormatted} />
-                  <FieldCard label="SUBMISSION DEADLINE" value={closingDateFormatted} />
-                  <FieldCard label="DELIVERY LOCATION" value={deliveryLocation} />
-                  <FieldCard label="PROJECT DURATION" value={projectDuration} />
-                  <FieldCard label="PAYMENT TERMS" value={paymentTerms} />
+            <div className="grid gap-4 lg:grid-cols-12">
+              {/* Left Column: Buyer Procurement Info */}
+              <section className="lg:col-span-7 rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
+                <SectionHeader title={`${procurementTypeLabel.toUpperCase()} Information`} icon={ClipboardList} />
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5">
+                  <FieldItem label={`${procurementTypeLabel.toUpperCase()} Number`} value={procurementNumber} />
+                  <FieldItem label="Procurement Method" value={procurementMethod} />
+                  <FieldItem label="Buying Type" value={buyingType} />
+                  <FieldItem label="Category" value={category} />
+                  <FieldItem label="Sub Category" value={subCategory} />
+                  <FieldItem label="Published Date" value={publishedDateFormatted} />
+                  <FieldItem label="Submission Deadline" value={closingDateFormatted} />
+                  <FieldItem label="Delivery Location" value={deliveryLocation} />
+                  <FieldItem label="Project Duration" value={projectDuration} />
+                  <FieldItem label="Payment Terms" value={paymentTerms} />
                 </div>
-                <FieldCard label={`${procurementTypeLabel.toUpperCase()} SCOPE SUMMARY`} value={scopeText} />
+
+                {scopeText && scopeText !== 'No description provided.' && (
+                  <div className="pt-3 border-t border-slate-100 space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Scope Summary</p>
+                    {(() => {
+                      const cleaned = cleanAndFormatScopeText(scopeText);
+                      const lines = cleaned.split('\n').map(l => l.trim()).filter(Boolean);
+                      const keyVals: { label: string; val: string }[] = [];
+                      const freeLines: string[] = [];
+                      for (const l of lines) {
+                        const cIdx = l.indexOf(':');
+                        if (cIdx > 0 && cIdx < l.length - 1) {
+                          const k = l.slice(0, cIdx).trim();
+                          const v = l.slice(cIdx + 1).trim();
+                          if (k && v && !k.includes('  ') && k.length < 30) {
+                            keyVals.push({ label: humanizeKey(k), val: v });
+                          } else {
+                            freeLines.push(l);
+                          }
+                        } else {
+                          freeLines.push(l);
+                        }
+                      }
+                      return (
+                        <div className="space-y-2.5">
+                          {keyVals.length > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {keyVals.map((kv, idx) => (
+                                <div key={idx} className="rounded-lg bg-slate-50/90 border border-slate-200/70 p-2.5">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">{kv.label}</span>
+                                  <span className="text-xs font-bold text-slate-900 mt-0.5 block">{kv.val}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {freeLines.length > 0 && (
+                            <div className="rounded-lg bg-slate-50/80 p-3 text-xs font-medium text-slate-700 leading-relaxed border border-slate-200/70 whitespace-pre-line">
+                              {freeLines.join('\n')}
+                            </div>
+                          )}
+                          {keyVals.length === 0 && freeLines.length === 0 && (
+                            <div className="rounded-lg bg-slate-50/80 p-3 text-xs font-medium text-slate-700 leading-relaxed border border-slate-200/70 whitespace-pre-line">
+                              {cleaned}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </section>
 
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-                <SectionHeader title="BUYER INFORMATION" icon={Building2} />
-                <div className="grid gap-2.5 sm:grid-cols-2">
-                  <FieldCard label="ORGANIZATION" value={buyerOrgName} />
-                  <FieldCard label="CONTACT PERSON" value={contactPerson} />
-                  <FieldCard label="EMAIL" value={email} />
-                  <FieldCard label="PHONE" value={phone} />
-                  <FieldCard label="ADDRESS" value={buyerAddress} className="sm:col-span-2" />
-                  <FieldCard label="DEPARTMENT" value={department} className="sm:col-span-2" />
+              {/* Right Column: Buyer Information */}
+              <section className="lg:col-span-5 rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4 flex flex-col justify-between">
+                <div>
+                  <SectionHeader title="Buyer Details" icon={Building2} />
+                  
+                  {/* Buyer Organization Card Header */}
+                  <div className="my-3 flex items-start gap-3 rounded-lg bg-indigo-50/60 border border-indigo-100/80 p-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white font-black text-sm shadow-2xs">
+                      {(buyerOrgName || 'B').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-black text-slate-900 leading-tight truncate">{buyerOrgName}</h3>
+                      <p className="text-[11px] font-semibold text-indigo-700 truncate mt-0.5">{department}</p>
+                    </div>
+                  </div>
+
+                  {/* Contact List */}
+                  <div className="space-y-3 pt-1">
+                    <div className="flex items-start gap-2.5 text-xs">
+                      <User className="h-4 w-4 shrink-0 text-slate-400 mt-0.5" />
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Contact Person</span>
+                        <span className="font-bold text-slate-900">{contactPerson}</span>
+                      </div>
+                    </div>
+                    {phone && phone !== 'N/A' && phone !== '—' && (
+                      <div className="flex items-start gap-2.5 text-xs">
+                        <PhoneCall className="h-4 w-4 shrink-0 text-slate-400 mt-0.5" />
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Phone</span>
+                          <span className="font-bold text-slate-900">{phone}</span>
+                        </div>
+                      </div>
+                    )}
+                    {email && email !== 'N/A' && email !== '—' && (
+                      <div className="flex items-start gap-2.5 text-xs">
+                        <Info className="h-4 w-4 shrink-0 text-slate-400 mt-0.5" />
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Email</span>
+                          <span className="font-bold text-slate-900">{email}</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-start gap-2.5 text-xs">
+                      <MapPin className="h-4 w-4 shrink-0 text-slate-400 mt-0.5" />
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Registered Address</span>
+                        <span className="font-bold text-slate-900 leading-snug">{buyerAddress}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Secondary Quick Stats */}
+                <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-center">
+                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Proposal Status</span>
+                    <span className="text-xs font-black text-slate-900 mt-0.5 block">
+                      {props.hasSubmittedProposal ? 'Submitted' : currentUser?.role === 'seller' ? 'Not submitted' : 'Open'}
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Clarifications</span>
+                    <span className="text-xs font-black text-slate-900 mt-0.5 block">
+                      {(props.totalClarifications || 0).toLocaleString('en-IN')} Active
+                    </span>
+                  </div>
                 </div>
               </section>
             </div>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-              <SectionHeader title="KEY DATES TIMELINE" icon={CalendarDays} />
-              <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+            {/* Key Dates Timeline */}
+            <section className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-3.5">
+              <SectionHeader title="Key Dates & Schedule" icon={CalendarDays} />
+              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
                 {[
                   { label: 'Published', value: publishedDateFormatted, icon: Calendar, tone: 'emerald' as Tone },
                   { label: 'Clarification', value: clarificationDateFormatted, icon: Info, tone: 'sky' as Tone },
-                  { label: 'Submission', value: closingDateFormatted, icon: Clock, tone: 'rose' as Tone },
+                  { label: 'Submission End', value: closingDateFormatted, icon: Clock, tone: 'rose' as Tone },
                   { label: 'Technical Opening', value: technicalDateFormatted, icon: ClipboardCheck, tone: 'indigo' as Tone },
-                  // { label: 'Presentation', value: presentationDateFormatted, icon: User, tone: 'violet' as Tone },
                   { label: 'Financial Opening', value: financialDateFormatted, icon: IndianRupee, tone: 'amber' as Tone },
                   { label: 'Award', value: awardDateFormatted, icon: ShieldCheck, tone: 'slate' as Tone },
                 ].map(date => {
                   const Icon = date.icon;
-                  const styles = toneStyles[date.tone];
+                  const styles = toneStyles[date.tone] || toneStyles.slate;
                   return (
-                    <article key={date.label} className="rounded-lg border border-slate-200 bg-slate-50/50 p-2.5 shadow-2xs">
-                      <div className="flex items-center gap-2">
-                        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-md', styles.icon)}>
-                          <Icon className="h-3.5 w-3.5" />
+                    <div key={date.label} className="flex flex-col justify-between rounded-lg border border-slate-100 bg-slate-50/60 p-3 transition-colors hover:bg-slate-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">{date.label}</span>
+                        <span className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-md', styles.icon)}>
+                          <Icon className="h-3 w-3" />
                         </span>
-                        <div className="min-w-0">
-                          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 truncate">{date.label}</p>
-                          <p className="mt-0.5 break-words text-xs font-black text-slate-900 leading-tight">{date.value}</p>
-                        </div>
                       </div>
-                    </article>
+                      <div className="break-words text-xs font-bold text-slate-900 leading-snug">
+                        {date.value}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
-            </section>
-
-            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <FieldCard label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
-              <FieldCard label="Proposal Status" value={props.hasSubmittedProposal ? 'Submitted' : currentUser?.role === 'seller' ? 'Not submitted' : 'N/A'} />
-              <FieldCard label="Deadline Status" value={props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs ? 'Closed' : 'Open'} />
-              <FieldCard label="Source Record" value={procurementTypeLabel} />
             </section>
           </div>
         )}
@@ -2363,13 +2500,13 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
         {/* Tab 4: Evaluation & Controls */}
         {activeTab === 'evaluation' && (
           <div className="space-y-4">
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
+            <section className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-4">
               <SectionHeader title="Evaluation Overview & Method" icon={ClipboardCheck} />
-              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-                <FieldCard label="Evaluation Method" value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')} />
-                <FieldCard label="Require Demo" value={formatPrimitiveValue(requireDemo)} />
-                {hasDetailData(qcbsRatio) && <FieldCard label="QCBS Ratio" value={qcbsRatio} />}
-                {hasDetailData(passingScore) && <FieldCard label="Passing Score" value={passingScore} />}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3.5">
+                <FieldItem label="Evaluation Method" value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')} />
+                <FieldItem label="Require Demo" value={formatPrimitiveValue(requireDemo)} />
+                {hasDetailData(qcbsRatio) && <FieldItem label="QCBS Ratio" value={qcbsRatio} />}
+                {hasDetailData(passingScore) && <FieldItem label="Passing Score" value={passingScore} />}
               </div>
             </section>
 
