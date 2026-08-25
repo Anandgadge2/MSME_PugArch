@@ -80,9 +80,13 @@ const shgAdditionalOptionalDocs: Record<string, string[]> = {
 };
 
 const buyerBusinessTypes = [
+  { value: 'Proprietorship', label: 'Proprietorship' },
+  { value: 'Partnership Firm', label: 'Partnership Firm' },
+  { value: 'Company (Pvt Ltd / Ltd)', label: 'Company (Pvt Ltd / Ltd)' },
+  { value: 'LLP', label: 'LLP' },
+  { value: 'MSME', label: 'MSME' },
+  { value: 'Startup', label: 'Startup' },
   { value: 'Primary User (HOD)', label: 'Primary User (HOD)' },
-  // { value: 'Verifying Authority (VA)', label: 'Verifying Authority (VA)' },
-  // { value: 'Primary User (Co-operative)', label: 'Primary User (Co-operative)' },
 ];
 
 const buyerBaseRequiredDocs = [
@@ -296,7 +300,7 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
 
         <CardContent className="p-4 pt-0 pb-10 sm:p-6 sm:pt-0 sm:pb-12 md:p-8 md:pt-0 md:pb-16">
           <div className="mb-6 sm:mb-8">
-            <label className="mb-2 block text-xs font-bold text-slate-700">{isBuyer ? 'User Type' : isHerShg ? 'SHG Type' : 'Business / Organisation Type'} * <Info className="inline h-3 w-3 text-slate-400" /></label>
+            <label className="mb-2 block text-xs font-bold text-slate-700">{isHerShg ? 'SHG Type' : 'Business / Organisation Type'} * <Info className="inline h-3 w-3 text-slate-400" /></label>
             <div className="w-full max-w-md">
               {isHerShg ? (
                 <Select
@@ -323,7 +327,7 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
                   }}
                   className="h-12 rounded-xl border-slate-200 bg-white text-base sm:text-sm"
                 >
-                  <option value="">{isBuyer ? 'Select type of User' : 'Select type'}</option>
+                  <option value="">{isBuyer ? 'Select Type' : 'Select type'}</option>
                   {(isBuyer ? buyerBusinessTypes : sellerBusinessTypes.filter(t => t.value !== 'herSHG')).map(t => (
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}

@@ -24,7 +24,16 @@ import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
 import { formatGstVerificationError } from '../features/shared/gstVerification';
 
-const PRIMARY_USER_TYPES = ['Primary User (HOD)', 'Primary User (Co-operative)'];
+const PRIMARY_USER_TYPES = [
+  'Primary User (HOD)',
+  'Primary User (Co-operative)',
+  'Proprietorship',
+  'Partnership Firm',
+  'Company (Pvt Ltd / Ltd)',
+  'LLP',
+  'MSME',
+  'Startup'
+];
 
 
 const SIDEBAR_SECTIONS = [
