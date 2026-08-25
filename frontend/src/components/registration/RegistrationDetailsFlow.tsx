@@ -1340,6 +1340,61 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           className="h-10 rounded border-slate-300 bg-white text-[13px]"
                         />
                       </div>
+
+                      <div className="space-y-2 md:col-span-2 flex items-center gap-2 py-2">
+                        <input
+                          type="checkbox"
+                          id="showOptionalDetailsPrimaryBuyer"
+                          checked={showOptionalDetails}
+                          onChange={(e) => setShowOptionalDetails(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <label htmlFor="showOptionalDetailsPrimaryBuyer" className="text-[13px] font-semibold text-slate-700 cursor-pointer">
+                          Provide Optional Details (CIN, Website)
+                        </label>
+                      </div>
+
+                      {showOptionalDetails && (
+                        <>
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                              CIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                            </label>
+                            <Input
+                              placeholder="e.g., U72900MH1996PLC104693"
+                              value={formData.cin}
+                              onChange={(e) => {
+                                const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 21);
+                                setFormData({ ...formData, cin: cleaned });
+                              }}
+                              maxLength={21}
+                              className={cn(
+                                "h-10 rounded bg-white text-[13px]",
+                                formData.cin && validateCin(formData.cin)
+                                  ? "border-red-400 focus-visible:ring-red-300"
+                                  : "border-slate-300"
+                              )}
+                            />
+                            {formData.cin && validateCin(formData.cin) && (
+                              <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">
+                                {validateCin(formData.cin)}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                              Website (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                            </label>
+                            <Input
+                              placeholder="e.g., https://example.com"
+                              value={formData.website}
+                              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                              className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                   ) : role === 'buyer' ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
@@ -1398,6 +1453,61 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           <p className="text-[10px] text-red-500 mt-1">Please enter Business / Organisation Name.</p>
                         )}
                       </div>
+
+                      <div className="space-y-2 md:col-span-2 flex items-center gap-2 py-2">
+                        <input
+                          type="checkbox"
+                          id="showOptionalDetailsBuyer"
+                          checked={showOptionalDetails}
+                          onChange={(e) => setShowOptionalDetails(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <label htmlFor="showOptionalDetailsBuyer" className="text-[13px] font-semibold text-slate-700 cursor-pointer">
+                          Provide Optional Details (CIN, Website)
+                        </label>
+                      </div>
+
+                      {showOptionalDetails && (
+                        <>
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                              CIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                            </label>
+                            <Input
+                              placeholder="e.g., U72900MH1996PLC104693"
+                              value={formData.cin}
+                              onChange={(e) => {
+                                const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 21);
+                                setFormData({ ...formData, cin: cleaned });
+                              }}
+                              maxLength={21}
+                              className={cn(
+                                "h-10 rounded bg-white text-[13px]",
+                                formData.cin && validateCin(formData.cin)
+                                  ? "border-red-400 focus-visible:ring-red-300"
+                                  : "border-slate-300"
+                              )}
+                            />
+                            {formData.cin && validateCin(formData.cin) && (
+                              <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">
+                                {validateCin(formData.cin)}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                              Website (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                            </label>
+                            <Input
+                              placeholder="e.g., https://example.com"
+                              value={formData.website}
+                              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                              className="h-10 rounded border-slate-300 bg-white text-[13px]"
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">

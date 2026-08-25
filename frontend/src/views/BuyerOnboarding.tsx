@@ -1435,7 +1435,7 @@ export default function BuyerOnboarding() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 px-3 py-3 sm:px-5 sm:py-4">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header Section */}
         <div className="mb-3">
           <div className="flex flex-wrap items-end justify-between gap-2 mb-1.5">
@@ -1460,41 +1460,66 @@ export default function BuyerOnboarding() {
           </div>
         </div>
 
-        {/* Stepper Navigation */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-3 overflow-x-auto pb-1 no-scrollbar">
-          {SIDEBAR_SECTIONS.map((section, idx) => {
-            const isActive = activeSection === section.id;
-            const isCompleted = sectionCompletions[section.id];
-            return (
-              <button
-                key={section.id}
-                onClick={() => {
-                  setSubmitAttempted(false);
-                  handleSectionChange(section.id);
-                }}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold transition-all whitespace-nowrap border",
-                  isActive
-                    ? "bg-white text-[#12335f] border-slate-300 shadow-xs"
-                    : isCompleted
-                      ? "bg-transparent text-slate-500 border-transparent hover:text-slate-700"
-                      : "bg-transparent text-slate-400 border-transparent hover:text-slate-600"
-                )}
-              >
-                <span className={cn(
-                  "w-4.5 h-4.5 rounded-full flex items-center justify-center text-[10px]",
-                  isActive ? "bg-[#12335f] text-white" : isCompleted ? "bg-emerald-100 text-emerald-600" : "bg-slate-200 text-slate-600"
-                )}>
-                  {isCompleted && !isActive ? <Check className="h-3 w-3" /> : idx + 1}
-                </span>
-                {section.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* Main Content Layout with Left Vertical Sidebar */}
+        <div className="flex flex-col md:flex-row items-start gap-4 sm:gap-6 mb-3">
+          {/* Vertical Left Navigation Sidebar */}
+          <div className="w-full md:w-64 lg:w-72 shrink-0 bg-white border border-slate-200 rounded-xl shadow-xs p-3.5 space-y-3 md:sticky md:top-4">
+            <div className="pb-2 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Registration Steps</h3>
+                <p className="text-[10px] text-slate-400 font-medium">Click any step to navigate</p>
+              </div>
+              <span className="text-[10px] font-bold text-[#12335f] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                {complianceProgress}% Done
+              </span>
+            </div>
 
-        {/* Form Card */}
-        <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden mb-3">
+            <div className="space-y-1">
+              {SIDEBAR_SECTIONS.map((section, idx) => {
+                const isActive = activeSection === section.id;
+                const isCompleted = sectionCompletions[section.id];
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={() => {
+                      setSubmitAttempted(false);
+                      handleSectionChange(section.id);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-all text-xs font-bold border",
+                      isActive
+                        ? "bg-[#12335f] text-white border-[#12335f] shadow-sm"
+                        : isCompleted
+                          ? "bg-emerald-50/60 text-slate-800 border-emerald-100 hover:bg-emerald-50"
+                          : "bg-transparent text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900"
+                    )}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className={cn(
+                        "w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0 font-bold transition-colors",
+                        isActive
+                          ? "bg-white text-[#12335f]"
+                          : isCompleted
+                            ? "bg-emerald-500 text-white"
+                            : "bg-slate-100 text-slate-500"
+                      )}>
+                        {isCompleted && !isActive ? <Check className="h-3 w-3" strokeWidth={3} /> : idx + 1}
+                      </span>
+                      <span className="truncate">{section.label}</span>
+                    </div>
+
+                    {isCompleted && (
+                      <CheckCircle2 className={cn("h-4 w-4 shrink-0", isActive ? "text-emerald-300" : "text-emerald-500")} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Form Card */}
+          <div className="flex-1 min-w-0 w-full bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden mb-3">
           <div className="p-3.5 sm:p-5">
             <div className="mb-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -1587,7 +1612,7 @@ export default function BuyerOnboarding() {
                             disabled={isFetchingGst || !formData.gst}
                             className="h-9 px-3 rounded-lg border-slate-200 text-[#12335f] font-bold uppercase text-[9px] hover:bg-slate-50"
                           >
-                            {isFetchingGst ? 'Wait...' : 'Fetch Details'}
+                            {isFetchingGst ? 'Wait...' : /* 'Fetch Details' */ ''}
                           </Button>
                         </div>
                       )}
@@ -2046,8 +2071,9 @@ export default function BuyerOnboarding() {
             </form>
           </div>
         </div>
+      </div>
 
-        {/* Bottom Footer Notice */}
+      {/* Bottom Footer Notice */}
         <div className="flex items-center justify-center gap-1.5 py-3 text-slate-400">
           <ShieldCheck className="h-3.5 w-3.5" />
           <p className="text-[10px] font-medium tracking-wide">Your information is encrypted and reviewed by our compliance team within 24-48 business hours.</p>

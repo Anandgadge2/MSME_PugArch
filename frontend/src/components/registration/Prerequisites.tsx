@@ -81,8 +81,8 @@ const shgAdditionalOptionalDocs: Record<string, string[]> = {
 
 const buyerBusinessTypes = [
   { value: 'Primary User (HOD)', label: 'Primary User (HOD)' },
-  { value: 'Verifying Authority (VA)', label: 'Verifying Authority (VA)' },
-  { value: 'Primary User (Co-operative)', label: 'Primary User (Co-operative)' },
+  // { value: 'Verifying Authority (VA)', label: 'Verifying Authority (VA)' },
+  // { value: 'Primary User (Co-operative)', label: 'Primary User (Co-operative)' },
 ];
 
 const buyerBaseRequiredDocs = [
