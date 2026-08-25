@@ -493,9 +493,9 @@ function MetricCard({
 }) {
   const styles = toneStyles[tone] || toneStyles.slate;
   return (
-    <article className="group relative flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs hover:border-slate-300 hover:shadow-xs transition-all min-h-[94px]">
+    <article className="group relative flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs hover:border-slate-300 hover:shadow-xs transition-all min-h-[96px]">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 truncate">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 truncate" title={label}>
           {label}
         </span>
         <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-2xs', styles.icon)}>
@@ -504,16 +504,16 @@ function MetricCard({
       </div>
 
       <div className="my-1 min-w-0">
-        <div className="text-base sm:text-lg font-black text-slate-950 leading-tight truncate">
+        <div className="text-xs sm:text-sm lg:text-base font-black text-slate-950 leading-snug break-words">
           {value}
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-1 text-[11px] font-medium text-slate-500 truncate">
+      <div className="flex items-center justify-between gap-1 text-[11px] font-medium text-slate-500">
         {badge ? (
-          <span className="truncate">{badge}</span>
+          <div className="min-w-0">{badge}</div>
         ) : (
-          <span className="truncate text-slate-500">{subtext || 'Procurement metric'}</span>
+          <span className="truncate text-slate-500" title={subtext}>{subtext || 'Procurement metric'}</span>
         )}
       </div>
     </article>
@@ -643,6 +643,28 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
   );
 }
 
+function cleanAndFormatScopeText(raw?: string): string {
+  if (!raw) return '';
+  return String(raw)
+    .replace(/([^\n])\s*(Sourcing\s*Method:?)/gi, '$1\nSourcing Method: ')
+    .replace(/([^\n])\s*(RFP\s*Value:?)/gi, '$1\nRFP Value: ')
+    .replace(/([^\n])\s*(Estimated\s*Value:?)/gi, '$1\nEstimated Value: ')
+    .replace(/([^\n])\s*(Value:?)/gi, '$1\nValue: ')
+    .replace(/([^\n])\s*(Urgency:?)/gi, '$1\nUrgency: ')
+    .replace(/([^\n])\s*(Priority:?)/gi, '$1\nPriority: ')
+    .replace(/([^\n])\s*(Delivery\s*Location:?)/gi, '$1\nDelivery Location: ')
+    .replace(/([^\n])\s*(Project\s*Duration:?)/gi, '$1\nProject Duration: ')
+    .replace(/([^\n])\s*(Payment\s*Terms:?)/gi, '$1\nPayment Terms: ')
+    .replace(/OPEN_TENDER/g, 'Open Tender')
+    .replace(/DIRECT_PURCHASE/g, 'Direct Purchase')
+    .replace(/RATE_CONTRACT/g, 'Rate Contract')
+    .replace(/SINGLE_PACKET/g, 'Single Packet')
+    .replace(/TWO_PACKET/g, 'Two Packet')
+    .replace(/QCBS_SELECTION/g, 'QCBS Selection')
+    .replace(/L1_BASIS/g, 'L1 Basis')
+    .trim();
+}
+
 function ScopeSummaryCard({
   scopeText,
   procurementTypeLabel = "PROCUREMENT",
@@ -656,15 +678,7 @@ function ScopeSummaryCard({
   urgency?: string;
   procurementMethod?: string;
 }) {
-  const raw = String(scopeText || '');
-  const formatted = raw
-    .replace(/(Sourcing Method:?\s*)/gi, '\nSourcing Method: ')
-    .replace(/(RFP\s?Value:?\s*)/gi, '\nRFP Value: ')
-    .replace(/(Value:?\s*)/gi, '\nValue: ')
-    .replace(/(Urgency:?\s*)/gi, '\nUrgency: ')
-    .replace(/([a-z0-9])([A-Z][a-z])/g, '$1\n$2')
-    .replace(/(INR\s?[\d,]+)([A-Z])/g, '$1\n$2');
-
+  const formatted = cleanAndFormatScopeText(scopeText);
   const lines = formatted
     .split('\n')
     .map(l => l.trim())
@@ -678,7 +692,7 @@ function ScopeSummaryCard({
     if (colonIdx > 0 && colonIdx < line.length - 1) {
       const k = line.slice(0, colonIdx).trim();
       const v = line.slice(colonIdx + 1).trim();
-      if (k && v) {
+      if (k && v && k.length < 30) {
         parsedKeyValues.push({ label: humanizeKey(k), val: v });
       } else if (line) {
         textParts.push(line);
@@ -699,33 +713,36 @@ function ScopeSummaryCard({
     keyValues.push({ label: 'Value', val: valDisplay });
   }
 
-  const hasUrgency = parsedKeyValues.some(kv => kv.label.toLowerCase().includes('urgency'));
+  const hasUrgency = parsedKeyValues.some(kv => kv.label.toLowerCase().includes('urgency') || kv.label.toLowerCase().includes('priority'));
   if (!hasUrgency) {
     keyValues.push({ label: 'Urgency', val: urgency || 'Normal' });
   }
 
   const hasSourcingMethod = parsedKeyValues.some(kv => kv.label.toLowerCase().includes('sourcing'));
   if (!hasSourcingMethod) {
-    keyValues.push({ label: 'Sourcing Method', val: procurementMethod || procurementTypeLabel });
+    keyValues.push({ label: 'Sourcing Method', val: formatPrimitiveValue(procurementMethod || procurementTypeLabel, 'procurementMethod') });
   }
 
   keyValues.push(...parsedKeyValues);
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
       <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
         <FileText className="h-4 w-4 text-indigo-600" />
         {procurementTypeLabel.toUpperCase()} SCOPE &amp; SOURCING SUMMARY
       </h3>
-      <div className="grid gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {keyValues.map((kv, idx) => (
-          <CompactField key={idx} label={kv.label} value={kv.val} />
+          <div key={idx} className="rounded-lg border border-slate-200/80 bg-slate-50/70 p-3 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">{kv.label}</span>
+            <span className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">{kv.val}</span>
+          </div>
         ))}
       </div>
       {freeText && freeText !== 'No scope summary provided.' && (
-        <p className="text-xs font-medium text-slate-700 leading-relaxed bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 whitespace-pre-line">
+        <div className="text-xs font-medium text-slate-700 leading-relaxed bg-slate-50/80 p-3.5 rounded-lg border border-slate-200/70 whitespace-pre-line">
           {freeText}
-        </p>
+        </div>
       )}
     </div>
   );
@@ -2188,11 +2205,52 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                 </div>
 
                 {scopeText && scopeText !== 'No description provided.' && (
-                  <div className="pt-3 border-t border-slate-100">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Scope Summary</p>
-                    <div className="rounded-lg bg-slate-50/80 p-3 text-xs font-medium text-slate-700 leading-relaxed border border-slate-100 whitespace-pre-line">
-                      {scopeText}
-                    </div>
+                  <div className="pt-3 border-t border-slate-100 space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Scope Summary</p>
+                    {(() => {
+                      const cleaned = cleanAndFormatScopeText(scopeText);
+                      const lines = cleaned.split('\n').map(l => l.trim()).filter(Boolean);
+                      const keyVals: { label: string; val: string }[] = [];
+                      const freeLines: string[] = [];
+                      for (const l of lines) {
+                        const cIdx = l.indexOf(':');
+                        if (cIdx > 0 && cIdx < l.length - 1) {
+                          const k = l.slice(0, cIdx).trim();
+                          const v = l.slice(cIdx + 1).trim();
+                          if (k && v && !k.includes('  ') && k.length < 30) {
+                            keyVals.push({ label: humanizeKey(k), val: v });
+                          } else {
+                            freeLines.push(l);
+                          }
+                        } else {
+                          freeLines.push(l);
+                        }
+                      }
+                      return (
+                        <div className="space-y-2.5">
+                          {keyVals.length > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {keyVals.map((kv, idx) => (
+                                <div key={idx} className="rounded-lg bg-slate-50/90 border border-slate-200/70 p-2.5">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">{kv.label}</span>
+                                  <span className="text-xs font-bold text-slate-900 mt-0.5 block">{kv.val}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {freeLines.length > 0 && (
+                            <div className="rounded-lg bg-slate-50/80 p-3 text-xs font-medium text-slate-700 leading-relaxed border border-slate-200/70 whitespace-pre-line">
+                              {freeLines.join('\n')}
+                            </div>
+                          )}
+                          {keyVals.length === 0 && freeLines.length === 0 && (
+                            <div className="rounded-lg bg-slate-50/80 p-3 text-xs font-medium text-slate-700 leading-relaxed border border-slate-200/70 whitespace-pre-line">
+                              {cleaned}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </section>
