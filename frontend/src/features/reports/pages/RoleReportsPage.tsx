@@ -26,6 +26,7 @@ import { money } from '../../procurementBid/data';
 import { InlineError, LoadingState } from '../../shared/FeatureStates';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
+import { KpiCard } from '../../shared/KpiCard';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { formatDateTime } from '../../shared/format';
 import { downloadCsv, downloadJson } from '../../shared/exportUtils';
@@ -232,11 +233,11 @@ export default function RoleReportsPage() {
             <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                     <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Reports and Analytics</p>
+                        {/* <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Reports and Analytics</p> */}
                         <h1 className="mt-1 text-2xl font-black text-slate-950">{user?.role === 'seller' ? 'Seller Performance Reports' : 'Buyer Procurement Reports'}</h1>
-                        <p className="mt-1 max-w-3xl text-sm font-semibold text-slate-600">
+                        {/* <p className="mt-1 max-w-3xl text-sm font-semibold text-slate-600">
                             Track procurement value, order lifecycle, delivery movement, invoice readiness, and pending actions from one analytical report.
-                        </p>
+                        </p> */}
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <Button type="button" variant="outline" onClick={() => handleExport('excel')} className="h-10 gap-2 text-xs font-black uppercase bg-[#12335f] text-white hover:bg-[#0b2447] hover:text-white border-transparent">
@@ -260,7 +261,7 @@ export default function RoleReportsPage() {
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => { summary.refetch(); procurementOrders.refetch(); purchaseOrders.refetch(); }} /> : isLoading ? <LoadingState label="Loading analytical reports..." /> : (
                 <>
-                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         {analytics.kpis.map((kpi) => <KpiCard key={kpi.label} {...kpi} />)}
                     </div>
 
@@ -451,16 +452,6 @@ function buildAnalytics(orders: any[], summary: any, role?: string) {
             { name: 'Payment', completed: paymentReady, pending: count - paymentReady },
         ],
     };
-}
-
-function KpiCard({ label, value, hint }: { label: string; value: string; hint: string }) {
-    return (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-            <p className="mt-2 text-2xl font-black text-[#12335f]">{value}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">{hint}</p>
-        </div>
-    );
 }
 
 function ReportCard({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {

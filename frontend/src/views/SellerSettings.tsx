@@ -6,11 +6,12 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
-import { ShieldCheck, Mail, Lock, UserX, Info, AlertTriangle, PlayCircle, Building2 } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, UserX, Info, AlertTriangle, PlayCircle, Building2, Stamp } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { GeMSettingsSidebar } from '../components/GeMSettingsSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
+import { SignatureStampUploadModal } from '../features/invoices/components/SignatureStampUploadModal';
 
 export default function SellerSettings() {
   const { user, refreshUser, logout } = useAuth();
@@ -27,9 +28,12 @@ export default function SellerSettings() {
   // Logo & Branding states
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+  const [stampUrl, setStampUrl] = useState<string | null>(null);
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
   const [isBrandingLoading, setIsBrandingLoading] = useState(false);
   const [isLogoLoading, setIsLogoLoading] = useState(false);
   const [isBannerLoading, setIsBannerLoading] = useState(false);
+  const [isStampModalOpen, setIsStampModalOpen] = useState(false);
 
   // Form states
   const [aadhaarForm, setAadhaarForm] = useState({
@@ -92,6 +96,21 @@ export default function SellerSettings() {
             const data = await res.json();
             setLogoUrl(data.data?.logoUrl || null);
             setBannerUrl(data.data?.bannerUrl || null);
+          }
+
+          // Fetch Invoice Branding
+          const invRes = await api.fetch('/api/user/invoice-branding', {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          });
+          if (invRes.ok) {
+            const invData = await invRes.json();
+            if (invData.stampUrl) setStampUrl(invData.stampUrl);
+            if (invData.signatureUrl) setSignatureUrl(invData.signatureUrl);
+          } else if (typeof window !== 'undefined') {
+            const lsStamp = localStorage.getItem('msme_invoice_stamp');
+            const lsSig = localStorage.getItem('msme_invoice_signature');
+            if (lsStamp) setStampUrl(lsStamp);
+            if (lsSig) setSignatureUrl(lsSig);
           }
         } catch (err) {
           console.error(err);
@@ -795,6 +814,47 @@ export default function SellerSettings() {
                       </div>
                     )}
                   </div>
+
+                  {/* Stamp & Authorized Signature Card */}
+                  <div className="md:col-span-2 bg-gradient-to-br from-indigo-50/40 via-white to-slate-50 border border-indigo-100/80 hover:border-indigo-300 hover:shadow-md transition-all duration-300 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+                    <div className="space-y-2 flex-1">
+                      <div className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200/60 px-2.5 py-1 rounded-full text-indigo-700 text-[10px] font-black uppercase tracking-wider">
+                        <Stamp className="h-3.5 w-3.5" />
+                        ERP Tax Invoices
+                      </div>
+                      <h3 className="text-base font-black text-slate-900">Official Stamp & Authorized Signature</h3>
+                      <p className="text-xs font-semibold text-slate-500 max-w-xl leading-relaxed">
+                        Customize your company seal and signatory marks printed on generated tax invoices, delivery notes, and e-bill registries.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="h-16 w-28 rounded-xl border border-slate-200 bg-white shadow-xs p-1 flex items-center justify-center overflow-hidden">
+                        {stampUrl || signatureUrl ? (
+                          <div className="relative h-full w-full flex items-center justify-center">
+                            {stampUrl && (
+                              <img src={stampUrl} alt="Stamp" className="h-full w-auto object-contain opacity-90" />
+                            )}
+                            {signatureUrl && (
+                              <img src={signatureUrl} alt="Signature" className="absolute inset-0 h-full w-full object-contain mix-blend-multiply" />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-slate-300">
+                            <Stamp className="h-6 w-6" />
+                            <span className="text-[8px] font-bold text-slate-400">No Stamp / Sign</span>
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={() => setIsStampModalOpen(true)}
+                        className="bg-[#12335f] hover:bg-[#0e2a4f] text-white font-black uppercase text-xs tracking-wider h-11 px-5 rounded-xl shadow-md flex items-center gap-2"
+                      >
+                        <Stamp className="h-4 w-4" /> Manage Stamp & Sign
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -968,6 +1028,19 @@ export default function SellerSettings() {
           </div>
         </div>
       )}
+
+      {/* Stamp & Signature Modal */}
+      <SignatureStampUploadModal
+        isOpen={isStampModalOpen}
+        onClose={() => setIsStampModalOpen(false)}
+        initialLogo={logoUrl}
+        initialStamp={stampUrl}
+        initialSignature={signatureUrl}
+        onSaved={(branding) => {
+          if (branding.stampUrl !== undefined) setStampUrl(branding.stampUrl);
+          if (branding.signatureUrl !== undefined) setSignatureUrl(branding.signatureUrl);
+        }}
+      />
     </div>
   );
 }

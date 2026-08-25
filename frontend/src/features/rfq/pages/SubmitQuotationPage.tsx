@@ -261,14 +261,17 @@ const findSellerParticipation = (bidData: any, user: any) => {
   const participations = [
     ...toArray(bidData?.participations),
     ...toArray(bidData?.results),
-    ...toArray(bidData?.quoteResponses)
+    ...toArray(bidData?.quoteResponses),
+    ...(bidData?.participation ? [bidData.participation] : []),
+    ...(bidData?.ownParticipation ? [bidData.ownParticipation] : []),
+    ...(bidData?.myParticipation ? [bidData.myParticipation] : [])
   ];
   return participations.find((p: any) => {
     const sellerId = p.sellerId || p.seller?.id || p.sellerUserId;
     const orgId = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id;
     return String(sellerId || '') === String(user?.id || '') ||
       (user?.organizationId && String(orgId || '') === String(user.organizationId));
-  });
+  }) || (participations.length === 1 && !bidData?.participations?.length ? participations[0] : null);
 };
 
 const participationToOwnResponse = (participation: any) => {
@@ -277,16 +280,39 @@ const participationToOwnResponse = (participation: any) => {
   const documents = dedupeDocuments([
     ...toArray(responseData.documents),
     ...toArray(responseData.requestedDocuments),
-    ...toArray(participation.documents)
+    ...toArray(participation.documents),
+    ...toArray(participation.technicalDocuments)
   ]);
   const supportingAttachment = findSupportingAttachment({ ...participation, responseData }, documents);
 
+  const lineItems = toArray(participation.lineItems).length
+    ? toArray(participation.lineItems)
+    : toArray(responseData.lineItems).length
+    ? toArray(responseData.lineItems)
+    : toArray(responseData.lineQuotes).length
+    ? toArray(responseData.lineQuotes)
+    : toArray(participation.lineQuotes);
+
+  const offeredPrice = firstPresent(
+    participation.offeredPrice,
+    participation.quotedAmount,
+    participation.totalAmount,
+    responseData.offeredPrice,
+    responseData.quotedAmount,
+    responseData.totalAmount,
+    participation.financialPacket?.totalAmount,
+    participation.financialPacket?.offeredPrice
+  );
+
+  const status = participation.status || participation.submissionStatus || 'SUBMITTED';
+
   return normalizeOwnResponse({
+    ...participation,
     id: participation.id,
-    status: participation.status || participation.submissionStatus || 'SUBMITTED',
-    submissionStatus: participation.submissionStatus || participation.status || 'SUBMITTED',
-    offeredPrice: firstPresent(participation.offeredPrice, participation.quotedAmount, participation.totalAmount, responseData.offeredPrice),
-    offeredQuantity: firstPresent(participation.offeredQuantity, responseData.offeredQuantity),
+    status,
+    submissionStatus: participation.submissionStatus || status,
+    offeredPrice,
+    offeredQuantity: firstPresent(participation.offeredQuantity, responseData.offeredQuantity, responseData.quantity),
     deliveryTimeline: firstPresent(participation.deliveryTimeline, responseData.deliveryTimeline),
     terms: firstPresent(participation.terms, responseData.terms),
     message: firstPresent(participation.message, responseData.message, participation.coverNote, responseData.coverNote, participation.offeredItemDescription),
@@ -297,11 +323,11 @@ const participationToOwnResponse = (participation: any) => {
     responseData: {
       ...responseData,
       documents,
-      lineItems: toArray(participation.lineItems).length ? toArray(participation.lineItems) : toArray(responseData.lineItems),
-      lineQuotes: toArray(responseData.lineQuotes)
+      lineItems,
+      lineQuotes: toArray(responseData.lineQuotes).length ? toArray(responseData.lineQuotes) : lineItems
     },
     documents,
-    lineItems: toArray(participation.lineItems).length ? toArray(participation.lineItems) : toArray(responseData.lineItems)
+    lineItems
   });
 };
 
@@ -317,8 +343,12 @@ export default function SubmitQuotationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const requirementIdParam = searchParams?.get('requirementId') || searchParams?.get('id') || searchParams?.get('requestId');
-  const requirementId = requirementIdParam ? (isNaN(Number(requirementIdParam)) ? requirementIdParam : Number(requirementIdParam)) : 0;
+  const pathBidMatch = typeof window !== 'undefined' ? window.location.pathname.match(/\/bids\/([^/]+)/) : null;
+  const pathBidId = pathBidMatch ? pathBidMatch[1] : null;
+  const rawParam = searchParams?.get('requirementId') || searchParams?.get('id') || searchParams?.get('requestId') || searchParams?.get('bidId') || pathBidId || '';
+  const cleanId = String(rawParam).replace(/^req-/i, '').replace(/^mr-/i, '').trim();
+  const numericId = Number(cleanId);
+  const requirementId = !isNaN(numericId) && numericId !== 0 ? numericId : cleanId;
 
   const [offeredPrice, setOfferedPrice] = useState('');
   const [offeredQuantity, setOfferedQuantity] = useState('');
@@ -348,83 +378,118 @@ export default function SubmitQuotationPage() {
   };
 
   const { data: queryData, isLoading, error } = useQuery({
-    queryKey: ['marketplace-requirement-quotation', requirementId, user?.id, user?.organizationId],
+    queryKey: ['marketplace-requirement-quotation', requirementId, cleanId, user?.id, user?.organizationId],
     queryFn: async () => {
+      const idToTry = Array.from(new Set([cleanId, requirementId, rawParam].filter(Boolean)));
       let marketplaceResult: { requirement: any; ownResponse: any } | null = null;
-      try {
-        const data = await getApi<any>(`/api/marketplace/requirements/${requirementId}`);
-        if (data && (data.requirement || data.id)) {
-          marketplaceResult = {
-            requirement: data.requirement || data,
-            ownResponse: normalizeOwnResponse(data.ownResponse || data.myResponse || data.response || null),
-          };
-        }
-      } catch (err) {
-        // Fallback to procurement bid endpoint if marketplace requirement route fails
-      }
-
       let bidResult: { requirement: any; ownResponse: any } | null = null;
-      try {
-        const bidData = await getApi<any>(`/api/procurement-bids/${encodeURIComponent(String(requirementId))}`);
-        if (bidData) {
-          const userParticipation = findSellerParticipation(bidData, user);
-          const ownResponseData = participationToOwnResponse(userParticipation);
+      let directSellerResponse: any = null;
 
-          bidResult = {
-            requirement: {
-              id: bidData.bidNumber || bidData.id || requirementId,
-              procurementBidId: bidData.id,
-              procurementBidNumber: bidData.bidNumber,
-              sourceId: bidData.sourceId,
-              sourceModel: bidData.sourceModel,
-              procurementType: bidData.procurementType,
-              procurementMethod: bidData.procurementMethod,
-              bidType: bidData.bidType || bidData.procurementType,
-              type: bidData.type || bidData.procurementType,
-              sourcingMethod: bidData.sourcingMethod,
-              title: bidData.title,
-              requirementNumber: bidData.bidNumber || bidData.id,
-              buyerOrganization: bidData.buyerOrganization || { organizationName: bidData.buyerName },
-              lastDate: bidData.endDate,
-              items: [
-                bidData.technicalPacket?.boqTable,
-                bidData.technicalPacket?.items,
-                bidData.technicalPacket?.boq,
-                bidData.technicalPacket?.wizardData?.boqTable,
-                bidData.technicalPacket?.wizardData?.items,
-                bidData.payload?.boqTable,
-                bidData.payload?.items,
-                bidData.payload?.boq,
-                bidData.payload?.wizardData?.boqTable,
-                bidData.payload?.wizardData?.items,
-                bidData.boqTable,
-                bidData.items,
-              ].reduce((best: any[], cand: any) => (Array.isArray(cand) && cand.length > best.length ? cand : best), []),
-              documents: bidData.documents || [],
-              payload: bidData.technicalPacket || bidData.payload,
-              requiredDocuments: bidData.requiredDocuments,
-              estimatedValue: bidData.estimatedValue,
-              quantity: bidData.quantity,
-              unit: bidData.unit,
-              status: bidData.status,
-              description: bidData.description,
-            },
-            ownResponse: ownResponseData,
-          };
-        }
-      } catch (e) {
-        // Ignore fallback error
+      // 1. Check marketplace requirement endpoint
+      for (const testId of idToTry) {
+        try {
+          const data = await getApi<any>(`/api/marketplace/requirements/${encodeURIComponent(String(testId))}`);
+          if (data && (data.requirement || data.id)) {
+            marketplaceResult = {
+              requirement: data.requirement || data,
+              ownResponse: normalizeOwnResponse(data.ownResponse || data.myResponse || data.response || null),
+            };
+            if (marketplaceResult.ownResponse) break;
+          }
+        } catch (err) {}
       }
 
-      if (marketplaceResult || bidResult) {
+      // 2. Check seller-specific bid status endpoint (returns seller's own participation)
+      for (const testId of idToTry) {
+        try {
+          const statusData = await getApi<any>(`/api/seller/procurement-bids/${encodeURIComponent(String(testId))}/status`);
+          if (statusData && (statusData.bid || statusData.participation)) {
+            const ownResponseData = participationToOwnResponse(statusData.participation);
+            bidResult = {
+              requirement: statusData.bid,
+              ownResponse: ownResponseData,
+            };
+            if (ownResponseData) break;
+          }
+        } catch (err) {}
+      }
+
+      // 3. Check general procurement bid endpoint
+      if (!bidResult?.requirement) {
+        for (const testId of idToTry) {
+          try {
+            const bidData = await getApi<any>(`/api/procurement-bids/${encodeURIComponent(String(testId))}`);
+            if (bidData) {
+              const userParticipation = findSellerParticipation(bidData, user);
+              const ownResponseData = participationToOwnResponse(userParticipation);
+              bidResult = {
+                requirement: bidData,
+                ownResponse: ownResponseData,
+              };
+              if (ownResponseData) break;
+            }
+          } catch (e) {}
+        }
+      }
+
+      // 4. If ownResponse still not found, check seller's marketplace responses list
+      if (!marketplaceResult?.ownResponse && !bidResult?.ownResponse) {
+        try {
+          const sellerMrData = await getApi<any>('/api/seller/requirement-responses');
+          const responses = Array.isArray(sellerMrData?.responses) ? sellerMrData.responses : (Array.isArray(sellerMrData) ? sellerMrData : []);
+          const matching = responses.find((r: any) => {
+            const reqId = String(r.requirementId || r.requirement?.id || '');
+            const bId = String(r.bidId || '');
+            const rId = String(r.id || '');
+            return idToTry.some(t => String(t) === reqId || String(t) === bId || String(t) === rId || `req-${t}` === bId || `req-${reqId}` === String(t));
+          });
+          if (matching) {
+            directSellerResponse = normalizeOwnResponse(matching);
+            if (!marketplaceResult?.requirement && matching.requirement) {
+              marketplaceResult = {
+                requirement: matching.requirement,
+                ownResponse: directSellerResponse
+              };
+            }
+          }
+        } catch (e) {}
+      }
+
+      // 5. If ownResponse still not found, check seller's procurement bids list
+      if (!marketplaceResult?.ownResponse && !bidResult?.ownResponse && !directSellerResponse) {
+        try {
+          const sellerBidsData = await getApi<any>('/api/seller/procurement-bids');
+          const rows = Array.isArray(sellerBidsData) ? sellerBidsData : [];
+          const matchingRow = rows.find((row: any) => {
+            const bId = String(row.bidId || row.bid?.id || '');
+            const rowId = String(row.id || '');
+            return idToTry.some(t => String(t) === bId || String(t) === rowId);
+          });
+          if (matchingRow) {
+            const ownResponseData = participationToOwnResponse(matchingRow);
+            directSellerResponse = ownResponseData;
+            if (!bidResult?.requirement && matchingRow.bid) {
+              bidResult = {
+                requirement: matchingRow.bid,
+                ownResponse: ownResponseData
+              };
+            }
+          }
+        } catch (e) {}
+      }
+
+      const requirement = marketplaceResult?.requirement || bidResult?.requirement;
+      const resolvedOwnResponse = chooseOwnResponse(marketplaceResult?.ownResponse, chooseOwnResponse(bidResult?.ownResponse, directSellerResponse));
+
+      if (requirement || resolvedOwnResponse) {
         return {
-          requirement: marketplaceResult?.requirement || bidResult?.requirement,
-          ownResponse: chooseOwnResponse(marketplaceResult?.ownResponse, bidResult?.ownResponse),
+          requirement: requirement || (resolvedOwnResponse?.requirement ?? null),
+          ownResponse: resolvedOwnResponse,
         };
       }
       return null;
     },
-    enabled: !!requirementId,
+    enabled: !!(cleanId || requirementId),
   });
 
   const rfqData: any = queryData?.requirement

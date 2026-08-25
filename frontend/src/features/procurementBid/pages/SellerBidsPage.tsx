@@ -348,30 +348,32 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
 
   const handleAction = (item: any) => {
     if (item.isMarketplaceResponse) {
-      const targetPath = item.bid?.category?.toLowerCase().includes('proposal') || item.bid?.category?.toLowerCase().includes('rfp') 
-        ? '/seller/rfp' 
-        : '/seller/rfq';
+      const isRfp = item.bid?.category?.toLowerCase().includes('proposal') || item.bid?.category?.toLowerCase().includes('rfp');
+      const isRateContract = item.bid?.category?.toLowerCase().includes('contract') || item.bid?.category?.toLowerCase().includes('rate');
+      const targetPath = isRfp 
+        ? '/seller/rfp/submit-quotation' 
+        : isRateContract
+          ? '/seller/rate-contract/submit-quotation'
+          : '/seller/rfq/submit-quotation';
       router.push(`${targetPath}?requirementId=${item.requirementId}`);
       return;
     }
-    const bidId = item.bid?.id || item.bidId;
+    const rawBidId = item.bid?.id || item.bidId;
+    const bidId = typeof rawBidId === 'string' && rawBidId.startsWith('req-') ? rawBidId.replace(/^req-/, '') : rawBidId;
     
     const typeStr = String(item.bid?.procurementType || item.bid?.bidType || item.bid?.category || '').toLowerCase();
     const isRfp = typeStr.includes('rfp') || typeStr.includes('proposal');
+    const isRateContract = typeStr.includes('rate') || typeStr.includes('contract');
     const isRfq = typeStr.includes('rfq');
 
-    // Any not-yet-submitted participation (draft or partially uploaded) resumes the
-    // participate flow; finalised/awarded ones open the read-only details view.
-    if (isDraft(item)) {
-      router.push(`/bids/${bidId}/participate`);
+    if (isRfp) {
+      router.push(`/seller/rfp/submit-quotation?requirementId=${bidId}&requestId=${bidId}`);
+    } else if (isRateContract) {
+      router.push(`/seller/rate-contract/submit-quotation?requirementId=${bidId}&requestId=${bidId}`);
+    } else if (isRfq) {
+      router.push(`/seller/rfq/submit-quotation?requirementId=${bidId}&requestId=${bidId}`);
     } else {
-      if (isRfp) {
-        router.push(`/seller/rfp?requestId=${bidId}`);
-      } else if (isRfq) {
-        router.push(`/seller/rfq?requestId=${bidId}`);
-      } else {
-        router.push(`/bids/${bidId}`);
-      }
+      router.push(`/bids/${bidId}/participate?requirementId=${bidId}`);
     }
   };
 

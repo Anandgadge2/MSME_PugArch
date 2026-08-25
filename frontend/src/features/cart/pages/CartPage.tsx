@@ -99,10 +99,6 @@ export default function CartPage() {
     const allTechApproved = cart?.items.every(i => i.technicalApproved === true) ?? false;
     const isSubmittable = canSubmitCart && cart?.status === 'ACTIVE' && cart.items.length > 0;
 
-    if (permissionsLoading && !canViewCart) {
-        return <LoadingState label="Loading cart..." />;
-    }
-
     const sortedItems = useMemo(() => {
         if (!cart?.items) return [];
         if (!sortField || !sortDir) return cart.items;
@@ -125,6 +121,10 @@ export default function CartPage() {
             return 0;
         });
     }, [cart?.items, sortField, sortDir]);
+
+    if (permissionsLoading && !canViewCart) {
+        return <LoadingState label="Loading cart..." />;
+    }
 
     const handleSort = (field: SortField) => {
         if (sortField === field) {

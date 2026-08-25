@@ -2307,8 +2307,8 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         let id = Number(idToken);
         let hasNumericId = idToken !== '' && Number.isFinite(id) && id !== 0;
         
-        if (!hasNumericId && idToken.startsWith('REQ-')) {
-            const parsed = Number(idToken.replace('REQ-', ''));
+        if (!hasNumericId && /^(REQ-|req-|RFQ-|rfq-)/i.test(idToken)) {
+            const parsed = Number(idToken.replace(/^(REQ-|req-|RFQ-|rfq-)/i, ''));
             if (Number.isFinite(parsed) && parsed !== 0) {
                 id = parsed;
                 hasNumericId = true;

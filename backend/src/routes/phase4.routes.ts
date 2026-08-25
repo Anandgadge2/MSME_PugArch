@@ -7248,8 +7248,8 @@ router.get('/invoices', authenticate, asyncRoute(async (req, res) => {
     db.invoice.findMany({
       where,
       include: {
-        buyer: { select: { id: true, name: true } },
-        seller: { select: { id: true, name: true } },
+        buyer: { select: { id: true, name: true, organization: { select: { organizationName: true, gstin: true, panNumber: true } } } },
+        seller: { select: { id: true, name: true, organization: { select: { organizationName: true, gstin: true, panNumber: true, cinNumber: true } } } },
         purchaseOrder: { select: { id: true, poNumber: true, title: true } },
         payments: { orderBy: { createdAt: 'desc' }, take: 3 }
       },
@@ -7263,7 +7263,55 @@ router.get('/invoices', authenticate, asyncRoute(async (req, res) => {
 
 router.get('/invoices/:id', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
-  const invoice = await db.invoice.findUnique({ where: { id }, include: { items: true, payments: true } });
+  const invoice = await db.invoice.findUnique({
+    where: { id },
+    include: {
+      items: true,
+      payments: true,
+      purchaseOrder: {
+        include: {
+          items: true
+        }
+      },
+      seller: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          registrationDetails: true,
+          sellerProfile: {
+            include: {
+              offices: true,
+              bankAccounts: true
+            }
+          },
+          organization: {
+            include: {
+              profile: true,
+              deliveryAddresses: true
+            }
+          }
+        }
+      },
+      buyer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          registrationDetails: true,
+          buyerProfile: true,
+          organization: {
+            include: {
+              profile: true,
+              deliveryAddresses: true
+            }
+          }
+        }
+      }
+    }
+  });
   if (!invoice || (!isAdmin(req) && invoice.buyerId !== userId(req) && invoice.sellerId !== userId(req))) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
   ok(res, invoice);
 }));
@@ -9539,6 +9587,76 @@ router.put('/seller/settings/branding', authenticate, authorize('seller', 'shg')
   ok(res, { 
     logoUrl: updatedProfile.logoUrl,
     bannerUrl: updatedProfile.bannerUrl
+  });
+}));
+
+router.get('/user/invoice-branding', authenticate, asyncRoute(async (req, res) => {
+  const user = await db.user.findUnique({
+    where: { id: userId(req) },
+    select: {
+      id: true,
+      registrationDetails: true,
+      organization: {
+        include: {
+          profile: true
+        }
+      }
+    }
+  });
+  const regDetails = (user?.registrationDetails as any) || {};
+  const orgLogo = user?.organization?.profile?.logoUrl;
+  const logoUrl = regDetails.logoUrl || orgLogo || null;
+  const stampUrl = regDetails.stampUrl || null;
+  const signatureUrl = regDetails.signatureUrl || null;
+  ok(res, {
+    logoUrl,
+    stampUrl,
+    signatureUrl
+  });
+}));
+
+router.put('/user/invoice-branding', authenticate, asyncRoute(async (req, res) => {
+  const body = parse(z.object({
+    logoUrl: z.string().trim().optional().nullable(),
+    stampUrl: z.string().trim().optional().nullable(),
+    signatureUrl: z.string().trim().optional().nullable()
+  }), req.body);
+
+  const user = await db.user.findUnique({
+    where: { id: userId(req) },
+    select: { id: true, registrationDetails: true, organizationId: true }
+  });
+  if (!user) throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
+
+  const currentReg = (user.registrationDetails as Record<string, any>) || {};
+  const updatedReg = {
+    ...currentReg,
+    ...(body.logoUrl !== undefined && { logoUrl: body.logoUrl }),
+    ...(body.stampUrl !== undefined && { stampUrl: body.stampUrl }),
+    ...(body.signatureUrl !== undefined && { signatureUrl: body.signatureUrl })
+  };
+
+  await db.user.update({
+    where: { id: user.id },
+    data: { registrationDetails: updatedReg }
+  });
+
+  if (body.logoUrl !== undefined && user.organizationId) {
+    try {
+      await db.organizationProfile.upsert({
+        where: { organizationId: user.organizationId },
+        update: { logoUrl: body.logoUrl },
+        create: { organizationId: user.organizationId, logoUrl: body.logoUrl }
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  ok(res, {
+    logoUrl: updatedReg.logoUrl || null,
+    stampUrl: updatedReg.stampUrl || null,
+    signatureUrl: updatedReg.signatureUrl || null
   });
 }));
 

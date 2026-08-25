@@ -269,24 +269,24 @@ export default function AddressBookPage() {
         <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
             {/* Top Toolbar */}
             <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">PROCUREMENT SETTINGS</p>
+                {/* <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">PROCUREMENT SETTINGS</p> */}
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div>
                         <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">
                             Delivery Addresses
                         </h1>
-                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                        {/* <p className="mt-1 text-sm font-semibold text-slate-500">
                             Manage saved delivery locations, GST state codes, and address books for direct purchase and quotation workflows.
-                        </p>
+                        </p> */}
                     </div>
                     <div className="flex items-center gap-2">
-                        <Button
+                        {/* <Button
                             onClick={() => setIsGroupModalOpen(true)}
                             variant="outline"
                             className="h-10 rounded-lg text-xs font-black uppercase shadow-sm bg-white hover:bg-slate-50 border-slate-200"
                         >
                             New Address Group
-                        </Button>
+                        </Button> */}
                         <Button
                             onClick={() => handleOpenAddAddress()}
                             className="h-10 rounded-lg text-xs font-black uppercase shadow-sm bg-[#12335f] hover:bg-[#0b2447] text-white"
@@ -299,7 +299,7 @@ export default function AddressBookPage() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {/* <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <KpiCard
                     label="Total Addresses"
                     value={addresses.length}
@@ -330,67 +330,12 @@ export default function AddressBookPage() {
                     icon={MapPin}
                     tone="indigo"
                 />
-            </div>
+            </div> */}
 
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                {/* Sidebar - Groups */}
-                <div className="lg:col-span-1 space-y-4">
-                    <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm space-y-3">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
-                            Address Groups
-                        </span>
-                        <div className="space-y-1.5">
-                            <button
-                                onClick={() => setSelectedGroupId(null)}
-                                className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold transition-all ${
-                                    selectedGroupId === null
-                                        ? 'bg-[#12335f]/10 text-[#12335f] border border-[#12335f]/15 shadow-xs'
-                                        : 'text-slate-650 hover:bg-slate-50'
-                                }`}
-                            >
-                                <span>All Saved Addresses</span>
-                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-                                    selectedGroupId === null ? 'bg-[#12335f] text-white' : 'bg-slate-100 text-slate-600'
-                                }`}>
-                                    {addresses.length}
-                                </span>
-                            </button>
-                            
-                            {groups.map(group => {
-                                const groupAddressesCount = addresses.filter(a => a.addressGroupId === group.id).length;
-                                return (
-                                    <button
-                                        key={group.id}
-                                        onClick={() => setSelectedGroupId(group.id)}
-                                        className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold transition-all ${
-                                            selectedGroupId === group.id
-                                                ? 'bg-[#12335f]/10 text-[#12335f] border border-[#12335f]/15 shadow-xs'
-                                                : 'text-slate-650 hover:bg-slate-50'
-                                        }`}
-                                    >
-                                        <div className="flex flex-col items-start min-w-0 pr-2">
-                                            <span className="truncate max-w-[130px]">{group.groupName}</span>
-                                            {group.isDefaultGroup && (
-                                                <span className="text-[9px] font-black text-emerald-600 uppercase tracking-tight">
-                                                    Default Group
-                                                </span>
-                                            )}
-                                        </div>
-                                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black shrink-0 ${
-                                            selectedGroupId === group.id ? 'bg-[#12335f] text-white' : 'bg-slate-100 text-slate-600'
-                                        }`}>
-                                            {groupAddressesCount}
-                                        </span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-
+            {/* Main Content */}
+            <div className="block">
                 {/* Addresses List */}
-                <div className="lg:col-span-3 space-y-4">
+                <div className="w-full space-y-4">
                     {/* Search & Filter Bar */}
                     <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-sm">
                         <ResponsiveFilterBar
@@ -459,7 +404,7 @@ export default function AddressBookPage() {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                                 {pagedAddresses.map(addr => (
                                     <div
                                         key={addr.id}
