@@ -52,7 +52,7 @@ const extractUrlFromAsset = (asset: any) => {
         return normalizeUrl(directUrl);
     }
 
-    const fileId = asset.id || asset.fileAssetId || asset.fileAsset?.id;
+    const fileId = asset.fileAssetId || asset.fileAsset?.id || asset.id;
     if (fileId && Number(fileId) > 0) {
         return normalizeUrl(`/api/files/${fileId}/view`);
     }
@@ -85,7 +85,8 @@ const readImageFromEntry = (entry: any, isKnownImageSource = false) => {
         || extractUrlFromAsset(entry.url)
         || extractUrlFromAsset(entry.fileUrl)
         || extractUrlFromAsset(entry.asset)
-        || extractUrlFromAsset(entry.file);
+        || extractUrlFromAsset(entry.file)
+        || extractUrlFromAsset(entry);
 
     if (!candidate) return '';
 

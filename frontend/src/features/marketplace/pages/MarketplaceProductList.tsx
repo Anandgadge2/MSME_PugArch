@@ -1194,6 +1194,9 @@ export default function MarketplaceProductList() {
                                                                 alt={item.name}
                                                                 loading="lazy"
                                                                 decoding="async"
+                                                                onError={(e) => {
+                                                                    e.currentTarget.src = resolveMarketplaceImage({}, 'product');
+                                                                }}
                                                                 className="max-h-full max-w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
                                                             />
                                                         ) : (
