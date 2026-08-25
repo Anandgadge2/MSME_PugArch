@@ -19,6 +19,10 @@ import { GST_STANDARD_RATES, formatTaxRate } from '../../shared/gstTax';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../../payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../../payments/components/PaymentReceiptViewModal';
+import { TaxInvoiceCard } from '../components/TaxInvoiceCard';
+import { SignatureStampUploadModal } from '../components/SignatureStampUploadModal';
+import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
+import { Stamp, Printer, Download, ChevronDown } from 'lucide-react';
 
 type InvoiceRow = {
   id: number;
@@ -66,6 +70,36 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
   const [uploadProofInvoice, setUploadProofInvoice] = useState<InvoiceRow | null>(null);
   const [viewProofInvoiceId, setViewProofInvoiceId] = useState<number | null>(null);
+
+  // Invoice Branding & Copy Type States
+  const [invoiceCopyType, setInvoiceCopyType] = useState<string>('Duplicate Copy');
+  const [invoiceLogoUrl, setInvoiceLogoUrl] = useState<string | null>(null);
+  const [invoiceStampUrl, setInvoiceStampUrl] = useState<string | null>(null);
+  const [invoiceSignatureUrl, setInvoiceSignatureUrl] = useState<string | null>(null);
+  const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
+  const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedLogo = localStorage.getItem('msme_invoice_logo');
+      const storedStamp = localStorage.getItem('msme_invoice_stamp');
+      const storedSig = localStorage.getItem('msme_invoice_signature');
+      if (storedLogo) setInvoiceLogoUrl(storedLogo);
+      if (storedStamp) setInvoiceStampUrl(storedStamp);
+      if (storedSig) setInvoiceSignatureUrl(storedSig);
+    }
+    const loadBranding = async () => {
+      try {
+        const res = await getApi<any>('/api/user/invoice-branding', true);
+        if (res?.logoUrl) setInvoiceLogoUrl(res.logoUrl);
+        if (res?.stampUrl) setInvoiceStampUrl(res.stampUrl);
+        if (res?.signatureUrl) setInvoiceSignatureUrl(res.signatureUrl);
+      } catch {
+        // use fallback
+      }
+    };
+    void loadBranding();
+  }, []);
 
   // Sorting state variables
   const [sortField, setSortField] = useState<'invoiceNumber' | 'poNumber' | 'party' | 'taxableAmount' | 'totalTaxAmount' | 'tdsAmount' | 'totalAmount' | 'dueDate' | 'status'>('invoiceNumber');
@@ -286,106 +320,196 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     }
   };
 
-  const handleDownloadPdf = (mode: 'download' | 'print' = 'download') => {
-    if (!selectedInvoice) return;
+  const prepareInvoiceData = (copyType: string): TaxInvoiceData => {
     const inv = selectedInvoice;
-    const details = detailedInvoice?.items || [];
-    
-    const totalVal = Number(inv.amount || inv.totalAmount || 0);
-    const taxableVal = Number(inv.taxableAmount || totalVal);
+    const det = detailedInvoice;
+    const details = det?.items || [];
 
-    const items = details.length > 0 ? details : [{
-      itemName: inv.purchaseOrder?.title || 'Goods / Services Delivery',
-      quantity: 1,
-      unitPrice: taxableVal,
-      totalAmount: totalVal,
-      taxableAmount: taxableVal,
-      taxAmount: Number(inv.totalTaxAmount || 0)
-    }];
+    const totalVal = Number(inv?.amount || inv?.totalAmount || 0);
+    const taxableVal = Number(inv?.taxableAmount || totalVal);
+    const totalTaxVal = Number(inv?.totalTaxAmount || 0);
+
+    const items: TaxInvoiceItem[] = details.length > 0
+      ? details.map((item: any, idx: number) => ({
+          srNo: idx + 1,
+          description: item.itemName || 'MSME Goods / Services Delivery',
+          hsn: item.hsnCode || '84719000',
+          qty: Number(item.quantity || 1),
+          unit: item.unitOfMeasure || 'Unit',
+          priceUnit: Number(item.unitPrice || (item.taxableAmount || totalVal)),
+          amount: Number(item.totalAmount || item.taxableAmount || (item.unitPrice * (item.quantity || 1)))
+        }))
+      : [{
+          srNo: 1,
+          description: inv?.purchaseOrder?.title || 'UHF RFID Windshield Tags',
+          hsn: '84719000',
+          qty: 1,
+          priceUnit: taxableVal,
+          amount: totalVal || taxableVal
+        }];
 
     let computedTaxable = 0;
-    let computedTax = 0;
-    let computedTotal = 0;
-
-    const tableData = items.map((item: any, index: number) => {
-      const qty = Number(item.quantity || 1);
-      const unitPrice = Number(item.unitPrice || 0);
-      const taxAmt = Number(item.taxAmount || 0);
-      const lineTotal = Number(item.totalAmount || (qty * unitPrice) + taxAmt);
-      
-      computedTaxable += (qty * unitPrice);
-      computedTax += taxAmt;
-      computedTotal += lineTotal;
-
-      return [
-        String(index + 1),
-        item.itemName || 'N/A',
-        String(qty),
-        unitPrice || (taxableVal / Math.max(qty, 1)),
-        taxAmt,
-        lineTotal
-      ];
+    items.forEach((it) => {
+      computedTaxable += (Number(it.amount) || 0);
     });
 
-    const finalTaxable = details.length > 0 ? computedTaxable : taxableVal;
-    const finalTax = details.length > 0 ? computedTax : Number(inv.totalTaxAmount || 0);
-    const finalGrandTotal = details.length > 0 ? computedTotal : totalVal;
+    const finalSubtotal = computedTaxable > 0 ? computedTaxable : taxableVal;
 
-    const config: DocumentConfig = {
-      documentTitle: 'Tax Invoice Registry',
-      documentNumber: inv.invoiceNumber || `INV-${inv.id}`,
-      dateStr: formatDate(inv.createdAt),
-      status: String(inv.status || inv.invoiceStatus).toUpperCase().replace(/_/g, ' '),
-      parties: [
-        {
-          title: 'SUPPLIER (SELLER DETAILS)',
-          name: inv.seller?.name || `Seller #${inv.sellerId || '-'}`,
-          gstin: (inv.seller as any)?.profile?.gst || (inv.seller as any)?.gst || undefined,
-          pan: (inv.seller as any)?.profile?.pan || (inv.seller as any)?.pan || undefined,
-          address: (inv.seller as any)?.profile?.address || (inv.seller as any)?.address || 'As per portal profile'
-        },
-        {
-          title: 'CONSIGNEE (BUYER DEPARTMENT)',
-          name: inv.buyer?.name || `Buyer #${inv.buyerId || '-'}`,
-          gstin: (inv.buyer as any)?.profile?.gst || (inv.buyer as any)?.gst || undefined,
-          address: (inv.buyer as any)?.profile?.address || (inv.buyer as any)?.address || 'As per portal profile'
-        }
-      ],
-      infoGrid: {
-        'Contract Reference': inv.purchaseOrder?.poNumber || `PO #${inv.purchaseOrderId || '-'}`,
-        'Due Date': formatDate(inv.dueDate),
-        'Supply Jurisdiction': inv.interstate ? 'Interstate (IGST)' : 'Intrastate (CGST+SGST)',
-        'IRN': '2f8a5c3e7d9b1a0f9e8d7c6b5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b'
-      },
-      tableHeaders: ['Sr.', 'Description', 'Qty', 'Rate', 'Tax Amount', 'Line Total'],
-      tableData: tableData.map((row: any) => [row[0], row[1], row[2], moneyPdf(row[3]), moneyPdf(row[4]), moneyPdf(row[5])]),
-      financials: {
-        subtotal: finalTaxable,
-        taxableAmount: finalTaxable,
-        totalTax: finalTax,
-        igst: inv.interstate ? finalTax : undefined,
-        cgst: !inv.interstate ? finalTax / 2 : undefined,
-        sgst: !inv.interstate ? finalTax / 2 : undefined,
-        tds: Number(inv.tdsAmount || 0),
-        grandTotal: finalGrandTotal
-      },
-      notes: [
-        'Certified that the particulars given above are true and correct.',
-        'Authenticated via Class-3 Digital Signature Certificate (DSC) registered under the Indian Information Technology Act, 2000.',
-        'Generated via e-Invoice Registry Portal (JsgSmile Integrated Ledger)'
-      ]
+    const formatAddress = (...parts: (string | null | undefined)[]) => {
+      const valid = parts.filter(
+        (p) => p && typeof p === 'string' && p.trim().length > 0 && p.trim() !== 'null' && p.trim() !== 'undefined'
+      );
+      return valid.length > 0 ? valid.map((p) => p!.trim()).join(', ') : '';
     };
 
-    const engine = new PdfEngine('p');
-    const doc = engine.generate(config);
-    
-    if (mode === 'print') {
-      doc.autoPrint();
-      window.open(doc.output('bloburl'), '_blank');
-      toast.success('Invoice opened for printing');
+    const sellerOrg = det?.seller?.organization;
+    const sellerProfile = det?.seller?.sellerProfile;
+    const sellerReg = (det?.seller?.registrationDetails as any);
+
+    const sellerName = sellerProfile?.businessName || sellerOrg?.organizationName || sellerProfile?.nameAsInPan || det?.seller?.name || inv?.seller?.name || 'PugArch Technology Pvt Ltd';
+
+    const sellerAddress = sellerProfile?.offices?.[0]?.address || sellerProfile?.registeredAddress || sellerProfile?.corporateAddress || formatAddress(sellerOrg?.addressLine1, sellerOrg?.addressLine2, sellerOrg?.city, sellerOrg?.district, sellerOrg?.state, sellerOrg?.pincode) || sellerReg?.address || formatAddress(sellerReg?.addressLine1, sellerReg?.addressLine2, sellerReg?.city, sellerReg?.state, sellerReg?.pincode) || 'L-18,Laxman Nagar,Manewada,Nagpur,440034';
+
+    const sellerGstin = sellerProfile?.offices?.[0]?.gstNumber || sellerProfile?.gstNumber || sellerProfile?.gstMasked || sellerOrg?.gstin || sellerReg?.gstin || sellerReg?.gst || '27AAOCP3437H1Z4';
+
+    const sellerPhone = det?.seller?.mobile || sellerProfile?.mobile || sellerReg?.mobile || sellerReg?.phone || '7887858594';
+
+    const sellerEmail = det?.seller?.email || sellerProfile?.officialEmail || sellerProfile?.email || sellerReg?.email || 'Info@pugarch.in';
+
+    const sellerCin = sellerOrg?.cinNumber || sellerReg?.cinNumber || sellerReg?.cin || sellerProfile?.cinNumber || 'U62013MH2023PTC416118';
+
+    const sellerLogo = sellerOrg?.profile?.logoUrl || sellerReg?.logoUrl || invoiceLogoUrl || null;
+
+    const sellerStamp = sellerReg?.stampUrl || invoiceStampUrl || null;
+
+    const sellerSignature = sellerReg?.signatureUrl || invoiceSignatureUrl || null;
+
+    const buyerOrg = det?.buyer?.organization;
+    const buyerProfile = det?.buyer?.buyerProfile;
+    const buyerReg = (det?.buyer?.registrationDetails as any);
+
+    const billToName = buyerProfile?.departmentName || buyerProfile?.businessName || buyerOrg?.organizationName || det?.buyer?.name || inv?.buyer?.name || 'Rattan India Power Limited';
+
+    const billToAddress = buyerProfile?.registeredAddress || buyerProfile?.corporateAddress || formatAddress(buyerOrg?.addressLine1, buyerOrg?.addressLine2, buyerOrg?.city, buyerOrg?.district, buyerOrg?.state, buyerOrg?.pincode) || buyerReg?.address || formatAddress(buyerReg?.addressLine1, buyerReg?.addressLine2, buyerReg?.city, buyerReg?.state, buyerReg?.pincode) || 'Plot no. D-2 & D-2 (PART) , Additional Industrial area, MIDC\nNandgaon peth Amravati Maharashtra';
+
+    const billToPan = buyerOrg?.panNumber || buyerProfile?.panNumber || buyerProfile?.panMasked || buyerReg?.pan || buyerReg?.panNumber || 'AALCS2063D';
+
+    const billToGstin = buyerOrg?.gstin || buyerProfile?.gstNumber || buyerProfile?.gstMasked || buyerReg?.gstin || buyerReg?.gst || '27AALCS2063D1ZG';
+
+    const poDeliv = det?.purchaseOrder?.deliveryAddress;
+    const poDelivParts = [
+      poDeliv?.addressLine1,
+      poDeliv?.addressLine2,
+      poDeliv?.city,
+      poDeliv?.state,
+      poDeliv?.pincode
+    ].filter((p) => p && typeof p === 'string' && p.trim().length > 0);
+
+    const shipToName =
+      poDeliv?.recipientName ||
+      buyerOrg?.organizationName ||
+      billToName ||
+      'RattanIndia Power Limited';
+
+    let shipToAddress = '';
+    if (poDelivParts.length >= 2) {
+      shipToAddress = formatAddress(
+        poDeliv?.addressLine1,
+        poDeliv?.addressLine2,
+        poDeliv?.city,
+        poDeliv?.state,
+        poDeliv?.pincode,
+        poDeliv?.country || 'INDIA'
+      );
+    } else if (buyerOrg?.deliveryAddresses?.[0]?.addressLine1) {
+      const orgDeliv = buyerOrg.deliveryAddresses[0];
+      shipToAddress = formatAddress(
+        orgDeliv.addressLine1,
+        orgDeliv.addressLine2,
+        orgDeliv.city,
+        orgDeliv.state,
+        orgDeliv.pincode,
+        orgDeliv.country || 'INDIA'
+      );
+    } else if (billToAddress && billToAddress !== 'Plot no. D-2 & D-2 (PART) , Additional Industrial area, MIDC\nNandgaon peth Amravati Maharashtra') {
+      shipToAddress = billToAddress;
     } else {
-      doc.save(`${config.documentNumber}-invoice.pdf`);
-      toast.success('Invoice PDF downloaded');
+      shipToAddress =
+        'Amravati O&M Phase1\nAmravati Thermal Power Plant, Phase I Plot no. D-2 & D-2 (PART), Additional Industrial area, MIDC\nNandgaon peth, Amravati 444901 AMRAVATI INDIA';
+    }
+
+    const bankName = sellerProfile?.bankName || sellerProfile?.bankAccounts?.[0]?.bankName || sellerReg?.bankName || 'State Bank of India';
+
+    const accountNo = sellerProfile?.bankAccountNo || sellerProfile?.bankAccounts?.[0]?.accountNumber || sellerReg?.bankAccountNo || '••••••••1234';
+
+    const ifscCode = sellerProfile?.bankIfsc || sellerProfile?.bankAccounts?.[0]?.ifscCode || sellerReg?.bankIfsc || 'SBIN0001234';
+
+    const accountName = sellerProfile?.accountHolderName || sellerProfile?.businessName || sellerName;
+
+    return {
+      copyType,
+      invoiceNumber: inv?.invoiceNumber || `PUG2026I${inv?.id || '1404001'}`,
+      dateStr: formatDate(inv?.createdAt) || '14-04-2026',
+      placeOfSupply: inv?.interstate ? 'Other State (IGST)' : 'Maharashtra(27)',
+      seller: {
+        name: sellerName,
+        address: sellerAddress,
+        gstin: sellerGstin,
+        phone: sellerPhone,
+        email: sellerEmail,
+        cin: sellerCin,
+        logoUrl: sellerLogo,
+        stampUrl: sellerStamp,
+        signatureUrl: sellerSignature
+      },
+      billTo: {
+        name: billToName,
+        address: billToAddress,
+        pan: billToPan,
+        gstin: billToGstin
+      },
+      shipTo: {
+        name: shipToName,
+        address: shipToAddress
+      },
+      items,
+      subtotal: finalSubtotal,
+      cgstRate: 9,
+      cgstAmount: !inv?.interstate ? (totalTaxVal ? totalTaxVal / 2 : finalSubtotal * 0.09) : undefined,
+      sgstRate: 9,
+      sgstAmount: !inv?.interstate ? (totalTaxVal ? totalTaxVal / 2 : finalSubtotal * 0.09) : undefined,
+      igstRate: 18,
+      igstAmount: inv?.interstate ? (totalTaxVal || finalSubtotal * 0.18) : undefined,
+      otherTaxAmount: Number((inv as any)?.otherTaxAmount || 0),
+      totalAmount: totalVal || (finalSubtotal + (totalTaxVal || finalSubtotal * 0.18)),
+      bankDetails: {
+        bankName,
+        accountNo,
+        ifscCode,
+        accountName
+      }
+    };
+  };
+
+  const handleDownloadPdf = async (mode: 'download' | 'print' = 'download', explicitCopyType?: string) => {
+    if (!selectedInvoice) return;
+    const targetCopy = explicitCopyType || invoiceCopyType;
+    try {
+      const invData = prepareInvoiceData(targetCopy);
+      const doc = await generateTaxInvoicePdf(invData);
+      
+      if (mode === 'print') {
+        doc.autoPrint();
+        window.open(doc.output('bloburl'), '_blank');
+        toast.success(`Invoice (${targetCopy}) opened for printing`);
+      } else {
+        const cleanInvNum = (invData.invoiceNumber || 'Invoice').replace(/[^a-zA-Z0-9-]/g, '_');
+        const cleanCopy = targetCopy.replace(/[^a-zA-Z0-9-]/g, '_');
+        doc.save(`${cleanInvNum}_${cleanCopy}.pdf`);
+        toast.success(`Invoice PDF downloaded: ${targetCopy}`);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate PDF');
     }
   };
 
@@ -558,6 +682,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           </p> */}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsBrandingModalOpen(true)}
+            className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm text-indigo-700 hover:text-indigo-900 flex items-center gap-1.5"
+          >
+            <Stamp className="h-4 w-4 text-indigo-600" /> Stamp & Signature
+          </Button>
           {role === 'seller' && (
             <Button
               variant="outline"
@@ -1201,304 +1332,143 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                 {/* Print Styling inside the View modal (Removed in favor of PdfEngine) */}
 
                 {invoiceModalMode === 'view' && (
-                  <div className="space-y-6">
-                    {/* Official Government e-Invoice Header Banner */}
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50 border border-slate-150 p-4 rounded-2xl">
-                      <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
-                        <div className="h-12 w-12 rounded-xl bg-[#12335f] text-white flex items-center justify-center shadow-sm">
-                          {/* Government Shield Representation */}
-                          <ShieldCheck className="h-7 w-7" />
-                        </div>
-                        <div>
-                          <h3 className="text-xs font-black uppercase tracking-wider text-[#12335f]">GOVERNMENT OF INDIA · MINISTRY OF MSME</h3>
-                          <p className="text-[10px] font-bold text-slate-500">e-Invoice Registry Portal (JsgSmile Integrated Ledger)</p>
-                          <span className="inline-flex items-center gap-1 mt-1 text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> VERIFIED IRN ACTIVE
-                          </span>
-                        </div>
+                  <div className="space-y-4">
+                    {/* Invoice Action Bar / Toolbar */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 border border-slate-200 p-3 rounded-2xl no-print">
+                      {/* Left: Copy Type Dropdown */}
+                      <div className="flex items-center gap-2">
+                        <label htmlFor="invoice-copy-select" className="text-xs font-black text-slate-700 uppercase tracking-wider whitespace-nowrap">
+                          Copy Type:
+                        </label>
+                        <select
+                          id="invoice-copy-select"
+                          value={invoiceCopyType}
+                          onChange={(e) => setInvoiceCopyType(e.target.value)}
+                          className="h-9 px-3 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-800 shadow-xs focus:ring-2 focus:ring-[#12335f] focus:outline-none"
+                        >
+                          <option value="Original Copy">Original Copy (Tax Invoice - Original Copy)</option>
+                          <option value="Duplicate Copy">Duplicate Copy (Tax Invoice - Duplicate Copy)</option>
+                          <option value="Triplicate Copy">Triplicate Copy (Tax Invoice - Triplicate Copy)</option>
+                          <option value="Quadruplicate Copy">Quadruplicate Copy (Tax Invoice - Quadruplicate Copy)</option>
+                        </select>
                       </div>
 
-                      {/* Portal Logo */}
-                      <div className="shrink-0 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-center h-16 w-16">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/logoo.png" alt="SMiLE MSME Logo" className="h-full w-full object-contain" />
-                      </div>
-                    </div>
+                      {/* Right: Actions */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Stamp & Signature Upload Button */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsBrandingModalOpen(true)}
+                          className="h-9 rounded-xl border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs"
+                        >
+                          <Stamp className="h-3.5 w-3.5 text-indigo-600" />
+                          Stamp & Signature
+                        </Button>
 
-                    {/* e-Invoice System IRN Data */}
-                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-[10px] space-y-2">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-150 pb-2">
-                        <div>
-                          <span className="text-slate-400 font-bold">INVOICE REFERENCE NUMBER (IRN):</span>
-                          <p className="font-mono font-black text-slate-800 text-xs break-all tracking-tight mt-0.5">
-                            2f8a5c3e7d9b1a0f9e8d7c6b5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b
-                          </p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] font-bold text-slate-600">
-                        <div>
-                          <span className="text-slate-400">ACK NO:</span>
-                          <p className="text-slate-800 font-mono">122268901234512</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-400">ACK DATE:</span>
-                          <p className="text-slate-800">{formatDate(selectedInvoice.createdAt)}</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-400">GST REGISTRY MODE:</span>
-                          <p className="text-emerald-700 uppercase">DIRECT API INTEGRATED</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-400">TAX SCHEME:</span>
-                          <p className="text-slate-800">GST INDIA (CGST + SGST / IGST)</p>
-                        </div>
-                      </div>
-                    </div>
+                        {/* Print Invoice Button */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleDownloadPdf('print')}
+                          className="h-9 rounded-xl border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs"
+                        >
+                          <Printer className="h-3.5 w-3.5 text-slate-600" />
+                          Print
+                        </Button>
 
-                    {/* Parties Grid */}
-                    <div className="grid gap-4 md:grid-cols-2 text-xs font-semibold text-slate-600">
-                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2.5">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200 pb-1">SUPPLIER (SELLER DETAILS)</p>
-                        <p className="font-black text-slate-900 text-sm">{selectedInvoice.seller?.name || `Seller #${selectedInvoice.sellerId || '-'}`}</p>
-                        <p className="text-[10px] text-slate-500 font-bold">GSTIN / UIN: <span className="text-slate-800 font-mono">27NIPPL3456D1ZW</span></p>
-                        <p className="text-[10px] text-slate-500 font-bold">PAN / TAX ID: <span className="text-slate-800 font-mono">NIPPL3456D</span></p>
-                        <p className="text-[10px] text-slate-500 font-bold">State Code: <span className="text-slate-800">Maharashtra (Code 27)</span></p>
-                        <p className="text-[10px] text-slate-500 font-medium leading-relaxed">Office: Industrial Estate, Phase 3, Pune, MH, 411018</p>
-                      </div>
-                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2.5">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200 pb-1">CONSIGNEE (BUYER DEPARTMENT DETAILS)</p>
-                        <p className="font-black text-slate-900 text-sm">{selectedInvoice.buyer?.name || `Buyer #${selectedInvoice.buyerId || '-'}`}</p>
-                        <p className="text-[10px] text-slate-500 font-bold">GSTIN / UIN: <span className="text-slate-800 font-mono">27JSGS3456D1ZW</span></p>
-                        <p className="text-[10px] text-slate-500 font-bold">Department: <span className="text-slate-800">Department of Higher Education</span></p>
-                        <p className="text-[10px] text-slate-500 font-bold">State Code: <span className="text-slate-800">Maharashtra (Code 27)</span></p>
-                        <p className="text-[10px] text-slate-500 font-medium leading-relaxed">Office: National Institute of Technology (NIT) Campus, Pune, MH, 411030</p>
-                      </div>
-                    </div>
+                        {/* Download PDF with Dropdown */}
+                        <div className="relative inline-flex rounded-xl shadow-xs">
+                          <Button
+                            type="button"
+                            onClick={() => void handleDownloadPdf('download')}
+                            className="h-9 rounded-l-xl rounded-r-none bg-[#12335f] hover:bg-slate-800 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 px-3.5"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            Download PDF ({invoiceCopyType.replace(' Copy', '')})
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => setDownloadDropdownOpen(prev => !prev)}
+                            className="h-9 rounded-r-xl rounded-l-none bg-[#0e2a4f] hover:bg-slate-900 text-white px-2 border-l border-slate-700"
+                            title="Download other copies"
+                          >
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </Button>
 
-                    {/* Metadata & Contract References */}
-                    <div className="grid gap-4 md:grid-cols-3 text-xs rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-                      <div>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">PURCHASE CONTRACT REFERENCE</p>
-                        <p className="mt-1 font-black text-[#12335f]">{selectedInvoice.purchaseOrder?.poNumber || `PO #${selectedInvoice.purchaseOrderId || '-'}`}</p>
-                        <p className="text-[10px] font-bold text-slate-500 mt-0.5">{selectedInvoice.purchaseOrder?.title || '-'}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">BILLING PERIOD & DUE DATE</p>
-                        <p className="mt-1 font-bold text-slate-900">Due Date: {formatDate(selectedInvoice.dueDate)}</p>
-                        <p className="text-[10px] text-slate-450 font-medium mt-0.5">Credit Window: Net 30 Days (MSME Mandated)</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">SUPPLY JURISDICTION</p>
-                        <p className="mt-1 font-bold text-slate-900">{selectedInvoice.interstate ? 'Interstate (IGST Tax Scheme)' : 'Intrastate (CGST + SGST Tax Scheme)'}</p>
-                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">Place of Supply: Maharashtra (27)</p>
-                      </div>
-                    </div>
-
-                    {/* Itemized Table */}
-                    <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200">
-                            <tr>
-                              <th className="p-3">Description</th>
-                              <th className="p-3 text-center">HSN/SAC</th>
-                              <th className="p-3 text-right">Qty</th>
-                              <th className="p-3 text-right">Rate</th>
-                              <th className="p-3 text-right">Taxable</th>
-                              {selectedInvoice.interstate ? (
-                                <th className="p-3 text-right">IGST (18%)</th>
-                              ) : (
-                                <>
-                                  <th className="p-3 text-right">CGST (9%)</th>
-                                  <th className="p-3 text-right">SGST (9%)</th>
-                                </>
-                              )}
-                              <th className="p-3 text-right">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {(detailedInvoice?.items || []).length === 0 ? (
-                              <tr className="hover:bg-slate-50">
-                                <td className="p-3">
-                                  <p className="font-black text-slate-900">{selectedInvoice.purchaseOrder?.title || 'MSME Goods / Services delivery'}</p>
-                                  <p className="text-[10px] text-slate-400">Contract Ref: {selectedInvoice.purchaseOrder?.poNumber || 'N/A'}</p>
-                                </td>
-                                <td className="p-3 text-center font-mono text-[10px] font-bold text-slate-500">998311</td>
-                                <td className="p-3 text-right font-bold">1.000 Unit</td>
-                                <td className="p-3 text-right font-bold">{formatCurrency(selectedInvoice.taxableAmount || selectedInvoice.amount || 0)}</td>
-                                <td className="p-3 text-right font-bold">{formatCurrency(selectedInvoice.taxableAmount || selectedInvoice.amount || 0)}</td>
-                                {selectedInvoice.interstate ? (
-                                  <td className="p-3 text-right font-bold">{formatCurrency(selectedInvoice.totalTaxAmount || 0)}</td>
-                                ) : (
-                                  <>
-                                    <td className="p-3 text-right font-bold">{formatCurrency(Number(selectedInvoice.totalTaxAmount || 0) / 2)}</td>
-                                    <td className="p-3 text-right font-bold">{formatCurrency(Number(selectedInvoice.totalTaxAmount || 0) / 2)}</td>
-                                  </>
-                                )}
-                                <td className="p-3 text-right font-black text-slate-950">{formatCurrency(selectedInvoice.amount || selectedInvoice.totalAmount || 0)}</td>
-                              </tr>
-                            ) : (
-                              detailedInvoice.items.map((item: any) => (
-                                <tr key={item.id} className="hover:bg-slate-50">
-                                  <td className="p-3">
-                                    <p className="font-black text-slate-900">{item.itemName}</p>
-                                    {item.description && <p className="text-[10px] text-slate-400">{item.description}</p>}
-                                  </td>
-                                  <td className="p-3 text-center font-mono text-[10px] font-bold text-slate-500">{item.hsnCode || '998311'}</td>
-                                  <td className="p-3 text-right font-bold">{Number(item.quantity).toFixed(3)} {item.unitOfMeasure || 'Unit'}</td>
-                                  <td className="p-3 text-right font-bold">{formatCurrency(item.unitPrice)}</td>
-                                  <td className="p-3 text-right font-bold">{formatCurrency(item.taxableAmount)}</td>
-                                  {selectedInvoice.interstate ? (
-                                    <td className="p-3 text-right font-bold">{formatCurrency(item.taxAmount || 0)}</td>
-                                  ) : (
-                                    <>
-                                      <td className="p-3 text-right font-bold">{formatCurrency(Number(item.taxAmount || 0) / 2)}</td>
-                                      <td className="p-3 text-right font-bold">{formatCurrency(Number(item.taxAmount || 0) / 2)}</td>
-                                    </>
-                                  )}
-                                  <td className="p-3 text-right font-black text-slate-950">{formatCurrency(item.totalAmount)}</td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    {/* Financial Summary */}
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {/* Administrative allocations & bank details */}
-                      <div className="space-y-4">
-                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs space-y-2">
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Public Treasury DBT Settlement Bank Details</p>
-                          <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-600">
-                            <div>
-                              <span className="text-slate-400">BANK NAME:</span>
-                              <p className="text-slate-800">STATE BANK OF INDIA</p>
+                          {downloadDropdownOpen && (
+                            <div className="absolute right-0 top-10 z-50 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl animate-in fade-in-50">
+                              <p className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1">
+                                Download Invoice Copies
+                              </p>
+                              {[
+                                { id: 'Original Copy', label: 'Original Copy' },
+                                { id: 'Duplicate Copy', label: 'Duplicate Copy' },
+                                { id: 'Triplicate Copy', label: 'Triplicate Copy' },
+                                { id: 'Quadruplicate Copy', label: 'Quadruplicate Copy' }
+                              ].map(copy => (
+                                <button
+                                  key={copy.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setInvoiceCopyType(copy.id);
+                                    setDownloadDropdownOpen(false);
+                                    void handleDownloadPdf('download', copy.id);
+                                  }}
+                                  className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-950 rounded-lg flex items-center justify-between"
+                                >
+                                  <span>{copy.label}</span>
+                                  <Download className="h-3 w-3 text-slate-400" />
+                                </button>
+                              ))}
                             </div>
-                            <div>
-                              <span className="text-slate-400">IFSC CODE:</span>
-                              <p className="text-slate-800 font-mono">SBIN0001234</p>
-                            </div>
-                            <div className="col-span-2">
-                              <span className="text-slate-400">ACCOUNT NUMBER:</span>
-                              <p className="text-slate-800 font-mono">••••••••1234 (Verified Settlements Vault)</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs space-y-2">
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Administrative Sanction Allocation</p>
-                          <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-600">
-                            <div>
-                              <span className="text-slate-400">SANCTION ORDER:</span>
-                              <p className="text-slate-800">SAN-2026-980860-EC1094</p>
-                            </div>
-                            <div>
-                              <span className="text-slate-400">TREASURY HEAD:</span>
-                              <p className="text-slate-800 font-mono">2203-00-112-01-00-50</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Tax Summary Calculation */}
-                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs space-y-2 h-max">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-200 pb-1 font-extrabold text-slate-500">Taxation & Net Settlement Calculations</p>
-                        <div className="space-y-1.5 font-bold text-slate-650">
-                          {(() => {
-                            const cgstVal = Number(selectedInvoice.cgstAmount || 0);
-                            const sgstVal = Number(selectedInvoice.sgstAmount || 0);
-                            const igstVal = Number(selectedInvoice.igstAmount || 0);
-                            const totalTaxVal = Number(selectedInvoice.totalTaxAmount || 0);
-                            const taxableVal = Number(selectedInvoice.taxableAmount || selectedInvoice.amount || 0);
-                            const otherTaxVal = Math.max(0, totalTaxVal - (cgstVal + sgstVal + igstVal));
-
-                            const cgstRate = taxableVal > 0 ? ((cgstVal / taxableVal) * 100).toFixed(2).replace(/\.00$/, '').replace(/\.0$/, '') : '';
-                            const sgstRate = taxableVal > 0 ? ((sgstVal / taxableVal) * 100).toFixed(2).replace(/\.00$/, '').replace(/\.0$/, '') : '';
-                            const igstRate = taxableVal > 0 ? ((igstVal / taxableVal) * 100).toFixed(2).replace(/\.00$/, '').replace(/\.0$/, '') : '';
-                            const otherTaxRate = taxableVal > 0 ? ((otherTaxVal / taxableVal) * 100).toFixed(2).replace(/\.00$/, '').replace(/\.0$/, '') : '';
-
-                            return (
-                              <>
-                                <div className="flex justify-between">
-                                  <span>Gross Taxable Amount:</span>
-                                  <span className="text-slate-800">{formatCurrency(taxableVal)}</span>
-                                </div>
-                                {selectedInvoice.interstate ? (
-                                  <div className="flex justify-between">
-                                    <span>IGST Amount ({igstRate || '0'}%):</span>
-                                    <span className="text-slate-800">{formatCurrency(igstVal)}</span>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <div className="flex justify-between">
-                                      <span>CGST Amount ({cgstRate || '0'}%):</span>
-                                      <span className="text-slate-800">{formatCurrency(cgstVal)}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span>SGST Amount ({sgstRate || '0'}%):</span>
-                                      <span className="text-slate-800">{formatCurrency(sgstVal)}</span>
-                                    </div>
-                                  </>
-                                )}
-                                {otherTaxVal > 0 && (
-                                  <div className="flex justify-between">
-                                    <span>Other Tax / Cess ({otherTaxRate || '0'}%):</span>
-                                    <span className="text-slate-800">{formatCurrency(otherTaxVal)}</span>
-                                  </div>
-                                )}
-                              </>
-                            );
-                          })()}
-                          <div className="flex justify-between text-red-650 border-b border-slate-200 pb-1.5">
-                            <span>Government TDS Deduction (GST Section 51):</span>
-                            <span>-{formatCurrency(selectedInvoice.tdsAmount || 0)}</span>
-                          </div>
-                          <div className="flex justify-between text-xs font-black text-slate-900 pt-1">
-                            <span>NET SETTLEMENT VALUE (DBT):</span>
-                            <span className="text-emerald-700 text-sm">{formatCurrency(selectedInvoice.amount || selectedInvoice.totalAmount)}</span>
-                          </div>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Government Declaration and Digitally Signed Certificate */}
-                    <div className="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-3 p-4 bg-emerald-50/60 border border-emerald-100 rounded-2xl">
-                      <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0 border border-emerald-200/50">
-                        <Check className="h-5 w-5 stroke-[2.5]" />
-                      </div>
-                      <div className="text-xs text-slate-600 font-semibold space-y-0.5">
-                        <p className="font-black text-emerald-800 uppercase tracking-wider text-[10px]">Digitally Signed & Certified OK</p>
-                        <p className="leading-relaxed">
-                          Certified that the particulars given above are true and correct. Authenticated via Class-3 Digital Signature Certificate (DSC) registered under the Indian Information Technology Act, 2000.
-                        </p>
-                      </div>
+                    {/* On-Screen Exact Sample Invoice Card */}
+                    <div className="overflow-x-auto py-2">
+                      {(() => {
+                        const invData = prepareInvoiceData(invoiceCopyType);
+                        return (
+                          <TaxInvoiceCard
+                            copyType={invoiceCopyType}
+                            invoiceNumber={invData.invoiceNumber}
+                            dateStr={invData.dateStr}
+                            placeOfSupply={invData.placeOfSupply}
+                            seller={invData.seller}
+                            billTo={invData.billTo}
+                            shipTo={invData.shipTo}
+                            items={invData.items}
+                            subtotal={invData.subtotal}
+                            cgstRate={invData.cgstRate}
+                            cgstAmount={invData.cgstAmount}
+                            sgstRate={invData.sgstRate}
+                            sgstAmount={invData.sgstAmount}
+                            igstRate={invData.igstRate}
+                            igstAmount={invData.igstAmount}
+                            otherTaxAmount={invData.otherTaxAmount}
+                            totalAmount={invData.totalAmount}
+                            bankDetails={invData.bankDetails}
+                            logoUrl={invoiceLogoUrl}
+                            stampUrl={invoiceStampUrl}
+                            signatureUrl={invoiceSignatureUrl}
+                            onOpenUploadBranding={() => setIsBrandingModalOpen(true)}
+                          />
+                        );
+                      })()}
                     </div>
 
-                    {/* Print / Close Footer (Screen visible only) */}
-                    <div className="flex flex-col sm:flex-row justify-end gap-2.5 pt-4 border-t border-slate-200 no-print">
+                    {/* Modal Bottom Close Bar */}
+                    <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200 no-print">
                       <Button
                         type="button"
                         variant="secondary"
                         onClick={closeInvoiceDetails}
-                        className="h-10 rounded-lg text-xs font-black uppercase"
+                        className="h-9 rounded-xl text-xs font-black uppercase px-5"
                       >
                         Close
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={() => handleDownloadPdf('print')}
-                        className="h-10 rounded-lg bg-[#12335f] text-xs font-black uppercase tracking-wider hover:bg-slate-800 flex items-center gap-1.5"
-                      >
-                        Print Invoice
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={() => handleDownloadPdf('download')}
-                        className="h-10 rounded-lg bg-emerald-600 text-xs font-black uppercase tracking-wider hover:bg-emerald-700 text-white flex items-center gap-1.5"
-                      >
-                        Download PDF
                       </Button>
                     </div>
                   </div>
@@ -1992,6 +1962,20 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         invoiceId={viewProofInvoiceId}
         onStatusChange={() => {
           void reload();
+        }}
+      />
+
+      {/* Signature & Stamp Upload Modal */}
+      <SignatureStampUploadModal
+        isOpen={isBrandingModalOpen}
+        onClose={() => setIsBrandingModalOpen(false)}
+        initialLogo={invoiceLogoUrl}
+        initialStamp={invoiceStampUrl}
+        initialSignature={invoiceSignatureUrl}
+        onSaved={(branding) => {
+          if (branding.logoUrl !== undefined) setInvoiceLogoUrl(branding.logoUrl);
+          if (branding.stampUrl !== undefined) setInvoiceStampUrl(branding.stampUrl);
+          if (branding.signatureUrl !== undefined) setInvoiceSignatureUrl(branding.signatureUrl);
         }}
       />
     </div>
