@@ -84,9 +84,9 @@ const buyerBusinessTypes = [
   { value: 'Partnership Firm', label: 'Partnership Firm' },
   { value: 'Company (Pvt Ltd / Ltd)', label: 'Company (Pvt Ltd / Ltd)' },
   { value: 'LLP', label: 'LLP' },
-  { value: 'MSME', label: 'MSME' },
-  { value: 'Startup', label: 'Startup' },
-  { value: 'Primary User (HOD)', label: 'Primary User (HOD)' },
+  // { value: 'MSME', label: 'MSME' },
+  // { value: 'Startup', label: 'Startup' },
+  // { value: 'Primary User (HOD)', label: 'Primary User (HOD)' },
 ];
 
 const buyerBaseRequiredDocs = [
