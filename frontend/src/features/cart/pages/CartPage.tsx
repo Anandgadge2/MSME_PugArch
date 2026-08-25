@@ -98,6 +98,29 @@ export default function CartPage() {
     const techApprovalNeeded = cart?.items.some(i => i.technicalApproved === null) ?? false;
     const allTechApproved = cart?.items.every(i => i.technicalApproved === true) ?? false;
     const isSubmittable = canSubmitCart && cart?.status === 'ACTIVE' && cart.items.length > 0;
+
+    const sortedItems = useMemo(() => {
+        if (!cart?.items) return [];
+        if (!sortField || !sortDir) return cart.items;
+        return [...cart.items].sort((a, b) => {
+            let valA: any, valB: any;
+            switch (sortField) {
+                case 'item': valA = a.itemName?.toLowerCase() || ''; valB = b.itemName?.toLowerCase() || ''; break;
+                case 'seller': valA = a.seller?.name?.toLowerCase() || ''; valB = b.seller?.name?.toLowerCase() || ''; break;
+                case 'unitPrice': valA = Number(a.unitPrice); valB = Number(b.unitPrice); break;
+                case 'quantity': valA = Number(a.quantity); valB = Number(b.quantity); break;
+                case 'total': valA = Number(a.quantity) * Number(a.unitPrice); valB = Number(b.quantity) * Number(b.unitPrice); break;
+                case 'techStatus':
+                    valA = a.technicalApproved === null ? 0 : a.technicalApproved ? 1 : -1;
+                    valB = b.technicalApproved === null ? 0 : b.technicalApproved ? 1 : -1;
+                    break;
+                case 'createdAt': valA = new Date(a.createdAt).getTime(); valB = new Date(b.createdAt).getTime(); break;
+            }
+            if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+            if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }, [cart?.items, sortField, sortDir]);
     if (permissionsLoading && !canViewCart) {
         return <LoadingState label="Loading cart..." />;
     }
