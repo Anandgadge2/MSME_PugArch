@@ -23,6 +23,8 @@ import {
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
+import { toast } from 'sonner';
+import { api } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { procurementBidApi } from '../api';
 import { formatDate } from '../../shared/format';
@@ -89,6 +91,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
   const [loading, setLoading] = useState<boolean>(() => !cachedSellerParticipations);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [convertingInvoiceId, setConvertingInvoiceId] = useState<string | null>(null);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -375,6 +378,31 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     }
   };
 
+  const handleConvertToInvoice = async (e: React.MouseEvent, item: any) => {
+    e.stopPropagation();
+    const bidId = item.bid?.id || item.bidId;
+    if (!bidId) return;
+    
+    setConvertingInvoiceId(item.id);
+    try {
+      const result = await api.post(`/api/seller/procurement-bids/${bidId}/convert-to-invoice`, {});
+      toast.success('Invoice generated successfully!');
+      
+      const createdInvoiceId = (result as any)?.data?.id || (result as any)?.id;
+      
+      if (createdInvoiceId) {
+        router.push(`/seller/invoices/${createdInvoiceId}`);
+      } else {
+        router.push('/seller/invoices');
+      }
+    } catch (err: any) {
+      console.error('[Convert Invoice Error]', err);
+      toast.error(err?.message || 'Failed to convert to invoice.');
+    } finally {
+      setConvertingInvoiceId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Transparent Header */}
@@ -516,9 +544,25 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                           Bid: {String(bid.status || 'OPEN').replace(/_/g, ' ')}
                         </span>
 
-                        <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-4">
-                          {isDraft(item) ? 'Resume Draft' : 'View Details'}
-                        </Button>
+                        <div className="flex gap-2">
+                          {isAwarded(item) && (
+                            <Button 
+                              onClick={(e) => handleConvertToInvoice(e, item)} 
+                              disabled={convertingInvoiceId === item.id}
+                              className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-4 flex items-center gap-1.5 shadow-sm"
+                            >
+                              {convertingInvoiceId === item.id ? (
+                                <RefreshCw className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <FileText className="h-3 w-3" />
+                              )}
+                              Convert to Invoice
+                            </Button>
+                          )}
+                          <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-4">
+                            {isDraft(item) ? 'Resume Draft' : 'View Details'}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -572,9 +616,25 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                             </span>
                           </td>
                           <td className="p-3 text-right" onClick={e => e.stopPropagation()}>
-                            <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg">
-                              {isDraft(item) ? 'Resume' : 'View'}
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              {isAwarded(item) && (
+                                <Button 
+                                  onClick={(e) => handleConvertToInvoice(e, item)}
+                                  disabled={convertingInvoiceId === item.id}
+                                  className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-3 flex items-center shadow-sm"
+                                  title="Convert to Invoice"
+                                >
+                                  {convertingInvoiceId === item.id ? (
+                                    <RefreshCw className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <FileText className="h-3 w-3" />
+                                  )}
+                                </Button>
+                              )}
+                              <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3">
+                                {isDraft(item) ? 'Resume' : 'View'}
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       );

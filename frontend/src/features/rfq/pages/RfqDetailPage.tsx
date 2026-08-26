@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner';
 import { EmdCard, EmdInfo } from '../components/EmdCard';
 import { EmdPaymentModal } from '../components/EmdPaymentModal';
-import { getApi } from '../../shared/apiClient';
+import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
@@ -683,6 +683,48 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     router.push(`/seller/rfq/submit-quotation?${param}=${encodeURIComponent(String(id))}`);
   };
 
+  const isAwarded = String(status).toUpperCase() === 'AWARDED' || 
+    (Array.isArray(ownParticipation?.awards) && ownParticipation.awards.some((a: any) => String(a?.awardStatus || '').toUpperCase() === 'ADMIN_APPROVED' || !!a?.awardedAt));
+
+  const { data: invoiceStatusData, isLoading: invoiceStatusLoading } = useQuery({
+    queryKey: ['rfq-invoice-status', requestId],
+    queryFn: async () => {
+      if (!requestId) return { exists: false };
+      try {
+        const res = await getApi<any>(`/api/seller/procurement-bids/${requestId}/invoice`);
+        return res?.data || res || { exists: false };
+      } catch (err) {
+        return { exists: false };
+      }
+    },
+    enabled: !!requestId && user?.role === 'seller' && isAwarded,
+    staleTime: 0,
+  });
+
+  const [isConvertingInvoice, setIsConvertingInvoice] = useState(false);
+
+  const handleConvertToInvoice = async () => {
+    if (!requestId) return;
+    setIsConvertingInvoice(true);
+    try {
+      const result = await postApi<any>(`/api/seller/procurement-bids/${requestId}/convert-to-invoice`, {});
+      toast.success('Invoice generated successfully!');
+      
+      const createdInvoiceId = result?.id || result?.data?.id;
+      
+      if (createdInvoiceId) {
+        router.push(`/seller/invoices/${createdInvoiceId}`);
+      } else {
+        router.push('/seller/invoices');
+      }
+    } catch (err: any) {
+      console.error('[Convert Invoice Error]', err);
+      toast.error(err?.message || 'Failed to convert to invoice.');
+    } finally {
+      setIsConvertingInvoice(false);
+    }
+  };
+
   /* ── Status Badge Styling Helper ── */
   const getStatusBadgeStyle = (st: string) => {
     const s = String(st || '').toUpperCase();
@@ -824,6 +866,13 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (submitted ? 'View Quotation' : 'Submit Quotation')}
       onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}
       onDownloadClick={handleDownloadPdf}
+      invoiceStatus={user?.role === 'seller' && isAwarded ? { 
+        exists: Boolean(invoiceStatusData?.exists), 
+        invoiceId: invoiceStatusData?.invoiceId, 
+        loading: invoiceStatusLoading 
+      } : null}
+      isConvertingInvoice={isConvertingInvoice}
+      onConvertToInvoiceClick={handleConvertToInvoice}
       clarificationKind={requirementId || (rawBid?.sourceModel === 'REQUIREMENT') ? 'requirement' : 'quote-request'}
       clarificationEntityId={requirementId || rawBid?.sourceId || targetReqId || requestId}
     />
