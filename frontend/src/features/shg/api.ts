@@ -47,4 +47,6 @@ export type ShgProfile = {
   documents?: any[];
   onboardingProgress?: any[];
   auditLogs?: any[];
+  meetings?: any[];
+  resolutions?: any[];
 };

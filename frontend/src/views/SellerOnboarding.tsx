@@ -15,6 +15,7 @@ import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts'
 import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES, PRODUCT_CATEGORIES, PRODUCT_CATEGORY_OTHER } from '../constants/dropdowns';
 import { cn } from '../lib/utils';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
+import { isShgBusinessType, isShgUser } from '../lib/shg';
 
 const toDateInputValue = (value: unknown) => {
   if (!value) return '';
@@ -150,7 +151,7 @@ const inferCompletedSellerSections = (profile: any, orgVerified = false) => {
   return Array.from(completed);
 };
 
-export default function SellerOnboarding() {
+export default function SellerOnboarding({ initialSection }: { initialSection?: string } = {}) {
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const getAuthHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
@@ -163,7 +164,7 @@ export default function SellerOnboarding() {
   const router = useRouter();
   const sectionParam = searchParams?.get('section');
 
-  const [currentSection, setCurrentSection] = useState(sectionParam || 'pan');
+  const [currentSection, setCurrentSection] = useState(sectionParam || initialSection || 'pan');
   const isAccountSettings = ['sellerProfile', 'updateAadhaar', 'changePassword', 'changeEmail', 'closeAccount'].includes(currentSection);
   const [bankTab, setBankTab] = useState<'manage' | 'add'>('manage');
   const [officeTab, setOfficeTab] = useState<'manage' | 'add'>('manage');
@@ -360,8 +361,11 @@ export default function SellerOnboarding() {
     };
   });
 
-  const isHerShg = String(cachedRegDetails.businessType || cachedProfile.organizationType || '').toLowerCase() === 'hershg';
-  const shgType = String(cachedRegDetails.shgType || cachedProfile.shgType || '').trim();
+  const isHerShg = isShgUser(user)
+    || isShgBusinessType(regDetails.businessType)
+    || isShgBusinessType(regDetails.stakeholderCategory)
+    || isShgBusinessType(formData.organizationType);
+  const shgType = String(regDetails.shgType || formData.shgType || cachedRegDetails.shgType || cachedProfile.shgType || '').trim();
 
   const getRequiredDocuments = useCallback(() => {
     if (isHerShg) {
@@ -578,7 +582,13 @@ export default function SellerOnboarding() {
     if (sectionParam && sectionParam !== currentSection) {
       setCurrentSection(sectionParam);
     }
-  }, [sectionParam]);
+  }, [currentSection, sectionParam]);
+
+  useEffect(() => {
+    if (!sectionParam && initialSection && initialSection !== currentSection) {
+      setCurrentSection(initialSection);
+    }
+  }, [currentSection, initialSection, sectionParam]);
 
   const handleSectionChange = (id: string) => {
     setCurrentSection(id);
