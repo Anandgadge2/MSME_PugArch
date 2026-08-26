@@ -25,7 +25,12 @@ export const requireAccountType = (...accountTypes: string[]) => {
     }
 
     const account = getAccountTypeForUser(req.user);
-    if (!isMasterAdmin(req.user) && !allowed.includes(account.accountType || '')) {
+    const currentAccountType = account.accountType || '';
+    // SHGs are supplier accounts throughout catalogue, bidding, fulfilment,
+    // payments, and messaging. A SELLER gate therefore includes SHG while an
+    // SHG-only gate remains restricted to dedicated SHG workflows.
+    const isShgSupplier = currentAccountType === 'SHG' && allowed.includes('SELLER');
+    if (!isMasterAdmin(req.user) && !allowed.includes(currentAccountType) && !isShgSupplier) {
       return apiResponse.error(res, 403, 'Access denied', 'ACCESS_DENIED');
     }
 

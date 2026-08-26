@@ -60,12 +60,12 @@ const formatFileSize = (size?: number) => {
 const roleBadgeClass = (role?: string) => {
     if (role === 'admin' || role === 'master_admin') return 'border-indigo-200 bg-indigo-50 text-indigo-700';
     if (role === 'buyer') return 'border-blue-200 bg-blue-50 text-blue-700';
-    if (role === 'seller') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    if (role === 'seller' || role === 'shg') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
     return 'border-slate-200 bg-slate-50 text-slate-600';
 };
 
 const routeForRole = (role?: string) => {
-    if (role === 'seller') return '/seller/messages';
+    if (role === 'seller' || role === 'shg') return '/seller/messages';
     if (isAdminRole(role)) return '/admin/messages';
     return '/buyer/messages';
 };

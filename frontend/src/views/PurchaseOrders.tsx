@@ -235,7 +235,7 @@ const OrderActionsMenu = ({
 export default function PurchaseOrders() {
   const { user } = useAuth();
   const router = useRouter();
-  const isSeller = user?.role === 'seller';
+  const isSeller = user?.role === 'seller' || user?.role === 'shg';
   const isBuyer = user?.role === 'buyer';
 
   const [activeTab, setActiveTab] = useState<'Open' | 'Delivered' | 'Cancelled' | 'All'>('All');

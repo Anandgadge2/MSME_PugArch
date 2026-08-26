@@ -12,9 +12,11 @@ import { GeMSettingsSidebar } from '../components/GeMSettingsSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
 import { SignatureStampUploadModal } from '../features/invoices/components/SignatureStampUploadModal';
+import { isShgUser } from '../lib/shg';
 
 export default function SellerSettings() {
   const { user, refreshUser, logout } = useAuth();
+  const isShgAccount = isShgUser(user);
   const searchParams = useSearchParams();
   const sectionParam = searchParams?.get('section');
   const [currentSection, setCurrentSection] = useState(sectionParam || 'profile');
@@ -541,8 +543,8 @@ export default function SellerSettings() {
             {currentSection === 'profile' && (
               <div className="p-5 sm:p-8 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-800">Seller Profile</h2>
-                  <p className="text-gray-500 mt-1">Summary of your Personal Profile with JsgSmile</p>
+                  <h2 className="text-2xl font-bold text-gray-800">{isShgAccount ? 'SHG Profile' : 'Seller Profile'}</h2>
+                  <p className="text-gray-500 mt-1">Summary of your {isShgAccount ? 'SHG representative' : 'personal'} profile with JsgSmile</p>
                 </div>
 
                 {!isEditingProfile ? (
@@ -575,7 +577,7 @@ export default function SellerSettings() {
                       <div className="space-y-1.5 md:col-span-2">
                         <label className="text-xs font-bold text-gray-700 uppercase tracking-tight">Roles</label>
                         <div className="w-full h-12 px-4 rounded bg-gray-100 border border-gray-200 flex items-center text-gray-600">
-                          Primary Seller
+                          {isShgAccount ? 'SHG Representative' : 'Primary Seller'}
                         </div>
                       </div>
                     </div>
@@ -623,7 +625,7 @@ export default function SellerSettings() {
                       <div className="space-y-1.5 md:col-span-2">
                         <label className="text-xs font-bold text-gray-700 uppercase tracking-tight">Roles</label>
                         <div className="w-full h-12 px-4 rounded bg-gray-100 border border-gray-200 flex items-center text-gray-600">
-                          Primary Seller
+                          {isShgAccount ? 'SHG Representative' : 'Primary Seller'}
                         </div>
                       </div>
                     </div>
@@ -971,17 +973,17 @@ export default function SellerSettings() {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <h2 className="text-2xl font-bold text-gray-800">Close Account</h2>
                   <div className="text-[10px] flex items-center gap-2 text-gray-400 uppercase tracking-widest font-black">
-                    Need help with Seller Profile completion? <PlayCircle className="h-4 w-4 text-red-600" />
+                    Need help with {isShgAccount ? 'SHG' : 'Seller'} Profile completion? <PlayCircle className="h-4 w-4 text-red-600" />
                   </div>
                 </div>
 
                 <p className="text-sm text-gray-600">
-                  If you close your account, your account will be closed permanently. You will not be able to login with this account. In addition, all the secondary seller accounts will also be closed.
+                  If you close your account, your account will be closed permanently. You will not be able to login with this account. In addition, all the secondary {isShgAccount ? 'SHG' : 'seller'} accounts will also be closed.
                 </p>
 
                 <div className="bg-sky-50 border border-sky-100 p-4 sm:p-6 rounded-lg">
                   <p className="text-sm text-sky-800 leading-relaxed">
-                    You are advised to check and validate your bank account details before closing your seller account on JsgSmile. The bank account details cannot be updated once the account is closed, which may affect pending refunds or settlements.
+                    You are advised to check and validate your bank account details before closing your {isShgAccount ? 'SHG' : 'seller'} account on JsgSmile. The bank account details cannot be updated once the account is closed, which may affect pending refunds or settlements.
                   </p>
                 </div>
 

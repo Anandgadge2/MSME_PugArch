@@ -277,6 +277,9 @@ const rolePreloaders = {
 const roleOk = (role?: string, allowed?: string[]) => {
   if (!allowed) return true;
   if (role === 'master_admin' && allowed.includes('admin')) return true;
+  // SHGs participate in procurement as suppliers. Treat the dedicated SHG
+  // account type as seller-compatible while retaining SHG-only routes.
+  if (role === 'shg' && allowed.includes('seller')) return true;
   return Boolean(role && allowed.includes(role));
 };
 
@@ -555,7 +558,7 @@ export default function App() {
         (pathname.startsWith('/master-admin') && user.role !== 'master_admin') ||
         (pathname.startsWith('/admin') && user.role !== 'admin') ||
         (pathname.startsWith('/buyer/') && user.role !== 'buyer') ||
-        (pathname.startsWith('/seller/') && user.role !== 'seller') ||
+        (pathname.startsWith('/seller/') && !['seller', 'shg'].includes(user.role)) ||
         (pathname.startsWith('/shg/') && !isCurrentShg);
       if (roleRestricted) return <Redirect to={authenticatedHome} />;
     }
@@ -574,7 +577,7 @@ export default function App() {
     if (pathname === '/tenders') return <TenderDetailPage />;
     
     if (/^\/bids\/[^/]+\/participate$/.test(pathname)) {
-      if (user && user.role !== 'seller') {
+      if (user && !['seller', 'shg'].includes(user.role)) {
         const bidId = pathname.split('/')[2];
         return <Redirect to={`/bids/${bidId}`} />;
       }
@@ -637,9 +640,9 @@ export default function App() {
     if (pathname === '/shg/members' && shgRouteOk) return <ShgOnboarding section="members" />;
     if (pathname === '/shg/bank-details' && shgRouteOk) return <ShgOnboarding section="bank-details" />;
     if (pathname === '/shg/documents' && shgRouteOk) return <ShgOnboarding section="documents" />;
-    if (pathname === '/shg/products' && shgRouteOk) return <ShgOnboarding section="products" />;
-    if (pathname === '/shg/orders' && shgRouteOk) return <ShgOnboarding section="orders" />;
-    if (pathname === '/shg/payments' && shgRouteOk) return <ShgOnboarding section="payments" />;
+    if (pathname === '/shg/products' && shgRouteOk) return <CataloguePage mode="seller" />;
+    if (pathname === '/shg/orders' && shgRouteOk) return <PurchaseOrders />;
+    if (pathname === '/shg/payments' && shgRouteOk) return <PaymentHistoryPage />;
     if (pathname === '/shg/meetings' && shgRouteOk) return <ShgOnboarding section="meetings" />;
     if (pathname === '/shg/schemes' && shgRouteOk) return <ShgOnboarding section="schemes" />;
     if (pathname === '/shg/support' && shgRouteOk) return <ShgOnboarding section="support" />;
@@ -738,7 +741,7 @@ export default function App() {
     if (pathname === '/payments' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
     if (pathname === '/payments/payment-status' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
     if (pathname === '/payments/transactions' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
-    if (pathname === '/payments/invoices' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <InvoiceRegisterPage role={user.role === 'admin' ? 'admin' : user.role === 'seller' ? 'seller' : 'buyer'} />;
+    if (pathname === '/payments/invoices' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <InvoiceRegisterPage role={user.role === 'admin' ? 'admin' : roleOk(user.role, ['seller']) ? 'seller' : 'buyer'} />;
     if (pathname === '/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <EscrowPage />;
     if (pathname === '/payments/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <EscrowPage />;
     

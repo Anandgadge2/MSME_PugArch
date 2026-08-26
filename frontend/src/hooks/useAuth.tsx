@@ -23,6 +23,7 @@ interface User {
   permissions?: string[];
   enabledFeatures?: string[];
   sellerProfile?: any;
+  shgProfile?: any;
   buyerProfile?: any;
   organizationId?: number;
   districtId?: number | null;
