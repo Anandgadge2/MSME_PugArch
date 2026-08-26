@@ -506,7 +506,7 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
 
   const processedItems = (rawItems.length ? rawItems : standardPresets).map((item: any, idx: number) => {
     const preset = standardPresets[idx % standardPresets.length];
-    
+
     if (typeof item === 'string') {
       const strLower = item.toLowerCase();
       if (strLower.includes('gst')) return { name: 'GST Certificate', instructions: 'Upload verified GST registration document.', fileType: 'PDF', maxSize: '5', required: true };
@@ -514,7 +514,7 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
       if (strLower.includes('bank') || strLower.includes('cheque')) return { name: 'Bank Details', instructions: 'Cancelled cheque or passbook.', fileType: 'PDF', maxSize: '2', required: true };
       if (strLower.includes('tech') || strLower.includes('compliance')) return { name: 'Technical Compliance Sheet', instructions: 'Compliance report against specified standards.', fileType: 'PDF, DOCX', maxSize: '10', required: true };
       if (strLower.includes('price') || strLower.includes('financial') || strLower.includes('rate') || strLower.includes('breakup')) return { name: 'Detailed Price Breakup', instructions: 'Itemized cost schedule.', fileType: 'PDF, XLSX', maxSize: '5', required: true };
-      
+
       if (strLower.includes('attached_doc') || strLower.includes('document') || !item.trim()) {
         return preset;
       }
@@ -1234,7 +1234,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [selectedQuotationForReview, setSelectedQuotationForReview] = useState<any | null>(null);
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
-const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
+  const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
 
   const [nowMs] = useState(() => Date.now());
@@ -1316,25 +1316,25 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
           const reqRes: any = await getApi(`/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`, true);
           const reqItems = extractArray(reqRes);
           if (reqItems.length > 0) return reqItems.map(normalizeItem);
-        } catch {}
+        } catch { }
 
         try {
           const directRes: any = await getApi(`/api/buyer/procurement-bids/${encodeURIComponent(idToken)}/participants`, true);
           const directItems = extractArray(directRes);
           if (directItems.length > 0) return directItems.map(normalizeItem);
-        } catch {}
+        } catch { }
 
         try {
           const bidRes: any = await procurementBidApi.detail(idToken);
           const bidItems = extractArray(bidRes);
           if (bidItems.length > 0) return bidItems.map(normalizeItem);
-        } catch {}
+        } catch { }
 
         try {
           const genRes: any = await getApi(`/api/marketplace/requirements/${encodeURIComponent(idToken)}/responses`, true);
           const genItems = extractArray(genRes);
           if (genItems.length > 0) return genItems.map(normalizeItem);
-        } catch {}
+        } catch { }
       }
 
       return [];
@@ -1745,8 +1745,8 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   const consigneeDetails = consigneeList.length
     ? consigneeList
     : (deliveryLocation && deliveryLocation !== '—' && deliveryLocation !== 'N/A'
-        ? [{ name: contactPerson && contactPerson !== '—' && contactPerson !== 'N/A' ? contactPerson : buyerOrgName, quantity: (lineItems[0]?.quantity || boqTable[0]?.quantity || '100'), location: deliveryLocation }]
-        : []);
+      ? [{ name: contactPerson && contactPerson !== '—' && contactPerson !== 'N/A' ? contactPerson : buyerOrgName, quantity: (lineItems[0]?.quantity || boqTable[0]?.quantity || '100'), location: deliveryLocation }]
+      : []);
 
   const isEmdRequired = Boolean(
     props.isEmdRequired ??
@@ -2465,8 +2465,8 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                               || participation.seller?.name
                               || participation.sellerUser?.name
                               || (participation.sellerId || participation.sellerUserId || (participation.id && !String(participation.id).startsWith('id-'))
-                                  ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
-                                  : `Supplier ${idx + 1}`);
+                                ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
+                                : `Supplier ${idx + 1}`);
                             const contactName = participation.sellerName || participation.contactPerson || participation.seller?.name || participation.sellerUser?.name || '';
                             const amount = Number(participation.totalAmount || participation.quotedAmount || participation.offeredPrice || 0);
                             const qty = participation.offeredQuantity || participation.quantity || 'Specified Qty';
@@ -2663,8 +2663,8 @@ export function SellerQuotationReviewModal({
     || participation.seller?.name
     || participation.sellerUser?.name
     || (participation.sellerId || participation.sellerUserId || (participation.id && !String(participation.id).startsWith('id-'))
-        ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
-        : 'Supplier Partner');
+      ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
+      : 'Supplier Partner');
 
   const contactPerson = participation.sellerName || participation.contactPerson || participation.seller?.name || participation.sellerUser?.name || 'N/A';
   const email = participation.sellerEmail || participation.seller?.email || participation.sellerUser?.email || 'N/A';
@@ -3118,9 +3118,8 @@ export function QuotationComparisonModal({
                         <th key={r.id || i} className={`p-3.5 border-r border-slate-200 text-center min-w-[200px] ${isL1 ? 'bg-emerald-50/70' : ''}`}>
                           <div className="font-extrabold text-slate-950 text-xs">{sellerOrg}</div>
                           <div className="mt-1 flex items-center justify-center gap-1">
-                            <span className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
-                              isL1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
-                            }`}>
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${isL1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
+                              }`}>
                               {isL1 ? 'L1 - Lowest Quote' : `L${i + 1}`}
                             </span>
                           </div>
@@ -3364,7 +3363,7 @@ export function SelectQuotationsToCompareModal({
                     <input
                       type="checkbox"
                       checked={isChecked}
-                      onChange={() => {}}
+                      onChange={() => { }}
                       className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
                     />
                     <div>

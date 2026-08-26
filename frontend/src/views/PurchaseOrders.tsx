@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical } from 'lucide-react';
@@ -91,6 +91,146 @@ const SortHeader = ({ label, columnKey, className = '', sortBy, onToggleSort }: 
     </button>
   );
 };
+import { createPortal } from 'react-dom';
+
+const OrderActionsMenu = ({
+  order,
+  buttonId,
+  onClose,
+  isSeller,
+  isBuyer,
+  isIssued,
+  isAccepted,
+  isDelivered,
+  isCancelled,
+  setViewingOrder,
+  handleAcceptOrder,
+  handleRejectOrder,
+  handleOpenDelivery,
+  exportInvoicePdf,
+  setConfirming
+}: any) => {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [style, setStyle] = useState<any>({ visibility: 'hidden', position: 'fixed', top: 0, left: 0, zIndex: 99999 });
+
+  useEffect(() => {
+    const btn = document.getElementById(buttonId);
+    const menu = menuRef.current;
+    if (!btn || !menu) return;
+
+    const btnRect = btn.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+
+    let top = btnRect.bottom + 6;
+    let left = btnRect.right - menuRect.width;
+
+    if (top + menuRect.height > window.innerHeight) {
+      top = btnRect.top - menuRect.height - 6;
+    }
+    if (top < 0) top = 6;
+    if (left < 0) left = 6;
+
+    setStyle({
+      position: 'fixed',
+      top: `${top}px`,
+      left: `${left}px`,
+      zIndex: 99999,
+      visibility: 'visible'
+    });
+  }, [buttonId]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div 
+      ref={menuRef}
+      style={style} 
+      onClick={e => e.stopPropagation()} 
+      className="w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          onClose();
+          setViewingOrder(order);
+        }}
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+      >
+        <Eye className="h-3.5 w-3.5 text-slate-500" />
+        <span>View</span>
+      </button>
+
+      {isSeller && isIssued && (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              handleAcceptOrder(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Accept</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              handleRejectOrder(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
+          >
+            <XCircle className="h-3.5 w-3.5 text-rose-600" />
+            <span>Reject</span>
+          </button>
+        </>
+      )}
+
+      {(isAccepted || isDelivered) && (
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            handleOpenDelivery(order);
+          }}
+          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+        >
+          <Truck className="h-3.5 w-3.5 text-blue-600" />
+          <span>Delivery</span>
+        </button>
+      )}
+
+      <button
+        type="button"
+        onClick={() => {
+          onClose();
+          exportInvoicePdf(order, 'print');
+        }}
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+      >
+        <Printer className="h-3.5 w-3.5 text-slate-500" />
+        <span>Print</span>
+      </button>
+
+      {isBuyer && !isCancelled && !isDelivered && (
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            setConfirming({ action: 'cancel', order });
+          }}
+          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
+        >
+          <XCircle className="h-3.5 w-3.5 text-rose-600" />
+          <span>Cancel</span>
+        </button>
+      )}
+    </div>,
+    document.body
+  );
+};
 
 export default function PurchaseOrders() {
   const { user } = useAuth();
@@ -110,9 +250,22 @@ export default function PurchaseOrders() {
 
   useEffect(() => {
     if (!openKebabId) return;
-    const handleClickOutside = () => setOpenKebabId(null);
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
+    const handleClose = () => setOpenKebabId(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenKebabId(null);
+    };
+    
+    window.addEventListener('click', handleClose);
+    window.addEventListener('scroll', handleClose, { capture: true, passive: true });
+    window.addEventListener('resize', handleClose);
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      window.removeEventListener('click', handleClose);
+      window.removeEventListener('scroll', handleClose, { capture: true });
+      window.removeEventListener('resize', handleClose);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [openKebabId]);
 
   const { data: activeDelivery } = useDeliveryByPO(viewingOrder?.id);
@@ -356,6 +509,7 @@ export default function PurchaseOrders() {
       <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
         <button
           type="button"
+          id={`kebab-btn-${order.id}`}
           onClick={(e) => {
             e.stopPropagation();
             setOpenKebabId(openKebabId === order.id ? null : order.id);
@@ -367,87 +521,23 @@ export default function PurchaseOrders() {
         </button>
 
         {openKebabId === order.id && (
-          <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
-            <button
-              type="button"
-              onClick={() => {
-                setOpenKebabId(null);
-                setViewingOrder(order);
-              }}
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-            >
-              <Eye className="h-3.5 w-3.5 text-slate-500" />
-              <span>View</span>
-            </button>
-
-            {isSeller && isIssued && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenKebabId(null);
-                    handleAcceptOrder(order);
-                  }}
-                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Accept</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenKebabId(null);
-                    handleRejectOrder(order);
-                  }}
-                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
-                >
-                  <XCircle className="h-3.5 w-3.5 text-rose-600" />
-                  <span>Reject</span>
-                </button>
-              </>
-            )}
-
-            {(isAccepted || isDelivered) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenKebabId(null);
-                  handleOpenDelivery(order);
-                }}
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
-              >
-                <Truck className="h-3.5 w-3.5 text-blue-600" />
-                <span>Delivery</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                setOpenKebabId(null);
-                exportInvoicePdf(order, 'print');
-              }}
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-            >
-              <Printer className="h-3.5 w-3.5 text-slate-500" />
-              <span>Print</span>
-            </button>
-
-            {isBuyer && !isCancelled && !isDelivered && (
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenKebabId(null);
-                  setConfirming({ action: 'cancel', order });
-                }}
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
-              >
-                <XCircle className="h-3.5 w-3.5 text-rose-600" />
-                <span>Cancel</span>
-              </button>
-            )}
-          </div>
+          <OrderActionsMenu
+            order={order}
+            buttonId={`kebab-btn-${order.id}`}
+            onClose={() => setOpenKebabId(null)}
+            isSeller={isSeller}
+            isBuyer={isBuyer}
+            isIssued={isIssued}
+            isAccepted={isAccepted}
+            isDelivered={isDelivered}
+            isCancelled={isCancelled}
+            setViewingOrder={setViewingOrder}
+            handleAcceptOrder={handleAcceptOrder}
+            handleRejectOrder={handleRejectOrder}
+            handleOpenDelivery={handleOpenDelivery}
+            exportInvoicePdf={exportInvoicePdf}
+            setConfirming={setConfirming}
+          />
         )}
       </div>
     );
@@ -677,10 +767,21 @@ export default function PurchaseOrders() {
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="overflow-x-auto w-full max-w-full">
-            <table className="w-full min-w-[1000px] border-collapse text-left text-xs">
+            <table className="w-full min-w-[1000px] border-collapse text-left text-xs table-fixed">
+              <colgroup>
+                <col className="w-[4%]" />
+                <col className="w-[9%]" />
+                <col className="w-[24%]" />
+                <col className="w-[14%]" />
+                <col className="w-[10%]" />
+                <col className="w-[8%]" />
+                <col className="w-[11%]" />
+                <col className="w-[12%]" />
+                <col className="w-[8%]" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75">
-                  <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
+                  <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Sr. No</th>
                   <th className="p-3"><SortHeader label="PO" columnKey="po" sortBy={sortBy} onToggleSort={toggleSort} /></th>
                   <th className="p-3"><SortHeader label="Title" columnKey="title" sortBy={sortBy} onToggleSort={toggleSort} /></th>
                   <th className="p-3"><SortHeader label="Party" columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} /></th>
@@ -699,7 +800,7 @@ export default function PurchaseOrders() {
                       <td className="p-3 font-mono text-xs text-slate-500">
                         {String(rowIndex).padStart(2, '0')}
                       </td>
-                      <td className="p-3 font-mono text-xs font-black text-[#12335f]">
+                      <td className="p-3 font-mono text-xs font-black text-[#12335f] whitespace-nowrap">
                         <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
                       </td>
                       <td className="p-3">
@@ -734,7 +835,7 @@ export default function PurchaseOrders() {
                         )}
                       </td>
                       <td className="p-3"><StatusPill status={order.status} /></td>
-                      <td className="p-3 text-right w-[18rem] min-w-[18rem]">
+                      <td className="p-3 text-right">
                         {renderOrderActions(order)}
                       </td>
                     </tr>

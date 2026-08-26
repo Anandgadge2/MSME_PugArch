@@ -187,15 +187,15 @@ export default function CartPage() {
 
     return (
         <div className="space-y-4">
-            <div className="brand-tricolor-strip rounded-full" />
+            {/* <div className="brand-tricolor-strip rounded-full" /> */}
             {/* Header */}
             <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Procurement</p>
+                    {/* <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Procurement</p> */}
                     <h1 className="text-2xl font-black text-slate-950">My Organisation Cart</h1>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                    {/* <p className="mt-1 text-xs font-semibold text-slate-500">
                         Add items to cart, get them approved by Finance and Technical Officers, then convert to PO/RFQ.
-                    </p>
+                    </p> */}
                 </div>
                 <div className="flex items-center gap-2">
                     {selectedCartId && (
