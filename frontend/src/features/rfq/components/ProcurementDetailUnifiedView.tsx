@@ -34,6 +34,8 @@ import {
   Award,
   Trash2,
   Tag,
+  AlertCircle,
+  HelpCircle,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -1223,6 +1225,11 @@ export interface ProcurementDetailUnifiedViewProps {
   clarificationKind?: 'quote-request' | 'requirement';
   /** Override the entity ID used for clarifications (defaults to props.id) */
   clarificationEntityId?: string | number;
+  
+  // Invoice conversion feature
+  invoiceStatus?: { exists: boolean; invoiceId?: number; loading?: boolean } | null;
+  isConvertingInvoice?: boolean;
+  onConvertToInvoiceClick?: () => void;
 }
 
 export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedViewProps) {
@@ -2077,6 +2084,28 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 <Download className="h-4 w-4" />
                 Download
               </Button>
+              {props.invoiceStatus && props.onConvertToInvoiceClick && (
+                props.invoiceStatus.exists ? (
+                  <Button
+                    type="button"
+                    onClick={() => router.push(`/seller/invoices/${props.invoiceStatus!.invoiceId}`)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    View Invoice
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    disabled={props.isConvertingInvoice || props.invoiceStatus.loading}
+                    onClick={props.onConvertToInvoiceClick}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                  >
+                    {props.isConvertingInvoice ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileText className="h-4 w-4 mr-1" />}
+                    {props.isConvertingInvoice ? 'Converting...' : 'Convert to Invoice'}
+                  </Button>
+                )
+              )}
               {props.onDiscardClick && (
                 <Button
                   type="button"
