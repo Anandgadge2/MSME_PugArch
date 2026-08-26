@@ -2139,7 +2139,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         {/* EMD Section commented out */}
 
         {/* Summary Metrics */}
-        <section className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+        <section className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
           {summaryCards.map(card => (
             <MetricCard key={card.label} {...card} />
           ))}

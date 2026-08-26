@@ -1,4 +1,5 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -544,47 +545,13 @@ export default function RepeatOrders() {
                       <td className="p-3 font-bold text-slate-900">{formatCurrency(order.amount || order.totalValue)}</td>
                       <td className="p-3 text-slate-500">{formatDate(order.updatedAt)}</td>
                       <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        <div className="relative inline-flex items-center justify-end">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenKebabId(openKebabId === order.id ? null : order.id);
-                            }}
-                            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
-                            title="Actions"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-
-                          {openKebabId === order.id && (
-                            <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenKebabId(null);
-                                  setViewingOrder(order);
-                                }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                              >
-                                <Eye className="h-3.5 w-3.5 text-slate-500" />
-                                <span>View Details</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenKebabId(null);
-                                  handleOpenRepeatModal(order);
-                                }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
-                              >
-                                <RotateCcw className="h-3.5 w-3.5 text-[#12335f]" />
-                                <span>Repeat Order</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        <ActionMenu 
+                          order={order}
+                          onView={setViewingOrder}
+                          onRepeat={handleOpenRepeatModal}
+                          openKebabId={openKebabId}
+                          setOpenKebabId={setOpenKebabId}
+                        />
                       </td>
                     </tr>
                   );
@@ -732,6 +699,94 @@ export default function RepeatOrders() {
         </div>
       )}
     </div>
+  );
+}
+
+function ActionMenu({ order, onView, onRepeat, openKebabId, setOpenKebabId }: any) {
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const isOpen = openKebabId === order.id;
+
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      setRect(buttonRef.current.getBoundingClientRect());
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isOpen && buttonRef.current) {
+        setRect(buttonRef.current.getBoundingClientRect());
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('scroll', handleScroll, true);
+      window.addEventListener('resize', handleScroll);
+    }
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [isOpen]);
+
+  const spaceBelow = rect ? window.innerHeight - rect.bottom : 0;
+  const shouldOpenUp = spaceBelow < 120;
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpenKebabId(isOpen ? null : order.id);
+        }}
+        className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+
+      {isOpen && rect && typeof window !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[9999]"
+          style={{
+            top: shouldOpenUp ? undefined : rect.bottom + 4,
+            bottom: shouldOpenUp ? window.innerHeight - rect.top + 4 : undefined,
+            right: window.innerWidth - rect.right,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in duration-100">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenKebabId(null);
+                onView(order);
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+            >
+              <Eye className="h-3.5 w-3.5 text-slate-500" />
+              <span>View Details</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenKebabId(null);
+                onRepeat(order);
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-[#12335f]" />
+              <span>Repeat Order</span>
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
 

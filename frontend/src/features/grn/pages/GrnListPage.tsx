@@ -4,7 +4,7 @@
  * Route: /grn
  */
 import { useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardList, Clock, FileCheck2, Plus, RefreshCw, Search, XCircle } from 'lucide-react';
+import { CheckCircle2, ClipboardList, Clock, FileCheck2, Plus, RefreshCw, Search, XCircle, X, Calendar } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { useRouter } from 'next/navigation';
 import { Button } from '../../../components/ui/button';
@@ -23,6 +23,108 @@ import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar'
 import { useGrns } from '../hooks';
 import type { GrnStatus } from '../api';
 import { GrnCreateModal } from '../components/GrnCreateModal';
+import { InfoTile } from './InfoTile';
+import { useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+
+function DateFilterPopover({ 
+    receivedFrom, setReceivedFrom, 
+    receivedTo, setReceivedTo, 
+    updatedFrom, setUpdatedFrom, 
+    updatedTo, setUpdatedTo,
+    activeCount, clearDates
+}: any) {
+    const [isOpen, setIsOpen] = useState(false);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const [position, setPosition] = useState({ top: 0, left: 0 });
+
+    const openPopover = () => {
+        if (buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            let left = rect.left;
+            if (left + 280 > window.innerWidth) {
+                left = window.innerWidth - 290;
+            }
+            setPosition({ top: rect.bottom + 8, left });
+        }
+        setIsOpen(true);
+    };
+
+    const closePopover = () => setIsOpen(false);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (isOpen && buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
+                const portal = document.getElementById('date-popover-portal');
+                if (portal && !portal.contains(e.target as Node)) {
+                    closePopover();
+                }
+            }
+        };
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            window.addEventListener('resize', closePopover);
+            window.addEventListener('scroll', closePopover, true);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('resize', closePopover);
+            window.removeEventListener('scroll', closePopover, true);
+        };
+    }, [isOpen]);
+
+    return (
+        <>
+            <Button
+                type="button"
+                ref={buttonRef}
+                variant="outline"
+                className={cn("h-10 shrink-0 whitespace-nowrap rounded-xl text-xs font-bold transition-colors w-full sm:w-auto px-3 shadow-xs outline-none", 
+                    activeCount > 0 
+                        ? "border-[#12335f] bg-[#12335f]/5 text-[#12335f] hover:bg-[#12335f]/10" 
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
+                )}
+                onClick={() => isOpen ? closePopover() : openPopover()}
+            >
+                <Calendar className="mr-2 h-4 w-4" /> Date Filters
+                {activeCount > 0 && <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#12335f] text-[9px] font-black text-white">{activeCount}</span>}
+            </Button>
+            
+            {isOpen && typeof document !== 'undefined' && createPortal(
+                <div id="date-popover-portal" className="fixed z-[100] w-[340px] rounded-xl border border-slate-200 bg-white shadow-xl flex flex-col overflow-hidden text-left" style={{ top: position.top, left: position.left }}>
+                    <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                        <span className="text-xs font-black text-[#12335f] uppercase tracking-widest">Date Filters</span>
+                        <button onClick={closePopover} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4"/></button>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Received</label>
+                            <div className="grid items-center gap-2" style={{ gridTemplateColumns: 'minmax(0, 1fr) 20px minmax(0, 1fr)' }}>
+                                <input type="date" value={receivedFrom} onChange={e => setReceivedFrom(e.target.value)} className="h-9 w-full min-w-0 rounded-lg bg-slate-50 px-2 text-[11px] font-bold text-slate-700 border border-slate-200 outline-none focus:border-[#12335f] focus:bg-white" title="From Date" />
+                                <span className="text-[10px] text-slate-400 font-bold text-center">-</span>
+                                <input type="date" value={receivedTo} onChange={e => setReceivedTo(e.target.value)} className="h-9 w-full min-w-0 rounded-lg bg-slate-50 px-2 text-[11px] font-bold text-slate-700 border border-slate-200 outline-none focus:border-[#12335f] focus:bg-white" title="To Date" />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Updated</label>
+                            <div className="grid items-center gap-2" style={{ gridTemplateColumns: 'minmax(0, 1fr) 20px minmax(0, 1fr)' }}>
+                                <input type="date" value={updatedFrom} onChange={e => setUpdatedFrom(e.target.value)} className="h-9 w-full min-w-0 rounded-lg bg-slate-50 px-2 text-[11px] font-bold text-slate-700 border border-slate-200 outline-none focus:border-[#12335f] focus:bg-white" title="From Date" />
+                                <span className="text-[10px] text-slate-400 font-bold text-center">-</span>
+                                <input type="date" value={updatedTo} onChange={e => setUpdatedTo(e.target.value)} className="h-9 w-full min-w-0 rounded-lg bg-slate-50 px-2 text-[11px] font-bold text-slate-700 border border-slate-200 outline-none focus:border-[#12335f] focus:bg-white" title="To Date" />
+                            </div>
+                        </div>
+                    </div>
+                    {activeCount > 0 && (
+                        <div className="bg-slate-50 px-4 py-2 border-t border-slate-100 flex justify-end">
+                            <button onClick={() => { clearDates(); closePopover(); }} className="text-xs font-bold text-red-600 hover:text-red-700">Clear Dates</button>
+                        </div>
+                    )}
+                </div>,
+                document.body
+            )}
+        </>
+    );
+}
 
 const STATUS_TONE: Record<GrnStatus, string> = {
     DRAFT: 'border-slate-200 bg-slate-50 text-slate-600',
@@ -42,16 +144,67 @@ export default function GrnListPage() {
     const [sortKey, setSortKey] = useState<GrnSortKey>('updatedAt');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
     const [viewMode, setViewMode] = useResponsiveViewMode('phase7:grn-list:view-mode');
+    const [filterPo, setFilterPo] = useState<string>('ALL');
+    const [filterSeller, setFilterSeller] = useState<string>('ALL');
+    const [filterReceivedFrom, setFilterReceivedFrom] = useState<string>('');
+    const [filterReceivedTo, setFilterReceivedTo] = useState<string>('');
+    const [filterUpdatedFrom, setFilterUpdatedFrom] = useState<string>('');
+    const [filterUpdatedTo, setFilterUpdatedTo] = useState<string>('');
+    const [filterItems, setFilterItems] = useState<string>('ALL');
+
     const canViewGrns = hasPermission('grn.view');
     const canCreate = hasPermission('grn.create');
     const { data, isLoading, error, refetch, isFetching } = useGrns(undefined, { enabled: canViewGrns });
 
     const grns = data || [];
 
+    const uniquePos = useMemo(() => {
+        const pos = new Set<string>();
+        grns.forEach(g => {
+            if (g.purchaseOrder?.poNumber) pos.add(g.purchaseOrder.poNumber);
+        });
+        return Array.from(pos).sort();
+    }, [grns]);
+
+    const uniqueSellers = useMemo(() => {
+        const sellers = new Set<string>();
+        grns.forEach(g => {
+            if (g.purchaseOrder?.seller?.name) sellers.add(g.purchaseOrder.seller.name);
+        });
+        return Array.from(sellers).sort();
+    }, [grns]);
+
     const visibleGrns = useMemo(() => {
         const text = search.trim().toLowerCase();
         return [...grns].filter(g => {
             if (filter !== 'ALL' && g.status !== filter) return false;
+            if (filterPo !== 'ALL' && g.purchaseOrder?.poNumber !== filterPo) return false;
+            if (filterSeller !== 'ALL' && g.purchaseOrder?.seller?.name !== filterSeller) return false;
+            
+            if (filterItems !== 'ALL') {
+                const count = g.items?.length || 0;
+                if (filterItems === '1' && count !== 1) return false;
+                if (filterItems === '2' && count !== 2) return false;
+                if (filterItems === '3+' && count < 3) return false;
+            }
+
+            if (filterReceivedFrom) {
+                if (new Date(g.receivedAt).getTime() < new Date(filterReceivedFrom).getTime()) return false;
+            }
+            if (filterReceivedTo) {
+                const toDate = new Date(filterReceivedTo);
+                toDate.setHours(23, 59, 59, 999);
+                if (new Date(g.receivedAt).getTime() > toDate.getTime()) return false;
+            }
+            if (filterUpdatedFrom) {
+                if (new Date(g.updatedAt).getTime() < new Date(filterUpdatedFrom).getTime()) return false;
+            }
+            if (filterUpdatedTo) {
+                const toDate = new Date(filterUpdatedTo);
+                toDate.setHours(23, 59, 59, 999);
+                if (new Date(g.updatedAt).getTime() > toDate.getTime()) return false;
+            }
+
             const haystack = [
                 g.grnNumber,
                 g.status,
@@ -78,7 +231,7 @@ export default function GrnListPage() {
                 : String(av).localeCompare(String(bv));
             return sortDirection === 'asc' ? result : -result;
         });
-    }, [grns, search, sortDirection, sortKey]);
+    }, [grns, search, sortDirection, sortKey, filter, filterPo, filterSeller, filterItems, filterReceivedFrom, filterReceivedTo, filterUpdatedFrom, filterUpdatedTo]);
 
     const { page, pageSize, pageItems, total, setPage, setPageSize } = usePagination(visibleGrns, 10);
 
@@ -91,6 +244,27 @@ export default function GrnListPage() {
         setSortKey(field);
         setPage(1);
     };
+
+    const clearFilters = () => {
+        setSearch('');
+        setFilter('ALL');
+        setFilterPo('ALL');
+        setFilterSeller('ALL');
+        setFilterReceivedFrom('');
+        setFilterReceivedTo('');
+        setFilterUpdatedFrom('');
+        setFilterUpdatedTo('');
+        setFilterItems('ALL');
+        setPage(1);
+    };
+
+    const activeFilterCount = (search ? 1 : 0) + 
+      (filter !== 'ALL' ? 1 : 0) + 
+      (filterPo !== 'ALL' ? 1 : 0) + 
+      (filterSeller !== 'ALL' ? 1 : 0) + 
+      (filterItems !== 'ALL' ? 1 : 0) + 
+      (filterReceivedFrom || filterReceivedTo ? 1 : 0) + 
+      (filterUpdatedFrom || filterUpdatedTo ? 1 : 0);
 
     const counts = {
         ALL: grns.length,
@@ -177,9 +351,9 @@ export default function GrnListPage() {
             {error && <InlineError message={(error as Error).message} onRetry={() => refetch()} />}
 
             {/* Search + Filter + View Toggle Toolbar */}
-            <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+            <div className={cn("rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm", activeFilterCount > 0 ? "space-y-3" : "")}>
                 <ResponsiveFilterBar
-                    activeFilterCount={search ? 1 : 0}
+                    activeFilterCount={activeFilterCount}
                     searchInput={
                         <div className="relative w-full">
                             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -193,18 +367,108 @@ export default function GrnListPage() {
                         </div>
                     }
                     filters={
-                        search ? (
-                            <Button
-                                variant="outline"
-                                className="h-10 shrink-0 whitespace-nowrap rounded-xl text-xs font-bold bg-white hover:bg-slate-50 border-slate-200 shadow-xs"
-                                onClick={() => { setSearch(''); setFilter('ALL'); setPage(1); }}
-                            >
-                                Reset Search
-                            </Button>
-                        ) : null
+                        <div className="flex flex-col sm:flex-row gap-2.5 flex-wrap w-full">
+                            <select value={filter} onChange={e => { setFilter(e.target.value as any); setPage(1); }} className="h-10 w-full sm:w-auto sm:w-[150px] shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
+                                <option value="ALL">All Statuses</option>
+                                <option value="DRAFT">Draft</option>
+                                <option value="SUBMITTED">Submitted</option>
+                                <option value="APPROVED">Approved</option>
+                                <option value="PARTIAL">Partial</option>
+                                <option value="REJECTED">Rejected</option>
+                            </select>
+
+                            <select value={filterPo} onChange={e => { setFilterPo(e.target.value); setPage(1); }} className="h-10 w-full sm:w-auto sm:w-[170px] shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
+                                <option value="ALL">All Purchase Orders</option>
+                                {uniquePos.map(po => <option key={po} value={po}>{po}</option>)}
+                            </select>
+
+                            <select value={filterSeller} onChange={e => { setFilterSeller(e.target.value); setPage(1); }} className="h-10 w-full sm:w-auto sm:w-[150px] shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
+                                <option value="ALL">All Sellers</option>
+                                {uniqueSellers.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+
+                            <select value={filterItems} onChange={e => { setFilterItems(e.target.value); setPage(1); }} className="h-10 w-full sm:w-auto sm:w-[130px] shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
+                                <option value="ALL">All Items</option>
+                                <option value="1">1 line</option>
+                                <option value="2">2 lines</option>
+                                <option value="3+">3+ lines</option>
+                            </select>
+
+                            <DateFilterPopover 
+                                receivedFrom={filterReceivedFrom} setReceivedFrom={(v: string) => { setFilterReceivedFrom(v); setPage(1); }}
+                                receivedTo={filterReceivedTo} setReceivedTo={(v: string) => { setFilterReceivedTo(v); setPage(1); }}
+                                updatedFrom={filterUpdatedFrom} setUpdatedFrom={(v: string) => { setFilterUpdatedFrom(v); setPage(1); }}
+                                updatedTo={filterUpdatedTo} setUpdatedTo={(v: string) => { setFilterUpdatedTo(v); setPage(1); }}
+                                activeCount={(filterReceivedFrom || filterReceivedTo ? 1 : 0) + (filterUpdatedFrom || filterUpdatedTo ? 1 : 0)}
+                                clearDates={() => {
+                                    setFilterReceivedFrom('');
+                                    setFilterReceivedTo('');
+                                    setFilterUpdatedFrom('');
+                                    setFilterUpdatedTo('');
+                                    setPage(1);
+                                }}
+                            />
+
+                            {activeFilterCount > 0 && (
+                                <button
+                                    type="button"
+                                    className="h-10 shrink-0 whitespace-nowrap text-[11px] font-black uppercase tracking-wider text-slate-500 hover:text-red-600 transition-colors w-full sm:w-auto sm:px-2 flex items-center justify-center sm:justify-start"
+                                    onClick={clearFilters}
+                                >
+                                    Clear Filters
+                                </button>
+                            )}
+                        </div>
                     }
                     endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
                 />
+
+                {/* Active Filter Chips */}
+                {activeFilterCount > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1 sm:pt-2 border-t border-slate-100">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 mr-1">Active Filters:</span>
+                        
+                        {search && (
+                            <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 border border-blue-200">
+                                Search: {search} <button onClick={() => { setSearch(''); setPage(1); }} className="hover:text-blue-900 ml-0.5"><X className="h-3 w-3" /></button>
+                            </span>
+                        )}
+                        {filter !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 border border-blue-200">
+                                Status: {filter} <button onClick={() => { setFilter('ALL'); setPage(1); }} className="hover:text-blue-900 ml-0.5"><X className="h-3 w-3" /></button>
+                            </span>
+                        )}
+                        {filterPo !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 border border-blue-200">
+                                PO: {filterPo} <button onClick={() => { setFilterPo('ALL'); setPage(1); }} className="hover:text-blue-900 ml-0.5"><X className="h-3 w-3" /></button>
+                            </span>
+                        )}
+                        {filterSeller !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 border border-blue-200">
+                                Seller: {filterSeller} <button onClick={() => { setFilterSeller('ALL'); setPage(1); }} className="hover:text-blue-900 ml-0.5"><X className="h-3 w-3" /></button>
+                            </span>
+                        )}
+                        {filterItems !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 border border-blue-200">
+                                Items: {filterItems === '1' ? '1 line' : filterItems === '2' ? '2 lines' : '3+ lines'} <button onClick={() => { setFilterItems('ALL'); setPage(1); }} className="hover:text-blue-900 ml-0.5"><X className="h-3 w-3" /></button>
+                            </span>
+                        )}
+                        {(filterReceivedFrom || filterReceivedTo) && (
+                            <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 border border-blue-200">
+                                Received: {filterReceivedFrom || '...'} to {filterReceivedTo || '...'} <button onClick={() => { setFilterReceivedFrom(''); setFilterReceivedTo(''); setPage(1); }} className="hover:text-blue-900 ml-0.5"><X className="h-3 w-3" /></button>
+                            </span>
+                        )}
+                        {(filterUpdatedFrom || filterUpdatedTo) && (
+                            <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 border border-blue-200">
+                                Updated: {filterUpdatedFrom || '...'} to {filterUpdatedTo || '...'} <button onClick={() => { setFilterUpdatedFrom(''); setFilterUpdatedTo(''); setPage(1); }} className="hover:text-blue-900 ml-0.5"><X className="h-3 w-3" /></button>
+                            </span>
+                        )}
+                        
+                        <button onClick={clearFilters} className="text-[10px] font-black uppercase text-slate-500 hover:text-slate-800 ml-1 underline decoration-slate-300 underline-offset-2">
+                            Clear All
+                        </button>
+                    </div>
+                )}
             </div>
 
             {isLoading ? (
@@ -212,7 +476,15 @@ export default function GrnListPage() {
             ) : grns.length === 0 ? (
                 <EmptyState title="No GRNs found" description={canCreate ? "Create one against an active Purchase Order to record the receipt of goods." : "No goods receipt notes recorded yet."} />
             ) : pageItems.length === 0 ? (
-                <EmptyState title="No GRNs match these filters" description="Clear the search or status card filter to see all goods receipt notes." />
+                <EmptyState 
+                    title="No GRNs match these filters" 
+                    description="Clear filters to see all goods receipt notes." 
+                    action={
+                        <Button onClick={clearFilters} className="mt-4 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-xs font-black uppercase tracking-wider rounded-lg shadow-sm">
+                            Clear Filters
+                        </Button>
+                    }
+                />
             ) : viewMode === 'grid' ? (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {pageItems.map((g: any, index) => {
@@ -252,16 +524,16 @@ export default function GrnListPage() {
             ) : (
                 <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                     <div className="overflow-x-auto w-full">
-                        <table data-ux-wrapped="true" className="w-full min-w-[760px] border-collapse text-left text-xs">
+                        <table data-ux-wrapped="true" className="w-full min-w-[850px] table-fixed border-collapse text-left text-xs">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-                                    <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
-                                    <th className="p-3 w-44"><SortableHeader label="GRN ID" field="grnNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="p-3"><SortableHeader label="Purchase Order" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="p-3 w-32"><SortableHeader label="Items" field="items" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="p-3 w-32"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="p-3 w-44"><SortableHeader label="Received" field="receivedAt" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="p-3 w-44"><SortableHeader label="Updated" field="updatedAt" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-[5%]">Sr. No</th>
+                                    <th className="p-3 w-[12%]"><SortableHeader label="GRN ID" field="grnNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="p-3 w-[38%]"><SortableHeader label="Purchase Order" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="p-3 w-[9%]"><SortableHeader label="Items" field="items" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="p-3 w-[10%]"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="p-3 w-[13%]"><SortableHeader label="Received" field="receivedAt" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
+                                    <th className="p-3 w-[13%]"><SortableHeader label="Updated" field="updatedAt" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
