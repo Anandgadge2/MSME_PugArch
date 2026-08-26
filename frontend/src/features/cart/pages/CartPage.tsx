@@ -457,18 +457,28 @@ export default function CartPage() {
                                 Created by {cart.createdBy?.name} · {formatDateTime(cart.createdAt)}
                             </p>
                             {isSubmittable && (
-                                <div className="flex flex-col items-start sm:items-end space-y-1">
-                                    <Button
-                                        onClick={() => router.push('/buyer/procurement/checkout')}
-                                        className="bg-[#12335f] text-white hover:bg-[#0e2a4f] font-bold"
-                                    >
-                                        Proceed to Procurement Checkout
-                                    </Button>
+                                <div className="flex flex-col items-start sm:items-end space-y-1.5">
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => router.push('/buyer/procurement/checkout')}
+                                            className="text-xs border-slate-300 font-semibold"
+                                        >
+                                            Create RFQ / Bid
+                                        </Button>
+                                        <Button
+                                            onClick={() => router.push('/buyer/checkout')}
+                                            className="bg-[#12335f] text-white hover:bg-[#0e2a4f] font-black text-xs px-5 shadow-sm"
+                                        >
+                                            Proceed to Direct Checkout
+                                        </Button>
+                                    </div>
                                     <span className="text-[10px] font-semibold text-slate-500">
-                                        Select Direct Purchase, L1 Purchase, Bid/RA, or PAC based on cart value and rules.
+                                        Direct Purchase: Create Purchase Orders immediately at active marketplace prices.
                                     </span>
                                 </div>
                             )}
+
                         </div>
                     )}
                 </CardContent>

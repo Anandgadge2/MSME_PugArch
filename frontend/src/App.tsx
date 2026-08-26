@@ -56,7 +56,9 @@ const RatingsPage = lazy(() => import('./features/ratings/pages/RatingsPage'));
 const ComplianceRulesPage = lazy(() => import('./features/compliance/pages/ComplianceRulesPage'));
 const FraudAlertsPage = lazy(() => import('./features/fraudAlerts/pages/FraudAlertsPage'));
 const DirectPurchasePage = lazy(() => import('./features/directPurchase/pages/DirectPurchasePage'));
+const DirectCheckoutPage = lazy(() => import('./features/directPurchase/pages/DirectCheckoutPage'));
 const AddressBookPage = lazy(() => import('./features/directPurchase/pages/AddressBookPage'));
+
 const RbacPanel = lazy(() => import('./views/RbacPanel'));
 const OrganizationManagement = lazy(() => import('./views/OrganizationManagement'));
 const NotificationCenter = lazy(() => import('./views/NotificationCenter'));
@@ -720,8 +722,10 @@ export default function App() {
     if (pathname === '/buyer/rfq/detail' && roleOk(user.role, ['buyer'])) return <RfqDetailPage />;
     if (pathname === '/buyer/rfp/detail' && roleOk(user.role, ['buyer'])) return <RfpDetailPage />;
     if (pathname === '/buyer/rate-contracts' && roleOk(user.role, ['buyer'])) return <RateContractsPage />;
+    if ((pathname === '/buyer/checkout' || pathname === '/buyer/direct-purchase/checkout') && roleOk(user.role, ['buyer'])) return <DirectCheckoutPage />;
     if (pathname === '/buyer/procurement/checkout' && roleOk(user.role, ['buyer'])) return <ProcurementCheckoutPage />;
     if (pathname === '/buyer/address-book' && roleOk(user.role, ['buyer'])) return <AddressBookPage />;
+
     
     
     if (pathname === '/buyer/vendors' && roleOk(user.role, ['buyer'])) return <Vendors />;
