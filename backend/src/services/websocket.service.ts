@@ -179,12 +179,17 @@ export const handleUpgrade = (request: IncomingMessage, socket: any, head: Buffe
   });
 };
 
+import { publishDisputeEvent } from './pusher.service.js';
+
 export const broadcastToDispute = (disputeId: number, event: DisputeSocketEvent) => {
+  // Always push to Pusher if configured (serverless compatible)
+  void publishDisputeEvent(disputeId, event);
+
   const roomId = `dispute:${disputeId}`;
   const room = rooms.get(roomId);
   
   if (!room) {
-    logger.info(`[WS] Event ${event.type} dropped for ${roomId} - no active subscribers`);
+    logger.info(`[WS] Event ${event.type} dropped for local room ${roomId} - no active local WS subscribers`);
     return;
   }
 

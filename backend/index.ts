@@ -26,6 +26,7 @@ import { upload } from './src/config/storage.js';
 import { errorHandler } from './src/middleware/errorHandler.js';
 import { checkOwnership } from './src/middleware/ownership.js';
 import { handleUpgrade } from './src/services/websocket.service.js';
+import { authorizePusherChannel, isPusherConfigured, publishConversationEvent } from './src/services/pusher.service.js';
 import { safeAsync } from './src/utils/safeAsync.js';
 import { TimeConstants } from './src/constants/time.js';
 import {
@@ -201,6 +202,87 @@ app.use('/api', (req, res, next) => {
   });
 
   return next();
+});
+
+app.post('/api/pusher/auth', authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!isPusherConfigured()) {
+      return res.status(503).json({ message: 'Pusher service is not configured' });
+    }
+
+    const socketId = req.body.socket_id || req.body.socketId;
+    const channelName = req.body.channel_name || req.body.channelName;
+
+    if (!socketId || !channelName) {
+      return res.status(400).json({ message: 'Missing socket_id or channel_name' });
+    }
+
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+
+    if (channelName.startsWith('private-dispute-')) {
+      const disputeId = Number(channelName.replace('private-dispute-', ''));
+      if (!disputeId || Number.isNaN(disputeId)) {
+        return res.status(400).json({ message: 'Invalid dispute channel name' });
+      }
+
+      const dispute = await prisma.dispute.findUnique({
+        where: { id: disputeId },
+        select: { buyerId: true, sellerId: true, againstOrgId: true }
+      });
+
+      if (!dispute) {
+        return res.status(404).json({ message: 'Dispute not found' });
+      }
+
+      const isAdmin = ['admin', 'master_admin'].includes(user.role || '');
+      const isParticipant =
+        user.id === dispute.buyerId ||
+        user.id === dispute.sellerId ||
+        (user.organizationId && user.organizationId === dispute.againstOrgId);
+
+      if (!isAdmin && !isParticipant) {
+        return res.status(403).json({ message: 'Forbidden: Unauthorized for this dispute channel' });
+      }
+    } else if (channelName.startsWith('private-conversation-')) {
+      const conversationId = Number(channelName.replace('private-conversation-', ''));
+      if (!conversationId || Number.isNaN(conversationId)) {
+        return res.status(400).json({ message: 'Invalid conversation channel name' });
+      }
+
+      const conversation = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { buyerId: true, sellerId: true }
+      });
+
+      if (!conversation) {
+        return res.status(404).json({ message: 'Conversation not found' });
+      }
+
+      const isAdmin = ['admin', 'master_admin'].includes(user.role || '');
+      const isParticipant = user.id === conversation.buyerId || user.id === conversation.sellerId;
+
+      if (!isAdmin && !isParticipant) {
+        return res.status(403).json({ message: 'Forbidden: Unauthorized for this conversation channel' });
+      }
+    } else if (channelName.startsWith('private-user-')) {
+      const targetUserId = Number(channelName.replace('private-user-', ''));
+      const isAdmin = ['admin', 'master_admin'].includes(user.role || '');
+      if (user.id !== targetUserId && !isAdmin) {
+        return res.status(403).json({ message: 'Forbidden: Cannot subscribe to another user channel' });
+      }
+    }
+
+    const authData = authorizePusherChannel(socketId, channelName, {
+      user_id: String(user.id),
+      user_info: { role: user.role }
+    });
+
+    return res.json(authData);
+  } catch (err: any) {
+    logger.error({ err }, '[Pusher Auth] Authorization failed');
+    return res.status(500).json({ message: 'Pusher authorization failed' });
+  }
 });
 
 const ensureOnboardingEditable = async (
@@ -5565,9 +5647,17 @@ app.post('/api/conversations', authenticate, authorize('buyer', 'seller', 'admin
         messages: { include: { attachments: true, sender: { select: conversationUserSelect } }, orderBy: { createdAt: 'asc' } }
       }
     });
+    const enrichedMsg = message ? (await enrichMessageAttachments([message]))[0] : null;
+    if (enrichedMsg) {
+      void publishConversationEvent(conversation.id, {
+        type: 'MESSAGE_CREATED',
+        conversationId: conversation.id,
+        message: enrichedMsg
+      });
+    }
     res.status(201).json(maskSensitive({
       conversation: enrichedConversation ? await enrichConversationPayload(enrichedConversation) : conversation,
-      message: message ? (await enrichMessageAttachments([message]))[0] : null
+      message: enrichedMsg
     }));
     const actorUserId = Number(actor.id);
     const actorRole = actor.role;
@@ -5717,6 +5807,11 @@ app.post('/api/conversations/:id/messages', authenticate, async (req: AuthReques
     await linkMessageFileAssets(message.id, payload.fileAssetIds || [], Number(req.user?.id));
     await prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
     const enrichedMessage = (await enrichMessageAttachments([message]))[0];
+    void publishConversationEvent(conversation.id, {
+      type: 'MESSAGE_CREATED',
+      conversationId: conversation.id,
+      message: enrichedMessage
+    });
     res.status(201).json(maskSensitive(enrichedMessage));
     const actorUserId = Number(req.user?.id);
     const actorRole = req.user?.role;
