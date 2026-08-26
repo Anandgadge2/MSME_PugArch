@@ -13,33 +13,25 @@ let isJobsRunning = false;
 
 export const processDisputeAutoEscalation = async () => {
   try {
-    const disputesToEscalate = await (prisma as any).dispute.findMany({
-      where: {
-        status: 'CLARIFICATION_REQUESTED',
-        responseDueAt: {
-          lt: new Date()
-        }
-      },
-      select: {
-        id: true,
-        disputeNo: true
-      }
-    });
+    const disputesToEscalate = await prisma.$queryRaw<Array<{ id: number; disputeNo: string | null }>>`
+      SELECT id, "disputeNo"
+      FROM "Dispute"
+      WHERE status = 'CLARIFICATION_REQUESTED'
+        AND "responseDueAt" IS NOT NULL
+        AND "responseDueAt" < NOW()
+    `.catch(() => []);
 
-    if (disputesToEscalate.length === 0) return { escalatedCount: 0 };
+    if (!disputesToEscalate || disputesToEscalate.length === 0) return { escalatedCount: 0 };
 
     let escalatedCount = 0;
 
     for (const dispute of disputesToEscalate) {
       await prisma.$transaction(async tx => {
-        const updated = await (tx as any).dispute.update({
-          where: { id: dispute.id, status: 'CLARIFICATION_REQUESTED' },
-          data: {
-            status: 'ESCALATED',
-            statusEnum: 'ESCALATED',
-            escalatedAt: new Date()
-          }
-        });
+        await tx.$executeRaw`
+          UPDATE "Dispute"
+          SET status = 'ESCALATED', "statusEnum" = 'ESCALATED', "escalatedAt" = NOW()
+          WHERE id = ${dispute.id} AND status = 'CLARIFICATION_REQUESTED'
+        `;
 
         await auditLog({
           actorUserId: 1, // System
