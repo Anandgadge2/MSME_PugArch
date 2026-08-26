@@ -43,10 +43,7 @@ export const uploadDeliveryFile = (file: File, opts: UploadOptions = {}): Promis
       xhr.setRequestHeader(key, value);
     }
 
-    const csrfToken = getCookieValue('csrfToken');
-    if (csrfToken) {
-      xhr.setRequestHeader('X-CSRF-Token', csrfToken);
-    }
+
 
     xhr.upload.addEventListener('progress', event => {
       if (event.lengthComputable && opts.onProgress) {

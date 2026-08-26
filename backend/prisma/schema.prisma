@@ -3068,6 +3068,10 @@ model Dispute {
   adminRemarks          String?
   resolutionSummary     String?
   closedAt              DateTime?
+  responseRequestedAt   DateTime?
+  responseDueAt         DateTime?
+  escalatedAt           DateTime?
+  withdrawnAt           DateTime?
   againstOrg            Organization?       @relation("DisputeAgainstOrg", fields: [againstOrgId], references: [id])
   assignedAdmin         User?               @relation("AssignedDisputes", fields: [assignedAdminId], references: [id])
   buyer                 User                @relation("BuyerDisputes", fields: [buyerId], references: [id])

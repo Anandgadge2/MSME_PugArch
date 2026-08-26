@@ -384,7 +384,7 @@ export default function MarketplaceProductDetail() {
                                             onClick={() => setSelectedImage(i)}
                                             className={`relative w-18 h-18 rounded-xl border-2 overflow-hidden shrink-0 transition-all duration-200 ${i === selectedImage ? 'border-[#0b2447] ring-2 ring-[#0b2447]/20 scale-105 shadow-sm' : 'border-slate-200 opacity-70 hover:opacity-100 hover:border-slate-300'}`}
                                         >
-                                            <img src={img} alt={`${product.name} preview ${i + 1}`} className="w-full h-full object-cover" />
+                                            <img src={img} alt={`${product.name} preview ${i + 1}`} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = resolveMarketplaceImage(product, 'product'); }} />
                                         </button>
                                     ))}
                                 </div>
@@ -853,7 +853,7 @@ export default function MarketplaceProductDetail() {
                                         <div className="space-y-2">
                                             <div className="h-36 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden relative">
                                                 {resolveMarketplaceImage(p, 'product') ? (
-                                                    <img src={resolveMarketplaceImage(p, 'product')} alt={p.name} className="w-full h-full object-contain p-2 group-hover:scale-105 transition" />
+                                                    <img src={resolveMarketplaceImage(p, 'product')} alt={p.name} className="w-full h-full object-contain p-2 group-hover:scale-105 transition" onError={(e) => { e.currentTarget.src = resolveMarketplaceImage({}, 'product'); }} />
                                                 ) : (
                                                     <Package className="h-10 w-10 text-slate-300" />
                                                 )}

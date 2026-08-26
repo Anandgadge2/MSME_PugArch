@@ -585,11 +585,11 @@ export default function SupplierResponsesPage() {
     <div className="mx-auto max-w-[1560px] space-y-3.5 sm:space-y-5 px-2.5 sm:px-4 pb-12">
       {/* ── Transparent Header ── */}
       <div>
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">Procurement Control</p>
+        {/* <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">Procurement Control</p> */}
         <div className="flex flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 mt-1 break-words">Supplier Responses</h1>
-            <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm font-semibold text-slate-500 break-words">Track bids, quotes, and proposals received from suppliers across your procurements.</p>
+            {/* <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm font-semibold text-slate-500 break-words">Track bids, quotes, and proposals received from suppliers across your procurements.</p> */}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button variant="outline" onClick={() => { api.invalidate('/api/buyer/procurement-bids'); api.invalidate('/api/marketplace/requirements'); refetch(); }} className="h-9 sm:h-10 rounded-lg text-xs font-black uppercase shadow-sm bg-white hover:bg-slate-50 border-slate-200">

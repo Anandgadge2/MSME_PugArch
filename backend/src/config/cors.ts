@@ -63,7 +63,7 @@ export const applyCorsHeaders = (req: Request, res: Response) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    String(req.headers['access-control-request-headers'] || 'Content-Type, Authorization, X-Requested-With, X-Request-Id, Idempotency-Key')
+    String(req.headers['access-control-request-headers'] || 'Content-Type, Authorization, X-Requested-With, X-Request-Id, Idempotency-Key, X-CSRF-Token')
   );
   res.setHeader('Access-Control-Max-Age', '86400');
 };
@@ -80,6 +80,6 @@ export const corsOptions: CorsOptions = {
   },
   credentials: true,
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Request-Id', 'Idempotency-Key'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Request-Id', 'Idempotency-Key', 'X-CSRF-Token'],
   optionsSuccessStatus: 204
 };

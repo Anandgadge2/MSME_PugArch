@@ -121,7 +121,6 @@ export default function CartPage() {
             return 0;
         });
     }, [cart?.items, sortField, sortDir]);
-
     if (permissionsLoading && !canViewCart) {
         return <LoadingState label="Loading cart..." />;
     }
