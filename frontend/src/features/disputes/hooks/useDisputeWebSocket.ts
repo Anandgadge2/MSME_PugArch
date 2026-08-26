@@ -85,8 +85,8 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
               if (!oldData) return oldData;
               return {
                 ...oldData,
-                status: data.status,
-                statusEnum: data.status
+                status: data.status as any,
+                statusEnum: data.status as any
               };
             });
           }

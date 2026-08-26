@@ -1,4 +1,4 @@
-import React, { ChangeEvent, FormEvent, InputHTMLAttributes, useMemo, useState } from 'react';
+import React, { ChangeEvent, FormEvent, InputHTMLAttributes, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
@@ -628,6 +628,15 @@ function MetricCard({
   );
 }
 
+const FALLBACK_BANNER_IMAGES = [
+  'https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?w=1920&q=90&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1920&q=90&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1606744824163-985d376605aa?w=1920&q=90&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=1920&q=90&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=1920&q=90&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1920&q=90&auto=format&fit=crop',
+];
+
 function BannerAdminCard({
   banner,
   busy,
@@ -641,20 +650,38 @@ function BannerAdminCard({
   onToggleVisibility: () => void;
   onDelete: () => void;
 }) {
-  const src = imageSrc(banner.imageUrl);
+  const initialSrc = imageSrc(banner.imageUrl);
+  const [src, setSrc] = useState(initialSrc);
+  const [hasError, setHasError] = useState(false);
   const isActive = banner.status === 'ACTIVE' || banner.status === 'APPROVED';
+  const fallbackUrl = FALLBACK_BANNER_IMAGES[Math.abs(banner.id || 0) % FALLBACK_BANNER_IMAGES.length];
+
+  useEffect(() => {
+    setSrc(imageSrc(banner.imageUrl));
+    setHasError(false);
+  }, [banner.imageUrl]);
 
   return (
     <Card className="overflow-hidden border-slate-200 bg-white shadow-xs transition hover:shadow-md">
       <CardContent className="flex h-full flex-col p-0">
         {/* Banner Visual Header */}
         <div className="relative min-h-[170px] overflow-hidden bg-slate-900">
-          {src ? (
+          {src && !hasError ? (
             <img
               src={src}
               alt={banner.title}
               referrerPolicy="no-referrer"
               crossOrigin="anonymous"
+              onError={() => {
+                setHasError(true);
+                setSrc(fallbackUrl);
+              }}
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+            />
+          ) : fallbackUrl ? (
+            <img
+              src={fallbackUrl}
+              alt={banner.title}
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
             />
           ) : (

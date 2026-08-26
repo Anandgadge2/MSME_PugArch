@@ -4,7 +4,7 @@ const DEFAULT_PORTAL_BANNERS = [
   {
     title: 'Steel & Metal Fabrication\nPowering Jharsuguda Industry',
     subtitle: 'Source verified steel, TMT bars, industrial castings, and metal components from local manufacturers across the district.',
-    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/steel-fabrication-plant.jpg',
+    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/jharsuguda-steel-industry.jpg',
     ctaText: 'Browse Steel & Metal',
     ctaLink: '#products',
     displayOrder: 1,
@@ -18,7 +18,7 @@ const DEFAULT_PORTAL_BANNERS = [
   {
     title: 'Simplified\ne-Procurement for Smart Buyers',
     subtitle: 'Compare quotations, track orders, and manage your procurement from verified district suppliers — all in one dashboard.',
-    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/smart-buyer-procurement.jpg',
+    imageUrl: 'https://storage.googleapis.com/jsgsmile1/banners/digital-procurement.jpg',
     ctaText: 'Start Buying',
     ctaLink: '/buyer/register',
     displayOrder: 2,
