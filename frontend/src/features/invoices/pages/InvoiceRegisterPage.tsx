@@ -72,7 +72,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [viewProofInvoiceId, setViewProofInvoiceId] = useState<number | null>(null);
 
   // Invoice Branding & Copy Type States
-  const [invoiceCopyType, setInvoiceCopyType] = useState<string>('Duplicate Copy');
+  const [invoiceCopyType, setInvoiceCopyType] = useState<string>('Original Copy');
   const [invoiceLogoUrl, setInvoiceLogoUrl] = useState<string | null>(null);
   const [invoiceStampUrl, setInvoiceStampUrl] = useState<string | null>(null);
   const [invoiceSignatureUrl, setInvoiceSignatureUrl] = useState<string | null>(null);

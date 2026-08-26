@@ -641,7 +641,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
 
   const isAllowed = useCallback((item: SidebarItem) => {
     if (!user) return false;
-    const hasRole = item.roles.includes(user.role) || (isShgAccount && item.roles.includes('shg'));
+    const hasRole = item.roles.includes(user.role)
+      || (isShgAccount && (item.roles.includes('shg') || item.roles.includes('seller')));
     if (!hasRole) return false;
     if (item.featureCode && user.role !== 'master_admin' && Array.isArray(user.enabledFeatures) && user.enabledFeatures.length > 0) {
       if (!user.enabledFeatures.includes(item.featureCode)) return false;
