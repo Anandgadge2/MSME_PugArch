@@ -33,7 +33,7 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
       
       setStatus(backoffRef.current > 1000 ? 'RECONNECTING' : 'CONNECTING');
 
-      let baseUrl = getBaseUrl();
+      let baseUrl = getBaseUrl().replace(/\/$/, '');
       if (!baseUrl && typeof window !== 'undefined') {
         baseUrl = window.location.origin;
       }
