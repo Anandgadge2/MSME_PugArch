@@ -4,11 +4,11 @@ import { verifyAccessToken, type AccessTokenPayload } from './token.service.js';
 import prisma from '../lib/prisma.js';
 import { logger } from '../config/logger.js';
 
-interface AuthenticatedWebSocket extends WebSocket {
+type AuthenticatedWebSocket = InstanceType<typeof WebSocket> & {
   user?: Partial<AccessTokenPayload>;
   isAlive: boolean;
   subscriptions: Set<string>;
-}
+};
 
 export type DisputeSocketEvent =
   | { type: 'DISPUTE_MESSAGE_CREATED'; disputeId: number; message: any }

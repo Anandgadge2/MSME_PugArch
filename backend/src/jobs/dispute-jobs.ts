@@ -13,7 +13,7 @@ let isJobsRunning = false;
 
 export const processDisputeAutoEscalation = async () => {
   try {
-    const disputesToEscalate = await prisma.dispute.findMany({
+    const disputesToEscalate = await (prisma as any).dispute.findMany({
       where: {
         status: 'CLARIFICATION_REQUESTED',
         responseDueAt: {
