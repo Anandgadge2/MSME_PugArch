@@ -2670,29 +2670,20 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
   const ext = path.extname(rawKey).toLowerCase();
   const contentType = RAW_MIME_TYPES[ext] || 'application/octet-stream';
 
-  // 1. Check local candidate paths (local disk fallback)
-  const localCandidates = [
-    path.resolve(process.cwd(), 'uploads', rawKey),
-    path.resolve(process.cwd(), 'backend/uploads', rawKey),
-    path.resolve(process.cwd(), 'public', rawKey),
-    path.resolve(process.cwd(), 'backend/public', rawKey),
-    path.resolve(process.cwd(), 'frontend/public', rawKey),
-    path.resolve(process.cwd(), '../frontend/public', rawKey),
-    path.resolve(process.cwd(), rawKey)
-  ];
-
-  for (const cand of localCandidates) {
-    try {
-      if (cand && fs.existsSync(cand) && !fs.statSync(cand).isDirectory()) {
-        const buffer = fs.readFileSync(cand);
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Length', buffer.length);
-        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        return res.end(buffer);
-      }
-    } catch {}
-  }
+  // 1. Try authenticated GCS client
+  try {
+    const bucket = getGCSBucket();
+    const file = bucket.file(rawKey);
+    const [exists] = await file.exists();
+    if (exists) {
+      const [buffer] = await file.download();
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.end(buffer);
+    }
+  } catch {}
 
   // 2. Try fetching public storage URL
   try {
@@ -2703,21 +2694,6 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
       const buffer = Buffer.from(await response.arrayBuffer());
       const headerContentType = response.headers.get('content-type') || contentType;
       res.setHeader('Content-Type', headerContentType);
-      res.setHeader('Content-Length', buffer.length);
-      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      return res.end(buffer);
-    }
-  } catch {}
-
-  // 3. Try authenticated GCS client if configured
-  try {
-    const bucket = getGCSBucket();
-    const file = bucket.file(rawKey);
-    const [exists] = await file.exists();
-    if (exists) {
-      const [buffer] = await file.download();
-      res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', buffer.length);
       res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
       res.setHeader('Access-Control-Allow-Origin', '*');

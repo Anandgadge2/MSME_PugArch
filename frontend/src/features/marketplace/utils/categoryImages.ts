@@ -190,7 +190,7 @@ export const normalizeDataUri = (url: unknown): string => {
 
 export const buildCategoryFallbackSvg = (categoryName: string, accentColor = '#2563eb'): string => {
     const fileName = findCategorySvgFilename(categoryName);
-    return `/categories/${fileName}`;
+    return resolveMediaUrl(`${GCS_BASE_URL}/${fileName}`) || `${GCS_BASE_URL}/${fileName}`;
 };
 
 export const getCategoryVisualMeta = (category: MarketplaceCategory | string): CategoryVisualMeta => {
@@ -210,12 +210,12 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
         }
     }
 
-    // 2. Direct match to GCP Bucket / Local SVG Icon
+    // 2. Direct match to GCP Bucket
     const svgFile = findCategorySvgFilename(rawName, rawSlug);
-    const localUrl = `/categories/${svgFile}`;
+    const cloudUrl = resolveMediaUrl(`${GCS_BASE_URL}/${svgFile}`) || `${GCS_BASE_URL}/${svgFile}`;
 
     return {
-        imageUrl: localUrl,
+        imageUrl: cloudUrl,
         accentColor: '#2563eb',
         categoryTag: rawName,
     };
@@ -228,13 +228,13 @@ export const getCategoryImageUrl = (category: MarketplaceCategory | string): str
         if (resolved) return resolved;
 
         const svgFile = findCategorySvgFilename(category.name, category.slug);
-        return `/categories/${svgFile}`;
+        return resolveMediaUrl(`${GCS_BASE_URL}/${svgFile}`) || `${GCS_BASE_URL}/${svgFile}`;
     }
 
     if (typeof category === 'string') {
         const svgFile = findCategorySvgFilename(category);
-        return `/categories/${svgFile}`;
+        return resolveMediaUrl(`${GCS_BASE_URL}/${svgFile}`) || `${GCS_BASE_URL}/${svgFile}`;
     }
 
-    return '/categories/general-industrial.svg';
+    return resolveMediaUrl(`${GCS_BASE_URL}/general-industrial.svg`) || `${GCS_BASE_URL}/general-industrial.svg`;
 };
