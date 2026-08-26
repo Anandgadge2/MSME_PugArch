@@ -2676,6 +2676,8 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
     path.resolve(process.cwd(), 'backend/uploads', rawKey),
     path.resolve(process.cwd(), 'public', rawKey),
     path.resolve(process.cwd(), 'backend/public', rawKey),
+    path.resolve(process.cwd(), 'frontend/public', rawKey),
+    path.resolve(process.cwd(), '../frontend/public', rawKey),
     path.resolve(process.cwd(), rawKey)
   ];
 

@@ -2955,7 +2955,7 @@ app.get('/api/files/:id/view', async (req: any, res: any) => {
     } else {
       const asset = await prisma.fileAsset.findUnique({ where: { id: fileId } });
       if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
-      const isPublic = (asset.mimeType && asset.mimeType.startsWith('image/')) || ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'organization_banner'].includes(asset.entityType);
+      const isPublic = ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'catalogue_service', 'organization_banner', 'public'].includes(asset.entityType);
       if (!isPublic) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
       file = await getStoredFileContent(fileId, { id: asset.ownerId, role: asset.ownerRole }, {
         ipAddress: req.ip,
@@ -2968,7 +2968,7 @@ app.get('/api/files/:id/view', async (req: any, res: any) => {
     res.setHeader('Content-Type', file.contentType);
     res.setHeader('Content-Length', file.buffer.length);
     res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Cache-Control', user ? 'private, no-store' : 'public, max-age=86400');
     return res.end(file.buffer);
   } catch (err: any) {
     return handleUploadRouteError(res, err);
