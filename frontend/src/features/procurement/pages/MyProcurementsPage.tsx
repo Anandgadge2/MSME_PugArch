@@ -797,7 +797,7 @@ export default function MyProcurementsPage() {
         singleRowDesktop={true}
         search={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Search by Title, Ref No, Category, or Type..."
+        searchPlaceholder="Search by title, ref no, category..."
         filters={[
           {
             kind: 'select',

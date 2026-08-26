@@ -213,10 +213,10 @@ export function PageToolbar({
                 {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
 
-            {/* Tablet & Desktop layout: search full-width on top, filters in flex row below */}
-            <div className={cn("hidden sm:flex gap-3", singleRowDesktop ? "sm:flex-row sm:items-center sm:flex-nowrap" : "sm:flex-col")}>
+            {/* Tablet & Desktop layout: search full-width on top (or compact on left), filters in flex row */}
+            <div className={cn("hidden sm:flex gap-2.5 sm:gap-3 w-full", singleRowDesktop ? "sm:flex-row sm:items-center sm:flex-nowrap" : "sm:flex-col")}>
                 {hasSearch && (
-                    <div className={cn("relative min-w-0", singleRowDesktop ? "flex-1" : "w-full")}>
+                    <div className={cn("relative min-w-0", singleRowDesktop ? "w-64 sm:w-72 md:w-80 shrink-0" : "w-full")}>
                         <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
                             value={search ?? ''}
@@ -231,7 +231,7 @@ export function PageToolbar({
                     </div>
                 )}
 
-                {(filters.length > 0 || onReset || actions) && (
+                {(filters.length > 0 || onReset) && (
                     <div className={cn("flex items-center gap-2.5 sm:gap-3", singleRowDesktop ? "flex-nowrap shrink-0" : "flex-wrap")}>
                         {filters.map((f, idx) => renderFilter(f, idx))}
 
@@ -245,8 +245,12 @@ export function PageToolbar({
                                 <RefreshCw className="mr-2 h-3.5 w-3.5" /> Reset
                             </Button>
                         )}
+                    </div>
+                )}
 
-                        {actions && <div className="flex items-center gap-2 sm:ml-auto shrink-0">{actions}</div>}
+                {actions && (
+                    <div className={cn("flex items-center gap-2 shrink-0", singleRowDesktop ? "ml-auto" : "sm:ml-auto")}>
+                        {actions}
                     </div>
                 )}
             </div>
