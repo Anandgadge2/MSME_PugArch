@@ -33,7 +33,10 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
       
       setStatus(backoffRef.current > 1000 ? 'RECONNECTING' : 'CONNECTING');
 
-      const baseUrl = getBaseUrl();
+      let baseUrl = getBaseUrl();
+      if (!baseUrl && typeof window !== 'undefined') {
+        baseUrl = window.location.origin;
+      }
       const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/ws';
       console.log(`[WS] Connecting to ${wsUrl} for dispute ${disputeId}`);
 
