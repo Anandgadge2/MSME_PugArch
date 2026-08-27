@@ -23,7 +23,7 @@ import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar'
 import { useGrns } from '../hooks';
 import type { GrnStatus } from '../api';
 import { GrnCreateModal } from '../components/GrnCreateModal';
-import { InfoTile } from './InfoTile';
+
 import { useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -278,7 +278,7 @@ export default function GrnListPage() {
     return (
         <div className="space-y-6">
             {/* Transparent Header */}
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
+            {/* <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
                 <div className="min-w-0">
                     <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">Fulfillment</span>
                     <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Goods Receipt Notes</h1>
@@ -286,18 +286,12 @@ export default function GrnListPage() {
                         Record received goods, run inspection, approve to trigger seller invoice.
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <ViewModeToggle className="col-span-2 sm:col-span-1 flex justify-end" value={viewMode} onChange={setViewMode} />
+                <div className="flex items-center gap-2 shrink-0">
                     <Button variant="outline" onClick={() => refetch()} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
                         <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", isFetching && "animate-spin")} /> Refresh
                     </Button>
-                    {canCreate && (
-                        <Button onClick={() => setShowCreate(true)} className="h-10 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-xs font-black uppercase rounded-lg shadow-sm">
-                            <Plus className="mr-2 h-4 w-4" /> New GRN
-                        </Button>
-                    )}
                 </div>
-            </div>
+            </div> */}
 
             {/* KPI Cards Grid */}
             <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -351,77 +345,98 @@ export default function GrnListPage() {
             {error && <InlineError message={(error as Error).message} onRetry={() => refetch()} />}
 
             {/* Search + Filter + View Toggle Toolbar */}
-            <div className={cn("rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm", activeFilterCount > 0 ? "space-y-3" : "")}>
-                <ResponsiveFilterBar
-                    activeFilterCount={activeFilterCount}
-                    searchInput={
-                        <div className="relative w-full">
-                            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={event => { setSearch(event.target.value); setPage(1); }}
-                                placeholder="Search GRN, PO, seller, receiver, status..."
-                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-                            />
-                        </div>
-                    }
-                    filters={
-                        <div className="flex flex-col sm:flex-row gap-2.5 flex-wrap w-full">
-                            <select value={filter} onChange={e => { setFilter(e.target.value as any); setPage(1); }} className="h-10 w-full sm:w-auto sm:w-[150px] shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
-                                <option value="ALL">All Statuses</option>
-                                <option value="DRAFT">Draft</option>
-                                <option value="SUBMITTED">Submitted</option>
-                                <option value="APPROVED">Approved</option>
-                                <option value="PARTIAL">Partial</option>
-                                <option value="REJECTED">Rejected</option>
-                            </select>
+            <div className={cn("rounded-[18px] border border-slate-200/90 bg-white p-3 shadow-sm", activeFilterCount > 0 ? "space-y-3" : "")}>
+                
+                <div className="flex flex-wrap lg:flex-nowrap items-center gap-3 w-full">
+                    {/* Search */}
+                    <div className="flex-[1_1_auto] min-w-[240px] relative">
+                        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={event => { setSearch(event.target.value); setPage(1); }}
+                            placeholder="Search GRN, PO, seller, receiver, status..."
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                        />
+                    </div>
 
-                            <select value={filterPo} onChange={e => { setFilterPo(e.target.value); setPage(1); }} className="h-10 w-full sm:w-auto sm:w-[170px] shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
-                                <option value="ALL">All Purchase Orders</option>
-                                {uniquePos.map(po => <option key={po} value={po}>{po}</option>)}
-                            </select>
+                    {/* Status */}
+                    <div className="flex-[0_0_auto] w-full sm:w-[130px]">
+                        <select value={filter} onChange={e => { setFilter(e.target.value as any); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
+                            <option value="ALL">Status: All</option>
+                            <option value="DRAFT">Draft</option>
+                            <option value="SUBMITTED">Submitted</option>
+                            <option value="APPROVED">Approved</option>
+                            <option value="PARTIAL">Partial</option>
+                            <option value="REJECTED">Rejected</option>
+                        </select>
+                    </div>
 
-                            <select value={filterSeller} onChange={e => { setFilterSeller(e.target.value); setPage(1); }} className="h-10 w-full sm:w-auto sm:w-[150px] shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
-                                <option value="ALL">All Sellers</option>
-                                {uniqueSellers.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                    {/* PO */}
+                    <div className="flex-[0_0_auto] w-full sm:w-[135px]">
+                        <select value={filterPo} onChange={e => { setFilterPo(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
+                            <option value="ALL">PO: All</option>
+                            {uniquePos.map(po => <option key={po} value={po}>{po.length > 20 ? po.substring(0, 20) + '...' : po}</option>)}
+                        </select>
+                    </div>
 
-                            <select value={filterItems} onChange={e => { setFilterItems(e.target.value); setPage(1); }} className="h-10 w-full sm:w-auto sm:w-[130px] shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
-                                <option value="ALL">All Items</option>
-                                <option value="1">1 line</option>
-                                <option value="2">2 lines</option>
-                                <option value="3+">3+ lines</option>
-                            </select>
+                    {/* Seller */}
+                    <div className="flex-[0_0_auto] w-full sm:w-[135px]">
+                        <select value={filterSeller} onChange={e => { setFilterSeller(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
+                            <option value="ALL">Seller: All</option>
+                            {uniqueSellers.map(s => <option key={s} value={s}>{s.length > 20 ? s.substring(0, 20) + '...' : s}</option>)}
+                        </select>
+                    </div>
 
-                            <DateFilterPopover 
-                                receivedFrom={filterReceivedFrom} setReceivedFrom={(v: string) => { setFilterReceivedFrom(v); setPage(1); }}
-                                receivedTo={filterReceivedTo} setReceivedTo={(v: string) => { setFilterReceivedTo(v); setPage(1); }}
-                                updatedFrom={filterUpdatedFrom} setUpdatedFrom={(v: string) => { setFilterUpdatedFrom(v); setPage(1); }}
-                                updatedTo={filterUpdatedTo} setUpdatedTo={(v: string) => { setFilterUpdatedTo(v); setPage(1); }}
-                                activeCount={(filterReceivedFrom || filterReceivedTo ? 1 : 0) + (filterUpdatedFrom || filterUpdatedTo ? 1 : 0)}
-                                clearDates={() => {
-                                    setFilterReceivedFrom('');
-                                    setFilterReceivedTo('');
-                                    setFilterUpdatedFrom('');
-                                    setFilterUpdatedTo('');
-                                    setPage(1);
-                                }}
-                            />
+                    {/* Items */}
+                    <div className="flex-[0_0_auto] w-full sm:w-[110px]">
+                        <select value={filterItems} onChange={e => { setFilterItems(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
+                            <option value="ALL">Items: All</option>
+                            <option value="1">1 line</option>
+                            <option value="2">2 lines</option>
+                            <option value="3+">3+ lines</option>
+                        </select>
+                    </div>
 
-                            {activeFilterCount > 0 && (
-                                <button
-                                    type="button"
-                                    className="h-10 shrink-0 whitespace-nowrap text-[11px] font-black uppercase tracking-wider text-slate-500 hover:text-red-600 transition-colors w-full sm:w-auto sm:px-2 flex items-center justify-center sm:justify-start"
-                                    onClick={clearFilters}
-                                >
-                                    Clear Filters
-                                </button>
+                    {/* Date Filter Component */}
+                    <div className="flex-[0_0_auto] w-full sm:w-[130px]">
+                        <DateFilterPopover 
+                            receivedFrom={filterReceivedFrom} setReceivedFrom={(v) => { setFilterReceivedFrom(v); setPage(1); }}
+                            receivedTo={filterReceivedTo} setReceivedTo={(v) => { setFilterReceivedTo(v); setPage(1); }}
+                            updatedFrom={filterUpdatedFrom} setUpdatedFrom={(v) => { setFilterUpdatedFrom(v); setPage(1); }}
+                            updatedTo={filterUpdatedTo} setUpdatedTo={(v) => { setFilterUpdatedTo(v); setPage(1); }}
+                            activeCount={(filterReceivedFrom || filterReceivedTo ? 1 : 0) + (filterUpdatedFrom || filterUpdatedTo ? 1 : 0)}
+                            clearDates={() => {
+                                setFilterReceivedFrom('');
+                                setFilterReceivedTo('');
+                                setFilterUpdatedFrom('');
+                                setFilterUpdatedTo('');
+                                setPage(1);
+                            }}
+                        />
+                    </div>
+
+                    {/* Right Actions */}
+                    <div className="flex-[0_0_auto] flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+                        {activeFilterCount > 0 && (
+                            <Button
+                                variant="ghost"
+                                onClick={clearFilters}
+                                className="h-9 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 shrink-0 hidden lg:inline-flex"
+                            >
+                                Clear Filters
+                            </Button>
+                        )}
+                        <div className="shrink-0 flex items-center gap-2 ml-auto">
+                            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                            {canCreate && (
+                                <Button onClick={() => setShowCreate(true)} className="h-10 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-xs font-black uppercase rounded-lg shadow-sm whitespace-nowrap px-4 shrink-0 transition-all hover:-translate-y-[1px] active:scale-[0.98]">
+                                    <Plus className="mr-1.5 h-4 w-4 shrink-0" /> New GRN
+                                </Button>
                             )}
                         </div>
-                    }
-                    endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
-                />
+                    </div>
+                </div>
 
                 {/* Active Filter Chips */}
                 {activeFilterCount > 0 && (
@@ -479,11 +494,7 @@ export default function GrnListPage() {
                 <EmptyState 
                     title="No GRNs match these filters" 
                     description="Clear filters to see all goods receipt notes." 
-                    action={
-                        <Button onClick={clearFilters} className="mt-4 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-xs font-black uppercase tracking-wider rounded-lg shadow-sm">
-                            Clear Filters
-                        </Button>
-                    }
+                    action={{ label: 'Clear Filters', onClick: clearFilters }}
                 />
             ) : viewMode === 'grid' ? (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

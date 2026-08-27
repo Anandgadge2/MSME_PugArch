@@ -136,7 +136,7 @@ export function HeroBanner({ banners }: Props) {
                 <div className="hidden sm:flex absolute sm:top-6 sm:right-6 2xl:right-8 z-30 flex-row flex-nowrap justify-end gap-2.5 pointer-events-auto">
                     <button 
                         onClick={handlePostRequirement} 
-                        className="h-9 sm:h-10 px-4 sm:px-5 rounded-full bg-white/15 hover:bg-white/25 border border-white/30 backdrop-blur-md text-white text-[11px] sm:text-xs font-bold transition-all active:scale-95 shadow-md"
+                        className="h-9 sm:h-10 px-4 sm:px-5 rounded-full bg-white/15 hover:bg-white/100 hover:text-black/100 border border-white/30 backdrop-blur-md text-white text-[11px] sm:text-xs font-bold transition-all active:scale-95 shadow-md"
                     >
                         Post Requirement
                     </button>
