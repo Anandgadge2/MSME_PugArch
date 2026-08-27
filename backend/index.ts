@@ -319,11 +319,20 @@ const emitNotification = (userId: number, notification: any) => {
   if (clients.size === 0) notificationClients.delete(userId);
 };
 
-const sanitizePortalText = (value: unknown, maxLength = 2000) =>
-  normalizeSpaces(value)
+const sanitizePortalText = (value: unknown, maxLength = 2000, preserveNewlines = true) => {
+  if (preserveNewlines) {
+    return String(value || '')
+      .replace(/\r\n/g, '\n')
+      .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
+      .replace(/[<>]/g, '')
+      .trim()
+      .slice(0, maxLength);
+  }
+  return normalizeSpaces(value)
     .replace(/[\u0000-\u001F\u007F]/g, '')
     .replace(/[<>]/g, '')
     .slice(0, maxLength);
+};
 
 const NOTIFICATION_READ_RETENTION_MS = TimeConstants.NOTIFICATION_READ_RETENTION_MS;
 
