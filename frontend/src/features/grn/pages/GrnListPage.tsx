@@ -23,7 +23,6 @@ import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar'
 import { useGrns } from '../hooks';
 import type { GrnStatus } from '../api';
 import { GrnCreateModal } from '../components/GrnCreateModal';
-
 import { useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -494,7 +493,11 @@ export default function GrnListPage() {
                 <EmptyState 
                     title="No GRNs match these filters" 
                     description="Clear filters to see all goods receipt notes." 
-                    action={{ label: 'Clear Filters', onClick: clearFilters }}
+                    action={
+                        <Button onClick={clearFilters} className="mt-4 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-xs font-black uppercase tracking-wider rounded-lg shadow-sm">
+                            Clear Filters
+                        </Button>
+                    }
                 />
             ) : viewMode === 'grid' ? (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

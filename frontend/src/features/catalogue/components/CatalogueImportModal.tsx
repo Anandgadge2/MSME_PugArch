@@ -78,23 +78,24 @@ export function CatalogueImportModal({ kind, open, onClose, onComplete }: {
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
-            <p className="font-bold text-slate-800">Instructions</p>
+            <p className="font-bold text-slate-800">Quick Guidelines</p>
             <ul className="mt-2 list-disc space-y-1 pl-4">
-              <li>Use the official template — do not rename columns.</li>
+              <li>Download the official template below — it includes <strong>pre-filled sample rows</strong> and field descriptions.</li>
+              <li>Columns marked with <strong>*</strong> (e.g. {kind === 'product' ? 'Product Name, Category, Price, Unit' : 'Service Name, Category, Pricing Model, Base Price, Service Area'}) are mandatory.</li>
+              <li>{kind === 'product' ? 'Link technical specifications in the "Product Specifications" sheet using matching SKU or Product Name.' : 'Link specifications in the "Service Specifications" sheet using the matching Service Name.'}</li>
+              <li>You can replace or delete the sample rows before uploading your file.</li>
               <li>Only .xlsx files up to 10MB, max 1000 rows.</li>
-              <li>Valid rows import as <strong>DRAFT</strong> unless you choose publish on confirm.</li>
-              <li>Invalid rows are skipped; download the error report after validation.</li>
             </ul>
             <Button
               type="button"
               variant="outline"
-              className="mt-3 h-8 text-[10px] font-black uppercase"
+              className="mt-3 h-8 text-[10px] font-black uppercase text-emerald-800 border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100"
               onClick={() => downloadCatalogueFile(
                 kind === 'product' ? '/api/catalogue/import/templates/products' : '/api/catalogue/import/templates/services',
                 kind === 'product' ? 'catalogue_products_template.xlsx' : 'catalogue_services_template.xlsx'
               ).catch(() => toast.error('Template download failed'))}
             >
-              <Download className="mr-1.5 h-3.5 w-3.5" /> Download Template
+              <Download className="mr-1.5 h-3.5 w-3.5" /> Download Template with Sample Data
             </Button>
           </div>
 

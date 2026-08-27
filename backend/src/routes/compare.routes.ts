@@ -293,19 +293,19 @@ router.get('/quote-requests/:id/responses/compare', authenticate, authorize('buy
                     businessName: true,
                     organizationType: true,
                     msmeCategory: true,
-                    city: true,
-                    state: true
+                    isStartup: true,
+                    isUdyamCertified: true
                   }
                 }
               }
             }
           },
-          orderBy: [{ rank: { sort: 'asc', nulls: 'last' } }, { evaluatedPrice: 'asc' }, { totalAmount: 'asc' }, { createdAt: 'asc' }]
+          orderBy: [{ createdAt: 'asc' }]
         }
       }
     });
     if (!quote) return apiResponse.error(res, 404, 'Quote request not found', 'QUOTE_REQUEST_NOT_FOUND');
-    const ownsQuote = quote.buyerId === req.user?.id || quote.buyer?.id === req.user?.id;
+    const ownsQuote = Number(quote.buyerId) === Number(req.user?.id) || Number(quote.buyer?.id) === Number(req.user?.id);
     if (!isPrivileged(req) && !ownsQuote) return apiResponse.error(res, 404, 'Quote request not found', 'QUOTE_REQUEST_NOT_FOUND');
 
     const responses = quote.quoteResponses || [];
@@ -321,6 +321,11 @@ router.get('/quote-requests/:id/responses/compare', authenticate, authorize('buy
         rankLabel,
         isDisqualified
       };
+    }).sort((a: any, b: any) => {
+      if (a.rank && b.rank) return a.rank - b.rank;
+      if (a.rank) return -1;
+      if (b.rank) return 1;
+      return (a.priceForEval || 0) - (b.priceForEval || 0);
     });
 
     // Compute highlights using evaluatedPrice where available
@@ -339,6 +344,7 @@ router.get('/quote-requests/:id/responses/compare', authenticate, authorize('buy
       highlights: { lowestPrice, highestPrice, averagePrice, priceDiff, minDeliveryDays }
     });
   } catch (error: any) {
+    console.error('[QuoteCompareError]', error);
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to compare quotations', error.code || 'QUOTE_RESPONSE_COMPARE_ERROR');
   }
 });

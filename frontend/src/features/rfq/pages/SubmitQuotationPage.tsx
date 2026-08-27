@@ -317,8 +317,14 @@ export default function SubmitQuotationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const conversationIdParam = searchParams?.get('conversationId');
+  const quoteRequestIdParam = searchParams?.get('quoteRequestId');
   const requirementIdParam = searchParams?.get('requirementId') || searchParams?.get('id') || searchParams?.get('requestId');
-  const requirementId = requirementIdParam ? (isNaN(Number(requirementIdParam)) ? requirementIdParam : Number(requirementIdParam)) : 0;
+  const isMarketplaceQuoteFlow = Boolean(conversationIdParam);
+  const requirementId = isMarketplaceQuoteFlow
+    ? 0
+    : (requirementIdParam ? (isNaN(Number(requirementIdParam)) ? requirementIdParam : Number(requirementIdParam)) : 0);
+  const conversationId = conversationIdParam ? Number(conversationIdParam) : 0;
 
   const [offeredPrice, setOfferedPrice] = useState('');
   const [offeredQuantity, setOfferedQuantity] = useState('');
@@ -348,8 +354,66 @@ export default function SubmitQuotationPage() {
   };
 
   const { data: queryData, isLoading, error } = useQuery({
-    queryKey: ['marketplace-requirement-quotation', requirementId, user?.id, user?.organizationId],
+    queryKey: ['marketplace-requirement-quotation', isMarketplaceQuoteFlow ? `conv-${conversationId}` : requirementId, user?.id, user?.organizationId],
     queryFn: async () => {
+      // 1. Marketplace Product Conversation Flow
+      if (isMarketplaceQuoteFlow && conversationId) {
+        try {
+          const conv = await getApi<any>(`/api/conversations/${conversationId}`);
+          if (conv) {
+            const rawSubject = String(conv.subject || '');
+            const cleanedTitle = rawSubject
+              .replace(/^Quote Request #?\d*:?\s*/i, '')
+              .replace(/^Quote request:?\s*/i, '')
+              .trim() || 'Requested Product';
+
+            const buyerOrgName = conv.buyer?.buyerProfile?.organizationName ||
+              conv.buyer?.company?.name ||
+              conv.buyer?.organization?.organizationName ||
+              conv.buyer?.name ||
+              'Buyer Organization';
+
+            const firstMsg = conv.messages?.find((m: any) => m.senderId !== Number(user?.id))?.content || conv.messages?.[0]?.content || '';
+            const existingQuote = conv.quoteRequest?.quoteResponses?.find((r: any) => r.sellerId === Number(user?.id)) || conv.quoteRequest?.quoteResponses?.[0];
+
+            return {
+              requirement: {
+                id: `conv-${conv.id}`,
+                conversationId: conv.id,
+                quoteRequestId: conv.quoteRequest?.id || (quoteRequestIdParam ? Number(quoteRequestIdParam) : undefined),
+                isMarketplaceQuote: true,
+                isQuoteRequestEntity: true,
+                title: `Quotation for ${cleanedTitle}`,
+                subject: conv.subject,
+                description: firstMsg,
+                estimatedValue: conv.quoteRequest?.estimatedValue || undefined,
+                buyerOrganization: { organizationName: buyerOrgName },
+                items: [{
+                  itemName: cleanedTitle,
+                  quantity: 1,
+                  unitOfMeasure: 'Nos',
+                  description: firstMsg
+                }],
+                requiredDocuments: ['GST Certificate', 'Detailed Price Breakup'],
+                documents: []
+              },
+              ownResponse: existingQuote ? normalizeOwnResponse({
+                id: existingQuote.id,
+                status: existingQuote.status,
+                offeredPrice: existingQuote.totalAmount,
+                deliveryTimeline: existingQuote.deliveryDays ? `${existingQuote.deliveryDays} Days` : '',
+                terms: existingQuote.notes || '',
+                message: existingQuote.notes || '',
+                attachmentUrl: existingQuote.documentUrl
+              }) : null
+            };
+          }
+        } catch (convErr) {
+          console.error('Failed to load marketplace quote conversation:', convErr);
+        }
+      }
+
+      // 2. Standard RFQ Marketplace Requirements Flow
       let marketplaceResult: { requirement: any; ownResponse: any } | null = null;
       try {
         const data = await getApi<any>(`/api/marketplace/requirements/${requirementId}`);
@@ -363,6 +427,7 @@ export default function SubmitQuotationPage() {
         // Fallback to procurement bid endpoint if marketplace requirement route fails
       }
 
+      // 3. Procurement Bid Flow
       let bidResult: { requirement: any; ownResponse: any } | null = null;
       try {
         const bidData = await getApi<any>(`/api/procurement-bids/${encodeURIComponent(String(requirementId))}`);
@@ -416,20 +481,65 @@ export default function SubmitQuotationPage() {
         // Ignore fallback error
       }
 
-      if (marketplaceResult || bidResult) {
+      // 4. Quote Request Flow
+      let quoteRequestResult: { requirement: any; ownResponse: any } | null = null;
+      try {
+        const quoteData = await getApi<any>(`/api/quote-requests/${requirementId}`);
+        if (quoteData && (quoteData.id || quoteData.subject)) {
+          const myResponse = Array.isArray(quoteData.quoteResponses)
+            ? (quoteData.quoteResponses.find((r: any) => r.sellerId === Number(user?.id)) || quoteData.quoteResponses[0])
+            : null;
+          quoteRequestResult = {
+            requirement: {
+              id: quoteData.id,
+              isQuoteRequestEntity: true,
+              title: quoteData.subject,
+              subject: quoteData.subject,
+              description: quoteData.message,
+              estimatedValue: quoteData.estimatedValue,
+              buyerOrganization: quoteData.buyer?.buyerProfile?.organizationName ? { organizationName: quoteData.buyer.buyerProfile.organizationName } : { organizationName: quoteData.buyer?.name || 'Buyer' },
+              items: [{
+                itemName: String(quoteData.subject || '').replace(/^Quote Request #?\d*:?\s*/i, '').trim() || 'Requested Product/Service',
+                quantity: 1,
+                unitOfMeasure: 'Nos',
+                description: quoteData.message || ''
+              }],
+              requiredDocuments: ['GST Certificate', 'Detailed Price Breakup'],
+              documents: quoteData.requestDocAsset ? [quoteData.requestDocAsset] : []
+            },
+            ownResponse: myResponse ? normalizeOwnResponse({
+              id: myResponse.id,
+              status: myResponse.status,
+              offeredPrice: myResponse.totalAmount,
+              deliveryTimeline: myResponse.deliveryDays ? `${myResponse.deliveryDays} Days` : '',
+              terms: myResponse.notes || '',
+              message: myResponse.notes || '',
+              attachmentUrl: myResponse.documentUrl
+            }) : null
+          };
+        }
+      } catch (err) {
+        // Ignore fallback error
+      }
+
+      if (marketplaceResult || bidResult || quoteRequestResult) {
         return {
-          requirement: marketplaceResult?.requirement || bidResult?.requirement,
-          ownResponse: chooseOwnResponse(marketplaceResult?.ownResponse, bidResult?.ownResponse),
+          requirement: marketplaceResult?.requirement || bidResult?.requirement || quoteRequestResult?.requirement,
+          ownResponse: chooseOwnResponse(marketplaceResult?.ownResponse, chooseOwnResponse(bidResult?.ownResponse, quoteRequestResult?.ownResponse)),
         };
       }
       return null;
     },
-    enabled: !!requirementId,
+    enabled: (isMarketplaceQuoteFlow && !!conversationId) || (!isMarketplaceQuoteFlow && !!requirementId),
   });
 
   const rfqData: any = queryData?.requirement
     ? {
         id: queryData.requirement.id,
+        conversationId: queryData.requirement.conversationId,
+        quoteRequestId: queryData.requirement.quoteRequestId,
+        isMarketplaceQuote: queryData.requirement.isMarketplaceQuote,
+        isQuoteRequestEntity: queryData.requirement.isQuoteRequestEntity,
         procurementType: queryData.requirement.procurementType || queryData.requirement.bidType,
         procurementMethod: queryData.requirement.procurementMethod,
         bidType: queryData.requirement.bidType,
@@ -583,11 +693,11 @@ export default function SubmitQuotationPage() {
   }, [ownResponse, requirementId, targetReqId, searchParams]);
 
   // Use the canonical token from fetched data; RFQ bid numbers are resolved server-side.
-  const resolvedId = rfqData?.id || requirementId;
+  const resolvedId = isMarketplaceQuoteFlow ? (conversationId || rfqData?.conversationId) : (rfqData?.id || requirementId);
 
   // Save draft to database
   const saveDraft = useCallback(async () => {
-    if (!resolvedId) return;
+    if (!resolvedId || isMarketplaceQuoteFlow) return;
     try {
       const payload: any = {
         offeredPrice: offeredPrice ? Number(offeredPrice) : undefined,
@@ -614,36 +724,40 @@ export default function SubmitQuotationPage() {
       console.warn('Failed to save draft to server', err);
       toast.error(err?.message || 'Failed to save draft to server');
     }
-  }, [resolvedId, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
+  }, [resolvedId, isMarketplaceQuoteFlow, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
 
   const isSubmittedQuote = submitted || isFinalSubmittedResponse(ownResponse);
   const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
-  const isDeadlinePassed = !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
+  const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
   const isReadOnly = isClosed || isDeadlinePassed || isSubmittedQuote;
 
-  const procurementTypeBadgeLabel = isLimitedTender ? 'Limited Tender'
+  const procurementTypeBadgeLabel = isMarketplaceQuoteFlow ? 'Product Quotation'
+    : isLimitedTender ? 'Limited Tender'
     : isOpenTender ? 'Open Tender'
     : isRateContract ? 'Rate Contract'
     : isRfp ? 'RFP'
     : 'RFQ';
 
-  const procurementTypePluralLabel = isLimitedTender ? 'Limited Tenders'
+  const procurementTypePluralLabel = isMarketplaceQuoteFlow ? 'Messages & Quotes'
+    : isLimitedTender ? 'Limited Tenders'
     : isOpenTender ? 'Open Tenders'
     : isRateContract ? 'Rate Contracts'
     : isRfp ? 'RFPs'
     : 'RFQs';
 
-  const procurementBackRoute = isLimitedTender ? '/seller/opportunities/invitations'
+  const procurementBackRoute = isMarketplaceQuoteFlow ? `/seller/messages?conversationId=${conversationId}`
+    : isLimitedTender ? '/seller/opportunities/invitations'
     : isOpenTender ? '/seller/opportunities/open-tenders'
     : isRateContract ? '/seller/opportunities/rate-contracts'
     : isRfp ? '/seller/opportunities/rfps'
     : '/seller/opportunities/rfqs';
 
   const submitActionHeaderLabel = isSubmittedQuote
-    ? (isRfp ? 'Submitted Proposal' : isRateContract ? 'Submitted Rate Quotation' : isOpenTender ? 'Submitted Quotation' : 'Submitted Quotation')
-    : (isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : isOpenTender ? 'Submit Quotation' : 'Submit Quotation');
+    ? (isMarketplaceQuoteFlow ? 'Submitted Product Quotation' : isRfp ? 'Submitted Proposal' : isRateContract ? 'Submitted Rate Quotation' : isOpenTender ? 'Submitted Quotation' : 'Submitted Quotation')
+    : (isMarketplaceQuoteFlow ? 'Submit Product Quotation' : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : isOpenTender ? 'Submit Quotation' : 'Submit Quotation');
 
-  const backButtonLabelText = isRfp ? 'Back to RFP'
+  const backButtonLabelText = isMarketplaceQuoteFlow ? 'Back to Conversation'
+    : isRfp ? 'Back to RFP'
     : isRateContract ? 'Back to Rate Contract'
     : isOpenTender ? 'Back to Open Tender'
     : isLimitedTender ? 'Back to Limited Tender'
@@ -1213,6 +1327,7 @@ export default function SubmitQuotationPage() {
     //   return;
     // }
     if (!validate()) return;
+    const resolvedId = isMarketplaceQuoteFlow ? (conversationId || rfqData?.conversationId) : (rfqData?.id || requirementId);
     if (!resolvedId) {
       toast.error('Invalid requirement');
       return;
@@ -1234,8 +1349,23 @@ export default function SubmitQuotationPage() {
       const responseData = buildResponseData();
       if (responseData) payload.responseData = responseData;
 
-      await postApi(`/api/marketplace/requirements/${resolvedId}/responses`, payload);
-      localStorage.removeItem(`rfq_draft_${requirementId}`);
+      if (isMarketplaceQuoteFlow || rfqData?.isMarketplaceQuote) {
+        const targetConvId = conversationId || rfqData?.conversationId;
+        await postApi(`/api/conversations/${targetConvId}/quotation`, payload);
+      } else if (rfqData?.isQuoteRequestEntity) {
+        await postApi(`/api/quote-requests/${resolvedId}/responses`, payload);
+      } else {
+        try {
+          await postApi(`/api/marketplace/requirements/${resolvedId}/responses`, payload);
+        } catch (mErr: any) {
+          if (mErr?.status === 404 || mErr?.message?.includes('not found')) {
+            await postApi(`/api/quote-requests/${resolvedId}/responses`, payload);
+          } else {
+            throw mErr;
+          }
+        }
+      }
+      localStorage.removeItem(`rfq_draft_${requirementId || conversationId}`);
       if (typeof window !== 'undefined') {
         const submitCache = {
           status: 'SUBMITTED',
@@ -1248,7 +1378,7 @@ export default function SubmitQuotationPage() {
           attachmentUrl: payload.attachmentUrl,
           responseData: payload.responseData,
         };
-        const keysToCache = Array.from(new Set([resolvedId, requirementId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
+        const keysToCache = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
         keysToCache.forEach(k => {
           try { localStorage.setItem(`rfq_submitted_${k}`, JSON.stringify(submitCache)); } catch {}
         });
@@ -1271,6 +1401,11 @@ export default function SubmitQuotationPage() {
   };
 
   const handleBackToRfq = () => {
+    if (isMarketplaceQuoteFlow || rfqData?.isMarketplaceQuote) {
+      const targetConvId = conversationId || rfqData?.conversationId;
+      window.location.href = `/seller/messages?conversationId=${targetConvId}`;
+      return;
+    }
     if (isRfp) {
       window.location.href = `/seller/rfp?requirementId=${requirementId}`;
     } else if (isRateContract) {
@@ -1280,13 +1415,13 @@ export default function SubmitQuotationPage() {
     }
   };
 
-  if (!requirementId) {
+  if (!requirementId && !conversationId) {
     return (
       <div className="mx-auto max-w-[1200px] px-4 py-12">
         <div className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center">
           <AlertTriangle className="mx-auto h-12 w-12 text-red-400" />
-          <h2 className="mt-4 text-lg font-black text-red-800">Invalid Requirement</h2>
-          <p className="mt-2 text-sm text-red-600">No requirement ID provided.</p>
+          <h2 className="mt-4 text-lg font-black text-red-800">Invalid Quotation Request</h2>
+          <p className="mt-2 text-sm text-red-600">No requirement or conversation ID provided.</p>
           <Button onClick={() => window.location.href = '/seller/opportunities'} className="mt-4 bg-[#12335f] text-white">
             Back to Opportunities
           </Button>

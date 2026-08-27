@@ -253,10 +253,25 @@ const parseDate = (value: unknown): Date | null => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
-const normalizeHeader = (h: unknown) => clean(h).toLowerCase().replace(/\s+/g, ' ');
+const normalizeHeader = (h: unknown) =>
+  clean(h)
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, '')
+    .replace(/[*%]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 const PRODUCT_STATUSES = new Set(['DRAFT', 'ACTIVE', 'INACTIVE']);
 const PRICING_MODELS = new Set(['FIXED', 'HOURLY', 'DAILY', 'MONTHLY', 'PER_PROJECT', 'CUSTOM']);
+
+const STANDARD_UNITS = [
+  'Nos', 'Kg', 'Ton', 'MT', 'Bag', 'Box', 'Packet', 'Set', 'Pair', 'Roll',
+  'Litre', 'Meter', 'Feet', 'Piece', 'Unit', 'Coil', 'Drum', 'Bundle', 'Carton',
+  'Cylinder', 'Dozen', 'Sheet', 'Plate', 'Bucket', 'Kit', 'Bottle', 'Container',
+  'Cum', 'SqFt', 'SqMeter'
+];
+
+const STANDARD_ITEM_CONDITIONS = ['NEW', 'REFURBISHED', 'USED', 'CUSTOM_MANUFACTURED'];
 
 type RowError = { rowNumber: number; field?: string; message: string; rawData?: Record<string, unknown> };
 
@@ -281,7 +296,7 @@ const col = (row: Record<string, unknown>, ...names: string[]) => {
   for (const name of names) {
     const target = normalizeHeader(name);
     const key = keys.find(k => normalizeHeader(k) === target);
-    if (key) return row[key];
+    if (key && clean(row[key]) !== '') return row[key];
   }
   return '';
 };
@@ -305,30 +320,58 @@ const categoryMap = async (type: 'PRODUCT' | 'SERVICE') => {
 };
 
 const productInstructions = () => [
-  ['Catalogue Product Import Instructions'],
+  ['Catalogue Product Import Instructions & Field Guide'],
   [''],
-  ['1. Do not rename column headers in the Products or Product Specifications sheets.'],
-  ['2. Required columns must be filled for each product row.'],
-  ['3. Status allowed values: DRAFT, ACTIVE, INACTIVE'],
-  ['4. Currency allowed: INR (defaults to INR if blank)'],
-  ['5. MSME Made / Bulk Deal Available: Yes or No'],
-  ['6. Dates must be YYYY-MM-DD format'],
-  ['7. Price and GST Rate must be numeric'],
-  ['8. Imported records save as DRAFT unless Status is ACTIVE and you confirm publish'],
-  ['9. SKU must be unique per seller'],
-  ['10. Link specifications using Product SKU or Product Name']
+  ['1. Mandatory vs Optional Fields:'],
+  ['   - MANDATORY (*): Product Name *, Category *, Price *, Unit Of Measure *.'],
+  ['   - OPTIONAL: SKU, Brand, Model Number, HSN Code, GST Rate, Item Condition, MSME Made,'],
+  ['     Description, Discount/Offer fields, Bulk Deal fields, Image URLs, Document URLs.'],
+  [''],
+  ['2. Sample Data Rows in Template:'],
+  ['   - Rows 2 and 3 in the "Products" sheet contain realistic sample products.'],
+  ['   - Rows 2-7 in the "Product Specifications" sheet show how to link technical attributes.'],
+  ['   - You can replace or delete the sample rows with your actual catalogue data before uploading.'],
+  [''],
+  ['3. Field Formatting Guidelines:'],
+  ['   - Category: Must match an active category name from the "Dropdown Values" sheet.'],
+  ['   - Status: DRAFT, ACTIVE, or INACTIVE (Defaults to DRAFT).'],
+  ['   - Price & Original Price: Numeric value in INR without commas or currency symbols (e.g. 450 or 1250.50).'],
+  ['   - GST Rate: Number representing percentage (0, 5, 12, 18, 28). Do not append %.'],
+  ['   - Unit Of Measure: Standard unit code e.g. Nos, Kg, Ton, Box, Piece, Set (see "Dropdown Values" sheet).'],
+  ['   - Item Condition: NEW, REFURBISHED, USED, or CUSTOM_MANUFACTURED.'],
+  ['   - Dates (Offer Start / End): Format as YYYY-MM-DD (e.g., 2026-09-01).'],
+  ['   - Booleans (MSME Made, Bulk Deal Available): Enter Yes or No (or TRUE / FALSE).'],
+  ['   - SKU: Optional, but if provided must be unique within your seller catalogue.'],
+  ['   - Image / Document URLs: Direct HTTP/HTTPS links separated by commas or semicolons.'],
+  [''],
+  ['4. Linking Technical Specifications:'],
+  ['   - Switch to the "Product Specifications" sheet to define technical specifications.'],
+  ['   - Link specifications by entering the matching "Product SKU" OR "Product Name" used in the Products sheet.'],
+  ['   - Multiple specification rows can be added for the same product.']
 ];
 
 const serviceInstructions = () => [
-  ['Catalogue Service Import Instructions'],
+  ['Catalogue Service Import Instructions & Field Guide'],
   [''],
-  ['1. Do not rename column headers in the Services or Service Specifications sheets.'],
-  ['2. Required columns must be filled for each service row.'],
-  ['3. Status allowed values: DRAFT, ACTIVE, INACTIVE'],
-  ['4. Pricing Model: FIXED, HOURLY, DAILY, MONTHLY, PER_PROJECT, CUSTOM'],
-  ['5. Currency allowed: INR'],
-  ['6. Dates must be YYYY-MM-DD format'],
-  ['7. Imported records save as DRAFT by default on confirm']
+  ['1. Mandatory vs Optional Fields:'],
+  ['   - MANDATORY (*): Service Name *, Category *, Pricing Model *, Base Price * (if FIXED), Service Area *.'],
+  ['   - OPTIONAL: Description, GST Rate, Scope Of Work, Deliverables, SLA Response Time, Duration,'],
+  ['     Offer fields, Document URLs.'],
+  [''],
+  ['2. Sample Data in Template:'],
+  ['   - Row 2 in the "Services" sheet contains a complete sample service.'],
+  ['   - Rows in "Service Specifications" show sample service attributes.'],
+  ['   - You can replace or delete the sample rows before uploading.'],
+  [''],
+  ['3. Field Formatting Guidelines:'],
+  ['   - Pricing Model: FIXED, HOURLY, DAILY, MONTHLY, PER_PROJECT, or CUSTOM.'],
+  ['   - Base Price: Numeric amount in INR (Mandatory for FIXED pricing).'],
+  ['   - GST Rate: Number between 0 and 40 (e.g. 18).'],
+  ['   - Dates: YYYY-MM-DD format.'],
+  ['   - Service Area: Geographical coverage (e.g., "Pan-India", "Maharashtra & Gujarat", "District-wide").'],
+  [''],
+  ['4. Specifications:'],
+  ['   - In "Service Specifications", link attributes using the exact "Service Name".']
 ];
 
 export const catalogueImportService = {
@@ -339,26 +382,99 @@ export const catalogueImportService = {
       orderBy: { name: 'asc' }
     });
     const wb = XLSX.utils.book_new();
+
     const productHeaders = [
-      'Product Name', 'Category', 'Status', 'Description', 'Price', 'Currency', 'GST Rate',
-      'Unit Of Measure', 'HSN Code', 'SKU', 'Brand', 'Model Number', 'Item Condition', 'MSME Made',
-      'Original Price', 'Discount Price', 'Discount Percent', 'Offer Label', 'Offer Start Date',
-      'Offer End Date', 'Bulk Deal Available', 'Bulk Minimum Quantity', 'Image URLs', 'Document URLs'
+      'Product Name *', 'Category *', 'Status', 'Description', 'Price *', 'Currency', 'GST Rate (%)',
+      'Unit Of Measure *', 'HSN Code', 'SKU', 'Brand', 'Model Number', 'Item Condition', 'MSME Made (Yes/No)',
+      'Original Price', 'Discount Price', 'Discount Percent', 'Offer Label', 'Offer Start Date (YYYY-MM-DD)',
+      'Offer End Date (YYYY-MM-DD)', 'Bulk Deal Available (Yes/No)', 'Bulk Minimum Quantity', 'Image URLs', 'Document URLs'
     ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([productHeaders]), 'Products');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Product SKU', 'Product Name', 'Specification Name', 'Specification Value', 'Unit']
-    ]), 'Product Specifications');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(productInstructions()), 'Instructions');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Categories', 'Statuses', 'Units', 'Item Conditions'],
-      ...Array.from({ length: Math.max(categories.length, 4) }, (_, i) => [
+
+    const sampleCategory1 = categories[0]?.name || 'Safety Equipment & Industrial Safety';
+    const sampleCategory2 = categories.find(c => /Fastener|Hardware|Mechanical|Metal/i.test(c.name))?.name || categories[1]?.name || 'Industrial Fasteners & Components';
+
+    const sampleProducts = [
+      [
+        'Industrial Safety Helmet Class-E',
+        sampleCategory1,
+        'ACTIVE',
+        'High-density polyethylene (HDPE) shell safety helmet with 6-point ratchet suspension and sweatband for industrial site safety.',
+        450,
+        'INR',
+        18,
+        'Nos',
+        '650610',
+        'SAF-HLM-001',
+        'SafeShield',
+        'PRO-E500',
+        'NEW',
+        'Yes',
+        600,
+        450,
+        25,
+        'MSME Special Deal',
+        '2026-09-01',
+        '2026-12-31',
+        'Yes',
+        50,
+        'https://images.unsplash.com/photo-1578873375969-d729352e464c',
+        ''
+      ],
+      [
+        'Heavy Duty M12 Galvanized Hex Bolt',
+        sampleCategory2,
+        'ACTIVE',
+        'Grade 8.8 galvanized carbon steel hexagonal head bolts with matching nuts and washers.',
+        35,
+        'INR',
+        18,
+        'Nos',
+        '731815',
+        'FAS-HEX-M12',
+        'SteelTech',
+        'M12-100G',
+        'NEW',
+        'Yes',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        'No',
+        '',
+        '',
+        ''
+      ]
+    ];
+
+    const specHeaders = ['Product SKU', 'Product Name', 'Specification Name *', 'Specification Value *', 'Unit'];
+    const sampleSpecs = [
+      ['SAF-HLM-001', 'Industrial Safety Helmet Class-E', 'Material', 'High-Density Polyethylene (HDPE)', ''],
+      ['SAF-HLM-001', 'Industrial Safety Helmet Class-E', 'Impact Resistance', '50', 'Joules'],
+      ['SAF-HLM-001', 'Industrial Safety Helmet Class-E', 'Standard Certification', 'IS 2925:1984 / EN 397', ''],
+      ['FAS-HEX-M12', 'Heavy Duty M12 Galvanized Hex Bolt', 'Thread Size', 'M12 x 1.75mm', ''],
+      ['FAS-HEX-M12', 'Heavy Duty M12 Galvanized Hex Bolt', 'Length', '100', 'mm'],
+      ['FAS-HEX-M12', 'Heavy Duty M12 Galvanized Hex Bolt', 'Tensile Strength', '800', 'MPa']
+    ];
+
+    const maxDropdownLength = Math.max(categories.length, STANDARD_UNITS.length, STANDARD_ITEM_CONDITIONS.length, 3);
+    const dropdownRows = [
+      ['Categories', 'Statuses', 'Units', 'Item Conditions', 'Yes / No'],
+      ...Array.from({ length: maxDropdownLength }, (_, i) => [
         categories[i]?.name || '',
-        ['DRAFT', 'ACTIVE', 'INACTIVE'][i] || '',
-        ['Nos', 'Kg', 'Ltr', 'Set', 'Box'][i] || '',
-        ['NEW', 'USED', 'REFURBISHED'][i] || ''
+        ['ACTIVE', 'DRAFT', 'INACTIVE'][i] || '',
+        STANDARD_UNITS[i] || '',
+        STANDARD_ITEM_CONDITIONS[i] || '',
+        ['Yes', 'No'][i] || ''
       ])
-    ]), 'Dropdown Values');
+    ];
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([productHeaders, ...sampleProducts]), 'Products');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([specHeaders, ...sampleSpecs]), 'Product Specifications');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(productInstructions()), 'Instructions');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dropdownRows), 'Dropdown Values');
+
     return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
   },
 
@@ -369,24 +485,59 @@ export const catalogueImportService = {
       orderBy: { name: 'asc' }
     });
     const wb = XLSX.utils.book_new();
+
     const serviceHeaders = [
-      'Service Name', 'Category', 'Status', 'Description', 'Pricing Model', 'Base Price', 'Currency',
-      'GST Rate', 'Service Area', 'Scope Of Work', 'Deliverables', 'SLA Response Time', 'Duration',
-      'Offer Label', 'Offer Start Date', 'Offer End Date', 'Document URLs'
+      'Service Name *', 'Category *', 'Status', 'Description', 'Pricing Model *', 'Base Price *', 'Currency',
+      'GST Rate (%)', 'Service Area *', 'Scope Of Work', 'Deliverables', 'SLA Response Time', 'Duration',
+      'Offer Label', 'Offer Start Date (YYYY-MM-DD)', 'Offer End Date (YYYY-MM-DD)', 'Document URLs'
     ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([serviceHeaders]), 'Services');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Service Name', 'Specification Name', 'Specification Value', 'Unit']
-    ]), 'Service Specifications');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(serviceInstructions()), 'Instructions');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+
+    const sampleServiceCategory = categories[0]?.name || 'Industrial Maintenance Services';
+
+    const sampleServices = [
+      [
+        'Annual Industrial Electrical Maintenance & Inspection',
+        sampleServiceCategory,
+        'ACTIVE',
+        'Comprehensive preventive electrical audit, transformer testing, thermography, and switchgear maintenance.',
+        'FIXED',
+        25000,
+        'INR',
+        18,
+        'Pan-India / On-site',
+        'Quarterly on-site visits, infrared thermography inspection, earth pit testing, relay calibration.',
+        'Audit report, compliance certificate, thermography scan sheets, maintenance log.',
+        '24 Hours',
+        '1 Year Contract',
+        'Annual MSME Maintenance Discount',
+        '2026-09-01',
+        '2027-08-31',
+        ''
+      ]
+    ];
+
+    const serviceSpecHeaders = ['Service Name', 'Specification Name *', 'Specification Value *', 'Unit'];
+    const sampleServiceSpecs = [
+      ['Annual Industrial Electrical Maintenance & Inspection', 'Technician Certification', 'Licensed Grade-A Electrical Supervisors', ''],
+      ['Annual Industrial Electrical Maintenance & Inspection', 'Visit Frequency', 'Quarterly (4 visits/year)', 'Visits'],
+      ['Annual Industrial Electrical Maintenance & Inspection', 'Emergency Support', '24x7 Breakdown On-call', '']
+    ];
+
+    const maxDropdownLength = Math.max(categories.length, PRICING_MODELS.size, 3);
+    const dropdownRows = [
       ['Categories', 'Pricing Models', 'Statuses'],
-      ...Array.from({ length: Math.max(categories.length, 6) }, (_, i) => [
+      ...Array.from({ length: maxDropdownLength }, (_, i) => [
         categories[i]?.name || '',
         ['FIXED', 'HOURLY', 'DAILY', 'MONTHLY', 'PER_PROJECT', 'CUSTOM'][i] || '',
-        ['DRAFT', 'ACTIVE', 'INACTIVE'][i] || ''
+        ['ACTIVE', 'DRAFT', 'INACTIVE'][i] || ''
       ])
-    ]), 'Dropdown Values');
+    ];
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([serviceHeaders, ...sampleServices]), 'Services');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([serviceSpecHeaders, ...sampleServiceSpecs]), 'Service Specifications');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(serviceInstructions()), 'Instructions');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dropdownRows), 'Dropdown Values');
+
     return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
   },
 
@@ -429,13 +580,17 @@ export const catalogueImportService = {
     const seenKeys = new Set<string>();
     let duplicateRows = 0;
 
-    const unknownHeaders = headers.filter(h => h && ![
-      'Product Name', 'Service Name', 'Category', 'Status', 'Description', 'Price', 'Currency', 'GST Rate',
-      'Unit Of Measure', 'HSN Code', 'SKU', 'Brand', 'Model Number', 'Item Condition', 'MSME Made',
-      'Original Price', 'Discount Price', 'Discount Percent', 'Offer Label', 'Offer Start Date', 'Offer End Date',
-      'Bulk Deal Available', 'Bulk Minimum Quantity', 'Image URLs', 'Document URLs',
-      'Pricing Model', 'Base Price', 'Service Area', 'Scope Of Work', 'Deliverables', 'SLA Response Time', 'Duration'
-    ].some(k => normalizeHeader(k) === normalizeHeader(h)));
+    const knownHeaders = new Set([
+      'product name', 'service name', 'category', 'status', 'description', 'price', 'currency', 'gst rate',
+      'unit of measure', 'hsn code', 'sku', 'brand', 'model number', 'item condition', 'msme made',
+      'original price', 'discount price', 'discount percent', 'offer label', 'offer start date', 'offer end date',
+      'bulk deal available', 'bulk minimum quantity', 'image urls', 'document urls',
+      'pricing model', 'base price', 'service area', 'scope of work', 'deliverables', 'sla response time', 'duration'
+    ]);
+    const unknownHeaders = headers.filter(h => {
+      const norm = normalizeHeader(h);
+      return norm && !knownHeaders.has(norm);
+    });
     if (unknownHeaders.length) warnings.push(`Unknown columns ignored: ${unknownHeaders.join(', ')}`);
 
     for (const row of dataRows) {
@@ -444,7 +599,8 @@ export const catalogueImportService = {
       const name = sanitizeText(col(row, 'Product Name', 'Service Name'), 200);
       const categoryName = sanitizeText(col(row, 'Category'), 120);
       const statusRaw = clean(col(row, 'Status')).toUpperCase() || 'DRAFT';
-      const description = sanitizeText(col(row, 'Description'));
+      const rawDescription = sanitizeText(col(row, 'Description'));
+      const description = rawDescription || name;
       const price = parseNumber(col(row, 'Price', 'Base Price'));
       const gst = parseNumber(col(row, 'GST Rate'));
       const currency = clean(col(row, 'Currency')).toUpperCase() || 'INR';
@@ -453,7 +609,6 @@ export const catalogueImportService = {
       if (!categoryName) errors.push({ rowNumber, field: 'category', message: 'Category is required', rawData: row });
       else if (!categories.has(categoryName.toLowerCase())) errors.push({ rowNumber, field: 'category', message: `Category "${categoryName}" not found`, rawData: row });
       if (!PRODUCT_STATUSES.has(statusRaw)) errors.push({ rowNumber, field: 'status', message: 'Status must be DRAFT, ACTIVE, or INACTIVE', rawData: row });
-      if (!description) errors.push({ rowNumber, field: 'description', message: 'Description is required', rawData: row });
       if (type === 'PRODUCT') {
         const uom = sanitizeText(col(row, 'Unit Of Measure'), 40);
         if (!uom) errors.push({ rowNumber, field: 'unitOfMeasure', message: 'Unit Of Measure is required', rawData: row });
@@ -497,14 +652,20 @@ export const catalogueImportService = {
       }
 
       const specs = specData.filter(s => {
-        const specName = type === 'PRODUCT'
-          ? clean(col(s, 'Product SKU', 'Product Name')).toLowerCase()
-          : clean(col(s, 'Service Name')).toLowerCase();
-        const key = type === 'PRODUCT' ? (sku || name || '').toLowerCase() : (name || '').toLowerCase();
-        return specName && key && specName === key;
+        const specSku = clean(col(s, 'Product SKU', 'SKU'));
+        const specName = clean(col(s, 'Product Name', 'Name', 'Service Name'));
+        if (type === 'PRODUCT') {
+          if (sku && specSku && sku.toLowerCase() === specSku.toLowerCase()) return true;
+          if (name && specName && name.toLowerCase() === specName.toLowerCase()) return true;
+          if (name && specSku && name.toLowerCase() === specSku.toLowerCase()) return true;
+          if (sku && specName && sku.toLowerCase() === specName.toLowerCase()) return true;
+          return false;
+        } else {
+          return Boolean(name && specName && name.toLowerCase() === specName.toLowerCase());
+        }
       }).map(s => ({
-        name: sanitizeText(col(s, 'Specification Name'), 120),
-        value: sanitizeText(col(s, 'Specification Value'), 500),
+        name: sanitizeText(col(s, 'Specification Name', 'Name'), 120),
+        value: sanitizeText(col(s, 'Specification Value', 'Value'), 500),
         unit: sanitizeText(col(s, 'Unit'), 40)
       })).filter(s => s.name && s.value);
 

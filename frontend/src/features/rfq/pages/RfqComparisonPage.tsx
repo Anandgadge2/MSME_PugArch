@@ -2,12 +2,12 @@
 
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api, unwrapApiData } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 import {
     ArrowLeft, Award, Info, CheckCircle2, AlertTriangle, Star,
-    X, Printer, Users, Eye, Download, Shield
+    X, Printer, Users, Eye, Download, Shield, MessageSquare, Truck, Clock, FileText, CheckCircle
 } from 'lucide-react';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { Badge } from '../../../components/ui/card';
@@ -91,6 +91,11 @@ function RankBadge({ rank, isDisqualified }: { rank: number | null; isDisqualifi
 
 export default function RfqComparisonPage({ id: propId }: { id?: number }) {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const paramId = searchParams?.get('id') || searchParams?.get('quoteRequestId');
+    const conversationIdParam = searchParams?.get('conversationId');
+    const resolvedId = propId || (paramId ? Number(paramId) : undefined);
+
     const { token, user } = useAuth();
     const queryClient = useQueryClient();
 
@@ -108,14 +113,32 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
     }, [token]);
 
     const { data, isLoading, error, refetch } = useQuery({
-        queryKey: ['quote-request-compare', propId],
+        queryKey: ['quote-request-compare', resolvedId, conversationIdParam],
         queryFn: async () => {
-            const res = await api.fetch(`/api/quote-requests/${propId}/responses/compare`, { headers: authHeaders });
-            if (!res.ok) throw new Error('Failed to fetch comparison data');
+            let targetId = resolvedId;
+            if (!targetId && conversationIdParam) {
+                const convRes = await api.fetch(`/api/conversations/${conversationIdParam}`, { headers: authHeaders });
+                if (convRes.ok) {
+                    const convJson = await convRes.json();
+                    const convData = unwrapApiData<any>(convJson);
+                    if (convData?.quoteRequest?.id) {
+                        targetId = convData.quoteRequest.id;
+                    } else {
+                        const m = convData?.subject?.match(/Quote Request #(\d+)/i);
+                        if (m) targetId = Number(m[1]);
+                    }
+                }
+            }
+            if (!targetId) throw new Error('Quote request ID not found');
+            const res = await api.fetch(`/api/quote-requests/${targetId}/responses/compare`, { headers: authHeaders });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.message || err?.error || 'Failed to fetch comparison data');
+            }
             const json = await res.json();
             return unwrapApiData<any>(json);
         },
-        enabled: !!propId && !!token
+        enabled: (!!resolvedId || !!conversationIdParam) && !!token
     });
 
     const acceptMut = useMutation({
@@ -128,8 +151,14 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
             if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error || 'Accept failed'); }
             return res.json();
         },
-        onSuccess: () => { toast.success('Quotation accepted and PO generated!'); setAwardModal(s => ({ ...s, show: false })); refetch(); queryClient.invalidateQueries({ queryKey: ['quote-requests'] }); },
-        onError: (e: any) => { toast.error(e.message || 'Failed to accept'); }
+        onSuccess: () => {
+            toast.success('Quotation accepted and Purchase Order generated!');
+            setAwardModal(s => ({ ...s, show: false }));
+            refetch();
+            queryClient.invalidateQueries({ queryKey: ['quote-requests'] });
+            queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+        },
+        onError: (e: any) => { toast.error(e.message || 'Failed to accept quotation'); }
     });
 
     const rejectMut = useMutation({
@@ -142,8 +171,12 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
             if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error || 'Reject failed'); }
             return res.json();
         },
-        onSuccess: () => { toast.success('Quotation rejected'); refetch(); queryClient.invalidateQueries({ queryKey: ['quote-requests'] }); },
-        onError: (e: any) => { toast.error(e.message || 'Failed to reject'); }
+        onSuccess: () => {
+            toast.success('Quotation rejected');
+            refetch();
+            queryClient.invalidateQueries({ queryKey: ['quote-requests'] });
+        },
+        onError: (e: any) => { toast.error(e.message || 'Failed to reject quotation'); }
     });
 
     const techEvalMut = useMutation({
@@ -256,8 +289,17 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
     return (
         <div className="container mx-auto space-y-6 p-6">
             <div className="flex items-center justify-between">
-                <button onClick={() => router.back()} className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-[#0b2447] transition">
-                    <ArrowLeft className="h-4 w-4" /> Back to RFQ
+                <button
+                    onClick={() => {
+                        if (conversationIdParam) {
+                            router.push(`/buyer/messages?conversationId=${conversationIdParam}`);
+                        } else {
+                            router.back();
+                        }
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-[#0b2447] transition"
+                >
+                    <ArrowLeft className="h-4 w-4" /> {conversationIdParam ? 'Back to Conversation' : 'Back to RFQ'}
                 </button>
                 <button onClick={() => window.print()} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 text-xs font-bold text-indigo-700 hover:bg-indigo-50 transition shadow-sm">
                     <Printer className="h-3.5 w-3.5" /> Export Report
@@ -265,33 +307,175 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
             </div>
 
             <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Quotation Comparison</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
+                    {rawResponses.length === 1 ? 'Formal Quotation Review' : 'Quotation Comparison'}
+                </p>
                 <h1 className="text-xl font-black tracking-tight text-slate-950">
-                    Compare Quotations — RFQ-{String(qr.id).padStart(5, '0')}
+                    {rawResponses.length === 1 ? 'Review Formal Quotation' : `Compare Quotations — RFQ-${String(qr.id).padStart(5, '0')}`}
                 </h1>
                 <p className="mt-1 text-xs font-semibold text-slate-500 max-w-2xl">
                     {qr.subject} — {rawResponses.length} seller response{rawResponses.length !== 1 ? 's' : ''} received
                 </p>
             </div>
 
-            {/* RFQ summary card */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">RFQ</span>
-                            <Badge className="rounded-md px-2 py-0.5 text-[10px] font-black uppercase bg-slate-100 text-slate-700">{String(qr.status).replace(/_/g, ' ')}</Badge>
+            {/* Direct 1-on-1 Quotation Proposal Card */}
+            {rawResponses.length === 1 && (() => {
+                const r = rawResponses[0];
+                const breakup = parsePriceBreakup(r.notes);
+                const isSubmitted = String(r.status || '').toUpperCase() === 'SUBMITTED';
+                const isAccepted = String(r.status || '').toUpperCase() === 'ACCEPTED';
+                const isRejected = String(r.status || '').toUpperCase() === 'REJECTED';
+
+                return (
+                    <div className="rounded-2xl border border-indigo-100 bg-white p-6 shadow-sm space-y-6">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-5">
+                            <div className="flex items-center gap-3.5">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 font-black text-base shadow-xs">
+                                    <FileText className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-base font-black text-slate-900">
+                                            {r.seller?.sellerProfile?.businessName || r.seller?.name || `Seller #${r.sellerId}`}
+                                        </h3>
+                                        <StatusBadgeInline label={r.status} />
+                                    </div>
+                                    <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                                        Quotation Ref: <span className="font-mono text-slate-700 font-bold">{r.responseNumber || `QR-${r.id}`}</span> | Submitted: {formatDateTime(r.createdAt)}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {isBuyer && isSubmitted && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (conversationIdParam) {
+                                                    router.push(`/buyer/messages?conversationId=${conversationIdParam}`);
+                                                } else {
+                                                    router.push(`/buyer/messages`);
+                                                }
+                                            }}
+                                            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                                        >
+                                            <MessageSquare className="h-3.5 w-3.5 text-slate-500" />
+                                            Request Changes / Chat
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => rejectMut.mutate(r.id)}
+                                            disabled={rejectMut.isPending}
+                                            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/50 px-3.5 text-xs font-black text-red-600 hover:bg-red-100 transition shadow-2xs disabled:opacity-50"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                            Reject Quotation
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAwardModal({
+                                                show: true,
+                                                responseId: r.id,
+                                                sellerName: r.seller?.sellerProfile?.businessName || r.seller?.name || `Seller #${r.sellerId}`,
+                                                amount: Number(r.totalAmount || 0),
+                                                rank: 1,
+                                                confirmed: false,
+                                                remarks: ''
+                                            })}
+                                            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-xs font-black text-white hover:bg-emerald-700 transition shadow-sm"
+                                        >
+                                            <CheckCircle2 className="h-4 w-4" />
+                                            Accept Quotation & Generate PO
+                                        </button>
+                                    </>
+                                )}
+                                {isAccepted && (
+                                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100 px-3.5 py-2 text-xs font-black text-emerald-800">
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        Quotation Accepted — Purchase Order Created
+                                    </span>
+                                )}
+                                {isRejected && (
+                                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-red-100 px-3.5 py-2 text-xs font-black text-red-800">
+                                        <X className="h-4 w-4" />
+                                        Quotation Rejected
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                        <h3 className="mt-1 text-base font-extrabold text-slate-900">{qr.subject}</h3>
-                        <p className="mt-1 text-xs text-slate-500 font-semibold">
-                            Estimated Value: {formatCurrency(qr.estimatedValue)} | Responses: {rawResponses.length}
-                        </p>
+
+                        {/* Financial & Logistics Grid */}
+                        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Quoted Amount</p>
+                                <p className="text-xl font-black text-emerald-700 mt-1">{money(r.totalAmount)}</p>
+                                {breakup?.['tax'] && <p className="text-[10px] font-semibold text-slate-500 mt-0.5">Incl. GST: {breakup['tax']}</p>}
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Delivery Timeline</p>
+                                <p className="text-base font-black text-slate-800 mt-1 flex items-center gap-1.5">
+                                    <Truck className="h-4 w-4 text-indigo-500" />
+                                    {r.deliveryDays ? `${r.deliveryDays} Days` : 'Standard Delivery'}
+                                </p>
+                                {r.deliveryLocation && <p className="text-[10px] font-semibold text-slate-500 mt-0.5">{r.deliveryLocation}</p>}
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Warranty & Terms</p>
+                                <p className="text-sm font-extrabold text-slate-800 mt-1">
+                                    {r.warrantyPeriod || 'Standard Warranty'}
+                                </p>
+                                <p className="text-[10px] font-semibold text-slate-500 mt-0.5">{r.paymentTerms || 'Standard Terms'}</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Proposal Document</p>
+                                {r.documentUrl ? (
+                                    <div className="mt-1.5 flex items-center gap-2">
+                                        <a href={r.documentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:underline">
+                                            <Eye className="h-3.5 w-3.5" /> View Proposal
+                                        </a>
+                                        <a href={r.documentUrl} download className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 hover:underline">
+                                            <Download className="h-3.5 w-3.5" /> Download
+                                        </a>
+                                    </div>
+                                ) : (
+                                    <p className="text-xs font-semibold text-slate-400 mt-1">No document attached</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Seller Notes & Breakup */}
+                        {(r.notes || breakup) && (
+                            <div className="rounded-xl border border-slate-200/80 bg-slate-50/30 p-4 space-y-2">
+                                <p className="text-[11px] font-black uppercase tracking-wider text-slate-700">Seller Notes & Specifications</p>
+                                <p className="text-xs font-medium text-slate-600 whitespace-pre-line leading-relaxed">
+                                    {extractCustomNotes(r.notes) || r.notes}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
+
+            {/* RFQ summary card (for multi-bidder comparison) */}
+            {rawResponses.length > 1 && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">RFQ</span>
+                                <Badge className="rounded-md px-2 py-0.5 text-[10px] font-black uppercase bg-slate-100 text-slate-700">{String(qr.status).replace(/_/g, ' ')}</Badge>
+                            </div>
+                            <h3 className="mt-1 text-base font-extrabold text-slate-900">{qr.subject}</h3>
+                            <p className="mt-1 text-xs text-slate-500 font-semibold">
+                                Estimated Value: {formatCurrency(qr.estimatedValue)} | Responses: {rawResponses.length}
+                            </p>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             {/* Highlights */}
-            {highlights && (
+            {highlights && rawResponses.length > 1 && (
                 <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="space-y-1">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Lowest Price</p>
@@ -313,20 +497,22 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
             )}
 
             {/* Navigation Tabs */}
-            <div className="flex border-b border-slate-200">
-                <button onClick={() => setActiveTab('l1')}
-                    className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-black uppercase tracking-wider border-b-2 transition ${
-                        activeTab === 'l1' ? 'border-indigo-650 text-indigo-700 bg-indigo-50/10' : 'border-transparent text-slate-400 hover:text-slate-700'
-                    }`}>
-                    <Shield className="h-4 w-4" /> L1 Ranking Sheet
-                </button>
-                <button onClick={() => setActiveTab('matrix')}
-                    className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-black uppercase tracking-wider border-b-2 transition ${
-                        activeTab === 'matrix' ? 'border-indigo-650 text-indigo-700 bg-indigo-50/10' : 'border-transparent text-slate-400 hover:text-slate-700'
-                    }`}>
-                    <Users className="h-4 w-4" /> Compare Matrix Table
-                </button>
-            </div>
+            {rawResponses.length > 1 && (
+                <div className="flex border-b border-slate-200">
+                    <button onClick={() => setActiveTab('l1')}
+                        className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-black uppercase tracking-wider border-b-2 transition ${
+                            activeTab === 'l1' ? 'border-indigo-650 text-indigo-700 bg-indigo-50/10' : 'border-transparent text-slate-400 hover:text-slate-700'
+                        }`}>
+                        <Shield className="h-4 w-4" /> L1 Ranking Sheet
+                    </button>
+                    <button onClick={() => setActiveTab('matrix')}
+                        className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-black uppercase tracking-wider border-b-2 transition ${
+                            activeTab === 'matrix' ? 'border-indigo-650 text-indigo-700 bg-indigo-50/10' : 'border-transparent text-slate-400 hover:text-slate-700'
+                        }`}>
+                        <Users className="h-4 w-4" /> Compare Matrix Table
+                    </button>
+                </div>
+            )}
 
             {/* Sort & Filter controls for Matrix tab */}
             {activeTab === 'matrix' && (
@@ -713,12 +899,24 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
                                                 return (
                                                     <td key={r.id} className="p-4 border-r border-slate-200 text-center">
                                                         {canAct ? (
-                                                            <div className="flex items-center justify-center gap-1">
+                                                            <div className="flex flex-wrap items-center justify-center gap-1">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (conversationIdParam) {
+                                                                            router.push(`/buyer/messages?conversationId=${conversationIdParam}`);
+                                                                        } else {
+                                                                            router.push(`/buyer/messages`);
+                                                                        }
+                                                                    }}
+                                                                    className="inline-flex h-7 items-center rounded-md border border-slate-200 bg-white px-2 text-[9px] font-black uppercase text-slate-700 hover:bg-slate-50"
+                                                                >
+                                                                    <MessageSquare className="mr-0.5 h-3 w-3 text-slate-500" /> Chat
+                                                                </button>
                                                                 <button onClick={() => rejectMut.mutate(r.id)} disabled={rejectMut.isPending}
                                                                     className="inline-flex h-7 items-center rounded-md border border-red-200 bg-white px-2 text-[9px] font-black uppercase text-red-600 hover:bg-red-50 disabled:opacity-50">
                                                                     <X className="mr-0.5 h-3 w-3" /> Reject
                                                                 </button>
-                                                                <button onClick={() => setAwardModal({ show: true, responseId: r.id, sellerName: r.seller?.name || `Seller #${r.sellerId}`, amount: Number(r.totalAmount || 0), rank: r.rank || 999, confirmed: false, remarks: '' })}
+                                                                <button onClick={() => setAwardModal({ show: true, responseId: r.id, sellerName: r.seller?.sellerProfile?.businessName || r.seller?.name || `Seller #${r.sellerId}`, amount: Number(r.totalAmount || 0), rank: r.rank || 999, confirmed: false, remarks: '' })}
                                                                     className="inline-flex h-7 items-center rounded-md bg-emerald-600 px-2 text-[9px] font-black uppercase text-white hover:bg-emerald-700 disabled:opacity-50">
                                                                     <CheckCircle2 className="mr-0.5 h-3 w-3" /> Accept & PO
                                                                 </button>
