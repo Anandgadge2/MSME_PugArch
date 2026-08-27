@@ -123,22 +123,34 @@ export const procurementWorkflow = {
         where: {
           buyerId: actor.id,
           sellerId: input.sellerId,
-          subject: { contains: input.subject, mode: 'insensitive' }
+          subject: { contains: String(quoteRequest.id) }
         }
       });
+      if (!conversation) {
+        conversation = await db.conversation.findFirst({
+          where: {
+            buyerId: actor.id,
+            sellerId: input.sellerId,
+            subject: { contains: input.subject, mode: 'insensitive' }
+          }
+        });
+      }
       if (!conversation) {
         conversation = await db.conversation.create({
           data: {
             buyerId: actor.id,
             sellerId: input.sellerId,
-            subject: `Quote Request: ${input.subject}`,
+            subject: `Quote Request #${quoteRequest.id}: ${input.subject}`,
             lastMessageAt: new Date()
           }
         });
       } else {
         await db.conversation.update({
           where: { id: conversation.id },
-          data: { lastMessageAt: new Date() }
+          data: {
+            subject: `Quote Request #${quoteRequest.id}: ${input.subject}`,
+            lastMessageAt: new Date()
+          }
         });
       }
 
@@ -146,7 +158,7 @@ export const procurementWorkflow = {
         data: {
           conversationId: conversation.id,
           senderId: actor.id,
-          content: input.message ? `[Quote Request: ${input.subject}]\n\n${input.message}${input.documentUrl ? `\n\nAttachment: ${input.documentUrl}` : ''}` : `[Quote Request: ${input.subject}]`
+          content: input.message ? `[Quote Request #${quoteRequest.id}: ${input.subject}]\n\n${input.message}${input.documentUrl ? `\n\nAttachment: ${input.documentUrl}` : ''}` : `[Quote Request #${quoteRequest.id}: ${input.subject}]`
         }
       });
     } catch (chatErr) {
@@ -209,6 +221,41 @@ export const procurementWorkflow = {
     }
 
     if (!isDraft) {
+      try {
+        let conversation = await db.conversation.findFirst({
+          where: {
+            buyerId: quoteRequest.buyerId,
+            sellerId: quoteRequest.sellerId,
+            subject: { contains: String(quoteRequestId) }
+          }
+        });
+        if (!conversation) {
+          conversation = await db.conversation.findFirst({
+            where: {
+              buyerId: quoteRequest.buyerId,
+              sellerId: quoteRequest.sellerId,
+              subject: { contains: quoteRequest.subject, mode: 'insensitive' }
+            }
+          });
+        }
+        if (conversation) {
+          const totalAmt = Number(input.totalAmount || 0);
+          await db.message.create({
+            data: {
+              conversationId: conversation.id,
+              senderId: actor.id,
+              content: `📄 **Formal Quotation Submitted**\n\n- **Quotation Ref**: ${response.responseNumber || `QR-${response.id}`}\n- **Total Amount**: ₹${totalAmt.toLocaleString('en-IN')}\n- **Delivery Timeline**: ${input.deliveryDays ? `${input.deliveryDays} Days` : 'As specified'}\n- **Validity**: ${input.validityDate ? new Date(input.validityDate as string).toLocaleDateString('en-IN') : 'Standard 30 Days'}\n\n*The buyer can now review, negotiate, or accept this formal quotation to generate a Purchase Order.*`
+            }
+          });
+          await db.conversation.update({
+            where: { id: conversation.id },
+            data: { lastMessageAt: new Date() }
+          });
+        }
+      } catch (chatNotifyErr) {
+        console.error('Failed to notify chat for quotation submission:', chatNotifyErr);
+      }
+
       notifyWorkflowSoon(quoteRequest.buyerId, 'RFQ response received', quoteRequest.subject, 'quote_response_created', '/quotations');
       auditWorkflowSoon(actor, 'workflow.rfq.response_created', 'quoteResponse', response.id);
     } else {

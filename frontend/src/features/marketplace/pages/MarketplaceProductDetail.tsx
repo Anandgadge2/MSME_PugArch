@@ -158,8 +158,11 @@ export default function MarketplaceProductDetail() {
         const params = new URLSearchParams({
             intent: 'quote',
             sellerId: String(sellerUserId),
-            subject: `Quote request: ${product.name}`,
-            message: `Hello, I would like to request a quotation for ${product.name}.\n\nCategory: ${product.category?.name || 'Not specified'}\nQuantity: Please confirm minimum order quantity and availability.\nDelivery: Please share delivery timeline, payment terms, and applicable taxes.`
+            productId: String(product.id || ''),
+            productName: product.name || '',
+            price: String(product.price || ''),
+            subject: `Quote Request: ${product.name}`,
+            message: `Hello, I would like to request a formal quotation for ${product.name}.\n\nCategory: ${product.category?.name || 'General'}\nBase Unit Price: ₹${Number(product.price || 0).toLocaleString('en-IN')}\nQuantity: Please confirm minimum order quantity and best pricing for volume orders.\nDelivery: Please provide delivery timeline to our destination and payment terms.`
         });
         router.push(`/buyer/messages?${params.toString()}`);
     };

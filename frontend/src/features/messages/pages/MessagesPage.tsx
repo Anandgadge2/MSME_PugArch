@@ -5,6 +5,8 @@ import {
     ArrowLeft,
     BellOff,
     CheckCheck,
+    CheckCircle2,
+    FileCheck,
     FileText,
     MessageSquare,
     Paperclip,
@@ -29,6 +31,7 @@ import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureState
 import { formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import { compressImage } from '../../../lib/compress';
+import { postApi } from '../../shared/apiClient';
 import { uploadDeliveryFile as uploadMessageFile, type UploadedFileAsset } from '../../delivery/upload';
 import {
     useArchiveConversation,
@@ -41,7 +44,7 @@ import {
     useSendMessage,
     useUnreadMessageCount
 } from '../hooks';
-import type { ConversationDto, MessageDto, MessageUserDto } from '../api';
+import { fetchConversations, type ConversationDto, type MessageDto, type MessageUserDto } from '../api';
 import MessageAttachmentView from '../components/MessageAttachmentView';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
@@ -94,6 +97,9 @@ export default function MessagesPage() {
             subject: searchParams?.get('subject') || '',
             message: searchParams?.get('message') || '',
             intent: searchParams?.get('intent') || '',
+            price: searchParams?.get('price') || '',
+            productId: searchParams?.get('productId') || '',
+            productName: searchParams?.get('productName') || ''
         };
     }, [searchParams, user?.role]);
 
@@ -181,6 +187,7 @@ export default function MessagesPage() {
                     initialSubject={initialModalValues.subject}
                     initialMessage={initialModalValues.message}
                     initialIntent={initialModalValues.intent}
+                    initialPrice={initialModalValues.price}
                     onClose={() => setShowCreate(false)}
                     onCreated={handleCreated}
                 />
@@ -313,6 +320,7 @@ function ConversationList({
 
 function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) {
     const { user } = useAuth();
+    const router = useRouter();
     const queryClient = useQueryClient();
     const { data: conversation, isLoading, error, refetch } = useConversation(id);
     const sendMut = useSendMessage();
@@ -474,6 +482,92 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                             <span>Last activity: {conversation.lastMessageAt ? formatDateTime(conversation.lastMessageAt) : formatDateTime(conversation.createdAt)}</span>
                         </div>
                     )}
+
+                    {(() => {
+                        const isQuoteRequest = Boolean(
+                            conversation.quoteRequest ||
+                            conversation.subject?.toLowerCase().includes('quote request')
+                        );
+                        if (!isQuoteRequest) return null;
+
+                        const quoteReqId = conversation.quoteRequest?.id || (() => {
+                            const m = conversation.subject?.match(/Quote Request #(\d+)/i);
+                            return m ? Number(m[1]) : null;
+                        })();
+
+                        const submittedQuote = conversation.quoteRequest?.quoteResponses?.find((r: any) => r.status === 'SUBMITTED' || r.status === 'ACCEPTED') || conversation.quoteRequest?.quoteResponses?.[0];
+                        const isSeller = user?.role === 'seller';
+                        const isBuyer = user?.role === 'buyer';
+
+                        return (
+                            <div className="mt-3 flex flex-col gap-3 rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/90 via-blue-50/70 to-slate-50 p-3.5 sm:flex-row sm:items-center sm:justify-between shadow-xs">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#12335f] text-white shadow-sm">
+                                        <FileText className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-[11px] font-black uppercase tracking-wider text-[#12335f]">
+                                                {quoteReqId ? `RFQ / Quote Request #${quoteReqId}` : 'Marketplace Quote Request'}
+                                            </span>
+                                            {submittedQuote ? (
+                                                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                                    Quotation Submitted: ₹{Number(submittedQuote.totalAmount || 0).toLocaleString('en-IN')}
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                                                    Pending Formal Quotation
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="mt-0.5 text-xs font-semibold text-slate-600">
+                                            {isSeller
+                                                ? (submittedQuote
+                                                    ? 'You have submitted a binding quotation. You can update it or discuss terms with the buyer.'
+                                                    : 'Negotiate and create a binding formal quotation with unit pricing, GST, delivery timeline, and warranty.')
+                                                : (submittedQuote
+                                                    ? 'The seller has submitted a formal quotation. Review L1 evaluation and accept to generate Purchase Order.'
+                                                    : 'Discuss specifications and negotiate with the seller. The seller will submit a binding formal quotation.')}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                    {isSeller && (
+                                        <Button
+                                            size="sm"
+                                            className="bg-[#12335f] text-white hover:bg-[#0b1f3a]"
+                                            onClick={() => {
+                                                const url = quoteReqId
+                                                    ? `/seller/rfq/submit-quotation?conversationId=${conversation.id}&quoteRequestId=${quoteReqId}`
+                                                    : `/seller/rfq/submit-quotation?conversationId=${conversation.id}`;
+                                                router.push(url);
+                                            }}
+                                        >
+                                            <FileCheck className="mr-1.5 h-4 w-4" />
+                                            {submittedQuote ? 'View / Edit Quotation' : 'Create Quotation'}
+                                        </Button>
+                                    )}
+                                    {isBuyer && submittedQuote && (
+                                        <Button
+                                            size="sm"
+                                            className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                            onClick={() => {
+                                                const targetId = quoteReqId || conversation.quoteRequest?.id;
+                                                if (targetId) {
+                                                    router.push(`/buyer/rfq/${targetId}/compare?conversationId=${conversation.id}`);
+                                                } else {
+                                                    router.push(`/buyer/rfq/compare?conversationId=${conversation.id}`);
+                                                }
+                                            }}
+                                        >
+                                            <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                                            Review & Accept Quotation
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4">
@@ -633,11 +727,12 @@ function ParticipantPill({ user, label }: { user?: MessageUserDto; label: string
 function CreateConversationModal({
     onClose,
     onCreated,
-    initialCounterpartyId = '',
-    initialRecipientRole = '',
+    initialCounterpartyId,
+    initialRecipientRole,
     initialSubject = '',
     initialMessage = '',
-    initialIntent = '',
+    initialIntent,
+    initialPrice
 }: {
     onClose: () => void;
     onCreated: (id: number, conversation?: ConversationDto) => void;
@@ -646,8 +741,10 @@ function CreateConversationModal({
     initialSubject?: string;
     initialMessage?: string;
     initialIntent?: string;
+    initialPrice?: string;
 }) {
     const { user } = useAuth();
+    const queryClient = useQueryClient();
     const [recipientRole, setRecipientRole] = useState(initialRecipientRole || (user?.role === 'buyer' ? 'seller' : 'buyer'));
     const [counterpartyId, setCounterpartyId] = useState<number | ''>(() => {
         const id = Number(initialCounterpartyId);
@@ -782,6 +879,39 @@ function CreateConversationModal({
                             const payload = payloadForRole();
                             if (!payload) { toast.error('Select a recipient'); return; }
                             if (subject.trim().length < 3) { toast.error('Subject required'); return; }
+
+                            if (isMarketplaceQuoteRequest && recipientRole === 'seller') {
+                                try {
+                                    const quotePayload = {
+                                        sellerId: Number(counterpartyId),
+                                        subject: subject.trim(),
+                                        message: message.trim(),
+                                        estimatedValue: initialPrice ? Number(initialPrice) : undefined
+                                    };
+                                    const createdQuote = await runWithToast(() => postApi<any>('/api/quote-requests', quotePayload), {
+                                        loading: 'Submitting formal quote request...',
+                                        success: 'Quote request sent to seller',
+                                        error: err => err instanceof Error ? err.message : 'Unable to send quote request'
+                                    });
+
+                                    const updatedList = await queryClient.fetchQuery({
+                                        queryKey: ['conversations', 'list'],
+                                        queryFn: fetchConversations
+                                    });
+                                    const matched = updatedList?.find(c =>
+                                        (c.sellerId === Number(counterpartyId) || c.buyerId === Number(counterpartyId)) &&
+                                        (c.subject?.includes(String(createdQuote?.id)) || c.subject?.includes(subject.trim()))
+                                    ) || updatedList?.[0];
+
+                                    if (matched?.id) {
+                                        onCreated(matched.id, matched);
+                                        return;
+                                    }
+                                } catch {
+                                    // Fallback to standard conversation creation
+                                }
+                            }
+
                             try {
                                 const result = await runWithToast(() => mut.mutateAsync(payload), {
                                     loading: isMarketplaceQuoteRequest ? 'Sending quote request...' : 'Starting conversation...',
