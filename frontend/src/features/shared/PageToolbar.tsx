@@ -72,7 +72,7 @@ export interface PageToolbarProps {
 }
 
 const inputBase =
-    'h-9 sm:h-10 min-w-0 rounded-xl border border-slate-200 bg-white text-xs lg:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all';
+    'h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer';
 
 const renderFilter = (f: ToolbarFilter, idx: number) => {
     if (f.kind === 'select') {
@@ -82,7 +82,7 @@ const renderFilter = (f: ToolbarFilter, idx: number) => {
                 value={f.value}
                 onChange={e => f.onChange(e.target.value)}
                 aria-label={f.ariaLabel || 'Filter'}
-                className={cn(inputBase, 'w-full sm:w-auto sm:min-w-[135px] px-3 shadow-xs cursor-pointer hover:border-slate-300', f.className)}
+                className={cn(inputBase, 'w-full sm:w-auto sm:min-w-[130px]', f.className)}
             >
                 {f.placeholder && <option value="">{f.placeholder}</option>}
                 {f.options.map(opt => (
@@ -100,7 +100,7 @@ const renderFilter = (f: ToolbarFilter, idx: number) => {
                 onChange={e => f.onChange(e.target.value)}
                 aria-label={f.ariaLabel || 'Date filter'}
                 placeholder={f.placeholder}
-                className={cn(inputBase, 'w-full sm:w-auto sm:min-w-[140px] px-3 shadow-xs', f.className)}
+                className={cn(inputBase, 'w-full sm:w-auto sm:min-w-[140px] font-semibold', f.className)}
             />
         );
     }
@@ -137,13 +137,13 @@ export function PageToolbar({
     return (
         <div
             className={cn(
-                embedded ? 'space-y-3' : 'rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3',
+                embedded ? 'space-y-3' : 'rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm space-y-3 sm:space-y-0',
                 'overflow-x-hidden',
                 className
             )}
         >
             {eyebrow && (
-                <div className="flex items-center gap-2 text-[#12335f]">
+                <div className="flex items-center gap-2 text-[#12335f] mb-3">
                     <Filter className="h-4 w-4" />
                     <p className="text-[10px] font-black uppercase tracking-widest">{eyebrow}</p>
                 </div>
@@ -156,13 +156,13 @@ export function PageToolbar({
                 <div className="flex items-center gap-2 min-w-0">
                     {hasSearch && (
                         <div className="relative min-w-0 flex-1">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <input
                                 value={search ?? ''}
                                 onChange={e => onSearchChange?.(e.target.value)}
                                 placeholder={searchPlaceholder}
                                 aria-label="Search"
-                                className={cn(inputBase, 'w-full pl-10 pr-3')}
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
                             />
                         </div>
                     )}
@@ -174,7 +174,7 @@ export function PageToolbar({
                             aria-expanded={mobileOpen}
                             aria-controls="page-toolbar-mobile-filters"
                             className={cn(
-                                'flex h-9 sm:h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-[10px] font-black tracking-wider uppercase transition-all duration-200',
+                                'flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-[10px] font-black tracking-wider uppercase transition-all duration-200',
                                 appliedCount > 0 || mobileOpen
                                     ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
                                     : 'border-slate-200 bg-slate-50 text-slate-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.1)] active:scale-[0.98]'
@@ -197,7 +197,7 @@ export function PageToolbar({
                         {onReset && (
                             <Button
                                 variant="outline"
-                                className="h-9 sm:h-10 w-full rounded-xl text-xs font-black uppercase text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100"
+                                className="h-10 w-full rounded-xl text-xs font-black uppercase text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100"
                                 onClick={() => {
                                     onReset();
                                     setMobileOpen(false);
@@ -213,40 +213,41 @@ export function PageToolbar({
                 {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
 
-            {/* Tablet & Desktop layout: search full-width on top, filters in flex row below */}
-            <div className={cn("hidden sm:flex gap-3", singleRowDesktop ? "sm:flex-row sm:items-center sm:flex-nowrap" : "sm:flex-col")}>
+            {/* Tablet & Desktop layout: search full-width on top (or compact on left), filters in flex row */}
+            <div className={cn("hidden sm:flex gap-2.5 sm:gap-3 w-full", singleRowDesktop ? "sm:flex-row sm:items-center sm:flex-nowrap" : "sm:flex-col")}>
                 {hasSearch && (
-                    <div className={cn("relative min-w-0", singleRowDesktop ? "flex-1" : "w-full")}>
+                    <div className={cn("relative min-w-0", singleRowDesktop ? "w-64 sm:w-72 md:w-80 shrink-0" : "w-full")}>
                         <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
                             value={search ?? ''}
                             onChange={e => onSearchChange?.(e.target.value)}
                             placeholder={searchPlaceholder}
                             aria-label="Search"
-                            className={cn(
-                                inputBase,
-                                'w-full bg-slate-50/50 pl-10 pr-4 text-slate-800 placeholder-slate-400 focus:bg-white shadow-inner'
-                            )}
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
                         />
                     </div>
                 )}
 
-                {(filters.length > 0 || onReset || actions) && (
+                {(filters.length > 0 || onReset) && (
                     <div className={cn("flex items-center gap-2.5 sm:gap-3", singleRowDesktop ? "flex-nowrap shrink-0" : "flex-wrap")}>
                         {filters.map((f, idx) => renderFilter(f, idx))}
 
                         {onReset && (
                             <Button
                                 variant="outline"
-                                className="h-9 sm:h-10 rounded-xl text-xs font-black uppercase px-3.5 text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 shrink-0"
+                                className="h-10 rounded-xl text-xs font-black uppercase px-3.5 text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 shrink-0"
                                 onClick={onReset}
                                 type="button"
                             >
                                 <RefreshCw className="mr-2 h-3.5 w-3.5" /> Reset
                             </Button>
                         )}
+                    </div>
+                )}
 
-                        {actions && <div className="flex items-center gap-2 sm:ml-auto shrink-0">{actions}</div>}
+                {actions && (
+                    <div className={cn("flex items-center gap-2 shrink-0", singleRowDesktop ? "ml-auto" : "sm:ml-auto")}>
+                        {actions}
                     </div>
                 )}
             </div>

@@ -1937,10 +1937,16 @@ const quoteRequestBody = z.object({
 
 const quoteResponseBody = z.object({
   totalAmount: z.coerce.number().nonnegative().optional(),
+  offeredPrice: z.coerce.number().nonnegative().optional(),
+  offeredQuantity: z.coerce.number().nonnegative().optional(),
   deliveryDays: z.coerce.number().int().positive().optional(),
+  deliveryTimeline: z.string().trim().optional(),
   validityDate: safeCoercedDate.optional(),
-  notes: z.string().trim().max(2000).optional(),
+  notes: z.string().trim().max(4000).optional(),
+  message: z.string().trim().max(4000).optional(),
+  terms: z.string().trim().max(2000).optional(),
   documentUrl: z.string().trim().max(1000).optional(),
+  attachmentUrl: z.string().trim().max(1000).optional(),
   currency: z.string().trim().max(10).optional(),
   warrantyPeriod: z.string().trim().max(200).optional(),
   paymentTerms: z.string().trim().max(500).optional(),
@@ -1949,7 +1955,22 @@ const quoteResponseBody = z.object({
   complianceStatus: z.string().trim().max(50).optional(),
   unitPrice: z.coerce.number().nonnegative().optional(),
   quantity: z.coerce.number().int().positive().optional(),
-  discountPercent: z.coerce.number().min(0).max(100).optional()
+  discountPercent: z.coerce.number().min(0).max(100).optional(),
+  status: z.enum(['DRAFT', 'SUBMITTED']).optional(),
+  responseData: z.any().optional()
+}).transform(val => {
+  let deliveryDays = val.deliveryDays;
+  if (!deliveryDays && val.deliveryTimeline) {
+    const dMatch = val.deliveryTimeline.match(/(\d+)/);
+    if (dMatch) deliveryDays = Number(dMatch[1]);
+  }
+  return {
+    ...val,
+    totalAmount: val.totalAmount ?? val.offeredPrice,
+    documentUrl: val.documentUrl ?? val.attachmentUrl,
+    notes: val.notes ?? val.message ?? val.terms,
+    deliveryDays
+  };
 });
 
 const actorFrom = (req: AuthRequest) => ({

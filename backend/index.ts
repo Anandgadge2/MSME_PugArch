@@ -1216,9 +1216,44 @@ const enrichMessageAttachments = async (messages: any[] = []) => {
 };
 
 const enrichConversationPayload = async (conversation: any) => {
-  if (!conversation?.messages?.length) return conversation;
+  let quoteRequest: any = null;
+  try {
+    const idMatch = conversation.subject?.match(/Quote Request #(\d+)/i);
+    if (idMatch) {
+      const qid = Number(idMatch[1]);
+      quoteRequest = await prisma.quoteRequest.findUnique({
+        where: { id: qid },
+        include: {
+          quoteResponses: {
+            select: { id: true, status: true, totalAmount: true, responseNumber: true, createdAt: true, deliveryDays: true }
+          }
+        }
+      });
+    }
+    if (!quoteRequest && conversation.subject?.toLowerCase().includes('quote request')) {
+      const cleanSubject = conversation.subject.replace(/Quote Request:?/i, '').trim();
+      quoteRequest = await prisma.quoteRequest.findFirst({
+        where: {
+          buyerId: conversation.buyerId,
+          sellerId: conversation.sellerId,
+          ...(cleanSubject ? { subject: { contains: cleanSubject.slice(0, 30), mode: 'insensitive' } } : {})
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          quoteResponses: {
+            select: { id: true, status: true, totalAmount: true, responseNumber: true, createdAt: true, deliveryDays: true }
+          }
+        }
+      });
+    }
+  } catch (err) {
+    // Non-critical enrichment error
+  }
+
+  const withQuote = quoteRequest ? { ...conversation, quoteRequest } : conversation;
+  if (!conversation?.messages?.length) return withQuote;
   return {
-    ...conversation,
+    ...withQuote,
     messages: await enrichMessageAttachments(conversation.messages)
   };
 };
@@ -5842,6 +5877,157 @@ app.post('/api/conversations/:id/messages', authenticate, async (req: AuthReques
     ]).catch(logMessageSideEffectFailure);
   } catch (err: any) {
     handleSecureRouteError(res, err, 'Unable to send message');
+  }
+});
+
+app.post('/api/conversations/:id/quotation', authenticate, authorize('seller', 'admin'), async (req: AuthRequest, res) => {
+  try {
+    const convId = Number(req.params.id);
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: convId },
+      include: {
+        buyer: { select: conversationUserSelect },
+        seller: { select: conversationUserSelect }
+      }
+    });
+    if (!conversation || (req.user?.role !== 'admin' && conversation.sellerId !== Number(req.user?.id))) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    const {
+      offeredPrice,
+      totalAmount,
+      deliveryTimeline,
+      deliveryDays,
+      terms,
+      notes,
+      message: quoteMessage,
+      attachmentUrl,
+      documentUrl,
+      warrantyPeriod
+    } = req.body || {};
+
+    const finalAmount = Number(totalAmount ?? offeredPrice ?? 0);
+    let finalDeliveryDays = Number(deliveryDays);
+    if (!finalDeliveryDays && deliveryTimeline) {
+      const dMatch = String(deliveryTimeline).match(/(\d+)/);
+      if (dMatch) finalDeliveryDays = Number(dMatch[1]);
+    }
+    const finalDoc = documentUrl || attachmentUrl || undefined;
+    const finalNotes = notes || quoteMessage || terms || '';
+
+    // Find or create QuoteRequest for this conversation
+    let quoteRequest: any = null;
+    const idMatch = conversation.subject?.match(/Quote Request #(\d+)/i);
+    if (idMatch) {
+      quoteRequest = await prisma.quoteRequest.findUnique({ where: { id: Number(idMatch[1]) } });
+    }
+    if (!quoteRequest) {
+      const cleanSubject = conversation.subject.replace(/Quote Request:?/i, '').trim();
+      quoteRequest = await prisma.quoteRequest.findFirst({
+        where: {
+          buyerId: conversation.buyerId,
+          sellerId: conversation.sellerId,
+          ...(cleanSubject ? { subject: { contains: cleanSubject.slice(0, 30), mode: 'insensitive' } } : {})
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+    }
+    if (!quoteRequest) {
+      quoteRequest = await prisma.quoteRequest.create({
+        data: {
+          buyerId: conversation.buyerId,
+          sellerId: conversation.sellerId,
+          subject: conversation.subject,
+          message: `Product quote request from chat: ${conversation.subject}`,
+          status: 'pending',
+          statusEnum: 'SENT',
+          estimatedValue: finalAmount || undefined
+        }
+      });
+    }
+
+    // Update conversation subject to link quoteRequest id if not already linked
+    if (!conversation.subject.includes(`#${quoteRequest.id}`)) {
+      const cleanSub = conversation.subject.replace(/^Quote Request #?\d*:?\s*/i, '').trim();
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          subject: `Quote Request #${quoteRequest.id}: ${cleanSub || 'Product'}`
+        }
+      });
+    }
+
+    // Check if QuoteResponse exists or create
+    let quoteResponse = await prisma.quoteResponse.findFirst({
+      where: { quoteRequestId: quoteRequest.id, sellerId: conversation.sellerId }
+    });
+
+    const responseNumber = quoteResponse?.responseNumber || `QR-${Date.now().toString(36).toUpperCase()}`;
+    const ack = {
+      acknowledgementId: `ACK-${responseNumber}`,
+      responseId: responseNumber,
+      timestamp: new Date().toISOString(),
+      message: 'Quotation submitted successfully.'
+    };
+
+    if (quoteResponse) {
+      quoteResponse = await prisma.quoteResponse.update({
+        where: { id: quoteResponse.id },
+        data: {
+          totalAmount: finalAmount,
+          deliveryDays: finalDeliveryDays || undefined,
+          notes: finalNotes || undefined,
+          documentUrl: finalDoc,
+          warrantyPeriod: warrantyPeriod || undefined,
+          status: 'SUBMITTED',
+          acknowledgement: ack
+        }
+      });
+    } else {
+      quoteResponse = await prisma.quoteResponse.create({
+        data: {
+          quoteRequestId: quoteRequest.id,
+          sellerId: conversation.sellerId,
+          responseNumber,
+          totalAmount: finalAmount,
+          deliveryDays: finalDeliveryDays || undefined,
+          notes: finalNotes || undefined,
+          documentUrl: finalDoc,
+          warrantyPeriod: warrantyPeriod || undefined,
+          status: 'SUBMITTED',
+          acknowledgement: ack
+        }
+      });
+    }
+
+    await prisma.quoteRequest.update({
+      where: { id: quoteRequest.id },
+      data: { status: 'responded', statusEnum: 'RESPONDED' }
+    });
+
+    // Post notification into chat
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        senderId: Number(req.user?.id),
+        content: `📄 **Formal Quotation Submitted**\n\n- **Quotation Ref**: ${responseNumber}\n- **Total Amount**: ₹${finalAmount.toLocaleString('en-IN')}\n- **Delivery Timeline**: ${deliveryTimeline || (finalDeliveryDays ? `${finalDeliveryDays} Days` : 'As specified')}\n- **Terms & Notes**: ${finalNotes || 'Standard Terms'}\n\n*The buyer can now review and accept this quotation to generate a Purchase Order.*`
+      }
+    });
+
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: new Date() }
+    });
+
+    res.status(201).json({
+      success: true,
+      quoteRequest,
+      quoteResponse,
+      quotation: quoteResponse
+    });
+  } catch (err: any) {
+    handleSecureRouteError(res, err, 'Unable to submit quotation for conversation');
   }
 });
 
