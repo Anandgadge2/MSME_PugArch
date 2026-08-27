@@ -505,7 +505,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   }, [getRequiredDocuments, sellerDocuments]);
 
   const isApprovedProfile = onboardingStatus === 'approved_for_procurement' || onboardingStatus === 'verified' || onboardingStatus === 'VERIFIED';
-  const isExplicitlySubmitted = Boolean(cachedMe?.user?.sectionStatus?.submitted || user?.sectionStatus?.submitted);
+  const isExplicitlySubmitted = Boolean((cachedMe?.user?.sectionStatus as any)?.submitted || (user?.sectionStatus as any)?.submitted);
   const lockBadgeText = isApprovedProfile
     ? 'Approved profile locked'
     : isExplicitlySubmitted
