@@ -724,7 +724,7 @@ function ParticipantPill({ user, label }: { user?: MessageUserDto; label: string
     );
 }
 
-function CreateConversationModal({
+export function CreateConversationModal({
     onClose,
     onCreated,
     initialCounterpartyId,

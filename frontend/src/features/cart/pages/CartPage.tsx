@@ -9,7 +9,7 @@
 */
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, CheckCircle2, Clock, History, Minus, Plus, RefreshCw, Send, ShoppingCart, Store, Trash2, X, XCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, History, Minus, Plus, RefreshCw, Send, ShoppingCart, Store, Trash2, X, XCircle, ArrowUpDown, ArrowUp, ArrowDown, FileText } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -22,6 +22,8 @@ import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureState
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { KpiCard } from '../../shared/KpiCard';
 import { runWithToast } from '../../../lib/toast';
+import { postApi } from '../../shared/apiClient';
+import { CreateConversationModal } from '../../messages/pages/MessagesPage';
 import {
     useActiveCart,
     useApproveCart,
@@ -82,6 +84,13 @@ export default function CartPage() {
     type SortDirection = 'asc' | 'desc' | null;
     const [sortField, setSortField] = useState<SortField>(null);
     const [sortDir, setSortDir] = useState<SortDirection>(null);
+    const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(new Set());
+    const [quoteModalState, setQuoteModalState] = useState<{
+        sellerId: string;
+        subject: string;
+        message: string;
+        estimatedPrice: string;
+    } | null>(null);
 
     const cart = cartQuery.data;
     const history = historyQuery.data || [];
@@ -121,6 +130,89 @@ export default function CartPage() {
             return 0;
         });
     }, [cart?.items, sortField, sortDir]);
+
+    const isAllSelected = sortedItems.length > 0 && sortedItems.every(i => selectedItemIds.has(i.id));
+    const isSomeSelected = sortedItems.some(i => selectedItemIds.has(i.id)) && !isAllSelected;
+
+    const toggleSelectAll = () => {
+        if (isAllSelected) {
+            setSelectedItemIds(new Set());
+        } else {
+            setSelectedItemIds(new Set(sortedItems.map(i => i.id)));
+        }
+    };
+
+    const toggleSelectItem = (id: number) => {
+        setSelectedItemIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const selectedItems = useMemo(() => {
+        return sortedItems.filter(i => selectedItemIds.has(i.id));
+    }, [sortedItems, selectedItemIds]);
+
+    const selectedTotal = useMemo(() => {
+        return selectedItems.reduce((sum, it) => sum + Number(it.quantity) * Number(it.unitPrice), 0);
+    }, [selectedItems]);
+
+    const formatCartQuoteData = (items: CartItemDto[]) => {
+        const totalValue = items.reduce((sum, it) => sum + Number(it.quantity) * Number(it.unitPrice), 0);
+        const firstItem = items[0];
+        const subject = items.length === 1
+            ? `Quote request: ${firstItem.itemName}`
+            : `Quote request: ${firstItem.itemName} + ${items.length - 1} other item(s)`;
+
+        const itemsText = items.map((item, idx) => {
+            const lineTotal = Number(item.quantity) * Number(item.unitPrice);
+            const unit = item.unitOfMeasure || (item.serviceId ? 'Service' : 'PCS');
+            return `${idx + 1}. ${item.itemName}\n   Quantity: ${item.quantity} ${unit}\n   Reference Unit Price: ${formatCurrency(item.unitPrice)}\n   Estimated Line Total: ${formatCurrency(lineTotal)}`;
+        }).join('\n\n');
+
+        const message = `Hello, I would like to request a formal quotation for the following ${items.length} item(s) from my cart:\n\n${itemsText}\n\nEstimated Total: ${formatCurrency(totalValue)}\n\nPlease share your best offered unit prices, delivery timeline, payment terms, and applicable GST/taxes.`;
+
+        return { subject, message, totalValue };
+    };
+
+    const handleRequestQuote = () => {
+        if (selectedItems.length === 0) {
+            toast.info('Select at least one cart item to request a quote.');
+            return;
+        }
+
+        if (!user) {
+            toast.info('Login is required to send a quote request.');
+            return;
+        }
+
+        if (user.role !== 'buyer' && user.role !== 'admin') {
+            toast.info('Quote requests are available from buyer accounts.');
+            return;
+        }
+
+        // Determine primary seller ID from selected items
+        const primaryItem = selectedItems.find(i => Number(i.sellerId || i.seller?.id || 0) > 0) || selectedItems[0];
+        const sellerId = Number(primaryItem?.sellerId || primaryItem?.seller?.id || 0);
+
+        // Format quote data for ALL selected items
+        const { subject, message, totalValue } = formatCartQuoteData(selectedItems);
+
+        setQuoteModalState({
+            sellerId: sellerId > 0 ? String(sellerId) : '',
+            subject,
+            message,
+            estimatedPrice: String(totalValue)
+        });
+    };
+
+    const handleQuoteCreated = (id: number) => {
+        toast.success('Quote request sent to seller');
+        setQuoteModalState(null);
+        router.push(`/buyer/messages?conversationId=${id}`);
+    };
     if (permissionsLoading && !canViewCart) {
         return <LoadingState label="Loading cart..." />;
     }
@@ -333,11 +425,38 @@ export default function CartPage() {
             {/* Cart Items */}
             <Card className="border-slate-200/80 shadow-sm">
                 <CardContent className="p-0">
-                    <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-3 flex items-center justify-between">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cart Items ({totals.lineCount})</p>
-                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${STATUS_TONE[cart?.status || 'ACTIVE']}`}>
-                            {(cart?.status || 'ACTIVE').replace(/_/g, ' ')}
-                        </span>
+                    <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cart Items ({totals.lineCount})</p>
+                            <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${STATUS_TONE[cart?.status || 'ACTIVE']}`}>
+                                {(cart?.status || 'ACTIVE').replace(/_/g, ' ')}
+                            </span>
+                            {selectedItemIds.size > 0 && (
+                                <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-black text-indigo-700">
+                                    {selectedItemIds.size} of {sortedItems.length} selected ({formatCurrency(selectedTotal)})
+                                </span>
+                            )}
+                        </div>
+                        {cart && cart.items.length > 0 && (
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={handleRequestQuote}
+                                    disabled={selectedItemIds.size === 0}
+                                    className={cn(
+                                        "h-8 gap-1.5 rounded-lg text-xs font-black uppercase transition",
+                                        selectedItemIds.size > 0
+                                            ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                                            : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                                    )}
+                                    title={selectedItemIds.size === 0 ? "Select items from the cart to request a quote" : `Send quote request for ${selectedItemIds.size} item(s)`}
+                                >
+                                    <FileText className="h-3.5 w-3.5" />
+                                    Request Quote {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : ''}
+                                </Button>
+                            </div>
+                        )}
                     </div>
                     {!cart || cart.items.length === 0 ? (
                         <EmptyState
@@ -349,6 +468,19 @@ export default function CartPage() {
                             <table data-ux-wrapped="true" className="w-full min-w-[760px] text-sm">
                                 <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                                     <tr>
+                                        <th className="px-3 py-2 text-center w-10">
+                                            <input
+                                                type="checkbox"
+                                                checked={isAllSelected}
+                                                ref={el => {
+                                                    if (el) el.indeterminate = isSomeSelected;
+                                                }}
+                                                onChange={toggleSelectAll}
+                                                className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
+                                                title="Select all items"
+                                                aria-label="Select all items"
+                                            />
+                                        </th>
                                         <th className="px-3 py-2 text-left w-10">#</th>
                                         <SortHeader label="Item" field="item" className="px-3 py-2 text-left min-w-[140px]" />
                                         <SortHeader label="Seller" field="seller" className="px-3 py-2 text-left min-w-[120px] max-w-[160px]" />
@@ -363,8 +495,18 @@ export default function CartPage() {
                                 <tbody className="divide-y divide-slate-100">
                                     {sortedItems.map((item, idx) => {
                                         const lineTotal = Number(item.quantity) * Number(item.unitPrice);
+                                        const isSelected = selectedItemIds.has(item.id);
                                         return (
-                                            <tr key={item.id} className="hover:bg-slate-50/60 group">
+                                            <tr key={item.id} className={cn("hover:bg-slate-50/60 group transition-colors", isSelected && "bg-indigo-50/20")}>
+                                                <td className="px-3 py-2.5 text-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={() => toggleSelectItem(item.id)}
+                                                        className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
+                                                        aria-label={`Select ${item.itemName}`}
+                                                    />
+                                                </td>
                                                 <td className="px-3 py-2.5 font-mono text-[10px] font-bold text-slate-400">{String(idx + 1).padStart(2, '0')}</td>
                                                 <td className="px-3 py-2.5">
                                                     <div className="flex flex-col gap-0.5">
@@ -442,7 +584,7 @@ export default function CartPage() {
                                 </tbody>
                                 <tfoot className="border-t-2 border-slate-200 bg-slate-50/80">
                                     <tr>
-                                        <td colSpan={5} className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">Grand Total</td>
+                                        <td colSpan={6} className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">Grand Total</td>
                                         <td className="px-3 py-2.5 text-right text-sm font-black text-slate-900 whitespace-nowrap">{formatCurrency(totals.total)}</td>
                                         <td colSpan={3} />
                                     </tr>
@@ -452,23 +594,42 @@ export default function CartPage() {
                     )}
 
                     {cart && cart.items.length > 0 && (
-                        <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                            <p className="text-[11px] font-semibold text-slate-500">
-                                Created by {cart.createdBy?.name} · {formatDateTime(cart.createdAt)}
-                            </p>
-                            {isSubmittable && (
-                                <div className="flex flex-col items-start sm:items-end space-y-1">
+                        <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                            <div>
+                                <p className="text-[11px] font-semibold text-slate-500">
+                                    Created by {cart.createdBy?.name} · {formatDateTime(cart.createdAt)}
+                                </p>
+                                {selectedItemIds.size > 0 && (
+                                    <p className="text-xs font-bold text-slate-700 mt-0.5">
+                                        Selected for Quote: <span className="font-extrabold text-[#12335f]">{selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''}</span> ({formatCurrency(selectedTotal)})
+                                    </p>
+                                )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    type="button"
+                                    onClick={handleRequestQuote}
+                                    disabled={selectedItemIds.size === 0}
+                                    className={cn(
+                                        "gap-1.5 font-bold transition shadow-xs",
+                                        selectedItemIds.size > 0
+                                            ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                                            : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                                    )}
+                                    title={selectedItemIds.size === 0 ? "Select items from the cart to request a quote" : `Send quote request for ${selectedItemIds.size} item(s)`}
+                                >
+                                    <FileText className="h-4 w-4" />
+                                    Request Quote {selectedItemIds.size > 0 ? `(${selectedItemIds.size} Selected)` : ''}
+                                </Button>
+                                {isSubmittable && (
                                     <Button
                                         onClick={() => router.push('/buyer/procurement/checkout')}
                                         className="bg-[#12335f] text-white hover:bg-[#0e2a4f] font-bold"
                                     >
                                         Proceed to Procurement Checkout
                                     </Button>
-                                    <span className="text-[10px] font-semibold text-slate-500">
-                                        Select Direct Purchase, L1 Purchase, Bid/RA, or PAC based on cart value and rules.
-                                    </span>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     )}
                 </CardContent>
@@ -553,6 +714,21 @@ export default function CartPage() {
                         setShowRejectModal(null);
                     }}
                     pending={rejectCartMut.isPending}
+                />
+            )}
+
+            {/* Request Quote Modal */}
+            {quoteModalState && (
+                <CreateConversationModal
+                    key={quoteModalState.sellerId || 'cart-quote'}
+                    initialCounterpartyId={quoteModalState.sellerId}
+                    initialRecipientRole="seller"
+                    initialSubject={quoteModalState.subject}
+                    initialMessage={quoteModalState.message}
+                    initialIntent="quote"
+                    initialPrice={quoteModalState.estimatedPrice}
+                    onClose={() => setQuoteModalState(null)}
+                    onCreated={handleQuoteCreated}
                 />
             )}
         </div>
