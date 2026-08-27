@@ -702,10 +702,13 @@ export default function App() {
     if (pathname === '/buyer/procurement/drafts' && roleOk(user.role, ['buyer'])) return <ProcurementDraftsPage />;
     if (pathname === '/buyer/procurement/responses' && roleOk(user.role, ['buyer'])) return <SupplierResponsesPage />;
     {
-      const rfqCompareMatch = pathname.match(/^\/buyer\/quote-requests\/(\d+)\/compare$/);
-      if (rfqCompareMatch && roleOk(user.role, ['buyer'])) {
+      const rfqCompareMatch = pathname.match(/^\/buyer\/(?:quote-requests|rfq|quotations)\/(\d+)(?:\/compare|\/review)?$/);
+      if (rfqCompareMatch && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
         const id = Number(rfqCompareMatch[1]);
         if (Number.isFinite(id) && id > 0) return <RfqComparisonPage id={id} />;
+      }
+      if ((pathname === '/buyer/rfq/compare' || pathname === '/buyer/quote-requests/compare' || pathname === '/buyer/quotations/review') && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
+        return <RfqComparisonPage />;
       }
     }
     

@@ -479,7 +479,7 @@ export default function GrnListPage() {
                     title="No GRNs match these filters" 
                     description="Clear filters to see all goods receipt notes." 
                     action={{
-                        label: "Clear Filters",
+                        label: 'Clear Filters',
                         onClick: clearFilters
                     }}
                 />
