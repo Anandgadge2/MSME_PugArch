@@ -16,7 +16,7 @@ import { openFileAsset } from '../lib/files';
 import { cn } from '../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../features/shared/FeatureStates';
 import { formatCurrency, formatDate, maskEmail } from '../features/shared/format';
-import { useFeatureQuery, usePaginatedFeatureQuery, useResponsiveViewMode } from '../features/shared/hooks';
+import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
@@ -241,6 +241,12 @@ export default function PurchaseOrders() {
   const [activeTab, setActiveTab] = useState<'Open' | 'Delivered' | 'Cancelled' | 'All'>('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All Statuses');
+  const [partyFilter, setPartyFilter] = useState('All Parties');
+  const [valueFilter, setValueFilter] = useState('All Values');
+  const [expectedDateFilter, setExpectedDateFilter] = useState('All Dates');
+  const [expectedDateCustom, setExpectedDateCustom] = useState({ start: '', end: '' });
+  const [updatedDateFilter, setUpdatedDateFilter] = useState({ start: '', end: '' });
   const [sortBy, setSortBy] = useState('newest');
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -329,40 +335,146 @@ export default function PurchaseOrders() {
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
-  const {
-    records: pagedOrders,
-    loading,
-    refreshing,
-    error,
-    reload,
-    setRecords: setPagedOrders,
-    page,
-    pageSize,
-    total,
-    setPage,
-    setPageSize
-  } = usePaginatedFeatureQuery<PurchaseOrderDto>(
-    '/api/purchase-orders',
-    {
-      q: debouncedSearch,
-      status: purchaseOrderStatusParam(activeTab),
-      sortBy,
-      viewerScope
-    },
-    10
-  );
-
-  const { data: allOrders, reload: reloadAllOrders } = useFeatureQuery<PurchaseOrderDto[]>(
+  const { data: allOrders, loading, refreshing, error, reload: reloadAllOrders, setData: setAllOrders } = useFeatureQuery<PurchaseOrderDto[]>(
     `/api/purchase-orders?take=500&viewerScope=${encodeURIComponent(viewerScope)}`,
     []
   );
 
-  const visibleOrders = useMemo(() => {
-    if (activeTab === 'Open') return pagedOrders.filter(isOpenPurchaseOrder);
-    if (activeTab === 'Delivered') return pagedOrders.filter(o => ['delivered', 'completed'].includes(String(o.status || '').toLowerCase()));
-    if (activeTab === 'Cancelled') return pagedOrders.filter(o => ['cancelled', 'rejected'].includes(String(o.status || '').toLowerCase()));
-    return pagedOrders;
-  }, [activeTab, pagedOrders]);
+  const reload = reloadAllOrders;
+  const setPagedOrders = setAllOrders; // Alias for minimal changes to action handlers
+
+  const uniqueStatuses = useMemo(() => {
+    const statuses = new Set<string>();
+    allOrders.forEach(o => {
+      if (o.status) statuses.add(readableStatus(o.status));
+    });
+    return Array.from(statuses).sort();
+  }, [allOrders]);
+
+  const uniqueParties = useMemo(() => {
+    const parties = new Set<string>();
+    allOrders.forEach(o => {
+      if (o.seller?.name) parties.add(o.seller.name);
+      if (o.buyer?.name) parties.add(o.buyer.name);
+    });
+    return Array.from(parties).sort();
+  }, [allOrders]);
+
+  const processedOrders = useMemo(() => {
+    let result = [...allOrders];
+
+    // 1. Search
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      result = result.filter(o => 
+        o.poNumber?.toLowerCase().includes(q) || 
+        o.title?.toLowerCase().includes(q) || 
+        o.seller?.name?.toLowerCase().includes(q) || 
+        o.buyer?.name?.toLowerCase().includes(q)
+      );
+    }
+
+    // 2. Tab Filter
+    if (activeTab === 'Open') result = result.filter(isOpenPurchaseOrder);
+    else if (activeTab === 'Delivered') result = result.filter(o => ['delivered', 'completed'].includes(String(o.status || '').toLowerCase()));
+    else if (activeTab === 'Cancelled') result = result.filter(o => ['cancelled', 'rejected'].includes(String(o.status || '').toLowerCase()));
+
+    // 3. Status Filter
+    if (statusFilter && statusFilter !== 'All Statuses') {
+      result = result.filter(o => readableStatus(o.status).toLowerCase() === statusFilter.toLowerCase());
+    }
+
+    // 4. Party Filter
+    if (partyFilter && partyFilter !== 'All Parties') {
+      result = result.filter(o => o.seller?.name === partyFilter || o.buyer?.name === partyFilter);
+    }
+
+    // 5. Value Filter
+    if (valueFilter && valueFilter !== 'All Values') {
+      result = result.filter(o => {
+        const val = Number(o.amount || o.totalValue || 0);
+        if (valueFilter === 'Below ₹10,000') return val < 10000;
+        if (valueFilter === '₹10,000 – ₹50,000') return val >= 10000 && val <= 50000;
+        if (valueFilter === '₹50,000 – ₹1,00,000') return val >= 50000 && val <= 100000;
+        if (valueFilter === 'Above ₹1,00,000') return val > 100000;
+        return true;
+      });
+    }
+
+    // 6. Expected Date Filter
+    if (expectedDateFilter && expectedDateFilter !== 'All Dates') {
+      const now = new Date();
+      now.setHours(0,0,0,0);
+      result = result.filter(o => {
+        if (!o.expectedDelivery) return false;
+        const expected = new Date(o.expectedDelivery);
+        expected.setHours(0,0,0,0);
+        
+        if (expectedDateFilter === 'Upcoming') {
+          return expected >= now && !['delivered', 'completed', 'cancelled', 'rejected'].includes(String(o.status).toLowerCase());
+        }
+        if (expectedDateFilter === 'Overdue') {
+          return expected < now && !['delivered', 'completed', 'cancelled', 'rejected'].includes(String(o.status).toLowerCase());
+        }
+        if (expectedDateFilter === 'Custom Date Range') {
+           const start = expectedDateCustom.start ? new Date(expectedDateCustom.start) : null;
+           const end = expectedDateCustom.end ? new Date(expectedDateCustom.end) : null;
+           if (start) start.setHours(0,0,0,0);
+           if (end) end.setHours(23,59,59,999);
+           
+           if (start && expected < start) return false;
+           if (end && expected > end) return false;
+           return true;
+        }
+        return true;
+      });
+    }
+
+    // 7. Updated Date Filter
+    if (updatedDateFilter.start || updatedDateFilter.end) {
+      result = result.filter(o => {
+        if (!o.updatedAt) return false;
+        const updated = new Date(o.updatedAt);
+        const start = updatedDateFilter.start ? new Date(updatedDateFilter.start) : null;
+        const end = updatedDateFilter.end ? new Date(updatedDateFilter.end) : null;
+        if (start) start.setHours(0,0,0,0);
+        if (end) end.setHours(23,59,59,999);
+        
+        if (start && updated < start) return false;
+        if (end && updated > end) return false;
+        return true;
+      });
+    }
+
+    // 8. Sorting
+    result.sort((a, b) => {
+      const valA = Number(a.amount || a.totalValue || 0);
+      const valB = Number(b.amount || b.totalValue || 0);
+      
+      if (sortBy === 'value_high') return valB - valA;
+      if (sortBy === 'value_low') return valA - valB;
+      if (sortBy === 'newest') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      
+      if (sortBy === 'po_asc') return String(a.poNumber || '').localeCompare(String(b.poNumber || ''));
+      if (sortBy === 'po_desc') return String(b.poNumber || '').localeCompare(String(a.poNumber || ''));
+      if (sortBy === 'title_asc') return String(a.title || '').localeCompare(String(b.title || ''));
+      if (sortBy === 'title_desc') return String(b.title || '').localeCompare(String(a.title || ''));
+      if (sortBy === 'party_asc') return String(a.seller?.name || '').localeCompare(String(b.seller?.name || ''));
+      if (sortBy === 'party_desc') return String(b.seller?.name || '').localeCompare(String(a.seller?.name || ''));
+      if (sortBy === 'expected_asc') return new Date(a.expectedDelivery || 0).getTime() - new Date(b.expectedDelivery || 0).getTime();
+      if (sortBy === 'expected_desc') return new Date(b.expectedDelivery || 0).getTime() - new Date(a.expectedDelivery || 0).getTime();
+      if (sortBy === 'updated_asc') return new Date(a.updatedAt || 0).getTime() - new Date(b.updatedAt || 0).getTime();
+      if (sortBy === 'updated_desc') return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+      if (sortBy === 'status_asc' || sortBy === 'status') return String(a.status || '').localeCompare(String(b.status || ''));
+      if (sortBy === 'status_desc') return String(b.status || '').localeCompare(String(a.status || ''));
+
+      return 0;
+    });
+
+    return result;
+  }, [allOrders, activeTab, debouncedSearch, statusFilter, partyFilter, valueFilter, expectedDateFilter, expectedDateCustom, updatedDateFilter, sortBy]);
+
+  const { page, pageSize, total, pageItems: visibleOrders, setPage, setPageSize } = usePagination(processedOrders, 10);
 
   const totalSpend = useMemo(
     () => allOrders.reduce((sum, order) => sum + Number(order.amount || order.totalValue || 0), 0),
@@ -636,6 +748,24 @@ export default function PurchaseOrders() {
     toast.success('Detailed invoice PDF generated');
   };
 
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('All Statuses');
+    setPartyFilter('All Parties');
+    setValueFilter('All Values');
+    setExpectedDateFilter('All Dates');
+    setExpectedDateCustom({ start: '', end: '' });
+    setUpdatedDateFilter({ start: '', end: '' });
+  };
+
+  const activeFiltersCount = 
+    (searchTerm ? 1 : 0) + 
+    (statusFilter !== 'All Statuses' ? 1 : 0) + 
+    (partyFilter !== 'All Parties' ? 1 : 0) + 
+    (valueFilter !== 'All Values' ? 1 : 0) + 
+    (expectedDateFilter !== 'All Dates' ? 1 : 0) + 
+    ((updatedDateFilter.start || updatedDateFilter.end) ? 1 : 0);
+
   return (
     <div className="space-y-6">
       {/* Transparent Header */}
@@ -664,36 +794,104 @@ export default function PurchaseOrders() {
       {error && <InlineError message={error} onRetry={reload} />}
 
       {/* ── Search + Filter + View Toggle Toolbar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
-        <ResponsiveFilterBar
-          activeFilterCount={(searchTerm ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0)}
-          searchInput={
-            <div className="relative w-full">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={searchTerm}
-                onChange={event => setSearchTerm(event.target.value)}
-                placeholder="Search PO, seller, buyer, status..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-              />
-            </div>
-          }
-          filters={
-            <div className="w-full sm:w-auto sm:min-w-[130px]">
-              <select
-                value={sortBy}
-                onChange={event => setSortBy(event.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-              >
-                <option value="newest">Newest</option>
-                <option value="value_high">Value High</option>
-                <option value="value_low">Value Low</option>
-                <option value="status">Status</option>
-              </select>
-            </div>
-          }
-          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
-        />
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm flex flex-wrap items-center gap-[12px]">
+        
+        {/* Search */}
+        <div className="relative flex-[1_1_auto] min-w-[240px]">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={searchTerm}
+            onChange={event => setSearchTerm(event.target.value)}
+            placeholder="Search PO, title, party..."
+            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+          />
+        </div>
+
+        {/* Status */}
+        <div className="flex-[0_0_auto] w-full sm:w-[130px]">
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+          >
+            <option value="All Statuses">Status: All</option>
+            {uniqueStatuses.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+        
+        {/* Party */}
+        <div className="flex-[0_0_auto] w-full sm:w-[130px]">
+          <select
+            value={partyFilter}
+            onChange={e => setPartyFilter(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+          >
+            <option value="All Parties">Party: All</option>
+            {uniqueParties.map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Value */}
+        <div className="flex-[0_0_auto] w-full sm:w-[130px]">
+          <select
+            value={valueFilter}
+            onChange={e => setValueFilter(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+          >
+            <option value="All Values">Value: All</option>
+            <option value="Below ₹10,000">Below ₹10,000</option>
+            <option value="₹10,000 – ₹50,000">₹10,000 – ₹50,000</option>
+            <option value="₹50,000 – ₹1,00,000">₹50,000 – ₹1,00,000</option>
+            <option value="Above ₹1,00,000">Above ₹1,00,000</option>
+          </select>
+        </div>
+
+        {/* Expected */}
+        <div className="flex-[0_0_auto] w-full sm:w-[130px] flex items-center gap-[12px]">
+          <select
+            value={expectedDateFilter}
+            onChange={e => setExpectedDateFilter(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+          >
+            <option value="All Dates">Expected: All</option>
+            <option value="Upcoming">Upcoming</option>
+            <option value="Overdue">Overdue</option>
+            <option value="Custom Date Range">Custom Date Range</option>
+          </select>
+        </div>
+        
+        {expectedDateFilter === 'Custom Date Range' && (
+          <div className="flex-[0_0_auto] flex items-center flex-nowrap whitespace-nowrap gap-1 w-full sm:w-auto h-10">
+            <input type="date" value={expectedDateCustom.start} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, start: e.target.value })} className="h-10 w-full sm:w-[115px] rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" title="Start Date" />
+            <span className="text-slate-400 font-bold shrink-0">-</span>
+            <input type="date" value={expectedDateCustom.end} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, end: e.target.value })} className="h-10 w-full sm:w-[115px] rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" title="End Date" />
+          </div>
+        )}
+
+        {/* Updated Date */}
+        <div className="flex-[0_0_auto] flex items-center flex-nowrap whitespace-nowrap gap-1 bg-slate-50/50 border border-slate-200 rounded-xl px-2 h-10 w-full sm:w-auto">
+          <span className="text-[10px] font-black uppercase text-slate-400 px-1 shrink-0 hidden lg:inline-block">Updated</span>
+          <input type="date" value={updatedDateFilter.start} onChange={e => setUpdatedDateFilter({ ...updatedDateFilter, start: e.target.value })} className="h-8 w-full sm:w-[105px] shrink-0 rounded-lg border-none bg-transparent px-1 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-slate-300" title="Updated Start" />
+          <span className="text-slate-300 font-black shrink-0">-</span>
+          <input type="date" value={updatedDateFilter.end} onChange={e => setUpdatedDateFilter({ ...updatedDateFilter, end: e.target.value })} className="h-8 w-full sm:w-[105px] shrink-0 rounded-lg border-none bg-transparent px-1 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-slate-300" title="Updated End" />
+        </div>
+
+        {/* Right Actions */}
+        <div className="flex-[0_0_auto] flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+          {activeFiltersCount > 0 && (
+            <Button variant="ghost" onClick={handleClearFilters} className="h-9 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 shrink-0">
+              Clear Filters
+            </Button>
+          )}
+          <div className="shrink-0">
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          </div>
+        </div>
+
       </div>
 
       {loading && visibleOrders.length === 0 ? (
@@ -762,7 +960,7 @@ export default function PurchaseOrders() {
               );
             })}
           </div>
-          <Pagination page={page} pageSize={pageSize} total={visibleOrders.length < pagedOrders.length ? visibleOrders.length : total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -844,7 +1042,7 @@ export default function PurchaseOrders() {
               </tbody>
             </table>
           </div>
-          <Pagination page={page} pageSize={pageSize} total={visibleOrders.length < pagedOrders.length ? visibleOrders.length : total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
         </div>
       )}
 
