@@ -2376,7 +2376,19 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     }
 
     const uploadedDocs = profile.sellerDocuments?.map((d: any) => d.documentType) || [];
-    const missingDocs = requiredDocs.filter(d => !uploadedDocs.includes(d));
+    const matchesDocType = (reqType: string, uploadedTypes: string[]) =>
+      uploadedTypes.some(u => {
+        const normU = String(u || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normR = String(reqType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normU === normR) return true;
+        const aliases: Record<string, string[]> = {
+          bankpassbook: ['bankpassbook', 'bankpassbookcancelledcheque'],
+          leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard'],
+          registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate']
+        };
+        return (aliases[normR] || []).includes(normU) || (aliases[normU] || []).includes(normR);
+      });
+    const missingDocs = requiredDocs.filter(d => !matchesDocType(d, uploadedDocs));
 
     if (missingDocs.length > 0) {
       const labels: Record<string, string> = {
@@ -3910,7 +3922,7 @@ router.post('/profile/verify-gst-dashboard', authenticate, asyncRoute(async (req
   let onboardingStatus = user.onboardingStatus;
   let registrationStatus = user.registrationStatus;
 
-  if (onboardingStatus !== 'approved_for_procurement') {
+  if (onboardingStatus !== 'approved_for_procurement' && (user.sectionStatus as any)?.submitted === true) {
     onboardingStatus = 'under_compliance_review';
     registrationStatus = 'completed';
   }

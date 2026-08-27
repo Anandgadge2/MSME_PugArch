@@ -221,6 +221,15 @@ const ALL_MENU_PATHS = [
   '/seller/bids/submitted',
   '/seller/bids/draft',
   '/seller/bids/awarded',
+  '/shg/opportunities/rfqs',
+  '/shg/opportunities/rfps',
+  '/shg/opportunities/open-tenders',
+  '/shg/opportunities/invitations',
+  '/shg/opportunities/auctions',
+  '/shg/opportunities/rate-contracts',
+  '/shg/bids/submitted',
+  '/shg/bids/draft',
+  '/shg/bids/awarded',
 ];
 
 const isSidebarRouteActive = (targetPath: string | undefined, pathname?: string | null, currentPathWithQuery?: string) => {
@@ -497,16 +506,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const accountLabel = isShgAccount ? 'SHG' : user?.role || 'user';
 
   const navItems: SidebarItem[] = useMemo(() => [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['seller', 'buyer', 'admin'] },
-    { label: 'Onboarding Hub', path: '/shg/onboarding', icon: Store, roles: ['shg'] },
-    { label: 'SHG Dashboard', path: '/shg/dashboard', icon: LayoutDashboard, roles: ['shg'] },
-    { label: 'Members', path: '/shg/members', icon: Users, roles: ['shg'] },
-    { label: 'Bank Details', path: '/shg/bank-details', icon: Landmark, roles: ['shg'] },
-    { label: 'Documents', path: '/shg/documents', icon: FileText, roles: ['shg'] },
-    { label: 'Products', path: '/shg/products', icon: ShoppingCart, roles: ['shg'] },
-    { label: 'SHG Orders', path: '/shg/orders', icon: ClipboardList, roles: ['shg'] },
-    { label: 'Meetings', path: '/shg/meetings', icon: ClipboardCheck, roles: ['shg'] },
-    { label: 'Support', path: '/shg/support', icon: Bell, roles: ['shg'] },
+    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['seller', 'buyer', 'admin', 'shg'] },
     { label: 'Master Console', path: '/master-admin', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Organizations', path: '/master-admin/organizations', icon: Store, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Users & Roles', path: '/master-admin/users', icon: UsersRound, roles: ['master_admin'], permission: 'company.manage' },
@@ -631,10 +631,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'] },
 
     // Common items
-    { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin'] },
-    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin'] },
+    { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin', 'shg'] },
+    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin', 'shg'] },
     { label: 'Disputes', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
-    ...(!isShgAccount ? [{ label: 'Onboarding Hub', path: user ? getSellerPortalPath(user) : '/seller/onboarding', icon: Store, roles: ['seller'] }] : []),
+    { label: 'Onboarding Hub', path: isShgAccount ? '/shg/onboarding' : (user ? getSellerPortalPath(user) : '/seller/onboarding'), icon: Store, roles: ['seller', 'shg'] },
     { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
     // { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
   ], [isShgAccount, user]);
@@ -654,14 +654,27 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     return true;
   }, [user, isShgAccount]);
 
-  const filteredNav = useMemo(() => navItems
-    .map(item => {
-      if (!isAllowed(item)) return null;
-      if (!item.children?.length) return item;
-      const children = item.children.filter(isAllowed);
-      return children.length ? { ...item, children } : null;
-    })
-    .filter(Boolean) as SidebarItem[], [isAllowed, navItems]);
+  const filteredNav = useMemo(() => {
+    const mapItemForShg = (item: SidebarItem): SidebarItem => {
+      if (!isShgAccount) return item;
+      const newPath = item.path?.startsWith('/seller/') ? item.path.replace(/^\/seller\//, '/shg/') : item.path;
+      const newChildren = item.children?.map(mapItemForShg);
+      return {
+        ...item,
+        ...(newPath ? { path: newPath } : {}),
+        ...(newChildren ? { children: newChildren } : {})
+      };
+    };
+
+    return navItems
+      .map(item => {
+        if (!isAllowed(item)) return null;
+        if (!item.children?.length) return mapItemForShg(item);
+        const children = item.children.filter(isAllowed);
+        return children.length ? mapItemForShg({ ...item, children }) : null;
+      })
+      .filter(Boolean) as SidebarItem[];
+  }, [isAllowed, navItems, isShgAccount]);
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_GROUP_STATE_KEY, JSON.stringify(openGroups));

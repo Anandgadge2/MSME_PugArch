@@ -3690,21 +3690,32 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
     // Verify dynamic mandatory documents
     const profile = existingUser.sellerProfile;
     if (!profile) return res.status(400).json({ message: 'Seller profile not found' });
+    const regDetails = (existingUser.registrationDetails as Record<string, any>) || {};
+    const shgKeywords = ['shg', 'hershg', 'women_shg', 'farmer_shg', 'artisan_shg', 'dairy_shg', 'livelihood_shg', 'tribal_shg', 'youth_shg', 'other_shg'];
+    const isHerShg = existingUser.role === 'shg'
+      || Boolean((existingUser as any).shgProfile)
+      || shgKeywords.some(keyword =>
+        String(profile.organizationType || '').toLowerCase().includes(keyword) ||
+        String(regDetails.businessType || '').toLowerCase().includes(keyword) ||
+        String(regDetails.stakeholderCategory || '').toLowerCase().includes(keyword) ||
+        String(regDetails.shgType || '').toLowerCase().includes(keyword)
+      );
+
     const finalSellerErrors: Record<string, string> = {};
-    if (!profile.panVerified) finalSellerErrors.pan = 'Business PAN must be verified before final submission.';
-    if (!onboardingPatterns.pan.test(normalizeSpaces(profile.pan).toUpperCase())) finalSellerErrors.pan = 'Business PAN must follow valid government PAN format.';
-    if (!onboardingPatterns.name.test(normalizeSpaces(profile.nameAsInPan))) finalSellerErrors.nameAsInPan = 'Name as per PAN is required and must be valid.';
-    if (!profile.dateAsInPan || !isPastOrToday(profile.dateAsInPan)) finalSellerErrors.dateAsInPan = 'PAN date is required and cannot be future dated.';
-    if (!onboardingPatterns.orgName.test(normalizeSpaces(profile.businessName))) finalSellerErrors.businessName = 'Business / organisation name is required and must be valid.';
-    if (!profile.dateOfIncorporation || !isPastOrToday(profile.dateOfIncorporation)) finalSellerErrors.dateOfIncorporation = 'Date of incorporation is required and cannot be future dated.';
+    if (!isHerShg) {
+      if (!profile.panVerified) finalSellerErrors.pan = 'Business PAN must be verified before final submission.';
+      if (!onboardingPatterns.pan.test(normalizeSpaces(profile.pan).toUpperCase())) finalSellerErrors.pan = 'Business PAN must follow valid government PAN format.';
+      if (!onboardingPatterns.name.test(normalizeSpaces(profile.nameAsInPan))) finalSellerErrors.nameAsInPan = 'Name as per PAN is required and must be valid.';
+      if (!profile.dateAsInPan || !isPastOrToday(profile.dateAsInPan)) finalSellerErrors.dateAsInPan = 'PAN date is required and cannot be future dated.';
+      if (!onboardingPatterns.orgName.test(normalizeSpaces(profile.businessName))) finalSellerErrors.businessName = 'Business / organisation name is required and must be valid.';
+      if (!profile.dateOfIncorporation || !isPastOrToday(profile.dateOfIncorporation)) finalSellerErrors.dateOfIncorporation = 'Date of incorporation is required and cannot be future dated.';
+    }
     if (!profile.offices?.length) finalSellerErrors.offices = 'At least one registered office is required.';
     if (!profile.bankAccounts?.length) finalSellerErrors.bankAccounts = 'At least one bank account is required.';
     if (Object.keys(finalSellerErrors).length > 0) {
       return res.status(400).json({ message: Object.values(finalSellerErrors)[0], errors: finalSellerErrors });
     }
 
-    const regDetails = (existingUser.registrationDetails as Record<string, any>) || {};
-    const isHerShg = String(profile.organizationType || regDetails.businessType || '').toLowerCase() === 'hershg';
     const shgType = String(regDetails.shgType || '').trim();
     const requiredDocs: string[] = isHerShg
       ? [
@@ -3717,36 +3728,8 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
       : ['pan_copy', 'bank_passbook', 'address_proof'];
 
     if (isHerShg) {
-      requiredDocs.push('pan_card_group_representative');
-      requiredDocs.push('udyam_registration_certificate');
       if (regDetails.gstin || profile.offices?.some((o: any) => o.gst)) {
         requiredDocs.push('gst_certificate');
-      }
-      if (shgType === 'Women SHG (Mahila Bachat Gat)') {
-        requiredDocs.push('nrlm_mission_certificate');
-        requiredDocs.push('women_empowerment_training_certificate');
-      } else if (shgType === 'Farmer SHG') {
-        requiredDocs.push('farmer_id_card');
-        requiredDocs.push('land_record_7_12');
-        requiredDocs.push('fpo_fpc_certificate');
-      } else if (shgType === 'Artisan / Handicraft SHG') {
-        requiredDocs.push('artisan_card');
-        requiredDocs.push('handicraft_certification');
-        requiredDocs.push('product_catalogue');
-      } else if (shgType === 'Dairy SHG') {
-        requiredDocs.push('dairy_cooperative_membership_certificate');
-        requiredDocs.push('livestock_ownership_proof');
-      } else if (shgType === 'Livelihood SHG') {
-        requiredDocs.push('skill_development_certificates');
-        requiredDocs.push('business_activity_proof');
-      } else if (shgType === 'Tribal SHG') {
-        requiredDocs.push('tribal_community_certificate');
-        requiredDocs.push('tribal_development_scheme_registration');
-      } else if (shgType === 'Youth SHG') {
-        requiredDocs.push('skill_training_certificate');
-        requiredDocs.push('startup_entrepreneurship_training_certificate');
-      } else if (shgType === 'Other SHG') {
-        requiredDocs.push('activity_specific_supporting_documents');
       }
     } else {
       requiredDocs.push('udyam_certificate');
@@ -3772,7 +3755,27 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
     }
 
     const uploadedDocs = profile.sellerDocuments?.map((d: any) => d.documentType) || [];
-    const missingDocs = requiredDocs.filter(d => !uploadedDocs.includes(d));
+    const matchesDocType = (reqType: string, uploadedTypes: string[]) =>
+      uploadedTypes.some(u => {
+        const normU = String(u || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normR = String(reqType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normU === normR) return true;
+        const aliases: Record<string, string[]> = {
+          bankpassbook: ['bankpassbook', 'bankpassbookcancelledcheque'],
+          bankpassbookcancelledcheque: ['bankpassbook', 'bankpassbookcancelledcheque'],
+          leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard', 'aadhaarcard'],
+          groupleaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard', 'aadhaarcard'],
+          registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate'],
+          shgregistrationcertificate: ['registrationcertificate', 'shgregistrationcertificate'],
+          pancopy: ['pancopy', 'pancard', 'pancardgrouprepresentative'],
+          pancardgrouprepresentative: ['pancopy', 'pancard', 'pancardgrouprepresentative'],
+          udyamcertificate: ['udyamcertificate', 'udyamregistrationcertificate'],
+          udyamregistrationcertificate: ['udyamcertificate', 'udyamregistrationcertificate']
+        };
+        return (aliases[normR] || []).includes(normU) || (aliases[normU] || []).includes(normR);
+      });
+
+    const missingDocs = requiredDocs.filter(d => !matchesDocType(d, uploadedDocs));
 
     if (missingDocs.length > 0) {
       const labels: Record<string, string> = {
