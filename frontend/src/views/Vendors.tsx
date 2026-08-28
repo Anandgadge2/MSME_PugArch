@@ -550,7 +550,7 @@ const Vendors = () => {
                     )}
                   </div>
 
-                  <p className="text-[11px] leading-relaxed text-slate-600 mb-4 flex-1 line-clamp-2 border-t border-b border-[#f1f3f5] py-3 my-2">
+                  <p title={`Specialized provider in ${(vendor.sellerProfile?.productCategories || []).join(', ') || 'Enterprise Supplies'}. Recognized for reliability.`} className="text-[11px] leading-relaxed text-slate-600 mb-4 flex-1 line-clamp-2 border-t border-b border-[#f1f3f5] py-3 my-2">
                     Specialized provider in {(vendor.sellerProfile?.productCategories || []).join(', ') || 'Enterprise Supplies'}. Recognized for reliability.
                   </p>
 

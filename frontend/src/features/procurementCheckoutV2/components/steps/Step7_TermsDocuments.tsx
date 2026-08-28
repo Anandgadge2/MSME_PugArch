@@ -109,7 +109,7 @@ function DocumentUploadZone({
             >
               <span className="inline-flex min-w-0 items-center gap-2">
                 <FileText className="h-4 w-4 shrink-0 text-slate-500" />
-                <span className="truncate text-[#12335f]">{doc.fileName}</span>
+                <span title={doc.fileName} className="truncate text-[#12335f]">{doc.fileName}</span>
                 <span className="shrink-0 text-slate-400">
                   ({(doc.fileSize / 1024).toFixed(0)} KB)
                 </span>

@@ -905,11 +905,11 @@ export default function MyProcurementsPage() {
                                 {p.referenceNumber}
                               </span>
                             </div>
-                            <p className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+                            <p title={p.title} className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
                               {p.title}
                             </p>
                             {p.description && (
-                              <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">
+                              <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">
                                 {p.description}
                               </p>
                             )}
@@ -938,7 +938,7 @@ export default function MyProcurementsPage() {
 
                           {/* Category & Location */}
                           <td className="px-4 py-4 space-y-1">
-                            <span className="text-xs font-bold text-slate-600 line-clamp-1">{p.category || '—'}</span>
+                            <span title={p.category || '—'} className="text-xs font-bold text-slate-600 line-clamp-1">{p.category || '—'}</span>
                             {p.deliveryLocation && (
                               <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-400">
                                 <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
@@ -1002,14 +1002,14 @@ export default function MyProcurementsPage() {
                       </div>
 
                       {/* Title */}
-                      <h3 className="text-sm font-black text-slate-900 leading-snug line-clamp-2 group-hover:text-[#12335f] transition-colors mb-2">
+                      <h3 title={p.title} className="text-sm font-black text-slate-900 leading-snug line-clamp-2 group-hover:text-[#12335f] transition-colors mb-2">
                         {p.title}
                       </h3>
 
                       {/* Source Ref & Category */}
                       <div className="text-[11px] text-slate-500 font-bold space-y-1 mb-4">
-                        {p.category && <p className="line-clamp-1">Category: {p.category}</p>}
-                        {p.description && <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
+                        {p.category && <p title={p.category} className="line-clamp-1">Category: {p.category}</p>}
+                        {p.description && <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
                       </div>
                     </div>
 
@@ -1136,14 +1136,14 @@ function ProcurementCard({ p, openDetail }: { p: any; openDetail: (p: any, e?: R
         </div>
 
         {/* Title */}
-        <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+        <h3 title={p.title} className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
           {p.title}
         </h3>
 
         {/* Source Ref & Category */}
         <div className="text-[11px] text-slate-500 font-bold space-y-1">
-          {p.category && <p className="line-clamp-1">Category: {p.category}</p>}
-          {p.description && <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
+          {p.category && <p title={p.category} className="line-clamp-1">Category: {p.category}</p>}
+          {p.description && <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
         </div>
       </div>
 
@@ -1315,7 +1315,7 @@ export function ProcurementDetailView({
           My Procurements
         </button>
         <ChevronRight className="h-3 w-3 text-slate-400" />
-        <span className="text-slate-600 truncate max-w-[200px] sm:max-w-none font-medium">
+        <span title={p.referenceNumber || p.title} className="text-slate-600 truncate max-w-[200px] sm:max-w-none font-medium">
           {p.referenceNumber || p.title}
         </span>
         <ChevronRight className="h-3 w-3 text-slate-400" />
@@ -1535,7 +1535,7 @@ export function ProcurementDetailView({
                           {item.itemName}
                         </p>
                         {item.description && (
-                          <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
+                          <p title={item.description} className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
                             {item.description}
                           </p>
                         )}
@@ -1656,7 +1656,7 @@ export function ProcurementDetailView({
             </div>
             <div className="flex justify-between items-center py-1 text-[11px]">
               <span className="text-slate-500 font-medium">Consignee</span>
-              <span className="font-bold text-slate-800 truncate max-w-[140px]">
+              <span title={p.organizationName || 'VANSIKA DAWANI'} className="font-bold text-slate-800 truncate max-w-[140px]">
                 {p.organizationName || 'VANSIKA DAWANI'}
               </span>
             </div>
@@ -1791,7 +1791,7 @@ export function ProcurementDetailView({
                 className="flex items-center gap-2 p-2 rounded-lg border border-slate-100 bg-slate-50/70 text-[11px] font-semibold text-slate-700 hover:bg-blue-50/50 hover:border-blue-200 transition-colors"
               >
                 <FileText className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                <span className="truncate">{docName}</span>
+                <span title={docName} className="truncate">{docName}</span>
               </div>
             ))}
           </div>
@@ -1909,7 +1909,7 @@ export function ProcurementDetailView({
                           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
                             {field.label}
                           </span>
-                          <p className="text-xs font-bold text-slate-800 truncate">
+                          <p title={formatDisplayValue(field.value, field.label)} className="text-xs font-bold text-slate-800 truncate">
                             {formatDisplayValue(field.value, field.label)}
                           </p>
                         </div>

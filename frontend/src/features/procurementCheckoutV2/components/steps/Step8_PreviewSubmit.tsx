@@ -89,7 +89,7 @@ export default function Step8_PreviewSubmit({
             {termLines.length > 0 && (
               <div className="mt-1 space-y-0.5">
                 {termLines.map((line, i) => (
-                  <p key={i} className="text-slate-600 truncate">{line}</p>
+                  <p key={i} title={line} className="text-slate-600 truncate">{line}</p>
                 ))}
               </div>
             )}
@@ -99,7 +99,7 @@ export default function Step8_PreviewSubmit({
                 {docs.map((doc, idx) => (
                   <div key={idx} className="flex items-center gap-2 text-slate-600">
                     <FileText className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                    <span className="truncate">{doc.fileName}</span>
+                    <span title={doc.fileName} className="truncate">{doc.fileName}</span>
                     <span className="shrink-0 text-slate-400">({doc.documentType})</span>
                   </div>
                 ))}

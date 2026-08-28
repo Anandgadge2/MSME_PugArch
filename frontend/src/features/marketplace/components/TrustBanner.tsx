@@ -111,7 +111,7 @@ export function TrustBanner() {
                             return (
                                 <div
                                     key={b.title}
-                                    className="group relative flex w-[85vw] max-w-[280px] sm:w-auto shrink-0 snap-start cursor-default items-center gap-3.5 rounded-xl px-4 py-2.5 transition-all duration-300 hover:bg-slate-50/90 hover:shadow-sm xl:justify-center"
+                                    className="group relative flex w-[85vw] max-w-[280px] sm:w-auto shrink-0 snap-start cursor-default items-center gap-3.5 rounded-xl px-4 py-2.5 transition-all duration-300 hover:bg-slate-50/90 hover:shadow-sm xl:justify-center overflow-hidden"
                                     style={{
                                         opacity: visible ? 1 : 0,
                                         transform: visible ? 'translateY(0)' : 'translateY(10px)',
@@ -152,6 +152,12 @@ export function TrustBanner() {
                                                 {b.tag}
                                             </span>
                                         </div>
+                                    </div>
+
+                                    {/* Premium Hover Overlay Tooltip */}
+                                    <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-white/95 px-2 opacity-0 backdrop-blur-md transition-all duration-300 group-hover:opacity-100 shadow-[inset_0_0_15px_rgba(255,255,255,0.5)] border border-slate-100 text-center scale-95 group-hover:scale-100">
+                                        <p className="text-[12px] font-bold text-slate-900 tracking-tight leading-tight">{b.title}</p>
+                                        <p className="mt-0.5 text-[10px] font-bold text-slate-600 leading-tight">{b.sub}</p>
                                     </div>
                                 </div>
                             );

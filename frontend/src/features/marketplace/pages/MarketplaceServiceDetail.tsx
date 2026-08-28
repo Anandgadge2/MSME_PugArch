@@ -259,13 +259,13 @@ export default function MarketplaceServiceDetail() {
                             {service.category && (
                                 <>
                                     <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                    <Link href={`/marketplace/services?categoryId=${service.category.id}`} className="hover:text-[#0b2447] transition truncate max-w-[150px] shrink-0">
+                                    <Link title={service.category.name} href={`/marketplace/services?categoryId=${service.category.id}`} className="hover:text-[#0b2447] transition truncate max-w-[150px] shrink-0">
                                         {service.category.name}
                                     </Link>
                                 </>
                             )}
                             <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span className="text-[#0b2447] font-semibold truncate max-w-[220px]">{service.name}</span>
+                            <span title={service.name} className="text-[#0b2447] font-semibold truncate max-w-[220px]">{service.name}</span>
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -358,7 +358,7 @@ export default function MarketplaceServiceDetail() {
                                         <Building2 className="h-5 w-5" />
                                     </div>
                                     <div className="min-w-0">
-                                        <h4 className="text-xs font-extrabold text-slate-900 truncate">
+                                        <h4 title={service.organization?.organizationName || service.seller?.name || 'Verified Service Provider'} className="text-xs font-extrabold text-slate-900 truncate">
                                             {service.organization?.organizationName || service.seller?.name || 'Verified Service Provider'}
                                         </h4>
                                         <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500">
@@ -578,7 +578,7 @@ export default function MarketplaceServiceDetail() {
                                                 >
                                                     <BadgeCheck className="h-5 w-5 shrink-0 text-emerald-600 mt-0.5" />
                                                     <div className="min-w-0 flex-1">
-                                                        <span className="block truncate font-extrabold text-slate-900 group-hover:text-[#0b2447] transition">
+                                                        <span title={cert.name || cert.fileAsset?.originalName || 'Service Document'} className="block truncate font-extrabold text-slate-900 group-hover:text-[#0b2447] transition">
                                                             {cert.name || cert.fileAsset?.originalName || 'Service Document'}
                                                         </span>
                                                         <span className="mt-0.5 block text-[10px] font-semibold text-slate-500">
@@ -716,8 +716,8 @@ export default function MarketplaceServiceDetail() {
                                                     <Wrench className="h-10 w-10 text-slate-300" />
                                                 )}
                                             </div>
-                                            <h4 className="text-xs font-extrabold text-slate-900 line-clamp-2 group-hover:text-[#0b2447] transition">{s.name}</h4>
-                                            <p className="text-[10px] font-semibold text-slate-500 truncate">{s.organization?.organizationName || 'Verified Provider'}</p>
+                                            <h4 title={s.name} className="text-xs font-extrabold text-slate-900 line-clamp-2 group-hover:text-[#0b2447] transition">{s.name}</h4>
+                                            <p title={s.organization?.organizationName || 'Verified Provider'} className="text-[10px] font-semibold text-slate-500 truncate">{s.organization?.organizationName || 'Verified Provider'}</p>
                                         </div>
                                         <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                                             <span className="text-[10px] font-extrabold text-[#0b2447] bg-[#0b2447]/5 px-2 py-0.5 rounded">
@@ -744,7 +744,7 @@ export default function MarketplaceServiceDetail() {
                             {service.basePrice ? (
                                 <div className="truncate">
                                     <span className="text-base font-black text-[#0b2447]">₹{Number(service.basePrice).toLocaleString('en-IN')}</span>
-                                    <span className="text-[10px] font-semibold text-slate-500 block truncate">{pricingLabels[service.pricingModel] || 'Per engagement'}</span>
+                                    <span title={pricingLabels[service.pricingModel] || 'Per engagement'} className="text-[10px] font-semibold text-slate-500 block truncate">{pricingLabels[service.pricingModel] || 'Per engagement'}</span>
                                 </div>
                             ) : (
                                 <span className="text-xs font-black text-amber-700">Quote Based</span>

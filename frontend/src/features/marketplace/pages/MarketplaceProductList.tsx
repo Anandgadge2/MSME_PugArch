@@ -622,7 +622,7 @@ export default function MarketplaceProductList() {
                                     }}
                                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                 />
-                                <span className="truncate flex-1">{cat.name}</span>
+                                <span title={cat.name} className="truncate flex-1">{cat.name}</span>
                             </label>
                         );
                     })}
@@ -662,7 +662,7 @@ export default function MarketplaceProductList() {
                                         }}
                                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span className="truncate flex-1">{sub}</span>
+                                    <span title={sub} className="truncate flex-1">{sub}</span>
                                 </label>
                             );
                         })}
@@ -727,7 +727,7 @@ export default function MarketplaceProductList() {
                                         }}
                                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span className="truncate">{sellerName}</span>
+                                    <span title={sellerName} className="truncate">{sellerName}</span>
                                 </label>
                             );
                         })}
@@ -1221,13 +1221,13 @@ export default function MarketplaceProductList() {
                                                         onClick={() => { if (!isFallback) cacheAndTrackItem(item); }}
                                                         className="block my-2"
                                                     >
-                                                        <h3 className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-2 min-h-[38px] leading-snug group-hover:text-blue-600 transition">
+                                                        <h3 title={item.name} className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-2 min-h-[38px] leading-snug group-hover:text-blue-600 transition">
                                                             {item.name}
                                                         </h3>
                                                     </Link>
 
                                                     {/* By Seller */}
-                                                    <p className="mt-1.5 text-[11px] font-semibold text-slate-500 flex items-center gap-1 truncate">
+                                                    <p title={`By: ${sellerName}`} className="mt-1.5 text-[11px] font-semibold text-slate-500 flex items-center gap-1 truncate">
                                                         <span>By: {sellerName}</span>
                                                         {isVerified && <BadgeCheck className="h-3.5 w-3.5 text-blue-600 shrink-0" />}
                                                     </p>
