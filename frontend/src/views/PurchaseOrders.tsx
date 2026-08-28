@@ -887,20 +887,14 @@ export default function PurchaseOrders() {
                 <span className="text-slate-300 font-black shrink-0">-</span>
                 <input type="date" value={updatedDateFilter.end} onChange={e => setUpdatedDateFilter({ ...updatedDateFilter, end: e.target.value })} className="h-8 w-full sm:w-[105px] shrink-0 rounded-lg border-none bg-transparent px-1 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-slate-300" title="Updated End" />
               </div>
-            </>
-          }
-          endContent={
-            <>
               {activeFiltersCount > 0 && (
-                <Button variant="ghost" onClick={handleClearFilters} className="h-9 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 shrink-0">
+                <Button variant="ghost" onClick={handleClearFilters} className="h-10 px-3 text-xs font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl shrink-0">
                   Clear Filters
                 </Button>
               )}
-              <div className="shrink-0">
-                <ViewModeToggle value={viewMode} onChange={setViewMode} />
-              </div>
             </>
           }
+          viewToggle={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
         />
       </div>
 

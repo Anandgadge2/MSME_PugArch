@@ -607,10 +607,6 @@ export default function RepeatOrders() {
                   <option value="qty_low">Lowest Quantity</option>
                 </select>
               </div>
-            </>
-          }
-          endContent={
-            <>
               {(searchTerm || supplierFilter !== 'All Suppliers' || procurementFilter !== 'All Procurements' || amountFilter !== 'All Amounts' || qtyFilter !== 'All Quantities' || deliveredDateFilter !== 'All Dates' || sortBy !== 'newest') && (
                 <Button 
                   variant="ghost" 
@@ -625,16 +621,14 @@ export default function RepeatOrders() {
                     setSortBy('newest');
                     setActiveKpiFilter('all');
                   }}
-                  className="h-9 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 shrink-0"
+                  className="h-10 px-3 text-xs font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl shrink-0"
                 >
                   Clear Filters
                 </Button>
               )}
-              <div className="shrink-0">
-                <ViewModeToggle value={viewMode} onChange={setViewMode} />
-              </div>
             </>
           }
+          viewToggle={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
         />
       </div>
 

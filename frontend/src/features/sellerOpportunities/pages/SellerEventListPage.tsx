@@ -12,6 +12,7 @@ import { MethodBadge, ProcurementStatusBadge, BuyerTypeBadge } from '../../procu
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 type SellerEventView = 'all' | 'invited' | 'submitted' | 'clarifications';
 
@@ -256,45 +257,56 @@ export default function SellerEventListPage() {
       ) : (
         <>
           {/* ── Filter Bar (border-y) ── */}
-          <div className="flex flex-wrap items-center gap-3 border-y border-slate-200 bg-slate-50/50 px-4 py-3">
-            <div className="relative min-w-[200px] flex-1 max-w-xs">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Search..."
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-              />
-            </div>
+          <div className="border-y border-slate-200 bg-slate-50/50 px-4 py-3">
+            <ResponsiveFilterBar
+              activeFilterCount={(method ? 1 : 0) + (status ? 1 : 0) + (submissionStatus ? 1 : 0) + (deadlineRange ? 1 : 0)}
+              searchInput={
+                <div className="relative w-full">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    placeholder="Search..."
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-xs"
+                  />
+                </div>
+              }
+              filters={
+                <>
+                  <select value={method} onChange={e => setMethod(e.target.value)} className="h-10 w-full sm:w-auto sm:min-w-[140px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-xs">
+                    <option value="">All Types</option>
+                    {methods.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
 
-            <select value={method} onChange={e => setMethod(e.target.value)} className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-              <option value="">All Types</option>
-              {methods.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
+                  <select value={status} onChange={e => setStatus(e.target.value)} className="h-10 w-full sm:w-auto sm:min-w-[140px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-xs">
+                    <option value="">All Statuses</option>
+                    {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
 
-            <select value={status} onChange={e => setStatus(e.target.value)} className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-              <option value="">All Statuses</option>
-              {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+                  <select value={submissionStatus} onChange={e => setSubmissionStatus(e.target.value)} className="h-10 w-full sm:w-auto sm:min-w-[150px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-xs">
+                    <option value="">All Submissions</option>
+                    <option value="invited">Invited Bids</option>
+                    <option value="submitted">Submitted Only</option>
+                  </select>
 
-            <select value={submissionStatus} onChange={e => setSubmissionStatus(e.target.value)} className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-              <option value="">All Submissions</option>
-              <option value="invited">Invited Bids</option>
-              <option value="submitted">Submitted Only</option>
-            </select>
+                  <select value={deadlineRange} onChange={e => setDeadlineRange(e.target.value)} className="h-10 w-full sm:w-auto sm:min-w-[140px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 shadow-xs">
+                    <option value="">Any Deadline</option>
+                    <option value="7">Closing in 7 Days</option>
+                  </select>
 
-            <select value={deadlineRange} onChange={e => setDeadlineRange(e.target.value)} className="h-10 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-              <option value="">Any Deadline</option>
-              <option value="7">Closing in 7 Days</option>
-            </select>
-
-            <Button type="button" variant="ghost" onClick={resetFilters} className="h-10 px-3 text-xs text-rose-600 hover:text-rose-700 font-black uppercase">
-              Reset
-            </Button>
-
-            <span className="ml-auto text-[10px] font-black uppercase tracking-wider text-slate-400">
-              {filteredBids.length} of {bids.length}
-            </span>
+                  {(query || method || status || submissionStatus || deadlineRange) && (
+                    <Button type="button" variant="ghost" onClick={resetFilters} className="h-10 px-3 text-xs text-rose-600 hover:text-rose-700 font-black uppercase rounded-xl">
+                      Reset
+                    </Button>
+                  )}
+                </>
+              }
+              endContent={
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {filteredBids.length} of {bids.length}
+                </span>
+              }
+            />
           </div>
 
           {/* ── Table ── */}

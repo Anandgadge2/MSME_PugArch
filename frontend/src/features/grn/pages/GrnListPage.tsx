@@ -417,28 +417,24 @@ export default function GrnListPage() {
                                     }}
                                 />
                             </div>
-                        </>
-                    }
-                    endContent={
-                        <>
                             {activeFilterCount > 0 && (
                                 <Button
                                     variant="ghost"
                                     onClick={clearFilters}
-                                    className="h-9 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 shrink-0"
+                                    className="h-10 px-3 text-xs font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl shrink-0"
                                 >
                                     Clear Filters
                                 </Button>
                             )}
-                            <div className="shrink-0 flex items-center gap-2">
-                                <ViewModeToggle value={viewMode} onChange={setViewMode} />
-                                {canCreate && (
-                                    <Button onClick={() => setShowCreate(true)} className="h-10 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-xs font-black uppercase rounded-lg shadow-sm whitespace-nowrap px-4 shrink-0 transition-all hover:-translate-y-[1px] active:scale-[0.98]">
-                                        <Plus className="mr-1.5 h-4 w-4 shrink-0" /> New GRN
-                                    </Button>
-                                )}
-                            </div>
                         </>
+                    }
+                    viewToggle={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+                    endContent={
+                        canCreate && (
+                            <Button onClick={() => setShowCreate(true)} className="h-10 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-xs font-black uppercase rounded-xl shadow-sm whitespace-nowrap px-4 shrink-0 transition-all hover:-translate-y-[1px] active:scale-[0.98]">
+                                <Plus className="mr-1.5 h-4 w-4 shrink-0" /> New GRN
+                            </Button>
+                        )
                     }
                 />
 
