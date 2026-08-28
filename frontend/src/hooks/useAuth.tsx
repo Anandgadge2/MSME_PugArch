@@ -229,7 +229,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const isShg = user.role === 'shg' || user.accountType === 'SHG';
     const targetUrl = redirectPath || (
-      user.role === 'master_admin' ? '/master-admin' : isShg ? '/shg/onboarding' : '/dashboard'
+      user.role === 'master_admin' ? '/master-admin' : isShg ? '/shg/dashboard' : '/dashboard'
     );
 
     router.replace(targetUrl);

@@ -506,7 +506,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const accountLabel = isShgAccount ? 'SHG' : user?.role || 'user';
 
   const navItems: SidebarItem[] = useMemo(() => [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['seller', 'buyer', 'admin', 'shg'] },
+    { label: 'Dashboard', path: isShgAccount ? '/shg/dashboard' : '/dashboard', icon: LayoutDashboard, roles: ['seller', 'buyer', 'admin', 'shg'] },
     { label: 'Master Console', path: '/master-admin', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Organizations', path: '/master-admin/organizations', icon: Store, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Users & Roles', path: '/master-admin/users', icon: UsersRound, roles: ['master_admin'], permission: 'company.manage' },
