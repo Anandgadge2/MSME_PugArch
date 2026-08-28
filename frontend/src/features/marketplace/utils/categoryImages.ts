@@ -9,6 +9,7 @@ export interface CategoryVisualMeta {
 
 const GCS_BUCKET_NAME = process.env.NEXT_PUBLIC_GCS_BUCKET_NAME || 'jsgsmile1';
 const GCS_BASE_URL = `https://storage.googleapis.com/${GCS_BUCKET_NAME}/categories`;
+const GCS_BACKGROUNDS_URL = `https://storage.googleapis.com/${GCS_BUCKET_NAME}/category-backgrounds`;
 
 export const CATEGORY_SVG_FILE_MAP: Record<string, string> = {
     'electrical & electronics': 'electrical-electronics.svg',
@@ -222,13 +223,21 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
 };
 
 export const getCategoryImageUrl = (category: MarketplaceCategory | string): string => {
+    // 1. Database imageUrl (admin-uploaded or generated background) — highest priority
     if (typeof category === 'object' && category !== null) {
         const rawCustom = (category as any).imageUrl || (category as any).image || (category as any).photoUrl;
         const resolved = resolveMediaUrl(rawCustom);
         if (resolved) return resolved;
 
+        // 2. Try WebP background image from GCS category-backgrounds folder
+        const bgUrl = resolveMediaUrl(`${GCS_BACKGROUNDS_URL}/${category.slug}.webp`) || `${GCS_BACKGROUNDS_URL}/${category.slug}.webp`;
+
+        // 3. SVG icon fallback
         const svgFile = findCategorySvgFilename(category.name, category.slug);
-        return resolveMediaUrl(`${GCS_BASE_URL}/${svgFile}`) || `${GCS_BASE_URL}/${svgFile}`;
+        const svgUrl = resolveMediaUrl(`${GCS_BASE_URL}/${svgFile}`) || `${GCS_BASE_URL}/${svgFile}`;
+
+        // Return background WebP as default — the card's onError handler will fallback to SVG
+        return bgUrl;
     }
 
     if (typeof category === 'string') {

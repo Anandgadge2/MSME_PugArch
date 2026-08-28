@@ -21,6 +21,7 @@ import {
   BadgeCheck,
   ArrowRight,
   ChevronRight,
+  ChevronDown,
   Info,
   ShoppingCart,
   Trash2,
@@ -2086,6 +2087,7 @@ function BasicsStepForm({
   const [alternateMobileNumber, setAlternateMobileNumber] = useState('');
   const [email, setEmail] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
+  const [rfqTypeDropdownOpen, setRfqTypeDropdownOpen] = useState(false);
   const [addressLine2, setAddressLine2] = useState('');
   const [state, setState] = useState('');
   const [district, setDistrict] = useState('');
@@ -2198,14 +2200,56 @@ function BasicsStepForm({
 
         {draft.type === 'RFQ' && (
           <Field label="RFQ Type" required>
-            <select
-              value={draft.rfqType || 'OPEN'}
-              onChange={e => updateDraft(c => ({ ...c, rfqType: e.target.value as any }))}
-              className={inputClass}
-            >
-              <option value="OPEN">Open RFQ (All registered sellers can quote)</option>
-              <option value="LIMITED">Limited RFQ (Only invited/selected sellers can quote)</option>
-            </select>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setRfqTypeDropdownOpen(!rfqTypeDropdownOpen)}
+                className={cn(inputClass, "flex items-center justify-between text-left h-auto min-h-[44px] py-2")}
+              >
+                <span className="truncate pr-2">
+                  {draft.rfqType === 'LIMITED' 
+                    ? 'Limited RFQ (Only invited/selected sellers can quote)'
+                    : 'Open RFQ (All registered sellers can quote)'}
+                </span>
+                <ChevronDown className={cn("h-4 w-4 shrink-0 text-slate-400 transition-transform", rfqTypeDropdownOpen && "rotate-180")} />
+              </button>
+
+              {rfqTypeDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-[90]" onClick={() => setRfqTypeDropdownOpen(false)} />
+                  <div className="absolute left-0 right-0 top-full mt-1 z-[100] rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateDraft(c => ({ ...c, rfqType: 'OPEN' }));
+                        setRfqTypeDropdownOpen(false);
+                      }}
+                      className={cn(
+                        "w-full px-3 py-2.5 text-left text-sm font-semibold transition-colors",
+                        draft.rfqType !== 'LIMITED' ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
+                      )}
+                    >
+                      <span className="block">Open RFQ</span>
+                      <span className="block text-[11px] font-normal text-slate-500 mt-0.5 break-words whitespace-normal">All registered sellers can quote</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateDraft(c => ({ ...c, rfqType: 'LIMITED' }));
+                        setRfqTypeDropdownOpen(false);
+                      }}
+                      className={cn(
+                        "w-full px-3 py-2.5 text-left text-sm font-semibold transition-colors border-t border-slate-100",
+                        draft.rfqType === 'LIMITED' ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
+                      )}
+                    >
+                      <span className="block">Limited RFQ</span>
+                      <span className="block text-[11px] font-normal text-slate-500 mt-0.5 break-words whitespace-normal">Only invited/selected sellers can quote</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </Field>
         )}
 

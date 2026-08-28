@@ -1036,7 +1036,7 @@ export default function BuyerProfile() {
     }
   };
 
-  if (isInitialLoading) {
+  if (loading) {
     return <ProfileSkeleton />;
   }
 

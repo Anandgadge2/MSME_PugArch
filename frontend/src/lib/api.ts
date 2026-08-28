@@ -21,28 +21,7 @@ export const getBaseUrl = () => {
 };
 
 export const BASE_URL = getBaseUrl().replace(/\/$/, '');
-// GET responses are kept in memory and used as instant render data when the
-// user navigates back to a page they have already visited. Background refresh
-// (see `shouldCache` block in api.fetch) keeps them up to date so we can pick
-// a comfortably long TTL — the old 5-minute window meant tab-switching back
-// after a coffee break would re-show the loading spinner.
-const GET_CACHE_TTL = 15 * 60_000;
-// Stale entries past their TTL are still useful: they're rendered instantly
-// while we kick off a background fetch, the same pattern as React Query's
-// staleTime/cacheTime separation. This is what makes the portal feel
-// "loaded once per session" rather than refetching on every navigation.
-const GET_CACHE_STALE_LIMIT = 60 * 60_000;
-
-type CachedResponse = {
-  body: any;
-  status: number;
-  statusText: string;
-  headers: Record<string, string>;
-  timestamp: number;
-};
-
-const getCache = new Map<string, CachedResponse>();
-const inFlightGetResponses = new Map<string, Promise<Response>>();
+// Custom GET cache logic has been removed to allow TanStack Query to manage cache lifecycle exclusively.
 
 const resolveUrl = (endpoint: string) => {
   if (endpoint.startsWith('http')) return endpoint;
@@ -97,21 +76,6 @@ export const unwrapApiData = <T = any>(body: any): T => {
   return body as T;
 };
 
-const getHeaderValue = (headers: HeadersInit | undefined, name: string) => {
-  if (!headers) return '';
-  if (headers instanceof Headers) return headers.get(name) || '';
-  if (Array.isArray(headers)) {
-    const found = headers.find(([key]) => key.toLowerCase() === name.toLowerCase());
-    return found?.[1] || '';
-  }
-  return (headers as Record<string, string>)[name] || (headers as Record<string, string>)[name.toLowerCase()] || '';
-};
-
-const cacheKey = (endpoint: string, options: RequestInit = {}) => {
-  const auth = getHeaderValue(options.headers, 'Authorization');
-  return `${endpoint}|${auth}`;
-};
-
 const normalizeHeaders = (headers: HeadersInit | undefined, body?: BodyInit | null) => {
   const next: Record<string, string> = { ...(headers as any) };
   const auth = next.Authorization || next.authorization || '';
@@ -133,43 +97,6 @@ const normalizeHeaders = (headers: HeadersInit | undefined, body?: BodyInit | nu
   return next;
 };
 
-const responseFromCache = (entry: CachedResponse) => new Response(JSON.stringify(entry.body), {
-  status: entry.status,
-  statusText: entry.statusText,
-  headers: {
-    'Content-Type': 'application/json',
-    ...entry.headers,
-    'X-MSME-Cache': 'HIT'
-  }
-});
-
-const writeGetCache = async (key: string, response: Response) => {
-  const clone = response.clone();
-  try {
-    const body = await clone.json();
-    const responseHeaders: Record<string, string> = {};
-    clone.headers.forEach((value, headerKey) => {
-      responseHeaders[headerKey] = value;
-    });
-    getCache.set(key, {
-      body,
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeaders,
-      timestamp: Date.now()
-    });
-  } catch {
-    // Non-JSON GET responses are intentionally not cached.
-  }
-};
-
-const isCacheFresh = (entry?: CachedResponse) => Boolean(entry && Date.now() - entry.timestamp < GET_CACHE_TTL);
-// "Usable" means we can render it instantly; if it's older than fresh we
-// still serve it but kick off a refresh in the background (stale-while-
-// revalidate). This is what eliminates the loading spinner when navigating
-// between pages within the same session.
-const isCacheUsable = (entry?: CachedResponse) => Boolean(entry && Date.now() - entry.timestamp < GET_CACHE_STALE_LIMIT);
-const refreshingKeys = new Set<string>();
 const shouldDispatchUnauthorized = (endpoint: string) =>
   ![
     '/api/auth/me',
@@ -224,176 +151,22 @@ const networkErrorResponse = (error: unknown) => {
 };
 
 const clearApiCache = (matcher?: string) => {
-  if (typeof window !== 'undefined') {
-    if (!matcher || matcher.includes('my-procurements') || matcher.includes('/procurement') || matcher.includes('requirements')) {
-      try {
-        sessionStorage.removeItem('buyer_my_procurements_cached_data_v1');
-        localStorage.removeItem('buyer_my_procurements_cached_data_v1');
-      } catch {}
-    }
-  }
-  if (!matcher) {
-    getCache.clear();
-    return;
-  }
-  for (const key of getCache.keys()) {
-    if (key.startsWith(matcher) || key.includes(matcher)) getCache.delete(key);
-  }
+  // Legacy cache clear stub
 };
 
-/**
- * Convert a mutation endpoint into the GET-cache prefix that should be
- * invalidated. The goal: when a user marks a notification as read at
- * `/api/notifications/123/read`, only invalidate cached responses under
- * `/api/notifications`, not every other cached page.
- *
- * Heuristic: take the path up to (but not including) the first numeric
- * segment. If there are no numeric segments, use the path verbatim. This
- * works cleanly for REST-style endpoints used across this portal:
- *   /api/notifications/123/read         -> /api/notifications
- *   /api/admin/onboarding/45/status     -> /api/admin/onboarding
- *   /api/seller/onboarding              -> /api/seller/onboarding
- *   /api/auth/login                     -> /api/auth/login
- */
 const invalidatePrefixFor = (endpoint: string) => {
-  // Strip query string before splitting; we never key cache by it anyway.
-  const path = endpoint.split('?')[0];
-  const segments = path.split('/');
-  const truncated: string[] = [];
-  for (const segment of segments) {
-    if (segment && /^\d+$/.test(segment)) break;
-    truncated.push(segment);
-  }
-  const prefix = truncated.join('/') || path;
-  
-  const prefixesToInvalidate = new Set<string>();
-  const cleanPrefix = prefix.startsWith('/') ? prefix : '/' + prefix;
-  prefixesToInvalidate.add(cleanPrefix);
-
-  if (cleanPrefix.startsWith('/api/buyer-showcase/items')) {
-    prefixesToInvalidate.add('/api/buyer-showcase/items');
-  }
-
-  if (cleanPrefix.startsWith('/api/seller/products') || cleanPrefix.startsWith('/api/seller/services')) {
-    prefixesToInvalidate.add('/api/seller/products');
-    prefixesToInvalidate.add('/api/seller/services');
-    prefixesToInvalidate.add('/api/marketplace/products');
-    prefixesToInvalidate.add('/api/marketplace/services');
-    prefixesToInvalidate.add('/api/marketplace/home');
-  }
-
-  if (
-    cleanPrefix.includes('/auth/') ||
-    cleanPrefix.includes('/onboarding') ||
-    cleanPrefix.includes('/profile') ||
-    cleanPrefix.startsWith('/api/seller/register') ||
-    cleanPrefix.startsWith('/api/buyer/register')
-  ) {
-    prefixesToInvalidate.add('/api/auth/me');
-  }
-
-  if (cleanPrefix.startsWith('/api/cart')) {
-    prefixesToInvalidate.add('/api/cart');
-    prefixesToInvalidate.add('/api/approvals');
-  }
-  if (cleanPrefix.startsWith('/api/approvals')) {
-    prefixesToInvalidate.add('/api/approvals');
-    prefixesToInvalidate.add('/api/cart');
-  }
-  if (cleanPrefix.startsWith('/api/marketplace/guest-cart')) {
-    prefixesToInvalidate.add('/api/marketplace/guest-cart');
-  }
-  if (cleanPrefix.startsWith('/api/quote-requests') || cleanPrefix.startsWith('/api/quote-responses')) {
-    prefixesToInvalidate.add('/api/quote-requests');
-    prefixesToInvalidate.add('/api/quote-responses');
-    prefixesToInvalidate.add('/api/dashboard/summary');
-    prefixesToInvalidate.add('/api/purchase-orders');
-    prefixesToInvalidate.add('/api/buyer/my-procurements');
-  }
-  if (
-    cleanPrefix.startsWith('/api/marketplace/requirements') ||
-    cleanPrefix.startsWith('/api/buyer/procurement-bids') ||
-    cleanPrefix.startsWith('/api/procurement-bids') ||
-    cleanPrefix.startsWith('/api/procurement') ||
-    cleanPrefix.startsWith('/api/buyer/requirements') ||
-    cleanPrefix.startsWith('/api/buyer/my-procurements')
-  ) {
-    prefixesToInvalidate.add('/api/marketplace/requirements');
-    prefixesToInvalidate.add('/api/buyer/procurement-bids');
-    prefixesToInvalidate.add('/api/procurement-bids');
-    prefixesToInvalidate.add('/api/buyer/my-procurements');
-    prefixesToInvalidate.add('/api/seller/procurement-bids');
-    prefixesToInvalidate.add('/api/seller/requirement-responses');
-    prefixesToInvalidate.add('/api/dashboard/summary');
-  }
-
-  for (const pref of prefixesToInvalidate) {
-    clearApiCache(pref);
-  }
+  // Legacy cache invalidate stub
 };
 
 export const api = {
   fetch: (endpoint: string, options: RequestInit & { skipCache?: boolean } = {}) => {
     const url = resolveUrl(endpoint);
     const method = (options.method || 'GET').toUpperCase();
-    const { skipCache, ...fetchOptions } = options;
-    const shouldCache = method === 'GET' && !skipCache;
-    const headers = normalizeHeaders(fetchOptions.headers, options.body as BodyInit | null);
-    const key = cacheKey(endpoint, { ...options, headers });
-
-    if (shouldCache) {
-      const cached = getCache.get(key);
-      // Instant render path: any cache entry younger than GET_CACHE_STALE_LIMIT
-      // is rendered immediately. If it's still within the fresh TTL we don't
-      // bother refreshing; if it's stale we fire a background refresh so the
-      // UI stays current without the user seeing a spinner.
-      if (!skipCache && isCacheUsable(cached)) {
-        const isStale = !isCacheFresh(cached);
-        if (isStale && !refreshingKeys.has(key)) {
-          refreshingKeys.add(key);
-          fetch(url, {
-            credentials: 'include',
-            ...fetchOptions,
-            headers,
-          })
-            .then(async (response) => {
-              if (response.status === 401 && shouldDispatchUnauthorized(endpoint)) {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-                }
-                return;
-              }
-              if (!response.ok) return;
-              const body = await response.clone().json();
-              const responseHeaders: Record<string, string> = {};
-              response.headers.forEach((value, headerKey) => {
-                responseHeaders[headerKey] = value;
-              });
-              getCache.set(key, {
-                body,
-                status: response.status,
-                statusText: response.statusText,
-                headers: responseHeaders,
-                timestamp: Date.now()
-              });
-            })
-            .catch(() => {
-              // Background refresh must never block cached rendering.
-            })
-            .finally(() => refreshingKeys.delete(key));
-        }
-        return Promise.resolve(responseFromCache(cached!));
-      }
-
-      const pending = inFlightGetResponses.get(key);
-      if (pending) {
-        return pending.then((response) => response.clone());
-      }
-    }
+    const headers = normalizeHeaders(options.headers, options.body as BodyInit | null);
 
     const sendRequest = (requestHeaders: Record<string, string>) => fetch(url, {
       credentials: 'include',
-      ...fetchOptions,
+      ...options,
       headers: requestHeaders,
     });
 
@@ -401,7 +174,7 @@ export const api = {
       if (isUnsafeMethod(method) && await isCsrfFailure(response)) {
         const refreshed = await refreshSessionCookies().catch(() => false);
         if (refreshed) {
-          const retryHeaders = normalizeHeaders(fetchOptions.headers, options.body as BodyInit | null);
+          const retryHeaders = normalizeHeaders(options.headers, options.body as BodyInit | null);
           response = await sendRequest(retryHeaders);
         }
       }
@@ -412,32 +185,13 @@ export const api = {
         }
       }
       if (response.status === 503 && !endpoint.includes('/health')) {
-        // 503 means the backend explicitly declared itself down (e.g. behind a
-        // maintenance proxy). Hard-navigate to the maintenance page so the
-        // user gets a clear status. 500/502/504 are treated as transient and
-        // bubble up to the caller, which can show a toast and let React Query
-        // retry instead of nuking the whole app.
         if (typeof window !== 'undefined' && !window.location.pathname.includes('503')) {
           window.location.href = '/503.html';
         }
       }
-      if (shouldCache && response.ok) {
-        await writeGetCache(key, response);
-      }
-      if (response.ok && isUnsafeMethod(method)) {
-        invalidatePrefixFor(endpoint);
-      }
+      
       return response;
     }).catch(networkErrorResponse);
-
-    if (shouldCache) {
-      inFlightGetResponses.set(
-        key,
-        request
-          .then((response) => response.clone())
-          .finally(() => inFlightGetResponses.delete(key))
-      );
-    }
 
     return request;
   },
@@ -450,14 +204,6 @@ export const api = {
       ...options,
       method: 'POST',
       body: JSON.stringify(body)
-    }).then((response) => {
-      // Only invalidate the resource that just mutated, not every cached
-      // page. Wiping the entire cache is what was making the dashboard look
-      // like it reloads on every navigation: a single click that POSTs
-      // (e.g. marking a notification read) used to drop every other
-      // unrelated GET from cache.
-      if (response.ok) invalidatePrefixFor(endpoint);
-      return response;
     }),
 
   put: (endpoint: string, body: any, options: RequestInit = {}) =>
@@ -465,9 +211,6 @@ export const api = {
       ...options,
       method: 'PUT',
       body: JSON.stringify(body)
-    }).then((response) => {
-      if (response.ok) invalidatePrefixFor(endpoint);
-      return response;
     }),
 
   patch: (endpoint: string, body: any, options: RequestInit = {}) =>
@@ -475,23 +218,14 @@ export const api = {
       ...options,
       method: 'PATCH',
       body: JSON.stringify(body)
-    }).then((response) => {
-      if (response.ok) invalidatePrefixFor(endpoint);
-      return response;
     }),
 
   delete: (endpoint: string, options: RequestInit = {}) =>
-    api.fetch(endpoint, { ...options, method: 'DELETE' }).then((response) => {
-      if (response.ok) invalidatePrefixFor(endpoint);
-      return response;
-    }),
+    api.fetch(endpoint, { ...options, method: 'DELETE' }),
 
-  peek: (endpoint: string, options: RequestInit = {}) => {
-    const cached = getCache.get(cacheKey(endpoint, options));
-    // peek() is what page components call before render to seed initial
-    // state. Use the same stale-while-revalidate window as the fetch path
-    // so revisited pages render instantly even after the fresh TTL.
-    return isCacheUsable(cached) ? cached?.body : null;
+  peek: (endpoint: string, options: RequestInit = {}): any => {
+    // Legacy API cache peek stub
+    return null;
   },
 
   invalidate: clearApiCache,

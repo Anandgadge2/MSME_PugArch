@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Building2, Users, Package, Wrench, Layers, TrendingUp, Sparkles, Briefcase } from 'lucide-react';
 import type { MarketplaceStats } from '../api';
 
@@ -96,23 +96,7 @@ export function StatsSection({ stats }: Props) {
     const ref = useRef<HTMLDivElement>(null);
     const [running, setRunning] = useState(false);
 
-    useEffect(() => {
-        const el = ref.current;
-        if (!el) return;
-        const obs = new IntersectionObserver(
-            ([entry]) => {
-                if (entry.isIntersecting) {
-                    setRunning(true);
-                    obs.disconnect();
-                }
-            },
-            { threshold: 0.15 }
-        );
-        obs.observe(el);
-        return () => obs.disconnect();
-    }, []);
-
-    const items = [
+    const items = useMemo(() => [
         {
             icon: <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-sky-400" />,
             value: stats?.verifiedSellers || 0,
@@ -173,9 +157,26 @@ export function StatsSection({ stats }: Props) {
             iconBorder: 'border border-emerald-400/30',
             glowBorder: 'hover:border-emerald-400/40 hover:shadow-emerald-500/10',
         },
-    ];
+    ], [stats]);
 
     const hasData = items.some(i => i.value > 0);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const obs = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    setRunning(true);
+                    obs.disconnect();
+                }
+            },
+            { threshold: 0.15 }
+        );
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, [hasData]);
+
     if (!hasData) return null;
 
     return (

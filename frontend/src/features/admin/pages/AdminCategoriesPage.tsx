@@ -104,8 +104,8 @@ export default function AdminCategoriesPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Image size should be less than 2MB');
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
       return;
     }
 
@@ -115,6 +115,13 @@ export default function AdminCategoriesPage() {
       return;
     }
 
+    // If editing an existing category, upload directly to GCS
+    if (editingCategory) {
+      handleUploadCategoryImage(editingCategory.id, file);
+      return;
+    }
+
+    // For new categories, fall back to data-URI (will be saved inline)
     const reader = new FileReader();
     reader.onload = (event) => {
       const result = (event.target?.result as string) || '';
@@ -122,6 +129,31 @@ export default function AdminCategoriesPage() {
       setFormImageUrl(result);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleUploadCategoryImage = async (categoryId: number, file: File) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      const res = await api.fetch(`/api/admin/categories/${categoryId}/image`, {
+        method: 'POST',
+        body: formData,
+        headers: {} // let browser set content-type with boundary
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        const newUrl = updated?.data?.imageUrl || updated?.imageUrl || '';
+        setFormImageUrl(newUrl);
+        setImagePreview(newUrl);
+        toast.success('Category image uploaded to cloud storage!');
+        fetchCategories();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.message || 'Failed to upload image');
+      }
+    } catch {
+      toast.error('Network error uploading image');
+    }
   };
 
   const handleRemoveImage = () => {
@@ -468,11 +500,11 @@ export default function AdminCategoriesPage() {
                           {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <div className="h-10 w-10 mx-auto rounded-lg border border-slate-200/80 bg-white flex items-center justify-center p-1.5 shadow-2xs overflow-hidden">
+                          <div className="h-10 w-10 mx-auto rounded-lg border border-slate-200/80 bg-white flex items-center justify-center shadow-2xs overflow-hidden">
                             <img
                               src={displayImg}
                               alt={cat.name}
-                              className="h-full w-full object-contain drop-shadow-2xs"
+                              className="h-full w-full object-cover"
                               onError={(e) => {
                                 (e.target as HTMLElement).style.display = 'none';
                               }}
@@ -603,11 +635,11 @@ export default function AdminCategoriesPage() {
 
                 {imagePreview ? (
                   <div className="flex items-center gap-3.5 p-3 rounded-lg border border-slate-200 bg-slate-50/70">
-                    <div className="h-14 w-14 rounded-lg border border-slate-200 bg-white flex items-center justify-center p-2 shadow-2xs shrink-0">
+                    <div className="h-14 w-14 rounded-lg border border-slate-200 bg-white flex items-center justify-center shadow-2xs shrink-0 overflow-hidden">
                       <img
                         src={imagePreview}
                         alt="Category Preview"
-                        className="h-full w-full object-contain"
+                        className="h-full w-full object-cover"
                       />
                     </div>
                     <div className="flex-1 min-w-0">
