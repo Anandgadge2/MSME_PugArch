@@ -426,7 +426,7 @@ export default function RbacPanel() {
                     <span className="text-sm font-black text-slate-950">{role.name}</span>
                     <span className="rounded bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{role.status}</span>
                   </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">{role.description || role.code}</p>
+                  <p title={role.description || role.code} className="mt-1 line-clamp-2 text-xs text-slate-500">{role.description || role.code}</p>
                   <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-slate-500">
                     <span>{scopeLabels[role.scopeType]}</span>
                     <span>{role.permissions?.length || 0} permissions</span>
@@ -484,7 +484,7 @@ export default function RbacPanel() {
                             {(inDraft || assigned) && <Check className="h-3 w-3" />}
                           </span>
                           <span className="min-w-0">
-                            <span className="block truncate font-mono text-xs font-black text-slate-950">{permission.code}</span>
+                            <span title={permission.code} className="block truncate font-mono text-xs font-black text-slate-950">{permission.code}</span>
                             <span className="mt-1 block text-xs leading-relaxed text-slate-500">{permission.description}</span>
                           </span>
                         </button>

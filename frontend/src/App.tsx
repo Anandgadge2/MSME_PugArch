@@ -16,7 +16,7 @@ import ForgotPassword from './views/ForgotPassword';
 // load shipped the entire portal). React.lazy + Suspense lets Next.js
 // stream chunks per route so navigation only downloads what the user needs.
 const MarketplaceProductList = lazy(() => import('./features/marketplace/pages/MarketplaceProductList'));
-const MarketplaceHome = lazy(() => import('./features/marketplace/pages/MarketplaceHome'));
+import MarketplaceHome from './features/marketplace/pages/MarketplaceHome';
 const Dashboard = lazy(() => import('./views/Dashboard'));
 const MarketplaceProductDetail = lazy(() => import('./features/marketplace/pages/MarketplaceProductDetail'));
 const MarketplaceServiceDetail = lazy(() => import('./features/marketplace/pages/MarketplaceServiceDetail'));
@@ -400,7 +400,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     setInitialLoadComplete(true);
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('jsg_initial_load', 'true');
-      document.cookie = "jsg_initial_load=true; path=/; max-age=86400";
+      document.cookie = "jsg_initial_load=true; path=/";
     }
   };
   const [isPageMounted, setIsPageMounted] = useState(false);
@@ -881,16 +881,18 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     '/invite/signup',
   ].includes(pathname) || pathname.startsWith('/register');
 
+  if (!initialLoadComplete) {
+    return (
+      <PremiumLoader
+        mode="initial"
+        isReady={isInitialReady}
+        onComplete={completeInitialLoad}
+      />
+    );
+  }
+
   return (
     <>
-      {!initialLoadComplete && (
-        (() => { console.log('[APP LOADER] reason: INITIALIZATION'); return true; })() && 
-        <PremiumLoader
-          mode="initial"
-          isReady={isInitialReady}
-          onComplete={completeInitialLoad}
-        />
-      )}
       {isLoggingIn && (
         (() => { console.log('[APP LOADER] reason: LOGIN'); return true; })() && 
         <PremiumLoader

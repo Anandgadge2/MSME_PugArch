@@ -930,7 +930,7 @@ export default function PurchaseOrders() {
                           </span>
                           <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
                         </div>
-                        <h3 className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{order.title}</h3>
+                        <h3 title={order.title} className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{order.title}</h3>
                       </div>
                       <StatusPill status={order.status} />
                     </div>
@@ -1127,7 +1127,7 @@ export default function PurchaseOrders() {
                     {viewingOrder.deliveryAddress && (
                       <div>
                         <p className="text-[9px] font-black uppercase text-slate-400">Delivery Address</p>
-                        <p className="text-xs font-bold text-slate-600 line-clamp-2">{viewingOrder.deliveryAddress}</p>
+                        <p title={viewingOrder.deliveryAddress} className="text-xs font-bold text-slate-600 line-clamp-2">{viewingOrder.deliveryAddress}</p>
                       </div>
                     )}
                     {viewingOrder.deliveryTrackings && viewingOrder.deliveryTrackings.length > 0 && (
@@ -1285,6 +1285,7 @@ export default function PurchaseOrders() {
                                         toast.error(err instanceof Error ? err.message : 'Unable to open document');
                                       });
                                     }}
+                                    title={doc.fileName}
                                     className="block truncate text-xs font-bold text-[#12335f] hover:underline text-left w-full"
                                   >
                                     {doc.fileName}

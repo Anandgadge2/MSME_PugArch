@@ -659,7 +659,7 @@ export default function RepeatOrders() {
                           </span>
                           <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
                         </div>
-                        <h3 className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{procurementName}</h3>
+                        <h3 title={procurementName} className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{procurementName}</h3>
                       </div>
                       <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-700 border border-emerald-200">
                         <CheckCircle2 className="h-3 w-3" /> Repeatable

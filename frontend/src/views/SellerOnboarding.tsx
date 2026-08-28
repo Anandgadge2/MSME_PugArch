@@ -2142,7 +2142,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                     </div>
                                     {fileAsset ? (
                                       <div className="mt-1 flex items-center gap-2">
-                                        <span className="text-xs text-slate-500 font-medium truncate max-w-[200px] sm:max-w-xs">
+                                        <span title={fileAsset.originalName || 'Uploaded Document'} className="text-xs text-slate-500 font-medium truncate max-w-[200px] sm:max-w-xs">
                                           {fileAsset.originalName || 'Uploaded Document'}
                                         </span>
                                         <button

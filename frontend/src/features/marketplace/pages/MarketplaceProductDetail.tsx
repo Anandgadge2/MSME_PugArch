@@ -304,13 +304,13 @@ export default function MarketplaceProductDetail() {
                             {product.category && (
                                 <>
                                     <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                    <Link href={`/marketplace/products?categoryId=${product.category.id}`} className="hover:text-[#0b2447] transition truncate max-w-[150px] shrink-0">
+                                    <Link title={product.category.name} href={`/marketplace/products?categoryId=${product.category.id}`} className="hover:text-[#0b2447] transition truncate max-w-[150px] shrink-0">
                                         {product.category.name}
                                     </Link>
                                 </>
                             )}
                             <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span className="text-[#0b2447] font-semibold truncate max-w-[220px]">{product.name}</span>
+                            <span title={product.name} className="text-[#0b2447] font-semibold truncate max-w-[220px]">{product.name}</span>
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -484,7 +484,7 @@ export default function MarketplaceProductDetail() {
                                         {(product.organization?.organizationName || product.seller?.name || 'M')[0].toUpperCase()}
                                     </div>
                                     <div className="min-w-0">
-                                        <h4 className="text-xs font-extrabold text-slate-900 truncate">
+                                        <h4 title={product.organization?.organizationName || product.seller?.name || 'Verified Supplier'} className="text-xs font-extrabold text-slate-900 truncate">
                                             {product.organization?.organizationName || product.seller?.name || 'Verified Supplier'}
                                         </h4>
                                         <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500">
@@ -799,7 +799,7 @@ export default function MarketplaceProductDetail() {
                                                     <FileText className="h-6 w-6" />
                                                 </div>
                                                 <div className="min-w-0 flex-1">
-                                                    <h4 className="font-extrabold text-xs text-slate-900 truncate group-hover:text-[#0b2447] transition">
+                                                    <h4 title={cert.name || cert.fileAsset?.originalName || 'Compliance Document'} className="font-extrabold text-xs text-slate-900 truncate group-hover:text-[#0b2447] transition">
                                                         {cert.name || cert.fileAsset?.originalName || 'Compliance Document'}
                                                     </h4>
                                                     <p className="text-[10px] font-semibold text-slate-500 mt-0.5">
@@ -861,8 +861,8 @@ export default function MarketplaceProductDetail() {
                                                     <Package className="h-10 w-10 text-slate-300" />
                                                 )}
                                             </div>
-                                            <h4 className="text-xs font-extrabold text-slate-900 line-clamp-2 group-hover:text-[#0b2447] transition">{p.name}</h4>
-                                            <p className="text-[10px] font-semibold text-slate-500 truncate">{p.organization?.organizationName || 'Verified Supplier'}</p>
+                                            <h4 title={p.name} className="text-xs font-extrabold text-slate-900 line-clamp-2 group-hover:text-[#0b2447] transition">{p.name}</h4>
+                                            <p title={p.organization?.organizationName || 'Verified Supplier'} className="text-[10px] font-semibold text-slate-500 truncate">{p.organization?.organizationName || 'Verified Supplier'}</p>
                                         </div>
                                         <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                                             <span className="text-[10px] font-bold text-slate-500">

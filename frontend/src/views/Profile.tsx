@@ -157,7 +157,7 @@ export default function Profile() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Email Address</p>
-                  <p className="text-sm font-semibold text-slate-900 truncate">{user.email}</p>
+                  <p title={user.email} className="text-sm font-semibold text-slate-900 truncate">{user.email}</p>
                 </div>
               </div>
 
