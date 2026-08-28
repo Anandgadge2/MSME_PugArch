@@ -46,9 +46,6 @@ export default function MarketplaceProductDetail() {
             const cachedDetail = queryClient.getQueryData<any>(['marketplaceProduct', productId]);
             if (cachedDetail) return cachedDetail;
 
-            const peeked = api.peek(`/api/marketplace/products/${productId}`);
-            if (peeked) return unwrapApiData(peeked);
-
             const cacheState = queryClient.getQueryCache().getAll();
             for (const query of cacheState) {
                 const data = query.state.data as any;

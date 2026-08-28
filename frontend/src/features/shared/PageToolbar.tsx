@@ -149,13 +149,11 @@ export function PageToolbar({
                 </div>
             )}
 
-            {/* Mobile layout: search + compact "Filters" toggle on the same row,
-                drawer below when open. Hidden once we hit `sm` because the inline
-                block below takes over. */}
+            {/* Mobile layout: responsive flex-wrap for Search, Filters, and Actions */}
             <div className="space-y-2 sm:hidden">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
                     {hasSearch && (
-                        <div className="relative min-w-0 flex-1">
+                        <div className="relative flex-1 min-w-[200px]">
                             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <input
                                 value={search ?? ''}
@@ -189,10 +187,12 @@ export function PageToolbar({
                             )}
                         </button>
                     )}
+
+                    {actions && <div className="flex items-center gap-2 ml-auto">{actions}</div>}
                 </div>
 
                 {mobileOpen && (
-                    <div id="page-toolbar-mobile-filters" className="space-y-2">
+                    <div id="page-toolbar-mobile-filters" className="space-y-2 mt-2">
                         {filters.map((f, idx) => renderFilter(f, idx))}
                         {onReset && (
                             <Button
@@ -209,8 +209,6 @@ export function PageToolbar({
                         )}
                     </div>
                 )}
-
-                {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
 
             {/* Tablet & Desktop layout: search full-width on top (or compact on left), filters in flex row */}

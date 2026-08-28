@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
@@ -387,49 +388,38 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
 
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  const { data: countsData } = useQuery({
+    queryKey: ['navigation-counts'],
+    queryFn: async () => {
+      const res = await api.get('/api/navigation/summary');
+      const body = await readJsonResponse(res);
+      const data = unwrapApiData(body);
+      if (!data) return {} as Record<string, number>;
 
-  useEffect(() => {
-    if (user?.role !== 'seller') return;
+      const rfqsCount = Number(data.rfqsCount || 0);
+      const rfpsCount = Number(data.rfpsCount || 0);
+      const openTendersCount = Number(data.openTendersCount || 0);
+      const invitationsCount = Number(data.invitationsCount || 0);
+      const auctionsCount = Number(data.auctionsCount || 0);
+      const rateContractsCount = Number(data.rateContractsCount || 0);
 
-    let alive = true;
-    const fetchCounts = async () => {
-      try {
-        const res = await api.get('/api/navigation/summary');
-        const body = await readJsonResponse(res);
-        const data = unwrapApiData(body);
-        if (!alive || !data) return;
+      const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount + rateContractsCount;
 
-        const rfqsCount = Number(data.rfqsCount || 0);
-        const rfpsCount = Number(data.rfpsCount || 0);
-        const openTendersCount = Number(data.openTendersCount || 0);
-        const invitationsCount = Number(data.invitationsCount || 0);
-        const auctionsCount = Number(data.auctionsCount || 0);
-        const rateContractsCount = Number(data.rateContractsCount || 0);
+      return {
+        '/seller/opportunities': allCount,
+        '/seller/opportunities/rfqs': rfqsCount,
+        '/seller/opportunities/rfps': rfpsCount,
+        '/seller/opportunities/open-tenders': openTendersCount,
+        '/seller/opportunities/invitations': invitationsCount,
+        '/seller/opportunities/auctions': auctionsCount,
+        '/seller/opportunities/rate-contracts': rateContractsCount
+      };
+    },
+    enabled: user?.role === 'seller',
+    refetchInterval: 15000,
+  });
 
-        const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount + rateContractsCount;
-
-        setCounts({
-          '/seller/opportunities': allCount,
-          '/seller/opportunities/rfqs': rfqsCount,
-          '/seller/opportunities/rfps': rfpsCount,
-          '/seller/opportunities/open-tenders': openTendersCount,
-          '/seller/opportunities/invitations': invitationsCount,
-          '/seller/opportunities/auctions': auctionsCount,
-          '/seller/opportunities/rate-contracts': rateContractsCount
-        });
-      } catch (err) {
-        console.warn('Navigation counts fetch error:', err);
-      }
-    };
-
-    fetchCounts();
-    const interval = setInterval(fetchCounts, 30000);
-    return () => {
-      alive = false;
-      clearInterval(interval);
-    };
-  }, [user]);
+  const counts = countsData || {};
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

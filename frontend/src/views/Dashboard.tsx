@@ -297,6 +297,7 @@ export default function Dashboard() {
     },
     enabled: !!token,
     staleTime: 60_000,
+    refetchInterval: 15000,
   });
   const notifications = notificationsData || [];
 
@@ -311,6 +312,7 @@ export default function Dashboard() {
     },
     enabled: !!token && user?.role === 'admin',
     staleTime: 5 * 60_000,
+    refetchInterval: 15000,
   });
 
   const canCheckBannerEligibility = Boolean(
@@ -347,6 +349,7 @@ export default function Dashboard() {
     },
     enabled: !!token && user?.role !== 'admin',
     staleTime: 5 * 60_000,
+    refetchInterval: 15000,
   });
 
   const dashboardData = useMemo(() => {

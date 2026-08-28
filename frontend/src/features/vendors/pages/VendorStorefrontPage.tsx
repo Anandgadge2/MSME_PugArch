@@ -29,19 +29,22 @@ export default function VendorStorefrontPage({ id }: Props) {
     const vendor = useQuery({
         queryKey: ['vendor', id] as const,
         queryFn: () => getApi<any>(`/api/vendors/${id}`),
-        enabled: id > 0
+        enabled: id > 0,
+        refetchInterval: 15000,
     });
 
     const products = useQuery({
         queryKey: ['vendor-products', id] as const,
         queryFn: () => getApi<any>(`/api/products/search?sellerId=${id}&take=24`),
-        enabled: id > 0 && tab === 'catalogue'
+        enabled: id > 0 && tab === 'catalogue',
+        refetchInterval: 15000,
     });
 
     const services = useQuery({
         queryKey: ['vendor-services', id] as const,
         queryFn: () => getApi<any>(`/api/services/search?sellerId=${id}&take=24`),
-        enabled: id > 0 && tab === 'catalogue'
+        enabled: id > 0 && tab === 'catalogue',
+        refetchInterval: 15000,
     });
 
     const ratingSummary = useSupplierSummary(id);
