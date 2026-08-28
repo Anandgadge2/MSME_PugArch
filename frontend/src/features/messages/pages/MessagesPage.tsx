@@ -47,6 +47,7 @@ import {
 import { fetchConversations, type ConversationDto, type MessageDto, type MessageUserDto } from '../api';
 import MessageAttachmentView from '../components/MessageAttachmentView';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
+import { useConversationRealtime } from '../hooks/useConversationRealtime';
 
 const roleLabel = (role?: string) => (role || 'user').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 const isAdminRole = (role?: string) => role === 'admin' || role === 'master_admin';
@@ -323,6 +324,7 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
     const router = useRouter();
     const queryClient = useQueryClient();
     const { data: conversation, isLoading, error, refetch } = useConversation(id);
+    useConversationRealtime(id);
     const sendMut = useSendMessage();
     const markRead = useMarkConversationRead();
     const archive = useArchiveConversation();

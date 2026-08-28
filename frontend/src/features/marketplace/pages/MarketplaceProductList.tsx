@@ -428,7 +428,7 @@ export default function MarketplaceProductList() {
             toast.info('Login is required to proceed to checkout.', {
                 action: {
                     label: 'Login',
-                    onClick: () => router.push(`/login?redirect=${encodeURIComponent('/buyer/procurement/checkout')}`),
+                    onClick: () => router.push(`/login?redirect=${encodeURIComponent('/buyer/checkout')}`),
                 },
             });
             return;
@@ -455,8 +455,9 @@ export default function MarketplaceProductList() {
                 },
                 { source: isServices ? 'services-list-buy' : 'products-list-buy', showToast: false }
             );
-            router.push('/buyer/procurement/checkout');
+            router.push('/buyer/checkout');
         } catch {
+
             toast.error('Unable to prepare checkout. Please try again.');
         }
     };

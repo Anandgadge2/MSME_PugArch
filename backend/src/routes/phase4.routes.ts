@@ -2397,7 +2397,19 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     }
 
     const uploadedDocs = profile.sellerDocuments?.map((d: any) => d.documentType) || [];
-    const missingDocs = requiredDocs.filter(d => !uploadedDocs.includes(d));
+    const matchesDocType = (reqType: string, uploadedTypes: string[]) =>
+      uploadedTypes.some(u => {
+        const normU = String(u || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normR = String(reqType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normU === normR) return true;
+        const aliases: Record<string, string[]> = {
+          bankpassbook: ['bankpassbook', 'bankpassbookcancelledcheque'],
+          leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard'],
+          registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate']
+        };
+        return (aliases[normR] || []).includes(normU) || (aliases[normU] || []).includes(normR);
+      });
+    const missingDocs = requiredDocs.filter(d => !matchesDocType(d, uploadedDocs));
 
     if (missingDocs.length > 0) {
       const labels: Record<string, string> = {
@@ -3931,7 +3943,7 @@ router.post('/profile/verify-gst-dashboard', authenticate, asyncRoute(async (req
   let onboardingStatus = user.onboardingStatus;
   let registrationStatus = user.registrationStatus;
 
-  if (onboardingStatus !== 'approved_for_procurement') {
+  if (onboardingStatus !== 'approved_for_procurement' && (user.sectionStatus as any)?.submitted === true) {
     onboardingStatus = 'under_compliance_review';
     registrationStatus = 'completed';
   }
@@ -7207,7 +7219,8 @@ for (const [path, status, action] of [
 
 router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(async (req, res) => {
   const body = parse(z.object({
-    purchaseOrderId: z.coerce.number().int().positive(),
+    purchaseOrderId: z.coerce.number().int().positive().optional(),
+    quotationId: z.coerce.number().int().positive().optional(),
     amount: z.coerce.number().positive().optional(),
     gstRate: z.coerce.number().min(0).max(100).optional(),
     otherTaxRate: z.coerce.number().min(0).max(100).optional(),
@@ -7222,12 +7235,80 @@ router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(
       totalAmount: z.coerce.number().nonnegative().optional()
     })).optional()
   }), req.body);
-  const po = await db.purchaseOrder.findUnique({ where: { id: body.purchaseOrderId } });
+
+  let targetPoId = body.purchaseOrderId;
+
+  if (!targetPoId && body.quotationId) {
+    const quoteResp = await db.requirementResponse.findUnique({
+      where: { id: body.quotationId },
+      include: { requirement: true }
+    });
+
+    if (!quoteResp) {
+      throw new ApiError(404, 'Submitted quotation not found', 'QUOTATION_NOT_FOUND');
+    }
+
+    let po = await db.purchaseOrder.findFirst({
+      where: {
+        sellerId: quoteResp.sellerUserId,
+        title: { contains: `Quotation #${quoteResp.id}` }
+      }
+    });
+
+    if (!po) {
+      const unitPrice = Number(quoteResp.offeredPrice || 0);
+      const qty = Number(quoteResp.offeredQuantity || 1);
+      const totalVal = unitPrice * qty || Number(body.amount || 0);
+      const poNum = `PO-${Date.now().toString().slice(-6)}`;
+      const buyerId = quoteResp.requirement.createdById || userId(req);
+
+      po = await db.purchaseOrder.create({
+        data: {
+          poNumber: poNum,
+          title: `Purchase Order from Quotation #${quoteResp.id}: ${quoteResp.requirement.title}`,
+          status: 'accepted',
+          poStatus: 'ACCEPTED',
+          amount: totalVal,
+          totalValue: totalVal,
+          buyerId,
+          sellerId: quoteResp.sellerUserId,
+          sourceType: 'quotation',
+          paymentTerms: 'PAY_ON_INVOICE',
+          deliveryAddress: quoteResp.requirement.location || 'As per quotation terms',
+          items: {
+            create: [{
+              itemName: quoteResp.requirement.title,
+              description: quoteResp.message || 'Quotation item',
+              quantity: qty,
+              unitOfMeasure: quoteResp.requirement.unit || 'units',
+              unitPrice: unitPrice || totalVal,
+              taxRate: body.gstRate || 18,
+              totalAmount: totalVal
+            }]
+          }
+        }
+      });
+    }
+
+    targetPoId = po.id;
+  }
+
+  if (!targetPoId) {
+    throw new ApiError(400, 'Either purchaseOrderId or quotationId must be provided', 'INVALID_INPUT');
+  }
+
+  const po = await db.purchaseOrder.findUnique({ where: { id: targetPoId } });
   if (!po || (!isAdmin(req) && po.sellerId !== userId(req))) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-  const invoice = await fulfillmentWorkflow.createInvoice(actorFrom(req), body);
+
+  const invoice = await fulfillmentWorkflow.createInvoice(actorFrom(req), {
+    ...body,
+    purchaseOrderId: targetPoId
+  });
+
   await auditWrite(req, 'invoice.created', 'invoice', invoice.id);
   ok(res, invoice, 201);
 }));
+
 
 router.get('/invoices', authenticate, asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
