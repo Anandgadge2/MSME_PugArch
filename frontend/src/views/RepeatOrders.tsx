@@ -30,15 +30,18 @@ import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { Card, CardContent } from '../components/ui/card';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
-import { EmptyState, LoadingState } from '../features/shared/FeatureStates';
+import { EmptyState, InlineError } from '../features/shared/FeatureStates';
 import { formatCurrency, formatDate, maskEmail } from '../features/shared/format';
 import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
-import { ViewModeToggle } from '../features/shared/ViewModeToggle';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
+import { postApi } from '../features/shared/apiClient';
+import { ViewModeToggle } from '../features/shared/ViewModeToggle';
+import { PageToolbar } from '../features/shared/PageToolbar';
 import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
+import { PageTableSkeleton } from '../components/ui/skeleton';
 
 type StatusTab = 'Delivered' | 'All';
 
@@ -387,6 +390,10 @@ export default function RepeatOrders() {
     );
   };
 
+  if (loadingAll && (!deliveredOrders || deliveredOrders.length === 0)) {
+    return <PageTableSkeleton kpiCount={4} />;
+  }
+
   return (
     <div className="space-y-4">
       {/* Tricolor Header Accent */}
@@ -619,22 +626,7 @@ export default function RepeatOrders() {
 
 
       {/* Content */}
-      {loadingAll && processedOrders.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200/85 bg-white p-6 shadow-sm">
-          <div className="space-y-4">
-            <div className="h-5 w-48 rounded bg-slate-100 animate-pulse" />
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/60 p-4 animate-pulse">
-                  <div className="h-6 w-20 rounded bg-slate-200/60" />
-                  <div className="h-5 flex-1 rounded bg-slate-200/60" />
-                  <div className="h-6 w-24 rounded bg-slate-200/60" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : processedOrders.length === 0 ? (
+      {processedOrders.length === 0 ? (
         <EmptyState
           title="No repeat orders available"
           description={

@@ -9,6 +9,8 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Award, Building2, Calendar, CheckCircle2, Globe, Mail, MapPin, Package, Phone, Send, ShieldCheck, ShoppingCart, Star, Store, Wrench } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { useRouter } from 'next/navigation';
+import { StarRating } from '@/features/marketplace/components/StarRating';
+import { StorefrontSkeleton } from '@/components/ui/skeleton';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { useAuth } from '../../../hooks/useAuth';
@@ -45,7 +47,7 @@ export default function VendorStorefrontPage({ id }: Props) {
 
     const ratingSummary = useSupplierSummary(id);
 
-    if (vendor.isLoading) return <LoadingState label="Loading vendor profile..." />;
+    if (vendor.isLoading) return <div className="mx-auto max-w-[1560px] pb-16"><StorefrontSkeleton /></div>;
     if (vendor.error) return <InlineError message={(vendor.error as Error).message} onRetry={() => vendor.refetch()} />;
     if (!vendor.data) return <InlineError message="Vendor not found" />;
 

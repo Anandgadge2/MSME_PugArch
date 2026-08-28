@@ -27,6 +27,7 @@ import { PageToolbar } from '../features/shared/PageToolbar';
 import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
 import { useDeliveryByPO } from '../features/delivery/hooks';
+import { PageTableSkeleton } from '../components/ui/skeleton';
 
 const readableStatus = (value?: string) => String(value || 'generated').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
 const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued'];
@@ -766,6 +767,10 @@ export default function PurchaseOrders() {
     (expectedDateFilter !== 'All Dates' ? 1 : 0) + 
     ((updatedDateFilter.start || updatedDateFilter.end) ? 1 : 0);
 
+  if (loading && (!allOrders || allOrders.length === 0)) {
+    return <PageTableSkeleton kpiCount={4} />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Transparent Header */}
@@ -894,20 +899,12 @@ export default function PurchaseOrders() {
 
       </div>
 
-      {loading && visibleOrders.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200/85 bg-white p-6 shadow-sm">
-          <div className="space-y-4">
-            <div className="h-5 w-48 rounded bg-slate-100 animate-pulse" />
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/60 p-4 animate-pulse">
-                  <div className="h-6 w-20 rounded bg-slate-200/60" />
-                  <div className="h-5 flex-1 rounded bg-slate-200/60" />
-                  <div className="h-6 w-24 rounded bg-slate-200/60" />
-                </div>
-              ))}
-            </div>
-          </div>
+      {loading && (!allOrders || allOrders.length === 0) ? (
+        <PageTableSkeleton kpiCount={4} />
+      ) : error ? (
+        <div className="p-8 text-center text-red-500">
+          <ShieldCheck className="mx-auto h-12 w-12 opacity-50 mb-4" />
+          <p>Failed to load orders.</p>
         </div>
       ) : visibleOrders.length === 0 ? (
         <EmptyState

@@ -387,15 +387,21 @@ function LegacyNoticePage({ title, target = '/buyer/procurement/create' }: { tit
 
 let globalInitialLoadComplete = false;
 
-export default function App() {
+export default function App({ serverInitialLoadComplete = false }: { serverInitialLoadComplete?: boolean }) {
   const { user, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '/';
-  const [initialLoadComplete, setInitialLoadComplete] = useState(globalInitialLoadComplete);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(() => {
+    return serverInitialLoadComplete || globalInitialLoadComplete;
+  });
 
   const completeInitialLoad = () => {
     globalInitialLoadComplete = true;
     setInitialLoadComplete(true);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('jsg_initial_load', 'true');
+      document.cookie = "jsg_initial_load=true; path=/; max-age=86400";
+    }
   };
   const [isPageMounted, setIsPageMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);

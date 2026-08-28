@@ -17,6 +17,7 @@ import { getApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { toast } from 'sonner';
+import { ComparisonMatrixSkeleton } from '../../../components/ui/skeleton';
 
 export default function BidResultsPage() {
   const { user } = useAuth();
@@ -394,8 +395,8 @@ export default function BidResultsPage() {
   if (loading) {
     return (
       <PageShell>
-        <main className="mx-auto w-full max-w-7xl px-4 py-6">
-          <ProcurementLoadingState message="Fetching live evaluation results & financial ranks..." />
+        <main className="mx-auto w-full max-w-[1560px] px-4 py-6">
+          <ComparisonMatrixSkeleton />
         </main>
       </PageShell>
     );

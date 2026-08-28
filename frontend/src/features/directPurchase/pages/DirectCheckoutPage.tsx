@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from '@/components/ui/loader';
+import { CheckoutSkeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useActiveCart, useRemoveCartItem, useUpdateCartItem } from '@/features/cart/hooks';
 import { fetchDeliveryAddresses, placeDirectOrder, type DeliveryAddressDto } from '../api';
@@ -162,7 +163,7 @@ export default function DirectCheckoutPage() {
   }, [cart]);
 
   if (activeCartQuery.isLoading) {
-    return <LoadingState label="Loading checkout..." />;
+    return <CheckoutSkeleton />;
   }
 
   if (!cart || !cart.items || cart.items.length === 0) {

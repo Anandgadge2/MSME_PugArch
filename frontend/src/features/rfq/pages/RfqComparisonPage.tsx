@@ -12,6 +12,7 @@ import {
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { Badge } from '../../../components/ui/card';
 import { toast } from 'sonner';
+import { ComparisonMatrixSkeleton } from '../../../components/ui/skeleton';
 
 function StatusBadgeInline({ label, className }: { label: string; className?: string }) {
     const tone: Record<string, string> = {
@@ -262,15 +263,7 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
     const isResponded = qr?.status === 'responded';
 
     if (isLoading) {
-        return (
-            <div className="container mx-auto p-6 space-y-4">
-                <div className="animate-pulse space-y-4">
-                    <div className="h-8 w-48 rounded bg-slate-200" />
-                    <div className="grid gap-4 sm:grid-cols-4"><div className="h-20 rounded-xl bg-slate-200" /><div className="h-20 rounded-xl bg-slate-200" /><div className="h-20 rounded-xl bg-slate-200" /><div className="h-20 rounded-xl bg-slate-200" /></div>
-                    <div className="h-96 rounded-2xl bg-slate-200" />
-                </div>
-            </div>
-        );
+        return <ComparisonMatrixSkeleton suppliers={3} />;
     }
 
     if (error || !qr) {

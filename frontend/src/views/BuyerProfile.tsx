@@ -41,6 +41,7 @@ import { MSME_TYPES } from '../constants/dropdowns';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
 import { Pagination } from '../features/shared/Pagination';
 import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
+import { ProfileSkeleton } from '../components/ui/skeleton';
 
 const SIDEBAR_NAV = [
   { id: 'showcase_profile', label: 'Organization Showcase Profile', icon: Building2 },
@@ -1035,12 +1036,8 @@ export default function BuyerProfile() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-[400px] items-center justify-center">
-        <Loader2 className="h-10 w-10 shadow-xl shadow-blue-500/20" />
-      </div>
-    );
+  if (isInitialLoading) {
+    return <ProfileSkeleton />;
   }
 
   return (

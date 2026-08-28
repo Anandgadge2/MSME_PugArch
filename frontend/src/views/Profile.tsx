@@ -8,9 +8,10 @@ import { User, Lock, Mail, Shield, CheckCircle2, ExternalLink } from 'lucide-rea
 import { Loader2 } from '@/components/ui/loader';
 import Link from 'next/link';
 import { getSellerPortalPath, isShgUser } from '../lib/shg';
+import { ProfileSkeleton } from '../components/ui/skeleton';
 
 export default function Profile() {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, loading, logout, refreshUser } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [twoFactorOtp, setTwoFactorOtp] = useState('');
   const [twoFactorPassword, setTwoFactorPassword] = useState('');
@@ -123,6 +124,7 @@ export default function Profile() {
     }
   };
 
+  if (loading) return <ProfileSkeleton />;
   if (!user) return null;
 
   return (

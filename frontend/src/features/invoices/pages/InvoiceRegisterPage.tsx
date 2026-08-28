@@ -10,6 +10,7 @@ import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureState
 import { formatCurrency, formatDate } from '../../shared/format';
 import { useFeatureQuery, usePaginatedFeatureQuery, useResponsiveViewMode } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
+import { PageTableSkeleton } from '../../../components/ui/skeleton';
 import { usePurchaseOrders } from '../../purchaseOrders/hooks';
 import { procurementBidApi } from '../../procurementBid/api';
 import { postApi, getApi } from '../../shared/apiClient';
@@ -706,6 +707,16 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     }
   };
 
+  const isKpisLoading = loading && pagedInvoices.length === 0;
+
+  if (isKpisLoading) {
+    return (
+      <div className="space-y-6 pt-4">
+        <PageTableSkeleton kpiCount={5} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Transparent Header */}
@@ -852,22 +863,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         />
       </div>
 
-      {loading && pagedInvoices.length === 0 ? (
-        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-          <div className="space-y-4">
-            <div className="h-5 w-48 rounded bg-slate-100 animate-pulse" />
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/60 p-4 animate-pulse">
-                  <div className="h-6 w-20 rounded bg-slate-200/60" />
-                  <div className="h-5 flex-1 rounded bg-slate-200/60" />
-                  <div className="h-6 w-24 rounded bg-slate-200/60" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : total === 0 ? (
+      {total === 0 ? (
         <EmptyState
           title="No invoices found"
           description={
