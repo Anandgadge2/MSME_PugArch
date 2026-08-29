@@ -36,3 +36,25 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes_tool` for code review.
 3. Use `get_affected_flows_tool` to understand impact.
 4. Use `query_graph_tool` pattern="tests_for" to check coverage.
+
+---
+
+## Mandatory Standards: VPAT & Security Audit Compliance
+
+This project must strictly adhere to **VPAT (WCAG 2.1 / 2.2 Level AA)** accessibility standards and comprehensive **Defensive Security Guidelines**. All future UI components, backend APIs, and refactorings must comply with these requirements:
+
+### 1. Accessibility (VPAT / WCAG 2.1 AA) Standards
+* **Keyboard Operability (WCAG 2.1.1 & 2.1.2)**: Every interactive element (buttons, tabs, links, dropdowns, table actions) must be navigable and operable using only a keyboard. Focus must be trapped inside modals/drawers and returned to the trigger element upon closing.
+* **Form Semantics & Labels (WCAG 1.3.1 & 4.1.2)**: Every form input must have an explicitly linked `<label>` (via `htmlFor` / `id`), clear error indicators, and `aria-invalid` / `aria-describedby` when errors occur.
+* **Color Contrast (WCAG 1.4.3)**: Text and critical icons must maintain a minimum contrast ratio of **4.5:1** against backgrounds (and **3:1** for large text / graphical objects).
+* **Screen Reader & Live Regions (WCAG 4.1.3)**: Asynchronous status changes, toast alerts, step transitions, and error messages must use `aria-live="polite"` or `role="status"` / `role="alert"`.
+* **Alternative Text (WCAG 1.1.1)**: All meaningful images, avatars, banners, and logos must include descriptive `alt` text. Purely decorative icons must use `aria-hidden="true"`.
+* **Bypass Blocks (WCAG 2.4.1)**: Maintain a "Skip to Main Content" link at the root layout for keyboard and screen reader navigation.
+
+### 2. Security & Defensive Coding Standards
+* **Authorization & Scoping (BOLA / IDOR Prevention)**: Every mutating and sensitive reading endpoint must enforce RBAC, organization tenancy checks, and district scoping.
+* **Input Validation & Sanitization**: Enforce strict Zod schemas on all endpoints and strip null bytes and injection characters.
+* **CSRF & Rate Limiting**: Keep CSRF token checks and IP/User rate limiting intact across all mutating routes.
+* **PII & Data Masking**: Ensure sensitive financial and identity data (Aadhaar, PAN, Bank Accounts, GSTIN) are masked in responses and logs.
+* **Cryptographic & Financial Integrity**: Use constant-time comparison for webhooks/signatures and idempotency locks for escrow/payment state transitions.
+
