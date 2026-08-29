@@ -19,7 +19,7 @@ export const INDIAN_STATES: StateInfo[] = [
     districts: [
       'Anakapalli', 'Ananthapuramu', 'Annamayya', 'Bapatla', 'Chittoor',
       'Dr. B.R. Ambedkar Konaseema', 'East Godavari', 'Eluru', 'Guntur',
-      'Kakinada ', 'Krishna', 'Kurnool', 'Nandyal', 'Nellore',
+      'Kakinada', 'Krishna', 'Kurnool', 'Nandyal', 'Nellore',
       'Palnadu', 'Parvathipuram Manyam', 'Prakasam', 'Srikakulam',
       'Sri Potti Sriramulu Nellore', 'Sri Sathya Sai', 'Visakhapatnam',
       'Vizianagaram', 'West Godavari', 'YSR Kadapa'
