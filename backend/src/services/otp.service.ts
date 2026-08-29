@@ -16,7 +16,8 @@ export type OtpPurpose =
   | 'seller_profile_update'
   | 'onboarding_verification'
   | 'tender_alert'
-  | 'transaction_2fa';
+  | 'transaction_2fa'
+  | 'sub_user_mobile_verify';
 
 export type OtpChannel = 'email' | 'sms';
 

@@ -613,9 +613,9 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     // Seller Ratings
     { label: 'Ratings', path: '/seller/ratings', icon: CheckCircle2, roles: ['seller'] },
     // Seller Administration
-    { label: 'Administration', icon: Settings, roles: ['seller'], children: [
-      { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['seller'], permission: 'team.member.view' },
-      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller'] }
+    { label: 'Administration', icon: Settings, roles: ['seller', 'shg'], children: [
+      { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['seller', 'shg'], permission: 'team.member.view' },
+      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller', 'shg'] }
     ] },
     // Seller Disputes
     { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'] },
@@ -639,7 +639,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     }
     if (item.permission) {
       if (user.role === 'admin' || user.role === 'master_admin') return true;
-      return user.permissions?.includes(item.permission);
+      if (!user.isSubUser) return true;
+      return user.permissions?.includes(item.permission) || user.permissions?.includes('*') || false;
     }
     return true;
   }, [user, isShgAccount]);

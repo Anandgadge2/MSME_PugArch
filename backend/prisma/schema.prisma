@@ -37,6 +37,9 @@ model User {
   isDualRole                         Boolean                                 @default(false)
   organizationId                     Int?
   accountStatus                      UserStatus                              @default(ACTIVE)
+  mustChangePassword                 Boolean                                 @default(false)
+  isSubUser                          Boolean                                 @default(false)
+  requiresMobileVerification         Boolean                                 @default(true)
   smsNotificationsEnabled            Boolean                                 @default(false)
   preferredOtpChannel                String                                  @default("email")
   twoFactorChannel                   String                                  @default("email")

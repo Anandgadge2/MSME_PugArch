@@ -284,7 +284,7 @@ export default function RbacPanel() {
         mobile: cleanMobile || undefined
       }, { headers: authHeaders() });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Unable to create invite');
-      toast.success('Invite created.');
+      toast.success('Sub-user created and invitation credentials emailed successfully!');
       setInvite({ name: '', email: '', mobile: '', roleIds: [] });
       await load();
     } catch (error) {

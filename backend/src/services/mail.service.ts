@@ -353,3 +353,116 @@ export const sendAdminWelcomeEmail = async (params: SendAdminWelcomeEmailParams)
     return false;
   }
 };
+
+/**
+ * Send invitation email to a sub-user with direct login link and auto-generated temporary password.
+ */
+export const sendSubUserInvitationEmail = async (
+  email: string,
+  data: {
+    name: string;
+    organizationName: string;
+    roleName: string;
+    tempPassword: string;
+    loginUrl: string;
+  }
+): Promise<boolean> => {
+  const { name, organizationName, roleName, tempPassword, loginUrl } = data;
+  const fromName = 'JsgSmile Portal Admin';
+  const fromEmail = env.SMTP_USER || 'no-reply@jsgsmile.odisha.gov.in';
+  const subject = `Login Credentials — Sub-User Account for ${organizationName} on JsgSmile Portal`;
+
+  console.log(`\n========================================`);
+  console.log(`[SUB-USER INVITE GENERATED]`);
+  console.log(`To: ${email} (${name})`);
+  console.log(`Organization: ${organizationName}`);
+  console.log(`Role: ${roleName}`);
+  console.log(`Temporary Password: ${tempPassword}`);
+  console.log(`Login URL: ${loginUrl}`);
+  console.log(`========================================\n`);
+
+  try {
+    const html = `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 20px auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff; box-shadow: 0 4px 16px rgba(0,0,0,0.05);">
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #12335f 0%, #1e4b8a 100%); color: #ffffff; padding: 28px 24px; text-align: center;">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0.5px;">JSG SMILE Procurement Portal</h1>
+          <p style="margin: 6px 0 0; font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px;">Organization Sub-User Access</p>
+        </div>
+
+        <!-- Body -->
+        <div style="padding: 32px 28px; color: #1e293b;">
+          <h2 style="margin: 0 0 16px; font-size: 18px; color: #0f172a;">Hello ${name || 'User'},</h2>
+          <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px;">
+            A sub-user account has been created for you under <strong>${organizationName}</strong> with the role of <strong>${roleName}</strong> on the official MSME Procurement Gateway.
+          </p>
+
+          <!-- Credential Card -->
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin: 24px 0;">
+            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #12335f; margin-bottom: 12px;">Your Login Credentials</div>
+            <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600; width: 140px;">Portal Login URL:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;"><a href="${loginUrl}" style="color: #12335f; text-decoration: underline;">${loginUrl}</a></td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Email ID:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-family: monospace; font-size: 14px; font-weight: 700;">${email}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Assigned Role:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;">${roleName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Temporary Pass:</td>
+                <td style="padding: 6px 0;">
+                  <span style="color: #d97706; font-family: monospace; font-size: 16px; font-weight: 800; background-color: #fef3c7; padding: 4px 10px; border-radius: 6px; border: 1px dashed #f59e0b; display: inline-block;">
+                    ${tempPassword}
+                  </span>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Step by Step instructions -->
+          <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 16px 20px; margin: 20px 0; font-size: 13px; color: #1e40af;">
+            <strong style="display: block; margin-bottom: 6px;">Next Steps for First-Time Login:</strong>
+            <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
+              <li>Click the login button below and enter your temporary password.</li>
+              <li>You will be prompted to set your new permanent password.</li>
+              <li>Verify your mobile number via a one-time password (OTP).</li>
+              <li>Start accessing your organization's procurement dashboard!</li>
+            </ol>
+          </div>
+
+          <!-- Action Button -->
+          <div style="text-align: center; margin: 28px 0;">
+            <a href="${loginUrl}" style="background-color: #12335f; color: #ffffff; padding: 14px 36px; border-radius: 8px; font-size: 14px; font-weight: 700; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(18,51,95,0.25);">
+              Login & Activate Account &rarr;
+            </a>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="background-color: #f1f5f9; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5;">
+          <div>Government of Odisha &bull; District Administration Jharsuguda</div>
+          <div>Official MSME Linkage Gateway &bull; Confidential Sub-User Access</div>
+        </div>
+      </div>
+    `;
+
+    const transporter = getTransporter();
+    await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: email,
+      subject,
+      html
+    });
+
+    console.log(`[SubUserMail] Invitation email sent to ${email}`);
+    return true;
+  } catch (error: any) {
+    console.error(`[SubUserMail] Failed to send email to ${email}:`, error?.message || error);
+    return false;
+  }
+};

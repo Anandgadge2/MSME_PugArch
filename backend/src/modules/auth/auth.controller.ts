@@ -1541,6 +1541,7 @@ export const authController = {
         where: { id: userId },
         data: {
           password: hashedPassword,
+          mustChangePassword: false,
           passwordResetVersion: { increment: 1 },
           sessionVersion: { increment: 1 },
           lastPasswordChangeAt: new Date()
@@ -1558,6 +1559,157 @@ export const authController = {
         userAgent: req.headers['user-agent']
       });
       res.json({ message: 'Password updated successfully' });
+    } catch (err: any) {
+      handleSecureRouteError(res, err);
+    }
+  },
+
+  subUserActivatePassword: async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = Number(req.user?.id);
+      const { currentPassword, newPassword } = req.body;
+      if (!newPassword) {
+        return res.status(400).json({ message: 'New password is required' });
+      }
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) return res.status(404).json({ message: 'User not found' });
+
+      if (currentPassword) {
+        const isMatch = await verifyPassword(currentPassword, user.password);
+        if (!isMatch) return res.status(400).json({ message: 'Current temporary password incorrect' });
+      }
+
+      const passwordValidation = validatePasswordStrength(String(newPassword || ''));
+      if (!passwordValidation.ok) {
+        return res.status(400).json({
+          message: 'Password does not meet security requirements',
+          errors: passwordValidation.errors
+        });
+      }
+
+      try {
+        await assertPasswordNotReused(userId, String(newPassword), user.password);
+      } catch (reuseErr: any) {
+        if (reuseErr?.message === 'PASSWORD_REUSED') {
+          return res.status(400).json({ message: 'Choose a password you have not used recently' });
+        }
+        throw reuseErr;
+      }
+
+      const previousPasswordHash = user.password;
+      const hashedPassword = await hashPassword(newPassword);
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          password: hashedPassword,
+          mustChangePassword: false,
+          passwordResetVersion: { increment: 1 },
+          sessionVersion: { increment: 1 },
+          lastPasswordChangeAt: new Date()
+        }
+      });
+      await rememberPreviousPassword(userId, previousPasswordHash);
+
+      await auditLog({
+        actorUserId: userId,
+        actorRole: req.user?.role,
+        action: 'auth.sub_user.password_activated',
+        entityType: 'user',
+        entityId: userId,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+
+      const safeUser = await buildSafeAuthPayload(userId);
+      res.json({
+        success: true,
+        message: 'Password set successfully',
+        user: toSafeUser(safeUser || updatedUser)
+      });
+    } catch (err: any) {
+      handleSecureRouteError(res, err);
+    }
+  },
+
+  subUserSendMobileOtp: async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = Number(req.user?.id);
+      const mobile = toLocalIndianMobile(req.body.mobile);
+      if (!mobile) return res.status(400).json({ message: 'Valid 10-digit Indian mobile number is required' });
+
+      // Check if mobile is already used by another user
+      const existingUser = await prisma.user.findFirst({
+        where: { mobile, id: { not: userId } }
+      });
+      if (existingUser) {
+        return res.status(400).json({ message: 'This mobile number is already in use by another account.' });
+      }
+
+      const otp = generateOtp();
+      const otpState = await storeOtp('sub_user_mobile_verify', mobile, otp);
+      if (env.NODE_ENV !== 'production') {
+        logger.info({ mobile, otp }, `[SUB-USER MOBILE OTP] Mobile: ${mobile} | OTP: ${otp}`);
+        console.log(`\n\x1b[33m--- [SUB-USER MOBILE OTP] Mobile: ${mobile} | OTP: ${otp} ---\x1b[0m\n`);
+      }
+
+      await smsService.sendOtpSms(mobile, otp, 'registration_otp');
+      await auditLog({
+        actorUserId: userId,
+        action: 'auth.sub_user.mobile_otp_sent',
+        entityType: 'user',
+        entityId: userId,
+        ipAddress: req.ip,
+        metadata: { mobileHash: sha256(mobile) }
+      });
+
+      res.json({ success: true, message: 'OTP sent to mobile number', sendsRemaining: otpState.sendsRemaining });
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to send OTP right now.');
+    }
+  },
+
+  subUserVerifyMobileOtp: async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = Number(req.user?.id);
+      const mobile = toLocalIndianMobile(req.body.mobile);
+      const otp = String(req.body.otp || '').trim();
+      if (!mobile || !otp) return res.status(400).json({ message: 'Mobile and 6-digit OTP are required' });
+
+      const result = await verifyOtp('sub_user_mobile_verify', mobile, otp);
+      if (!result.ok && result.reason === 'expired') {
+        return res.status(400).json({ message: 'OTP expired. Please request a new code.' });
+      }
+      if (!result.ok) {
+        const remaining = result.attemptsRemaining ?? 0;
+        return res.status(400).json({ message: `Invalid OTP. ${remaining} attempts remaining.`, attemptsRemaining: remaining });
+      }
+
+      await consumeOtp('sub_user_mobile_verify', mobile);
+
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          mobile,
+          mobileVerified: true,
+          requiresMobileVerification: false
+        }
+      });
+
+      await auditLog({
+        actorUserId: userId,
+        action: 'auth.sub_user.mobile_verified',
+        entityType: 'user',
+        entityId: userId,
+        ipAddress: req.ip,
+        metadata: { mobileHash: sha256(mobile) }
+      });
+
+      const safeUser = await buildSafeAuthPayload(userId);
+      res.json({
+        success: true,
+        message: 'Mobile number verified successfully',
+        user: toSafeUser(safeUser || updatedUser)
+      });
     } catch (err: any) {
       handleSecureRouteError(res, err);
     }

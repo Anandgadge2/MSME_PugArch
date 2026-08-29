@@ -133,6 +133,7 @@ import Sidebar, { Header } from './components/layout/Navbar';
 import { MarketplaceHeader } from './features/marketplace/components/MarketplaceHeader';
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
+import { SubUserActivationGate } from './features/auth/components/SubUserActivationGate';
 
 function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKey: string }) {
   React.useEffect(() => {
@@ -955,6 +956,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
             <InviteLoginPopup />
           </Suspense>
         )}
+        <SubUserActivationGate />
       </div>
     </>
   );
