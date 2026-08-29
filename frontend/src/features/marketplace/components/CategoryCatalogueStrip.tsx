@@ -67,7 +67,7 @@ function CategoryCardItem({ category, selected, priority = false, onSelect, onCl
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out" />
 
             {/* Lower side whitish shade overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/85 via-[24%] to-transparent transition-opacity duration-300" />
+            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/75 via-[4%] to-transparent transition-opacity duration-300" />
             
             {/* Category Name with subtle 3D lift */}
             <div className="relative z-10 w-full p-3 sm:p-4 text-center transform transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5">
