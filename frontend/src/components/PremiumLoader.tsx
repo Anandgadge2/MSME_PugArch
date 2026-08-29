@@ -28,7 +28,7 @@ const LOGOUT_STEPS = [
   'Closing protected database tunnels...',
   'Wiping temporary local caches...',
   'Securing gateway endpoints...',
-  'Redirecting to login portal...'
+  'Redirecting to home page...'
 ];
 
 export interface PremiumLoaderProps {

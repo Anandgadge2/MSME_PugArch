@@ -243,7 +243,7 @@ const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery(
 });
 
 export default function Dashboard() {
-  const { user, token, logout, refreshUser } = useAuth();
+  const { user, token, logout, refreshUser, isLoggingOut } = useAuth();
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -274,8 +274,8 @@ export default function Dashboard() {
       const res = await api.fetch('/api/auth/me', { headers: authHeaders });
       if (!res.ok) {
         if (res.status === 401) {
-          logout();
-          router.replace('/login');
+          logout('/');
+          router.replace('/');
         }
         throw new Error('Failed to fetch profile');
       }
@@ -412,10 +412,10 @@ export default function Dashboard() {
   }, [token, queryClient]);
 
   useEffect(() => {
-    if (!token && !user) {
+    if (!token && !user && !isLoggingOut) {
       router.replace('/login');
     }
-  }, [token, user, router]);
+  }, [token, user, isLoggingOut, router]);
 
   const isApprovedOrOnboarded = useMemo(() => {
     const status = user?.onboardingStatus || profileData?.user?.onboardingStatus;

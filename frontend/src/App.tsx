@@ -473,7 +473,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   }, [loading, user]);
 
   React.useEffect(() => {
-    if (initialLoadComplete && !loading && !user) {
+    if (initialLoadComplete && !loading && !user && !isLoggingOut) {
       if (pathname === '/onboarding/kyc') {
         const savedRedirect = localStorage.getItem('preRegisterKycRedirectPath');
         if (savedRedirect) {
@@ -487,7 +487,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
         router.replace(`/login?returnUrl=${returnUrl}`);
       }
     }
-  }, [initialLoadComplete, loading, user, pathname, router]);
+  }, [initialLoadComplete, loading, user, isLoggingOut, pathname, router]);
 
   // Detect session marker cookie after backend sets HttpOnly auth cookies.
   const cookieStampedRef = React.useRef(false);
@@ -530,6 +530,11 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   const renderRoute = () => {
     const isCurrentShg = isShgUser(user);
     const authenticatedHome = user?.role === 'master_admin' ? '/master-admin' : isCurrentShg ? '/shg/dashboard' : '/dashboard';
+
+    // When logging out, immediately render the Home page
+    if (isLoggingOut) {
+      return <MarketplaceHome />;
+    }
 
     // Show RouteFallback skeleton for non-public routes while auth loading is in progress
     if (loading) {
