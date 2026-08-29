@@ -24,8 +24,6 @@ model User {
   updatedAt                          DateTime                                @updatedAt
   emailVerified                      Boolean                                 @default(false)
   mobileVerified                     Boolean                                 @default(false)
-  mustChangePassword                 Boolean                                 @default(false)
-  requiresMobileVerification         Boolean                                 @default(false)
   twoFactorEnabled                   Boolean                                 @default(false)
   failedLoginCount                   Int                                     @default(0)
   lockedUntil                        DateTime?

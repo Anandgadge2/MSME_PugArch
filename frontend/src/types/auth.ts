@@ -12,7 +12,5 @@ export type AuthUser = {
   permissions?: string[];
   emailVerified?: boolean;
   mobileVerified?: boolean;
-  mustChangePassword?: boolean;
-  requiresMobileVerification?: boolean;
   twoFactorEnabled?: boolean;
 };

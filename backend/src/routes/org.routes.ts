@@ -17,7 +17,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { OrgRole, Role } from '@prisma/client';
 import prisma from '../lib/prisma.js';
-import { authenticate, requireAccountType, requirePermission } from '../middleware/auth.js';
+import { authenticate, requireAccountType } from '../middleware/auth.js';
 import { generateAlphanumericUserId } from '../utils/userId.js';
 import { requireOrgRole } from '../middleware/requireOrgRole.js';
 import { shortCache } from '../middleware/httpCache.js';
@@ -33,7 +33,7 @@ import { issueCookieAuth } from '../services/auth-cookie.service.js';
 import { toSafeUser } from '../utils/routeHelpers.js';
 import type { AuthRequest } from '../middleware/authenticate.js';
 import { DEFAULT_ORG_ROLE_TEMPLATES, ORG_PERMISSION_CATALOG, type OrgPermissionKey } from '../constants/org-permissions.js';
-import { getDynamicPermissionForOrgKey, getOrgPermissionKeys, requireOrgPermission } from '../middleware/requireOrgPermission.js';
+import { getOrgPermissionKeys, requireOrgPermission } from '../middleware/requireOrgPermission.js';
 import { getOrSetCache } from '../services/cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
@@ -168,18 +168,6 @@ const assertValidPermissionKeys = (permissions: string[]) => {
     if (invalid.length) throw new ApiError(400, `Invalid permission keys: ${invalid.join(', ')}`, 'INVALID_PERMISSION');
 };
 
-const assertAssignableOrgPermissionKeys = async (req: AuthRequest, requested: string[]) => {
-    const { membership, permissions } = await getOrgPermissionKeys(userId(req), orgId(req));
-    if (membership?.orgRole === 'ORG_ADMIN' && !membership.invitedById) return;
-    const unavailable = requested.filter(permissionKey => {
-        const dynamicPermission = getDynamicPermissionForOrgKey(permissionKey);
-        return !dynamicPermission || (!permissions.includes('*') && !permissions.includes(dynamicPermission));
-    });
-    if (unavailable.length) {
-        throw new ApiError(403, `You cannot assign permissions outside your own access: ${unavailable.join(', ')}`, 'PERMISSION_ESCALATION_DENIED');
-    }
-};
-
 const createOrgWithoutGstSchema = z.object({
     organizationName: z.string().min(2).max(200).trim(),
     organizationType: z.enum(ORGANIZATION_TYPE_VALUES as unknown as [string, ...string[]]),
@@ -303,7 +291,6 @@ router.post('/org/roles', authenticate, requireAccountType('buyer', 'seller'), r
     const template = body.cloneFrom ? DEFAULT_ORG_ROLE_TEMPLATES.find(item => item.roleKey === body.cloneFrom) : null;
     const permissions = body.permissions || template?.permissions || [];
     assertValidPermissionKeys(permissions);
-    await assertAssignableOrgPermissionKeys(req, permissions);
     const roleKey = normalizeRoleKey(body.roleKey || body.name);
     const role = await (prisma as any).orgCustomRole.create({
         data: {
@@ -338,10 +325,7 @@ router.patch('/org/roles/:id', authenticate, requireAccountType('buyer', 'seller
     const existing = await (prisma as any).orgCustomRole.findFirst({ where: { id, organizationId: orgId(req) } });
     if (!existing) throw new ApiError(404, 'Role not found', 'ROLE_NOT_FOUND');
     if (existing.isSystemRole && (body.name || body.isActive === false)) throw new ApiError(409, 'System role templates cannot be renamed or disabled.', 'SYSTEM_ROLE_LOCKED');
-    if (body.permissions) {
-        assertValidPermissionKeys(body.permissions);
-        await assertAssignableOrgPermissionKeys(req, body.permissions);
-    }
+    if (body.permissions) assertValidPermissionKeys(body.permissions);
     const role = await prisma.$transaction(async tx => {
         if (body.permissions) {
             await (tx as any).orgRolePermission.deleteMany({ where: { roleId: id } });
@@ -378,7 +362,6 @@ router.post('/org/roles/:id/permissions', authenticate, requireAccountType('buye
     const id = Number(req.params.id);
     const body = rolePermissionSchema.parse(req.body);
     assertValidPermissionKeys(body.permissions);
-    await assertAssignableOrgPermissionKeys(req, body.permissions);
     const role = await (prisma as any).orgCustomRole.findFirst({ where: { id, organizationId: orgId(req) } });
     if (!role) throw new ApiError(404, 'Role not found', 'ROLE_NOT_FOUND');
     const updated = await prisma.$transaction(async tx => {
@@ -396,7 +379,6 @@ router.post('/org/roles/:id/clone', authenticate, requireAccountType('buyer', 's
     const id = Number(req.params.id);
     const source = await (prisma as any).orgCustomRole.findFirst({ where: { id, organizationId: orgId(req) }, include: { permissions: true } });
     if (!source) throw new ApiError(404, 'Role not found', 'ROLE_NOT_FOUND');
-    await assertAssignableOrgPermissionKeys(req, source.permissions.filter((p: any) => p.allowed).map((p: any) => p.permissionKey));
     const name = String(req.body?.name || `${source.name} Copy`).trim();
     const role = await (prisma as any).orgCustomRole.create({
         data: {
@@ -415,7 +397,7 @@ router.post('/org/roles/:id/clone', authenticate, requireAccountType('buyer', 's
 
 // ─── GET /api/dashboard/summary — unified dashboard counts ───────────────────
 // Returns all counts the dashboard cards need in ONE call instead of 5.
-router.get('/dashboard/summary', authenticate, requirePermission('dashboard.view'), shortCache(60), asyncRoute(async (req, res) => {
+router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async (req, res) => {
     if (!req.user) return ok(res, null);
     if (req.user.role === 'admin' || req.user.role === 'master_admin') {
         const cacheKey = `cache:dashboard:admin-summary:${req.user.id}:${req.user.role}`;

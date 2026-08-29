@@ -8,10 +8,6 @@ import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { ACCOUNT_TYPE_IDS, DEFAULT_DYNAMIC_ROLE_TEMPLATES, RBAC_PERMISSION_CATALOG } from '../constants/dynamic-rbac.js';
 import { assertCanAssignRole, assertCanManageRole, ensureAssignablePermissions, getActivePermissionCodes, isMasterAdmin, userHasPermission, type RbacScope } from '../services/rbac.service.js';
-import { hashPassword } from '../services/password.service.js';
-import { generateAlphanumericUserId } from '../utils/userId.js';
-import { sendTeamInvitationCredentialsEmail } from '../services/mail.service.js';
-import { toLocalIndianMobile } from '../services/sms.service.js';
 
 const router = Router();
 router.use(authenticate);
@@ -49,19 +45,16 @@ const assignmentStatusSchema = z.object({
 });
 
 const inviteSchema = z.object({
-  name: z.string().trim().min(2).max(120),
+  name: z.string().trim().min(2).max(120).optional(),
   email: z.string().trim().email(),
   mobile: z.string().trim().max(20).optional(),
-  roleIds: z.array(z.coerce.number().int().positive()).min(1).max(10)
+  accountType: z.enum(['MASTER_ADMIN', 'SUPERADMIN', 'SELLER', 'BUYER', 'SHG']).optional(),
+  roleIds: z.array(z.coerce.number().int().positive()).default([])
 });
 
 const scopeIdForWrite = (scopeType: string, scopeId: string | number | null | undefined, req: any) => {
   if (scopeType === 'PLATFORM') return null;
-  if (scopeType === 'DISTRICT') {
-    return scopeId == null
-      ? (req.user?.activeScope?.scopeType === 'DISTRICT' ? req.user.activeScope.scopeId : req.user?.districtId || null)
-      : String(scopeId);
-  }
+  if (scopeType === 'DISTRICT') return scopeId == null ? null : String(scopeId);
   return scopeId == null ? (req.user?.organizationId ? String(req.user.organizationId) : null) : String(scopeId);
 };
 
@@ -69,25 +62,9 @@ const assertCanManageScope = async (req: any, scope: RbacScope) => {
   return assertCanManageRole(req.user, String(scope.scopeType), scope.scopeId);
 };
 
-const assertHasAnyPermission = async (req: any, permissionCodes: string[]) => {
-  if (isMasterAdmin(req.user)) return;
-  const allowed = await Promise.all(permissionCodes.map(code => userHasPermission(req.user, code, req.user.activeScope)));
-  if (!allowed.some(Boolean)) {
-    const error = new Error(`Missing permission: ${permissionCodes.join(' or ')}`);
-    (error as any).statusCode = 403;
-    (error as any).code = 'PERMISSION_DENIED';
-    throw error;
-  }
-};
-
 const assertCanInviteScope = async (req: any, scope: RbacScope) => {
   const user = req.user;
-  if (isMasterAdmin(user)) {
-    const error = new Error('Master Admin is platform-owned and cannot create organization sub-logins.');
-    (error as any).statusCode = 403;
-    (error as any).code = 'MASTER_ADMIN_SUB_LOGIN_DENIED';
-    throw error;
-  }
+  if (isMasterAdmin(user)) return;
   const scopeType = String(scope.scopeType);
   const scopeId = scope.scopeId == null ? null : String(scope.scopeId);
   if (scopeType === 'PLATFORM') {
@@ -103,17 +80,6 @@ const assertCanInviteScope = async (req: any, scope: RbacScope) => {
     (error as any).code = 'CROSS_SCOPE_DENIED';
     throw error;
   }
-  if (scopeType === 'DISTRICT') {
-    const actorDistrict = user.activeScope?.scopeType === 'DISTRICT'
-      ? user.activeScope.scopeId
-      : user.districtId;
-    if (!scopeId || !actorDistrict || String(scopeId) !== String(actorDistrict)) {
-      const error = new Error('Cannot invite users outside your district scope.');
-      (error as any).statusCode = 403;
-      (error as any).code = 'CROSS_SCOPE_DENIED';
-      throw error;
-    }
-  }
   if (!(await userHasPermission(user, 'team.member.invite', scope))) {
     const error = new Error('Missing permission: team.member.invite');
     (error as any).statusCode = 403;
@@ -125,69 +91,13 @@ const assertCanInviteScope = async (req: any, scope: RbacScope) => {
 const roleWhereForUser = (req: any) => {
   if (isMasterAdmin(req.user)) return {};
   if (req.user?.role === 'admin' || req.user?.accountType === 'SUPERADMIN') {
-    const districtId = req.user?.activeScope?.scopeType === 'DISTRICT'
-      ? req.user.activeScope.scopeId
-      : req.user?.districtId;
-    return districtId ? { scopeType: 'DISTRICT', scopeId: String(districtId) } : { id: -1 };
+    return { OR: [{ scopeType: 'DISTRICT', scopeId: '0' }, { scopeType: 'PLATFORM', isDefault: true }] };
   }
   if (req.user?.organizationId) {
-    return { scopeType: 'ORGANIZATION', scopeId: String(req.user.organizationId) };
+    return { OR: [{ scopeType: 'ORGANIZATION', scopeId: String(req.user.organizationId) }, { scopeType: 'PLATFORM', isDefault: true }] };
   }
   return { id: -1 };
 };
-
-const actorScope = (req: any): RbacScope => {
-  const user = req.user;
-  if (user?.organizationId) {
-    return { scopeType: 'ORGANIZATION', scopeId: String(user.organizationId) };
-  }
-  const districtId = user?.activeScope?.scopeType === 'DISTRICT'
-    ? user.activeScope.scopeId
-    : user?.districtId;
-  return { scopeType: 'DISTRICT', scopeId: districtId ? String(districtId) : null };
-};
-
-const assertTargetUserInScope = async (req: any, targetUserId: number, scope: RbacScope) => {
-  const target = await prisma.user.findUnique({
-    where: { id: targetUserId },
-    select: {
-      id: true,
-      organizationId: true,
-      roles: {
-        where: {
-          isActive: true,
-          scopeType: scope.scopeType,
-          scopeId: scope.scopeId == null ? null : String(scope.scopeId)
-        },
-        select: { id: true },
-        take: 1
-      }
-    }
-  });
-  if (!target) {
-    const error = new Error('User not found.');
-    (error as any).statusCode = 404;
-    (error as any).code = 'USER_NOT_FOUND';
-    throw error;
-  }
-  if (isMasterAdmin(req.user)) return target;
-
-  const inOrganization = scope.scopeType === 'ORGANIZATION'
-    && scope.scopeId != null
-    && String(target.organizationId || '') === String(scope.scopeId);
-  const inDistrict = scope.scopeType === 'DISTRICT'
-    && scope.scopeId != null
-    && target.roles.length > 0;
-  if (!inOrganization && !inDistrict) {
-    const error = new Error('Cannot manage a user outside your workspace.');
-    (error as any).statusCode = 403;
-    (error as any).code = 'CROSS_SCOPE_DENIED';
-    throw error;
-  }
-  return target;
-};
-
-const generateTemporaryPassword = () => `${randomBytes(10).toString('base64url')}Aa1!`;
 
 const getPermissionIds = async (body: { permissionIds?: number[]; permissionCodes?: string[] }) => {
   if (body.permissionIds?.length) {
@@ -212,7 +122,6 @@ const writeAudit = (req: any, action: string, entityType: string, entityId?: num
   });
 
 router.get('/rbac/roles', asyncHandler(async (req, res) => {
-  await assertHasAnyPermission(req, ['team.role.view', 'team.role.manage']);
   const roles = await (prisma as any).rbacRole.findMany({
     where: roleWhereForUser(req),
     include: { permissions: { where: { allowed: true }, include: { permission: true } }, _count: { select: { users: true } } },
@@ -251,7 +160,6 @@ router.post('/rbac/roles', asyncHandler(async (req, res) => {
 }));
 
 router.get('/rbac/roles/:id', asyncHandler(async (req, res) => {
-  await assertHasAnyPermission(req, ['team.role.view', 'team.role.manage']);
   const { id } = idParamSchema.parse(req.params);
   const role = await (prisma as any).rbacRole.findFirst({
     where: { id, ...roleWhereForUser(req) },
@@ -310,7 +218,6 @@ router.patch('/rbac/roles/:id/archive', asyncHandler(async (req, res) => {
 }));
 
 router.get('/rbac/roles/:id/permissions', asyncHandler(async (req, res) => {
-  await assertHasAnyPermission(req, ['team.role.view', 'team.role.manage']);
   const { id } = idParamSchema.parse(req.params);
   const role = await (prisma as any).rbacRole.findFirst({ where: { id, ...roleWhereForUser(req) }, include: { permissions: { include: { permission: true } } } });
   if (!role) return apiResponse.error(res, 404, 'Role not found', 'ROLE_NOT_FOUND');
@@ -333,25 +240,13 @@ router.post('/rbac/roles/:id/permissions', asyncHandler(async (req, res) => {
   return apiResponse.success(res, updated);
 }));
 
-router.get('/rbac/permissions', asyncHandler(async (req, res) => {
-  await assertHasAnyPermission(req, ['team.role.manage']);
-  const user = (req as any).user;
-  const allowedCodes = isMasterAdmin(user) ? null : await getActivePermissionCodes(user.id, user.activeScope);
-  const permissions = await prisma.permission.findMany({
-    where: allowedCodes?.includes('*') ? {} : { code: { in: allowedCodes || [] } },
-    orderBy: [{ module: 'asc' }, { code: 'asc' }]
-  });
+router.get('/rbac/permissions', asyncHandler(async (_req, res) => {
+  const permissions = await prisma.permission.findMany({ orderBy: [{ module: 'asc' }, { code: 'asc' }] });
   return apiResponse.success(res, permissions);
 }));
 
-router.get('/rbac/permissions/grouped', asyncHandler(async (req, res) => {
-  await assertHasAnyPermission(req, ['team.role.manage']);
-  const user = (req as any).user;
-  const allowedCodes = isMasterAdmin(user) ? null : await getActivePermissionCodes(user.id, user.activeScope);
-  const permissions = await prisma.permission.findMany({
-    where: allowedCodes?.includes('*') ? {} : { code: { in: allowedCodes || [] } },
-    orderBy: [{ module: 'asc' }, { code: 'asc' }]
-  });
+router.get('/rbac/permissions/grouped', asyncHandler(async (_req, res) => {
+  const permissions = await prisma.permission.findMany({ orderBy: [{ module: 'asc' }, { code: 'asc' }] });
   const grouped = permissions.reduce((acc: Record<string, typeof permissions>, permission) => {
     const module = permission.module || 'Other';
     acc[module] = acc[module] || [];
@@ -363,13 +258,13 @@ router.get('/rbac/permissions/grouped', asyncHandler(async (req, res) => {
 
 router.get('/rbac/users/:userId/roles', asyncHandler(async (req, res) => {
   const { userId } = userIdParamSchema.parse(req.params);
-  await assertHasAnyPermission(req, ['team.member.view', 'team.role.assign', 'team.role.manage']);
-  const scope = actorScope(req);
-  await assertTargetUserInScope(req, userId, scope);
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { organizationId: true, } });
+  if (!target) return apiResponse.error(res, 404, 'User not found', 'USER_NOT_FOUND');
+  if (!isMasterAdmin((req as any).user) && target.organizationId !== (req as any).user?.organizationId) {
+    return apiResponse.error(res, 403, 'Cannot view role assignments outside your scope', 'RBAC_SCOPE_DENIED');
+  }
   const assignments = await (prisma as any).userRole.findMany({
-    where: isMasterAdmin((req as any).user)
-      ? { userId }
-      : { userId, scopeType: scope.scopeType, scopeId: scope.scopeId == null ? null : String(scope.scopeId) },
+    where: { userId },
     include: { role: { include: { permissions: { include: { permission: true } } } } },
     orderBy: { assignedAt: 'desc' }
   });
@@ -380,7 +275,6 @@ router.post('/rbac/users/:userId/roles', asyncHandler(async (req, res) => {
   const { userId } = userIdParamSchema.parse(req.params);
   const body = assignmentBodySchema.parse(req.body);
   const scope = { scopeType: body.scopeType, scopeId: scopeIdForWrite(body.scopeType, body.scopeId, req) };
-  await assertTargetUserInScope(req, userId, scope);
   await assertCanAssignRole((req as any).user, userId, body.roleId, body.scopeType, scope.scopeId);
   const assignmentData = {
       userId,
@@ -411,7 +305,6 @@ router.delete('/rbac/users/:userId/roles/:assignmentId', asyncHandler(async (req
   }
   const assignment = await (prisma as any).userRole.findUnique({ where: { id: assignmentId } });
   if (!assignment || assignment.userId !== userId) return apiResponse.error(res, 404, 'Assignment not found', 'ASSIGNMENT_NOT_FOUND');
-  await assertTargetUserInScope(req, userId, { scopeType: assignment.scopeType, scopeId: assignment.scopeId });
   await assertCanManageScope(req, { scopeType: assignment.scopeType, scopeId: assignment.scopeId });
   await (prisma as any).userRole.delete({ where: { id: assignmentId } });
   await writeAudit(req, 'rbac.user_role.removed', 'userRole', assignmentId, { userId });
@@ -427,7 +320,6 @@ router.patch('/rbac/users/:userId/roles/:assignmentId/status', asyncHandler(asyn
   }
   const assignment = await (prisma as any).userRole.findUnique({ where: { id: assignmentId } });
   if (!assignment || assignment.userId !== userId) return apiResponse.error(res, 404, 'Assignment not found', 'ASSIGNMENT_NOT_FOUND');
-  await assertTargetUserInScope(req, userId, { scopeType: assignment.scopeType, scopeId: assignment.scopeId });
   await assertCanManageScope(req, { scopeType: assignment.scopeType, scopeId: assignment.scopeId });
   const updated = await (prisma as any).userRole.update({ where: { id: assignmentId }, data: { isActive: body.isActive } });
   await writeAudit(req, 'rbac.user_role.status_updated', 'userRole', assignmentId, { userId, isActive: body.isActive });
@@ -441,43 +333,15 @@ router.get('/auth/me/permissions', asyncHandler(async (req, res) => {
 }));
 
 router.get('/team/members', asyncHandler(async (req, res) => {
-  await assertHasAnyPermission(req, ['team.member.view']);
   const user = (req as any).user;
-  const districtId = user.activeScope?.scopeType === 'DISTRICT' ? user.activeScope.scopeId : user.districtId;
   const where = isMasterAdmin(user)
     ? {}
     : user.organizationId
       ? { organizationId: user.organizationId }
-      : districtId
-        ? { roles: { some: { scopeType: 'DISTRICT', scopeId: String(districtId), isActive: true } } }
-        : { id: -1 };
+      : { };
   const members = await (prisma as any).user.findMany({
     where,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      mobile: true,
-      role: true,
-      accountType: true,
-      accountTypeId: true,
-      accountStatus: true,
-      organizationId: true,
-      mustChangePassword: true,
-      requiresMobileVerification: true,
-      mobileVerified: true,
-      roles: {
-        where: user.organizationId
-          ? { scopeType: 'ORGANIZATION', scopeId: String(user.organizationId) }
-          : districtId
-            ? { scopeType: 'DISTRICT', scopeId: String(districtId) }
-            : undefined,
-        include: { role: true }
-      },
-      orgMemberships: user.organizationId
-        ? { where: { organizationId: user.organizationId }, select: { orgRole: true, invitedById: true, acceptedAt: true, isActive: true } }
-        : false
-    },
+    select: { id: true, name: true, email: true, mobile: true, role: true, accountType: true, accountTypeId: true, accountStatus: true, organizationId: true,  roles: { include: { role: true } } },
     orderBy: { name: 'asc' },
     take: 500
   });
@@ -487,209 +351,45 @@ router.get('/team/members', asyncHandler(async (req, res) => {
   })));
 }));
 
-router.get('/team/invitations', asyncHandler(async (req, res) => {
-  const user = (req as any).user;
-  if (isMasterAdmin(user)) return apiResponse.success(res, []);
-  const scope = user.organizationId
-    ? { scopeType: 'ORGANIZATION', scopeId: String(user.organizationId) }
-    : { scopeType: 'DISTRICT', scopeId: String(user.activeScope?.scopeId || user.districtId || '') };
-  await assertHasAnyPermission(req, ['team.member.view', 'team.member.invite']);
-  const invitations = await (prisma as any).scopedInvitation.findMany({
-    where: { scopeType: scope.scopeType, scopeId: scope.scopeId },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      mobile: true,
-      roleIds: true,
-      status: true,
-      expiresAt: true,
-      acceptedAt: true,
-      createdAt: true
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 200
-  });
-  return apiResponse.success(res, invitations);
-}));
-
 router.post('/team/invite', asyncHandler(async (req, res) => {
   const body = inviteSchema.parse(req.body);
   const user = (req as any).user;
-  const scope = user.organizationId
+  const scope = isMasterAdmin(user)
+    ? { scopeType: 'PLATFORM' as const, scopeId: null }
+    : user.organizationId
     ? { scopeType: 'ORGANIZATION' as const, scopeId: String(user.organizationId) }
-    : {
-        scopeType: 'DISTRICT' as const,
-        scopeId: String(user.activeScope?.scopeId || user.districtId || '')
-      };
+    : { scopeType: 'DISTRICT' as const, scopeId: null };
   await assertCanInviteScope(req, scope);
-  await assertCanManageScope(req, scope);
-
-  const email = body.email.toLowerCase();
-  const mobile = body.mobile ? toLocalIndianMobile(body.mobile) : null;
-  if (body.mobile && !mobile) {
-    return apiResponse.error(res, 400, 'Enter a valid Indian mobile number.', 'INVALID_MOBILE');
+  for (const roleId of body.roleIds) {
+    await assertCanAssignRole(user, -1, roleId, scope.scopeType, scope.scopeId);
   }
-  const duplicate = await prisma.user.findFirst({
-    where: { OR: [{ email }, ...(mobile ? [{ mobile }] : [])] },
-    select: { id: true, email: true, mobile: true }
-  });
-  if (duplicate) {
-    return apiResponse.error(
-      res,
-      409,
-      duplicate.email === email ? 'A user with this email already exists.' : 'This mobile number is already in use.',
-      duplicate.email === email ? 'EMAIL_EXISTS' : 'MOBILE_EXISTS'
-    );
-  }
-  const pendingInvite = await (prisma as any).scopedInvitation.findFirst({
-    where: { email, scopeType: scope.scopeType, scopeId: scope.scopeId, status: { in: ['PENDING', 'SENT'] } },
-    select: { id: true }
-  });
-  if (pendingInvite) {
-    return apiResponse.error(res, 409, 'An active invitation already exists for this email.', 'INVITE_EXISTS');
-  }
-
-  const selectedRoles = await (prisma as any).rbacRole.findMany({
-    where: { id: { in: body.roleIds }, scopeType: scope.scopeType, scopeId: scope.scopeId, status: 'ACTIVE' },
-    select: {
-      id: true,
-      name: true,
-      permissions: {
-        where: { allowed: true },
-        select: { permission: { select: { code: true } } }
-      }
-    }
-  });
-  if (selectedRoles.length !== body.roleIds.length) {
-    return apiResponse.error(res, 400, 'One or more selected roles are unavailable in this workspace.', 'INVALID_ROLE_SELECTION');
-  }
-  const selectedPermissionCodes = Array.from(new Set<string>(selectedRoles.flatMap(
-    (role: any) => role.permissions.map((row: any) => String(row.permission.code))
-  )));
-  await ensureAssignablePermissions(user, selectedPermissionCodes, scope);
-  if (!selectedPermissionCodes.includes('dashboard.view')) {
-    return apiResponse.error(res, 400, 'At least one selected role must include dashboard.view.', 'DASHBOARD_PERMISSION_REQUIRED');
-  }
-
   const token = randomBytes(32).toString('hex');
-  const temporaryPassword = generateTemporaryPassword();
-  const password = await hashPassword(temporaryPassword);
-  const generatedUserId = await generateAlphanumericUserId();
-  const accountTypeId = user.organizationId
-    ? (user.accountTypeId || ACCOUNT_TYPE_IDS[user.accountType as keyof typeof ACCOUNT_TYPE_IDS] || ACCOUNT_TYPE_IDS.BUYER)
-    : ACCOUNT_TYPE_IDS.SUPERADMIN;
-  const portalRole = user.organizationId
-    ? (['buyer', 'seller', 'shg'].includes(user.role) ? user.role : 'buyer')
-    : 'admin';
-  const inviter = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { name: true, organization: { select: { organizationName: true } } }
-  });
-  const workspaceName = inviter?.organization?.organizationName || (scope.scopeType === 'DISTRICT' ? `District workspace ${scope.scopeId}` : 'JSG SMILE workspace');
-
-  const created = await prisma.$transaction(async tx => {
-    const invitation = await (tx as any).scopedInvitation.create({
-      data: {
-        name: body.name,
-        email,
-        mobile,
-        accountTypeId,
-        scopeType: scope.scopeType,
-        scopeId: scope.scopeId,
-        roleIds: body.roleIds,
-        token,
-        status: 'PENDING',
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        invitedById: user.id
-      }
-    });
-    const subUser = await (tx as any).user.create({
-      data: {
-        name: body.name,
-        email,
-        mobile,
-        password,
-        userId: generatedUserId,
-        role: portalRole,
-        accountTypeId,
-        organizationId: user.organizationId || null,
-        emailVerified: true,
-        mobileVerified: false,
-        mustChangePassword: true,
-        requiresMobileVerification: true,
-        registrationStatus: 'completed',
-        onboardingStatus: 'approved_for_procurement',
-        accountStatus: 'ACTIVE'
-      }
-    });
-    if (scope.scopeType === 'ORGANIZATION') {
-      await (tx as any).orgMembership.create({
-        data: {
-          userId: subUser.id,
-          organizationId: Number(scope.scopeId),
-          orgRole: 'VIEWER',
-          isActive: true,
-          invitedById: user.id,
-          invitedAt: new Date()
-        }
-      });
+  const accountTypeId = body.accountType ? ACCOUNT_TYPE_IDS[body.accountType] : user.organizationId ? user.accountTypeId : ACCOUNT_TYPE_IDS.SUPERADMIN;
+  const invitation = await (prisma as any).scopedInvitation.create({
+    data: {
+      name: body.name || null,
+      email: body.email,
+      mobile: body.mobile || null,
+      accountTypeId,
+      scopeType: scope.scopeType,
+      scopeId: scope.scopeId,
+      roleIds: body.roleIds,
+      token,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      invitedById: user.id
     }
-    await (tx as any).userRole.createMany({
-      data: body.roleIds.map(roleId => ({
-        userId: subUser.id,
-        roleId,
-        organizationId: scope.scopeType === 'ORGANIZATION' ? Number(scope.scopeId) : null,
-        assignedById: user.id,
-        scopeType: scope.scopeType,
-        scopeId: scope.scopeId,
-        isActive: true
-      }))
-    });
-    return { invitation, subUser };
   });
-
-  const emailSent = await sendTeamInvitationCredentialsEmail({
-    email,
-    name: body.name,
-    temporaryPassword,
-    roleNames: selectedRoles.map((role: any) => role.name),
-    inviterName: inviter?.name || 'Your workspace administrator',
-    workspaceName,
-    organizationId: user.organizationId || null
-  });
-  if (!emailSent) {
-    await prisma.$transaction([
-      (prisma as any).user.delete({ where: { id: created.subUser.id } }),
-      (prisma as any).scopedInvitation.delete({ where: { id: created.invitation.id } })
-    ]).catch(() => undefined);
-    return apiResponse.error(res, 502, 'The invitation email could not be delivered. No sub-login was created; check email settings and try again.', 'INVITE_EMAIL_FAILED');
-  }
-
-  const invitation = await (prisma as any).scopedInvitation.update({
-    where: { id: created.invitation.id },
-    data: { status: 'SENT' },
-    select: { id: true, email: true, name: true, mobile: true, roleIds: true, status: true, expiresAt: true, createdAt: true }
-  });
-  await writeAudit(req, 'team.invite.credentials_sent', 'scopedInvitation', invitation.id, { email, roleIds: body.roleIds, scope, invitedUserId: created.subUser.id });
-  return apiResponse.created(res, { invitation, userId: created.subUser.id, emailSent: true }, 'Invitation email sent and sub-login created');
+  await writeAudit(req, 'team.invite.created', 'scopedInvitation', invitation.id, { email: body.email, roleIds: body.roleIds, scope });
+  return apiResponse.created(res, invitation, 'Invitation created');
 }));
 
 router.patch('/team/members/:id/disable', asyncHandler(async (req, res) => {
   const { id } = idParamSchema.parse(req.params);
   if (id === (req as any).user?.id) return apiResponse.error(res, 403, 'You cannot disable your own account.', 'SELF_DISABLE_DENIED');
-  const scope = actorScope(req);
-  await assertHasAnyPermission(req, ['team.member.disable']);
-  await assertTargetUserInScope(req, id, scope);
-  if (scope.scopeType === 'ORGANIZATION' && scope.scopeId) {
-    const primaryMembership = await prisma.orgMembership.findUnique({
-      where: { userId_organizationId: { userId: id, organizationId: Number(scope.scopeId) } },
-      select: { orgRole: true, invitedById: true }
-    });
-    if (primaryMembership?.orgRole === 'ORG_ADMIN' && !primaryMembership.invitedById) {
-      return apiResponse.error(res, 403, 'The primary organization administrator cannot be disabled.', 'PRIMARY_ADMIN_PROTECTED');
-    }
-  }
+  const target = await prisma.user.findUnique({ where: { id }, select: { organizationId: true, } });
+  if (!target) return apiResponse.error(res, 404, 'Member not found', 'USER_NOT_FOUND');
+  const scope = target.organizationId ? { scopeType: 'ORGANIZATION' as const, scopeId: String(target.organizationId) } : { scopeType: 'DISTRICT' as const, scopeId: '0' };
+  await assertCanManageScope(req, scope);
   const updated = await prisma.user.update({ where: { id }, data: { accountStatus: 'BLOCKED' as any, sessionVersion: { increment: 1 } } });
   await writeAudit(req, 'team.member.disabled', 'user', id);
   return apiResponse.success(res, updated);

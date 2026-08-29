@@ -21,15 +21,6 @@ export const verifyMobileOtpSchema = z.object({
   otp: z.string().regex(/^\d{6}$/)
 });
 
-export const subUserMobileOtpSchema = z.object({
-  mobile: z.string().regex(/^(?:\+?91)?[6-9]\d{9}$/),
-  otp: z.string().regex(/^\d{6}$/).optional()
-});
-
-export const verifySubUserMobileOtpSchema = subUserMobileOtpSchema.extend({
-  otp: z.string().regex(/^\d{6}$/)
-});
-
 export const sendUnifiedOtpSchema = z.object({
   identifier: identifierSchema.optional(),
   email: z.string().email().max(254).optional(),

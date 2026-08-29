@@ -43,17 +43,10 @@ import { Pagination } from '../features/shared/Pagination';
 import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
 import { ProfileSkeleton } from '../components/ui/skeleton';
 
-interface SidebarNavItem {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  path?: string;
-}
-
-const SIDEBAR_NAV: SidebarNavItem[] = [
-  { id: 'showcase_profile', label: 'Organization Profile', icon: Building2 },
+const SIDEBAR_NAV = [
+  { id: 'showcase_profile', label: 'Organization Showcase Profile', icon: Building2 },
   { id: 'address', label: 'Organisation Address', icon: MapPin },
-  // { id: 'delivery_addresses', label: 'Delivery Addresses', icon: MapPin, path: '/buyer/address-book' },
+  { id: 'delivery_addresses', label: 'Delivery Addresses', icon: MapPin, path: '/buyer/address-book' },
   // { id: 'hierarchy', label: 'Organisation Hierarchy', icon: Users },
   // { id: 'team', label: 'Secondary Users / Roles', icon: Shield },
   // { id: 'bank', label: 'Bank Account Detail', icon: Building2 },
@@ -71,6 +64,7 @@ export default function BuyerProfile() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [personalOtp, setPersonalOtp] = useState('');
   const [personalOtpSent, setPersonalOtpSent] = useState(false);
   const [emailOtp, setEmailOtp] = useState('');
@@ -1047,83 +1041,97 @@ export default function BuyerProfile() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row bg-slate-50 min-h-screen">
-      {/* Mobile/Tablet Horizontal Tabs (hidden on lg and above) */}
-      <div className="lg:hidden w-full bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="flex flex-row overflow-x-auto no-scrollbar px-4 py-3 gap-2 whitespace-nowrap">
-          {SIDEBAR_NAV.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeSection === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  if (item.path) {
-                    router.push(item.path);
-                    return;
-                  }
-                  setActiveSection(item.id);
-                  setPersonalOtp('');
-                  setPersonalOtpSent(false);
-                  setFormErrors({});
-                }}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-200 border",
-                  isActive
-                    ? "bg-[#12335f] border-[#12335f] text-white shadow-md shadow-[#12335f]/15"
-                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                )}
-              >
-                <Icon className={cn("h-3.5 w-3.5", isActive ? "text-white" : "text-slate-400")} />
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* Full-width Account Settings Header/Navbar */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-[#12335f] flex items-center justify-center text-white shrink-0 shadow-xs">
+              <Settings className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-black uppercase tracking-wider text-slate-900 leading-tight truncate">
+                ACCOUNT SETTINGS
+              </h1>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden sm:block truncate">
+                {SIDEBAR_NAV.find(s => s.id === activeSection)?.label}
+              </p>
+            </div>
+          </div>
 
-      {/* Desktop Vertical Sidebar (hidden below lg) */}
-      <div className="hidden lg:block w-72 flex-shrink-0 bg-white border-r border-slate-200 min-h-screen shadow-xs overflow-y-auto py-6">
-        <div className="px-6 mb-4">
-          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Account Settings</h3>
-        </div>
-        <div className="space-y-1">
-          {SIDEBAR_NAV.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeSection === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  if (item.path) {
-                    router.push(item.path);
-                    return;
-                  }
-                  setActiveSection(item.id);
-                  setPersonalOtp('');
-                  setPersonalOtpSent(false);
-                  setFormErrors({});
-                }}
-                className={cn(
-                  "flex w-full items-center gap-3 px-8 py-3.5 text-left transition-all text-sm font-bold uppercase tracking-wider border-l-4",
-                  isActive
-                    ? "bg-slate-50/80 text-[#12335f] border-blue-600 font-extrabold"
-                    : "text-slate-600 hover:bg-slate-50 border-transparent hover:text-slate-900"
-                )}
-              >
-                <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-[#12335f]" : "text-slate-400")} />
-                <span className="truncate">{item.label}</span>
-              </button>
-            );
-          })}
+          {/* Hamburger / Menu Button */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition shadow-xs",
+                isSidebarOpen && "bg-[#12335f] text-white border-[#12335f] hover:bg-[#12335f]"
+              )}
+              aria-label="Toggle account settings menu"
+              aria-expanded={isSidebarOpen}
+            >
+              <Menu className="h-4 w-4" />
+              <span className="text-xs font-bold hidden sm:inline">Settings Menu</span>
+            </button>
+
+            {/* Dropdown Menu */}
+            {isSidebarOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-[2px]"
+                  onClick={() => setIsSidebarOpen(false)}
+                />
+                <div className="absolute right-0 mt-2 w-72 sm:w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl z-50 p-2 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Account Settings</p>
+                    <button
+                      type="button"
+                      onClick={() => setIsSidebarOpen(false)}
+                      className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-0.5 max-h-[70vh] overflow-y-auto no-scrollbar py-1">
+                    {SIDEBAR_NAV.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          if ('path' in item && item.path) {
+                            router.push(item.path);
+                            setIsSidebarOpen(false);
+                            return;
+                          }
+                          setActiveSection(item.id);
+                          setIsSidebarOpen(false);
+                          setPersonalOtp('');
+                          setPersonalOtpSent(false);
+                          setFormErrors({});
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition text-left group",
+                          activeSection === item.id
+                            ? "bg-[#12335f] text-white shadow-xs"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                        )}
+                      >
+                        <item.icon className={cn("h-4 w-4 shrink-0", activeSection === item.id ? "text-white" : "text-slate-400 group-hover:text-slate-600")} />
+                        <span className="text-xs font-bold truncate">{item.label}</span>
+                        {activeSection === item.id && <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-80" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <main className="p-4 sm:p-6 md:p-8 max-w-5xl mx-auto w-full">
+      <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-5xl mx-auto w-full">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <p className="text-[10px] font-black text-[#12335f] uppercase tracking-[0.18em]">BUYER SETTINGS</p>
@@ -2638,13 +2646,14 @@ export default function BuyerProfile() {
             )}
           </CardContent>
         </Card>
+
+
       </main>
 
       {/* Background Decorations */}
       <div className="fixed top-0 right-0 w-[800px] h-[800px] bg-[#12335f]/[0.02] rounded-full blur-[150px] -z-50 pointer-events-none" />
       <div className="fixed bottom-0 left-0 w-[800px] h-[800px] bg-indigo-600/[0.02] rounded-full blur-[150px] -z-50 pointer-events-none" />
     </div>
-  </div>
   );
 }
 

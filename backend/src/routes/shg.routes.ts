@@ -373,18 +373,6 @@ router.post('/shg/registration/create-account', async (req, res) => {
     });
 
     await tx.user.update({ where: { id: createdUser.id }, data: { organizationId: org.id} });
-    // The registering SHG user is the primary account holder and therefore
-    // the default administrator of the new organization workspace.
-    await tx.orgMembership.create({
-      data: {
-        userId: createdUser.id,
-        organizationId: org.id,
-        orgRole: 'ORG_ADMIN',
-        isActive: true,
-        invitedAt: now,
-        acceptedAt: now
-      }
-    });
     const shg = await tx.shgProfile.create({
       data: {
         organizationId: org.id,
