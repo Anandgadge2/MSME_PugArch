@@ -16,18 +16,21 @@ import {
     getCategoryVisualMeta,
     getCategoryImageUrl,
     buildCategoryFallbackSvg,
+    preloadCriticalCategoryPhotos,
 } from '../utils/categoryImages';
 
 interface CategoryCardItemProps {
     category: MarketplaceCategory;
     selected: boolean;
+    priority?: boolean;
     onSelect?: (category: MarketplaceCategory) => void;
     onClick?: () => void;
 }
 
-function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCardItemProps) {
+function CategoryCardItem({ category, selected, priority = false, onSelect, onClick }: CategoryCardItemProps) {
     const [imgSrc, setImgSrc] = useState<string>(() => getCategoryImageUrl(category));
     const [imgError, setImgError] = useState(false);
+    const [isLoaded, setIsLoaded] = useState(false);
 
     React.useEffect(() => {
         setImgSrc(getCategoryImageUrl(category));
@@ -43,23 +46,28 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     };
 
     const cardInner = (
-        <div className="relative flex h-full w-full flex-col justify-end overflow-hidden rounded-2xl sm:rounded-3xl">
-            {/* Background Image with crystal clear rendering and subtle internal parallax */}
+        <div className="relative flex h-full w-full flex-col justify-end overflow-hidden rounded-2xl sm:rounded-3xl bg-slate-100">
+            {/* Background Image with eager high-priority loading for visible cards */}
             <img
                 src={imgSrc}
                 alt={category.name}
-                loading="lazy"
+                loading={priority ? 'eager' : 'lazy'}
+                fetchPriority={priority ? 'high' : 'auto'}
                 decoding="async"
                 referrerPolicy="no-referrer"
+                onLoad={() => setIsLoaded(true)}
                 onError={handleImageError}
-                className="absolute inset-0 h-full w-full bg-slate-100 object-cover object-center transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105"
+                className={cn(
+                    "absolute inset-0 h-full w-full object-cover object-center transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105",
+                    isLoaded ? "opacity-100" : "opacity-90"
+                )}
             />
             
             {/* Ambient 3D Glass Light Sweep */}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out" />
 
             {/* Lower side whitish shade overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/70 via-[14%] to-transparent transition-opacity duration-300" />
+            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/85 via-[24%] to-transparent transition-opacity duration-300" />
             
             {/* Category Name with subtle 3D lift */}
             <div className="relative z-10 w-full p-3 sm:p-4 text-center transform transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5">
@@ -131,6 +139,10 @@ export function CategoryCatalogueStrip({
     const sectionRef = useRef<HTMLElement>(null);
     const [isExpanded, setIsExpanded] = useState(false);
 
+    React.useEffect(() => {
+        preloadCriticalCategoryPhotos(initialCount);
+    }, [initialCount]);
+
     if (!categories.length) return null;
 
     const trackCategory = (category: MarketplaceCategory) => {
@@ -195,13 +207,14 @@ export function CategoryCatalogueStrip({
 
                 {/* Clean, Non-Scrolling Responsive Grid Layout */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3.5 sm:gap-4.5">
-                    {displayedCategories.map((category) => {
+                    {displayedCategories.map((category, index) => {
                         const selected = String(selectedCategoryId || '') === String(category.id);
                         return (
                             <CategoryCardItem
                                 key={category.id}
                                 category={category}
                                 selected={selected}
+                                priority={index < 14}
                                 onSelect={onSelect}
                                 onClick={() => trackCategory(category)}
                             />

@@ -9,7 +9,46 @@ export interface CategoryVisualMeta {
 
 export const BUNDLED_CATEGORY_PHOTO_VERSION = '1787987232675';
 
-const BUNDLED_SLUG_SET = new Set([
+/**
+ * Non-blocking client-side preloader to prime the browser image cache
+ * so category photos appear instantly with zero latency.
+ */
+export const preloadCriticalCategoryPhotos = (limit = 14) => {
+    if (typeof window === 'undefined') return;
+    const slugs = Array.from(BUNDLED_SLUG_SET).slice(0, limit);
+    for (const slug of slugs) {
+        const img = new Image();
+        img.src = `/category-photos/${BUNDLED_CATEGORY_PHOTO_VERSION}/${slug}.webp`;
+    }
+};
+
+/**
+ * Checks if a stored image URL is one of the legacy seed SVG illustrations.
+ * Legacy placeholder SVGs should fall back to the bundled realistic industrial photography,
+ * while actual admin-uploaded photos (e.g. from /photos/, .jpg, .png, .webp, data URIs) are preserved.
+ */
+export const isLegacyPlaceholderSvg = (url: unknown): boolean => {
+    if (!url || typeof url !== 'string') return true;
+    const trimmed = url.trim();
+    if (!trimmed) return true;
+
+    // Explicit user/admin upload formats
+    if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return false;
+    if (trimmed.includes('/photos/') || trimmed.includes('/uploads/')) return false;
+
+    // If it points to the legacy static SVG files in GCS or local /categories/*.svg
+    const lower = trimmed.toLowerCase();
+    if (lower.endsWith('.svg') || lower.includes('.svg?')) {
+        return true;
+    }
+    if (lower.includes('/categories/') && !lower.includes('/photos/')) {
+        return true;
+    }
+
+    return false;
+};
+
+export const BUNDLED_SLUG_SET = new Set([
     'agriculture-and-nursery',
     'automation-and-robotics',
     'automobile-parts-and-services',
@@ -169,53 +208,52 @@ export const CATEGORY_SVG_FILE_MAP: Record<string, string> = {
     'multi-category-industrial-vendor': 'multi-category-industrial-vendor',
 };
 
-const KEYWORD_ICON_RULES: [string[], string][] = [
-    [['cable', 'wire', 'transformer'], 'electrical-cables-and-power-equipment'],
-    [['robot', 'automation', 'plc', 'sensor'], 'automation-and-robotics'],
-    [['cement', 'concrete', 'mortar', 'paver'], 'cement-and-concrete-products'],
-    [['pipe', 'tile', 'plumbing', 'fitting', 'sanitary'], 'pipes-tiles-and-hardware'],
-    [['bearing', 'bushing', 'ball bearing'], 'bearings-and-mechanical-components'],
-    [['fastener', 'bolt', 'nut', 'screw', 'washer'], 'industrial-fasteners-and-components'],
-    [['conveyor', 'material handling', 'forklift', 'crane'], 'conveyor-and-material-handling-equipment'],
-    [['pump', 'water pump', 'motor'], 'pumps-motors-and-hydraulics'],
-    [['seal', 'gasket', 'o-ring'], 'industrial-seals-and-gaskets'],
-    [['welding', 'weld', 'cutting torch', 'electrode'], 'welding-and-cutting-equipment'],
-    [['mining', 'coal', 'mineral'], 'mining-and-coal-equipment'],
-    [['gas', 'cylinder', 'oxygen', 'lpg'], 'gas-equipment-and-cylinders'],
-    [['power', 'energy', 'solar', 'generator'], 'power-and-energy-equipment'],
-    [['plastic', 'polymer', 'pvc', 'hdpe'], 'polymer-and-plastic-products'],
-    [['machin', 'lathe', 'milling', 'spares'], 'industrial-machinery-and-spare-parts'],
-    [['logistics', 'transport', 'freight', 'cargo'], 'logistics-and-supply-services'],
-    [['trade', 'trading', 'distribution', 'distributor'], 'trading-and-distribution'],
-    [['consultan', 'engineering design'], 'engineering-consultancy-services'],
-    [['maintenance', 'servicing', 'overhaul'], 'industrial-maintenance-services'],
-    [['civil', 'construction work', 'infrastructure'], 'construction-and-civil-work-services'],
-    [['environment', 'waste', 'recycle'], 'environmental-and-waste-management'],
-    [['telecom', 'communication', 'network'], 'telecom-and-communication-equipment'],
-    [['furniture', 'chair', 'desk', 'interior'], 'furniture-interior-supplies'],
-    [['consumable', 'abrasive'], 'industrial-consumables'],
-    [['electric', 'appliance', 'electronic'], 'electrical-and-electronics'],
-    [['office', 'stationery', 'paper'], 'office-equipment-and-stationery'],
-    [['tool', 'hardware', 'wrench'], 'tools-and-industrial-hardware'],
-    [['agri', 'farm', 'nursery', 'plant'], 'agriculture-and-nursery'],
-    [['medic', 'health', 'hospital', 'pharma'], 'medical-and-healthcare-supplies'],
-    [['safety', 'helmet', 'boot', 'protective'], 'safety-equipment-and-industrial-safety'],
-    [['auto', 'car', 'vehicle', 'truck'], 'automobile-parts-and-services'],
-    [['construct', 'building'], 'construction-and-building-materials'],
-    [['chemic', 'laboratory'], 'industrial-chemicals'],
-    [['refract', 'furnace', 'kiln', 'firebrick'], 'refractories'],
+const KEYWORD_PHOTO_RULES: [string[], string][] = [
+    [['cable', 'wire', 'transformer', 'power line'], 'electrical-cables-and-power-equipment'],
+    [['robot', 'automation', 'plc', 'sensor', 'robotic'], 'automation-and-robotics'],
+    [['cement', 'concrete', 'mortar', 'paver', 'rcc'], 'cement-and-concrete-products'],
+    [['pipe', 'tile', 'plumbing', 'fitting', 'sanitary', 'flange'], 'pipes-tiles-and-hardware'],
+    [['bearing', 'bushing', 'ball bearing', 'roller bearing'], 'bearings-and-mechanical-components'],
+    [['fastener', 'bolt', 'nut', 'screw', 'washer', 'rivet'], 'industrial-fasteners-and-components'],
+    [['conveyor', 'material handling', 'forklift', 'crane', 'hoist'], 'conveyor-and-material-handling-equipment'],
+    [['pump', 'water pump', 'motor', 'submersible'], 'pumps-motors-and-hydraulics'],
+    [['seal', 'gasket', 'o-ring', 'packing'], 'industrial-seals-and-gaskets'],
+    [['welding', 'weld', 'cutting torch', 'electrode', 'plasma'], 'welding-and-cutting-equipment'],
+    [['mining', 'coal', 'mineral', 'excavat', 'quarry'], 'mining-and-coal-equipment'],
+    [['gas', 'cylinder', 'oxygen', 'lpg', 'nitrogen', 'argon'], 'gas-equipment-and-cylinders'],
+    [['power', 'energy', 'solar', 'generator', 'substation'], 'power-and-energy-equipment'],
+    [['plastic', 'polymer', 'pvc', 'hdpe', 'molding'], 'polymer-and-plastic-products'],
+    [['machin', 'lathe', 'milling', 'spares', 'cnc'], 'industrial-machinery-and-spare-parts'],
+    [['logistics', 'transport', 'freight', 'cargo', 'fleet'], 'logistics-and-supply-services'],
+    [['trade', 'trading', 'distribution', 'distributor', 'wholesale'], 'trading-and-distribution'],
+    [['consultan', 'engineering design', 'advisory'], 'engineering-consultancy-services'],
+    [['maintenance', 'servicing', 'overhaul', 'amc'], 'industrial-maintenance-services'],
+    [['civil', 'construction work', 'infrastructure', 'roadwork'], 'construction-and-civil-work-services'],
+    [['environment', 'waste', 'recycle', 'effluent', 'treatment'], 'environmental-and-waste-management'],
+    [['telecom', 'communication', 'network', 'fiber'], 'telecom-and-communication-equipment'],
+    [['furniture', 'chair', 'desk', 'interior', 'workstation'], 'furniture-and-interior-supplies'],
+    [['consumable', 'abrasive', 'grinding', 'lubricant'], 'industrial-consumables'],
+    [['electric', 'appliance', 'electronic', 'circuit', 'switchgear'], 'electrical-and-electronics'],
+    [['office', 'stationery', 'paper', 'printer'], 'office-equipment-and-stationery'],
+    [['tool', 'hardware', 'wrench', 'spanner', 'drill'], 'tools-and-industrial-hardware'],
+    [['agri', 'farm', 'nursery', 'plant', 'fertilizer'], 'agriculture-and-nursery'],
+    [['medic', 'health', 'hospital', 'pharma', 'clinical'], 'medical-and-healthcare-supplies'],
+    [['safety', 'helmet', 'boot', 'protective', 'ppe', 'fire'], 'safety-equipment-and-industrial-safety'],
+    [['auto', 'car', 'vehicle', 'truck', 'automotive'], 'automobile-parts-and-services'],
+    [['construct', 'building', 'structure', 'tmt'], 'construction-and-building-materials'],
+    [['chemic', 'laboratory', 'acid', 'solvent'], 'industrial-chemicals'],
+    [['refract', 'furnace', 'kiln', 'firebrick', 'casting'], 'refractories'],
     [['tyre', 'tire', 'rubber'], 'tyres-and-rubber-products'],
-    [['it ', 'computer', 'software', 'server'], 'it-and-computer-equipment'],
-    [['fuel', 'petrol', 'diesel', 'oil'], 'fuel-oil-and-gas'],
-    [['hydraulic', 'pneumatic'], 'hydraulics-and-pneumatics'],
-    [['steel', 'metal', 'iron', 'aluminum'], 'steel-and-metal-products'],
-    [['packag', 'box', 'carton', 'print'], 'packaging-and-printing'],
-    [['shg', 'handicraft', 'artisan', 'handloom'], 'general-industrial-supplier'],
-    [['textile', 'cloth', 'garment', 'fabric'], 'textile-and-garments-supply'],
-    [['fmcg', 'daily utility', 'provision'], 'fmcg-and-daily-utility-supply'],
-    [['retail', 'commercial'], 'retail-and-commercial-supply'],
-    [['oem', 'manufacturing'], 'oem-manufacturing-vendor'],
-    [['repair', 'service'], 'repair-and-service-provider'],
+    [['it ', 'computer', 'software', 'server', 'hardware'], 'it-and-computer-equipment'],
+    [['fuel', 'petrol', 'diesel', 'oil', 'petroleum'], 'fuel-oil-and-gas'],
+    [['hydraulic', 'pneumatic', 'piston'], 'hydraulics-and-pneumatics'],
+    [['steel', 'metal', 'iron', 'aluminum', 'alloy'], 'steel-and-metal-products'],
+    [['packag', 'box', 'carton', 'print', 'corrugated'], 'packaging-and-printing'],
+    [['textile', 'cloth', 'garment', 'fabric', 'uniform'], 'textile-and-garments-supply'],
+    [['fmcg', 'daily utility', 'provision', 'grocery'], 'fmcg-and-daily-utility-supply'],
+    [['retail', 'commercial', 'store'], 'retail-and-commercial-supply'],
+    [['oem', 'manufacturing', 'assembly'], 'oem-manufacturing-vendor'],
+    [['repair', 'service', 'rebuild'], 'repair-and-service-provider'],
 ];
 
 export const findCategorySvgFilename = (name?: string, slug?: string): string => {
@@ -231,7 +269,7 @@ export const findCategorySvgFilename = (name?: string, slug?: string): string =>
     if (cleanName && CATEGORY_SVG_FILE_MAP[cleanName]) {
         return CATEGORY_SVG_FILE_MAP[cleanName];
     }
-    for (const [keywords, slugTarget] of KEYWORD_ICON_RULES) {
+    for (const [keywords, slugTarget] of KEYWORD_PHOTO_RULES) {
         if (keywords.some(kw => cleanName.includes(kw) || cleanSlug.includes(kw))) {
             return slugTarget;
         }
@@ -257,34 +295,41 @@ export const buildCategoryFallbackSvg = (categoryName: string, accentColor = '#2
     return getBundledPhotoUrl(categoryName);
 };
 
+/**
+ * Returns complete visual metadata for a category.
+ * If the admin has uploaded a custom photo in the database (or GCS), that image takes 100% priority.
+ * Otherwise, falls back to the bundled realistic industrial photograph.
+ */
 export const getCategoryVisualMeta = (category: MarketplaceCategory | string): CategoryVisualMeta => {
     const rawName = typeof category === 'string' ? category : category?.name || '';
     const rawSlug = typeof category === 'string' ? '' : category?.slug || '';
 
-    // 1. If category object has custom imageUrl stored in database (e.g. data URI or uploaded file)
+    // 1. If category object has custom photo uploaded by Admin
     if (typeof category === 'object' && category !== null) {
         const rawCustom = (category as any).imageUrl || (category as any).image || (category as any).photoUrl;
         if (typeof rawCustom === 'string' && rawCustom.trim()) {
             const trimmed = rawCustom.trim();
-            if (trimmed.startsWith('data:')) {
-                return {
-                    imageUrl: normalizeDataUri(trimmed),
-                    accentColor: '#2563eb',
-                    categoryTag: rawName,
-                };
-            }
-            const resolved = resolveMediaUrl(trimmed);
-            if (resolved) {
-                return {
-                    imageUrl: resolved,
-                    accentColor: '#2563eb',
-                    categoryTag: rawName,
-                };
+            if (!isLegacyPlaceholderSvg(trimmed)) {
+                if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+                    return {
+                        imageUrl: normalizeDataUri(trimmed),
+                        accentColor: '#2563eb',
+                        categoryTag: rawName,
+                    };
+                }
+                const resolved = resolveMediaUrl(trimmed);
+                if (resolved) {
+                    return {
+                        imageUrl: resolved,
+                        accentColor: '#2563eb',
+                        categoryTag: rawName,
+                    };
+                }
             }
         }
     }
 
-    // 2. Direct match to Bundled Static Photo
+    // 2. Direct match to Bundled Realistic Industrial Photo (.webp)
     const bundledUrl = getBundledPhotoUrl(rawName, rawSlug);
 
     return {
@@ -294,17 +339,23 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
     };
 };
 
+/**
+ * Returns the final display image URL for a category.
+ * Admin-uploaded photo takes highest priority; otherwise returns realistic industrial photo from /category-photos/.
+ */
 export const getCategoryImageUrl = (category: MarketplaceCategory | string): string => {
     if (typeof category === 'object' && category !== null) {
         const rawCustom = (category as any).imageUrl || (category as any).image || (category as any).photoUrl;
         if (typeof rawCustom === 'string' && rawCustom.trim()) {
             const trimmed = rawCustom.trim();
-            if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
-                return normalizeDataUri(trimmed);
-            }
-            const resolved = resolveMediaUrl(trimmed);
-            if (resolved) {
-                return resolved;
+            if (!isLegacyPlaceholderSvg(trimmed)) {
+                if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+                    return normalizeDataUri(trimmed);
+                }
+                const resolved = resolveMediaUrl(trimmed);
+                if (resolved) {
+                    return resolved;
+                }
             }
         }
         return getBundledPhotoUrl(category.name, category.slug);

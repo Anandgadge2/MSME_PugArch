@@ -22,10 +22,12 @@ interface CategoryHorizontalBarProps {
 function CategoryChip({
     category,
     isSelected,
+    priority = false,
     onClick,
 }: {
     category: MarketplaceCategory;
     isSelected: boolean;
+    priority?: boolean;
     onClick: () => void;
 }) {
     const meta = getCategoryVisualMeta(category);
@@ -58,18 +60,18 @@ function CategoryChip({
         >
             {/* Category Icon / Image thumbnail */}
             <div className={cn(
-                "relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg p-0.5 transition-transform duration-200 group-hover:scale-105",
+                "relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg overflow-hidden transition-transform duration-200 group-hover:scale-105",
                 isSelected
-                    ? "bg-white/15"
+                    ? "bg-white/15 ring-1 ring-white/30"
                     : "bg-slate-100/90 border border-slate-200/60"
             )}>
                 <img
                     src={imgSrc}
                     alt={category.name}
-                    loading="lazy"
+                    loading={priority ? 'eager' : 'lazy'}
                     decoding="async"
                     onError={handleImageError}
-                    className="h-full w-full object-contain"
+                    className="h-full w-full object-cover"
                 />
             </div>
 
@@ -170,7 +172,7 @@ export function CategoryHorizontalBar({
                     </button>
 
                     {/* Category Chips */}
-                    {categories.map((category) => {
+                    {categories.map((category, idx) => {
                         const catIdStr = String(category.id);
                         const isSelected = String(selectedCategoryId || '') === catIdStr || selectedCategoryIds.includes(catIdStr);
                         return (
@@ -178,6 +180,7 @@ export function CategoryHorizontalBar({
                                 key={category.id}
                                 category={category}
                                 isSelected={isSelected}
+                                priority={idx < 10}
                                 onClick={() => onSelectCategory(catIdStr)}
                             />
                         );

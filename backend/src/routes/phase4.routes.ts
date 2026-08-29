@@ -258,9 +258,11 @@ const defaultMarketplaceCategories = [
 const ensureMarketplaceCategories = async () => {
   const count = await db.category.count({ where: { isActive: true } });
   if (count === 0) {
-    await Promise.all(defaultMarketplaceCategories.map(category =>
-      db.category.upsert({
-        where: { slug: slugFor(category.name) },
+    await Promise.all(defaultMarketplaceCategories.map(category => {
+      const slug = slugFor(category.name);
+      const defaultPhotoUrl = `/category-photos/1787987232675/${slug}.webp`;
+      return db.category.upsert({
+        where: { slug },
         update: {
           name: category.name,
           type: category.type as any,
@@ -270,11 +272,12 @@ const ensureMarketplaceCategories = async () => {
         create: {
           ...category,
           type: category.type as any,
-          slug: slugFor(category.name),
+          slug,
+          imageUrl: defaultPhotoUrl,
           isActive: true
         }
-      })
-    ));
+      });
+    }));
     await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
   }
   const categories = await db.category.findMany({
