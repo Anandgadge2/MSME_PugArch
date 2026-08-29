@@ -431,7 +431,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   }, []);
 
   const isDataSettled = isFetchingQueries === 0 || safetyTimeoutPassed;
-  const isInitialReady = !loading || safetyTimeoutPassed;
+  const isInitialReady = (!loading && isDataSettled) || safetyTimeoutPassed;
   const isAuthTransitionReady = isPageMounted && (!loading || safetyTimeoutPassed);
   const isLogoutReady = isPageMounted || safetyTimeoutPassed;
 

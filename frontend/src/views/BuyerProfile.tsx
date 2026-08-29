@@ -1159,8 +1159,7 @@ export default function BuyerProfile() {
                   {[
                     { id: 'details', label: 'Organization Details' },
                     { id: 'branding', label: 'Branding & Logo' },
-                    { id: 'items', label: 'Frequently Bought Items' },
-                    { id: 'status', label: 'Verification Status' }
+                    { id: 'items', label: 'Frequently Bought Items' }
                   ].map(tab => (
                     <button
                       key={tab.id}
@@ -1747,83 +1746,6 @@ export default function BuyerProfile() {
                             </div>
                           </div>
                         )}
-                      </div>
-                    )}
-
-                    {/* Tab Content: Verification Status */}
-                    {showcaseTab === 'status' && showcaseProfile && (
-                      <div className="space-y-6">
-                        <h3 className="text-base font-extrabold text-slate-900 uppercase">Showcase Verification Status</h3>
-                        <div className="bg-slate-50 border border-slate-200/80 rounded-3xl p-6 md:p-8 space-y-6">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-6">
-                            <div>
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Verification Status</p>
-                              <div className="mt-2.5">
-                                {showcaseProfile.verificationStatus === 'VERIFIED' ? (
-                                  <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg px-4 py-1.5 text-[10px] font-black uppercase">
-                                    <CheckCircle2 className="h-4 w-4 mr-1 text-emerald-600 inline shrink-0" />
-                                    Verified Showcase
-                                  </Badge>
-                                ) : showcaseProfile.verificationStatus === 'REJECTED' ? (
-                                  <Badge className="bg-red-50 text-red-700 border border-red-100 rounded-lg px-4 py-1.5 text-[10px] font-black uppercase">
-                                    <X className="h-4 w-4 mr-1 text-red-600 inline shrink-0" />
-                                    Rejected — Contact Admin
-                                  </Badge>
-                                ) : (
-                                  <Badge className="bg-amber-50 text-amber-700 border border-amber-100 rounded-lg px-4 py-1.5 text-[10px] font-black uppercase">
-                                    <Clock className="h-4 w-4 mr-1 text-amber-600 inline shrink-0" />
-                                    Awaiting Admin Approval
-                                  </Badge>
-                                )}
-                              </div>
-                              {/* Explain the pending state so users aren't confused */}
-                              {showcaseProfile.verificationStatus !== 'VERIFIED' && (
-                                <p className="mt-2 text-[10px] font-semibold text-slate-400 max-w-xs leading-relaxed">
-                                  {showcaseProfile.verificationStatus === 'REJECTED'
-                                    ? 'Your showcase profile was rejected. Please update your details and contact an administrator.'
-                                    : 'Your showcase profile is under review by the portal administrator. This is separate from your GST or onboarding verification. No action needed from your side.'}
-                                </p>
-                              )}
-                            </div>
-
-                            <div>
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Visibility Status</p>
-                              <div className="mt-2.5">
-                                {showcaseProfile.isActive ? (
-                                  <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg px-4 py-1.5 text-[10px] font-black uppercase">
-                                    Showcase Publicly Active
-                                  </Badge>
-                                ) : (
-                                  <Badge className="bg-slate-100 text-slate-600 border border-slate-200/50 rounded-lg px-4 py-1.5 text-[10px] font-black uppercase">
-                                    Showcase Suspended / Inactive
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
-                            <div className="bg-white p-4 rounded-2xl border shadow-sm">
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Verified At</p>
-                              <p className="text-xs font-bold text-slate-800 mt-2 font-mono">
-                                {showcaseProfile.verifiedAt ? new Date(showcaseProfile.verifiedAt).toLocaleString() : 'Not verified yet'}
-                              </p>
-                            </div>
-                            <div className="bg-white p-4 rounded-2xl border shadow-sm">
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Verified By</p>
-                              <p className="text-xs font-bold text-slate-800 mt-2">
-                                {showcaseProfile.verifiedBy || 'Not verified yet'}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 space-y-2">
-                            <p className="text-[10px] font-black text-indigo-700 uppercase tracking-wider">Showcase Security Policy</p>
-                            <p className="text-xs text-indigo-900 leading-relaxed font-semibold">
-                              Showcase verification is managed strictly by official administrators. It is independent of your GST or onboarding status. Changing your organization details will trigger a re-review. Frequently bought requirements are only visible to the public once verification status is set to VERIFIED and visibility status is set to Active.
-                            </p>
-                          </div>
-                        </div>
                       </div>
                     )}
                   </>
