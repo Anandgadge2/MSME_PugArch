@@ -472,156 +472,164 @@ export default function RepeatOrders() {
       </div>
 
       {/* ── Search + Filter + View Toggle Toolbar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm flex flex-wrap items-center gap-[12px]">
-        
-        {/* Search */}
-        <div className="relative flex-[1_1_auto] min-w-[240px]">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={event => setSearchTerm(event.target.value)}
-            placeholder="Search PO number, procurement, supplier..."
-            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-          />
-        </div>
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={
+            (searchTerm ? 1 : 0) + 
+            (supplierFilter !== 'All Suppliers' ? 1 : 0) + 
+            (procurementFilter !== 'All Procurements' ? 1 : 0) + 
+            (amountFilter !== 'All Amounts' ? 1 : 0) + 
+            (qtyFilter !== 'All Quantities' ? 1 : 0) + 
+            (deliveredDateFilter !== 'All Dates' ? 1 : 0) + 
+            (sortBy !== 'newest' ? 1 : 0)
+          }
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={searchTerm}
+                onChange={event => setSearchTerm(event.target.value)}
+                placeholder="Search PO number, procurement, supplier..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+              />
+            </div>
+          }
+          filters={
+            <>
+              {/* Supplier */}
+              <div className="w-full sm:w-[140px]">
+                <select
+                  value={supplierFilter}
+                  onChange={e => setSupplierFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="All Suppliers">Supplier: All</option>
+                  {uniqueSuppliers.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
 
-        {/* Supplier */}
-        <div className="flex-[0_0_auto] w-full sm:w-[140px]">
-          <select
-            value={supplierFilter}
-            onChange={e => setSupplierFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-          >
-            <option value="All Suppliers">Supplier: All</option>
-            {uniqueSuppliers.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
+              {/* Procurement */}
+              <div className="w-full sm:w-[150px]">
+                <select
+                  value={procurementFilter}
+                  onChange={e => setProcurementFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="All Procurements">Procurement: All</option>
+                  {uniqueProcurements.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
 
-        {/* Procurement */}
-        <div className="flex-[0_0_auto] w-full sm:w-[150px]">
-          <select
-            value={procurementFilter}
-            onChange={e => setProcurementFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-          >
-            <option value="All Procurements">Procurement: All</option>
-            {uniqueProcurements.map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </div>
+              {/* Amount */}
+              <div className="w-full sm:w-[130px]">
+                <select
+                  value={amountFilter}
+                  onChange={e => setAmountFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="All Amounts">Amount: All</option>
+                  <option value="Below ₹10,000">Below ₹10,000</option>
+                  <option value="₹10,000 – ₹50,000">₹10,000 – ₹50,000</option>
+                  <option value="₹50,000 – ₹1,00,000">₹50,000 – ₹1,00,000</option>
+                  <option value="Above ₹1,00,000">Above ₹1,00,000</option>
+                </select>
+              </div>
 
-        {/* Amount */}
-        <div className="flex-[0_0_auto] w-full sm:w-[130px]">
-          <select
-            value={amountFilter}
-            onChange={e => setAmountFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-          >
-            <option value="All Amounts">Amount: All</option>
-            <option value="Below ₹10,000">Below ₹10,000</option>
-            <option value="₹10,000 – ₹50,000">₹10,000 – ₹50,000</option>
-            <option value="₹50,000 – ₹1,00,000">₹50,000 – ₹1,00,000</option>
-            <option value="Above ₹1,00,000">Above ₹1,00,000</option>
-          </select>
-        </div>
+              {/* Quantity */}
+              <div className="w-full sm:w-[110px]">
+                <select
+                  value={qtyFilter}
+                  onChange={e => setQtyFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="All Quantities">Qty: All</option>
+                  <option value="1–10">1–10</option>
+                  <option value="11–50">11–50</option>
+                  <option value="51–100">51–100</option>
+                  <option value="100+">100+</option>
+                </select>
+              </div>
 
-        {/* Quantity */}
-        <div className="flex-[0_0_auto] w-full sm:w-[110px]">
-          <select
-            value={qtyFilter}
-            onChange={e => setQtyFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-          >
-            <option value="All Quantities">Qty: All</option>
-            <option value="1–10">1–10</option>
-            <option value="11–50">11–50</option>
-            <option value="51–100">51–100</option>
-            <option value="100+">100+</option>
-          </select>
-        </div>
+              {/* Delivered On Date */}
+              <div className="w-full sm:w-[140px]">
+                <select
+                  value={deliveredDateFilter}
+                  onChange={e => setDeliveredDateFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="All Dates">Delivered: All</option>
+                  <option value="Today">Today</option>
+                  <option value="Last 7 Days">Last 7 Days</option>
+                  <option value="Last 30 Days">Last 30 Days</option>
+                  <option value="Custom Date Range">Custom Date Range</option>
+                </select>
+              </div>
+              
+              {deliveredDateFilter === 'Custom Date Range' && (
+                <div 
+                  className="grid items-center gap-1 w-full sm:w-auto h-10"
+                  style={{ gridTemplateColumns: 'minmax(0, 1fr) 20px minmax(0, 1fr)' }}
+                >
+                  <input 
+                    type="date" 
+                    value={customDate.start} 
+                    onChange={e => setCustomDate({ ...customDate, start: e.target.value })} 
+                    className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
+                    title="Start Date" 
+                  />
+                  <span className="text-slate-400 font-bold text-center">-</span>
+                  <input 
+                    type="date" 
+                    value={customDate.end} 
+                    onChange={e => setCustomDate({ ...customDate, end: e.target.value })} 
+                    className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
+                    title="End Date" 
+                  />
+                </div>
+              )}
 
-        {/* Delivered On Date */}
-        <div className="flex-[0_0_auto] w-full sm:w-[140px] flex items-center gap-[12px]">
-          <select
-            value={deliveredDateFilter}
-            onChange={e => setDeliveredDateFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-          >
-            <option value="All Dates">Delivered: All</option>
-            <option value="Today">Today</option>
-            <option value="Last 7 Days">Last 7 Days</option>
-            <option value="Last 30 Days">Last 30 Days</option>
-            <option value="Custom Date Range">Custom Date Range</option>
-          </select>
-        </div>
-        
-        {deliveredDateFilter === 'Custom Date Range' && (
-          <div 
-            className="flex-[0_0_auto] grid items-center gap-1 w-full sm:w-auto h-10"
-            style={{ gridTemplateColumns: 'minmax(0, 1fr) 20px minmax(0, 1fr)' }}
-          >
-            <input 
-              type="date" 
-              value={customDate.start} 
-              onChange={e => setCustomDate({ ...customDate, start: e.target.value })} 
-              className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
-              title="Start Date" 
-            />
-            <span className="text-slate-400 font-bold text-center">-</span>
-            <input 
-              type="date" 
-              value={customDate.end} 
-              onChange={e => setCustomDate({ ...customDate, end: e.target.value })} 
-              className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
-              title="End Date" 
-            />
-          </div>
-        )}
-
-        {/* Sorting */}
-        <div className="flex-[0_0_auto] w-full sm:w-[130px]">
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-          >
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="value_high">Highest Amount</option>
-            <option value="value_low">Lowest Amount</option>
-            <option value="qty_high">Highest Quantity</option>
-            <option value="qty_low">Lowest Quantity</option>
-          </select>
-        </div>
-
-        {/* Right Actions */}
-        <div className="flex-[0_0_auto] flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
-          {(searchTerm || supplierFilter !== 'All Suppliers' || procurementFilter !== 'All Procurements' || amountFilter !== 'All Amounts' || qtyFilter !== 'All Quantities' || deliveredDateFilter !== 'All Dates' || sortBy !== 'newest') && (
-            <Button 
-              variant="ghost" 
-              onClick={() => {
-                setSearchTerm('');
-                setSupplierFilter('All Suppliers');
-                setProcurementFilter('All Procurements');
-                setAmountFilter('All Amounts');
-                setQtyFilter('All Quantities');
-                setDeliveredDateFilter('All Dates');
-                setCustomDate({ start: '', end: '' });
-                setSortBy('newest');
-                setActiveKpiFilter('all');
-              }}
-              className="h-9 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 shrink-0"
-            >
-              Clear Filters
-            </Button>
-          )}
-          <div className="shrink-0">
-            <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          </div>
-        </div>
+              {/* Sorting */}
+              <div className="w-full sm:w-[130px]">
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
+                  <option value="value_high">Highest Amount</option>
+                  <option value="value_low">Lowest Amount</option>
+                  <option value="qty_high">Highest Quantity</option>
+                  <option value="qty_low">Lowest Quantity</option>
+                </select>
+              </div>
+              {(searchTerm || supplierFilter !== 'All Suppliers' || procurementFilter !== 'All Procurements' || amountFilter !== 'All Amounts' || qtyFilter !== 'All Quantities' || deliveredDateFilter !== 'All Dates' || sortBy !== 'newest') && (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSupplierFilter('All Suppliers');
+                    setProcurementFilter('All Procurements');
+                    setAmountFilter('All Amounts');
+                    setQtyFilter('All Quantities');
+                    setDeliveredDateFilter('All Dates');
+                    setCustomDate({ start: '', end: '' });
+                    setSortBy('newest');
+                    setActiveKpiFilter('all');
+                  }}
+                  className="h-10 px-3 text-xs font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl shrink-0"
+                >
+                  Clear Filters
+                </Button>
+              )}
+            </>
+          }
+          viewToggle={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
       </div>
 
 

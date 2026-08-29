@@ -481,30 +481,33 @@ export default function OrganizationManagement() {
       </div>
 
       {/* Search & Filter Controls */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm flex flex-col md:flex-row md:items-center gap-4 justify-between">
-        <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full md:max-w-md">
-          <div className="relative w-full">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-3 sm:p-4 shadow-sm flex flex-col md:flex-row md:items-center gap-2.5 sm:gap-4 justify-between">
+        <form onSubmit={handleSearchSubmit} className="flex items-center gap-1.5 sm:gap-2 w-full md:max-w-md flex-nowrap">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by company name, GSTIN, or PAN..."
-              className="w-full h-10 pl-10 pr-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0c2340]/10 focus:border-[#0c2340] bg-slate-50/50 focus:bg-white transition-all"
+              className="w-full h-10 pl-10 pr-3 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0c2340]/10 focus:border-[#0c2340] bg-slate-50/50 focus:bg-white transition-all"
             />
           </div>
-          <Button type="submit" className="bg-[#0c2340] hover:bg-[#0c2340]/90 text-white px-4 h-10 text-xs font-bold uppercase tracking-wider">
+          <Button type="submit" className="bg-[#0c2340] hover:bg-[#0c2340]/90 text-white px-3 sm:px-4 h-10 text-xs font-bold uppercase tracking-wider rounded-xl shrink-0">
             Search
           </Button>
+          <div className="md:hidden shrink-0 flex items-center">
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          </div>
         </form>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wide mr-2">Verification Status:</span>
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wide mr-1 sm:mr-2">Verification:</span>
           {['all', 'PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED'].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase border transition-all ${statusFilter === status
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase border transition-all ${statusFilter === status
                 ? 'bg-[#0c2340] border-[#0c2340] text-white shadow-sm'
                 : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                 }`}

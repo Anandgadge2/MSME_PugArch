@@ -149,9 +149,9 @@ export function PageToolbar({
                 </div>
             )}
 
-            {/* Mobile layout: responsive flex-wrap for Search, Filters, and Actions */}
+            {/* Mobile layout: search + compact "Filters" toggle + actions/toggle on the SAME horizontal row */}
             <div className="space-y-2 sm:hidden">
-                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-nowrap">
                     {hasSearch && (
                         <div className="relative flex-1 min-w-[200px]">
                             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -172,7 +172,7 @@ export function PageToolbar({
                             aria-expanded={mobileOpen}
                             aria-controls="page-toolbar-mobile-filters"
                             className={cn(
-                                'flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-[10px] font-black tracking-wider uppercase transition-all duration-200',
+                                'flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-2.5 text-[10px] font-black tracking-wider uppercase transition-all duration-200',
                                 appliedCount > 0 || mobileOpen
                                     ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
                                     : 'border-slate-200 bg-slate-50 text-slate-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.1)] active:scale-[0.98]'
@@ -188,11 +188,11 @@ export function PageToolbar({
                         </button>
                     )}
 
-                    {actions && <div className="flex items-center gap-2 ml-auto">{actions}</div>}
+                    {actions && <div className="shrink-0 flex items-center">{actions}</div>}
                 </div>
 
                 {mobileOpen && (
-                    <div id="page-toolbar-mobile-filters" className="space-y-2 mt-2">
+                    <div id="page-toolbar-mobile-filters" className="space-y-2 pt-2 border-t border-slate-100 animate-in fade-in slide-in-from-top-1 duration-200">
                         {filters.map((f, idx) => renderFilter(f, idx))}
                         {onReset && (
                             <Button

@@ -46,7 +46,11 @@ export default function Login() {
       if (returnUrl) {
         router.replace(safeInternalPath(returnUrl));
       } else {
-        router.replace(user.role === 'master_admin' ? '/master-admin' : '/dashboard');
+        if (isShgUser(user)) {
+          router.replace('/shg/dashboard');
+        } else {
+          router.replace(user.role === 'master_admin' ? '/master-admin' : '/dashboard');
+        }
       }
     }
   }, [user, router, returnUrl]);
@@ -69,7 +73,7 @@ export default function Login() {
           return;
         }
         const destination = returnUrl ? safeInternalPath(returnUrl) : (
-          data.user.role === 'master_admin' ? '/master-admin' : '/dashboard'
+          isShgUser(data.user) ? '/shg/dashboard' : (data.user.role === 'master_admin' ? '/master-admin' : '/dashboard')
         );
         toast.success(`Welcome back, ${data.user.name}!`, { id: loadToast });
         login(data.accessToken || data.token, data.user, data.refreshToken, destination);
@@ -96,7 +100,7 @@ export default function Login() {
         return;
       }
       const destination = returnUrl ? safeInternalPath(returnUrl) : (
-        data.user.role === 'master_admin' ? '/master-admin' : '/dashboard'
+        isShgUser(data.user) ? '/shg/dashboard' : (data.user.role === 'master_admin' ? '/master-admin' : '/dashboard')
       );
       toast.success(`Welcome back, ${data.user.name}!`, { id: loadToast });
       login(data.accessToken || data.token, data.user, data.refreshToken, destination);
