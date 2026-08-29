@@ -10,6 +10,19 @@ export interface CategoryVisualMeta {
 export const BUNDLED_CATEGORY_PHOTO_VERSION = '1787987232675';
 
 /**
+ * Non-blocking client-side preloader to prime the browser image cache
+ * so category photos appear instantly with zero latency.
+ */
+export const preloadCriticalCategoryPhotos = (limit = 14) => {
+    if (typeof window === 'undefined') return;
+    const slugs = Array.from(BUNDLED_SLUG_SET).slice(0, limit);
+    for (const slug of slugs) {
+        const img = new Image();
+        img.src = `/category-photos/${BUNDLED_CATEGORY_PHOTO_VERSION}/${slug}.webp`;
+    }
+};
+
+/**
  * Checks if a stored image URL is one of the legacy seed SVG illustrations.
  * Legacy placeholder SVGs should fall back to the bundled realistic industrial photography,
  * while actual admin-uploaded photos (e.g. from /photos/, .jpg, .png, .webp, data URIs) are preserved.
