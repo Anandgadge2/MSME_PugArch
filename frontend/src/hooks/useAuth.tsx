@@ -227,9 +227,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }).catch(() => undefined);
     }
 
-    const isShg = user.role === 'shg' || user.accountType === 'SHG';
     const targetUrl = redirectPath || (
-      user.role === 'master_admin' ? '/master-admin' : isShg ? '/shg/onboarding' : '/dashboard'
+      user.role === 'master_admin' ? '/master-admin' : '/dashboard'
     );
 
     router.replace(targetUrl);

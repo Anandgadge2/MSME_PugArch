@@ -201,7 +201,7 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
     if (typeof category === 'object' && category !== null) {
         const rawCustom = (category as any).imageUrl || (category as any).image || (category as any).photoUrl;
         const resolved = resolveMediaUrl(rawCustom);
-        if (resolved && !resolved.includes('category-backgrounds')) {
+        if (resolved) {
             return {
                 imageUrl: resolved,
                 accentColor: '#2563eb',
@@ -225,7 +225,7 @@ export const getCategoryImageUrl = (category: MarketplaceCategory | string): str
     if (typeof category === 'object' && category !== null) {
         const rawCustom = (category as any).imageUrl || (category as any).image || (category as any).photoUrl;
         const resolved = resolveMediaUrl(rawCustom);
-        if (resolved && !resolved.includes('category-backgrounds')) return resolved;
+        if (resolved) return resolved;
 
         const svgFile = findCategorySvgFilename(category.name, category.slug);
         return resolveMediaUrl(`${GCS_BASE_URL}/${svgFile}`) || `${GCS_BASE_URL}/${svgFile}`;

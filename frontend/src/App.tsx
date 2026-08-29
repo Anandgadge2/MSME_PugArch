@@ -528,7 +528,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
 
   const renderRoute = () => {
     const isCurrentShg = isShgUser(user);
-    const authenticatedHome = user?.role === 'master_admin' ? '/master-admin' : isCurrentShg ? '/shg/onboarding' : '/dashboard';
+    const authenticatedHome = user?.role === 'master_admin' ? '/master-admin' : '/dashboard';
 
     // Show RouteFallback skeleton for non-public routes while auth loading is in progress
     if (loading) {
@@ -640,10 +640,9 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     const shgRouteOk = isCurrentShg || roleOk(user.role, ['shg']);
     if ((pathname === '/master-admin' || pathname.startsWith('/master-admin/')) && roleOk(user.role, ['master_admin'])) return <MasterAdminPage />;
     if (pathname === '/dashboard' && user.role === 'master_admin') return <Redirect to="/master-admin" />;
-    if (pathname === '/dashboard' && isCurrentShg) return <Redirect to="/shg/onboarding" />;
     if (pathname === '/dashboard') return <Dashboard />;
+    if (pathname === '/shg/dashboard' && shgRouteOk) return <Dashboard />;
     if (pathname === '/shg/onboarding' && shgRouteOk) return <ShgOnboarding section="onboarding" />;
-    if (pathname === '/shg/dashboard' && shgRouteOk) return <ShgOnboarding section="dashboard" />;
     if (pathname === '/shg/profile' && shgRouteOk) return <ShgOnboarding section="profile" />;
     if (pathname === '/shg/members' && shgRouteOk) return <ShgOnboarding section="members" />;
     if (pathname === '/shg/bank-details' && shgRouteOk) return <ShgOnboarding section="bank-details" />;

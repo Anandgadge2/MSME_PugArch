@@ -4165,7 +4165,7 @@ router.post('/admin/categories/:id/image', authenticate, authorizeAdmin, categor
 
   const ext = file.mimetype === 'image/png' ? '.png' : file.mimetype === 'image/webp' ? '.webp' : '.jpg';
   const timestamp = Date.now();
-  const gcsKey = `category-backgrounds/${category.slug}-${timestamp}${ext}`;
+  const gcsKey = `categories/photos/${category.slug}-${timestamp}${ext}`;
   const bucket = getGCSBucket();
   const bucketName = getGCSBucketName();
 
@@ -4174,7 +4174,7 @@ router.post('/admin/categories/:id/image', authenticate, authorizeAdmin, categor
     resumable: false,
     metadata: {
       contentType: file.mimetype,
-      cacheControl: 'public, max-age=86400',
+      cacheControl: 'public, max-age=31536000, immutable',
       metadata: { categoryId: String(id), categorySlug: category.slug, uploadedBy: String(userId(req)) }
     }
   });
