@@ -37,13 +37,6 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     const handleImageError = () => {
         if (!imgError) {
             setImgError(true);
-            // First fallback: try the SVG icon from GCS
-            const svgUrl = getCategoryImageUrl({ ...category, imageUrl: null } as any);
-            if (svgUrl && svgUrl !== imgSrc) {
-                setImgSrc(svgUrl);
-                return;
-            }
-            // Final fallback: generated SVG placeholder
             const meta = getCategoryVisualMeta(category);
             setImgSrc(buildCategoryFallbackSvg(category.name, meta.accentColor));
         }
@@ -60,19 +53,19 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
                 referrerPolicy="no-referrer"
                 crossOrigin="anonymous"
                 onError={handleImageError}
-                className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
             />
             
             {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-900/40 to-transparent opacity-85 transition-opacity duration-300 group-hover:opacity-100" />
+            <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/50 to-transparent" />
             
             {/* Category Name */}
-            <div className="relative z-10 w-full p-3 sm:p-4 text-center transform transition-transform duration-300 group-hover:-translate-y-1">
+            <div className="relative z-10 w-full p-3 sm:p-4 text-center">
                 <span className={cn(
-                    "block w-full text-xs sm:text-[13px] font-extrabold leading-tight line-clamp-2 transition-colors duration-200 drop-shadow-md",
+                    "block w-full text-xs sm:text-[13px] font-extrabold leading-tight line-clamp-2 transition-colors duration-200",
                     selected
-                        ? "text-white font-black"
-                        : "text-slate-100 group-hover:text-white"
+                        ? "text-blue-700 font-black"
+                        : "text-slate-800 group-hover:text-blue-600"
                 )}>
                     {category.name}
                 </span>
@@ -81,10 +74,8 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     );
 
     const containerClassName = cn(
-        'group relative flex flex-col bg-white rounded-2xl sm:rounded-3xl transition-all duration-300 cursor-pointer border shadow-sm hover:shadow-xl hover:-translate-y-1 w-full h-[140px] sm:h-[150px] lg:h-[170px] xl:h-[180px]',
-        selected 
-            ? 'shadow-xl ring-2 ring-blue-500 border-blue-500 scale-[1.02] z-10' 
-            : 'border-slate-200/50 hover:border-slate-300/80'
+        'group relative flex flex-col bg-white rounded-2xl sm:rounded-3xl transition-all duration-300 cursor-pointer border border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-blue-300 w-full aspect-[4/5] sm:aspect-square md:aspect-[4/5] xl:aspect-[3/4]',
+        selected && 'shadow-xl ring-2 ring-blue-500 border-blue-400 scale-[1.02] z-10'
     );
 
     if (onSelect) {

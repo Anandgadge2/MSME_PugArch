@@ -9,7 +9,6 @@ export interface CategoryVisualMeta {
 
 const GCS_BUCKET_NAME = process.env.NEXT_PUBLIC_GCS_BUCKET_NAME || 'jsgsmile1';
 const GCS_BASE_URL = `https://storage.googleapis.com/${GCS_BUCKET_NAME}/categories`;
-const GCS_BACKGROUNDS_URL = `https://storage.googleapis.com/${GCS_BUCKET_NAME}/category-backgrounds`;
 
 export const CATEGORY_SVG_FILE_MAP: Record<string, string> = {
     'electrical & electronics': 'electrical-electronics.svg',
@@ -198,11 +197,11 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
     const rawName = typeof category === 'string' ? category : category?.name || '';
     const rawSlug = typeof category === 'string' ? '' : category?.slug || '';
     
-    // 1. If category object has imageUrl stored in database (e.g. GCP storage URL or data-URI)
+    // 1. If category object has custom imageUrl stored in database
     if (typeof category === 'object' && category !== null) {
         const rawCustom = (category as any).imageUrl || (category as any).image || (category as any).photoUrl;
         const resolved = resolveMediaUrl(rawCustom);
-        if (resolved) {
+        if (resolved && !resolved.includes('category-backgrounds')) {
             return {
                 imageUrl: resolved,
                 accentColor: '#2563eb',
@@ -211,7 +210,7 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
         }
     }
 
-    // 2. Direct match to GCP Bucket
+    // 2. Direct match to GCS Bucket SVG
     const svgFile = findCategorySvgFilename(rawName, rawSlug);
     const cloudUrl = resolveMediaUrl(`${GCS_BASE_URL}/${svgFile}`) || `${GCS_BASE_URL}/${svgFile}`;
 
@@ -223,21 +222,13 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
 };
 
 export const getCategoryImageUrl = (category: MarketplaceCategory | string): string => {
-    // 1. Database imageUrl (admin-uploaded or generated background) — highest priority
     if (typeof category === 'object' && category !== null) {
         const rawCustom = (category as any).imageUrl || (category as any).image || (category as any).photoUrl;
         const resolved = resolveMediaUrl(rawCustom);
-        if (resolved) return resolved;
+        if (resolved && !resolved.includes('category-backgrounds')) return resolved;
 
-        // 2. Try WebP background image from GCS category-backgrounds folder
-        const bgUrl = resolveMediaUrl(`${GCS_BACKGROUNDS_URL}/${category.slug}.webp`) || `${GCS_BACKGROUNDS_URL}/${category.slug}.webp`;
-
-        // 3. SVG icon fallback
         const svgFile = findCategorySvgFilename(category.name, category.slug);
-        const svgUrl = resolveMediaUrl(`${GCS_BASE_URL}/${svgFile}`) || `${GCS_BASE_URL}/${svgFile}`;
-
-        // Return background WebP as default — the card's onError handler will fallback to SVG
-        return bgUrl;
+        return resolveMediaUrl(`${GCS_BASE_URL}/${svgFile}`) || `${GCS_BASE_URL}/${svgFile}`;
     }
 
     if (typeof category === 'string') {

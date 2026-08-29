@@ -882,8 +882,10 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
 export default function CreateProcurementPage() {
   const router = useRouter();
   const { user, token } = useAuth();
+  const { data: activeCart, isLoading: isCartLoading } = useActiveCart({ enabled: true });
   const searchParams = useSearchParams();
   const draftIdParam = searchParams?.get('id') || searchParams?.get('draftId');
+  const fromCart = searchParams?.get('fromCart') === '1';
 
   const userRef = React.useRef(user);
   useEffect(() => {
@@ -983,6 +985,37 @@ export default function CreateProcurementPage() {
   const [selectedItemForEdit, setSelectedItemForEdit] = useState<ItemRow | null>(null);
   const [hasAutofilled, setHasAutofilled] = useState(false);
   const [isMobileStepperOpen, setIsMobileStepperOpen] = useState(false);
+
+  // A cart-to-RFQ launch is a new procurement intent. Prefer the live cart over
+  // any draft left in localStorage, force RFQ, and populate the same normalized
+  // item rows used by the manual "Import Cart" action.
+  useEffect(() => {
+    if (!fromCart || draftIdParam || !activeCart?.items?.length) return;
+
+    const importedItems = activeCart.items.map(cartItemToProcurementItem);
+    const estimatedValue = importedItems.reduce(
+      (sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0),
+      0
+    );
+
+    setDraft(current => {
+      const next = {
+        ...current,
+        type: 'RFQ' as ProcurementMethodId,
+        basics: {
+          ...current.basics,
+          title: current.basics.title || 'Request for Quotation from Cart',
+          estimatedValue,
+        },
+        items: importedItems,
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
+      return next;
+    });
+    setActiveStep(0);
+    setMaxVisitedStep(0);
+    setHasAutofilled(true);
+  }, [fromCart, draftIdParam, activeCart]);
 
   // Lock body scroll when item drawer is open to prevent window scroll lock conflict
   useEffect(() => {

@@ -626,7 +626,7 @@ export default function CartPage() {
                                         <Button
                                             type="button"
                                             variant="outline"
-                                            onClick={() => router.push('/buyer/procurement/checkout')}
+                                            onClick={() => router.push('/buyer/procurement/create?method=RFQ&fromCart=1')}
                                             className="text-xs border-slate-300 font-semibold"
                                         >
                                             Create RFQ / Bid
