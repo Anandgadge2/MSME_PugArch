@@ -12,6 +12,7 @@ import { hashPassword } from '../services/password.service.js';
 import { sendSubUserInvitationEmail } from '../services/mail.service.js';
 import { env } from '../config/env.js';
 import { generateAlphanumericUserId } from '../utils/userId.js';
+import { generateSecureTemporaryPassword } from '../utils/crypto.js';
 
 const router = Router();
 router.use(authenticate);
@@ -372,7 +373,7 @@ router.post('/team/invite', asyncHandler(async (req, res) => {
   const accountTypeId = body.accountType ? ACCOUNT_TYPE_IDS[body.accountType] : user.organizationId ? user.accountTypeId : ACCOUNT_TYPE_IDS.SUPERADMIN;
 
   // Auto-generate secure temporary password
-  const tempPassword = 'Msme@' + randomBytes(4).toString('hex').toUpperCase();
+  const tempPassword = generateSecureTemporaryPassword(12);
   const hashedPassword = await hashPassword(tempPassword);
 
   const orgIdNum = user.organizationId || (scope.scopeType === 'ORGANIZATION' && scope.scopeId ? Number(scope.scopeId) : null);

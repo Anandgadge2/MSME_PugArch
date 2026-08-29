@@ -19,6 +19,7 @@ import { OrgRole, Role } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { authenticate, requireAccountType } from '../middleware/auth.js';
 import { generateAlphanumericUserId } from '../utils/userId.js';
+import { generateSecureTemporaryPassword } from '../utils/crypto.js';
 import { requireOrgRole } from '../middleware/requireOrgRole.js';
 import { shortCache } from '../middleware/httpCache.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -839,8 +840,7 @@ router.post(
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
         // Auto-generate secure temporary password
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-        const tempPassword = 'Msme@' + Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        const tempPassword = generateSecureTemporaryPassword(12);
         const hashedPassword = await hashPassword(tempPassword);
 
         // Check if user already exists or create new sub-user
