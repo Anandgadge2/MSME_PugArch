@@ -782,7 +782,7 @@ function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
   );
 }
 
-function LineItemsTable({ items }: { items: any }) {
+function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?: string }) {
   const list = asArray(items).filter(hasDetailData);
   if (!list.length) return null;
 
@@ -812,18 +812,21 @@ function LineItemsTable({ items }: { items: any }) {
               {list.map((item: any, idx: number) => {
                 const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
 
-                const name = firstPresent(
+                const rawName = firstPresent(
                   item.name,
                   item.itemName,
                   item.title,
                   item.productName,
                   item.materialName,
                   item.serviceName,
-                  item.category,
                   sp.itemName,
-                  sp.name,
-                  `Item ${idx + 1}`
+                  sp.name
                 );
+
+                const isGeneric = !rawName || /^item\s*#?\d+$/i.test(String(rawName).trim()) || String(rawName).trim().toLowerCase() === 'item';
+                const name = !isGeneric
+                  ? String(rawName)
+                  : (defaultSubject && !/^item\s*#?\d+$/i.test(defaultSubject) ? defaultSubject : `Item #${idx + 1}`);
 
                 const rawQty = firstPresent(
                   item.quantity,
@@ -953,7 +956,17 @@ function LineItemsTable({ items }: { items: any }) {
   );
 }
 
-function BoqTableList({ data }: { data: any }) {
+function BoqTableList({
+  data,
+  defaultSubject,
+  defaultCategory,
+  defaultEstimatedValue
+}: {
+  data: any;
+  defaultSubject?: string;
+  defaultCategory?: string;
+  defaultEstimatedValue?: any;
+}) {
   const list = asArray(data).filter(hasDetailData);
   if (!list.length) return null;
 
@@ -982,12 +995,26 @@ function BoqTableList({ data }: { data: any }) {
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
               {list.map((item: any, idx: number) => {
                 const sr = firstPresent(item.srNo, item.sr, item.sr_no, item.id, idx + 1);
-                const category = firstPresent(item.category, item.itemCategory, item.name, item.itemName, item.title, `Category ${idx + 1}`);
-                const qty = firstPresent(item.quantity, item.qty, item.targetQty, item.count, '-');
-                const uom = firstPresent(item.uom, item.unit, item.unitOfMeasure, '');
-                const rate = firstPresent(item.estimatedRate, item.rate, item.unitPrice, item.price, item.estimatedPrice, '-');
-                const tax = firstPresent(item.taxPercent, item.tax, item.gstPercent, item.gst, item.gstRate, '-');
-                const total = firstPresent(item.total, item.amount, item.totalPrice, item.estimatedTotal, '-');
+                const rawCat = firstPresent(item.category, item.itemCategory, item.name, item.itemName, item.title);
+                const isGenericCat = !rawCat || String(rawCat).trim().toLowerCase() === 'general' || /^category\s*#?\d+$/i.test(String(rawCat).trim()) || /^item\s*#?\d+$/i.test(String(rawCat).trim());
+                const category = !isGenericCat
+                  ? String(rawCat)
+                  : (defaultCategory && defaultCategory !== 'General Procurement' ? defaultCategory : (defaultSubject || 'General'));
+
+                const qty = firstPresent(item.quantity, item.qty, item.targetQty, item.count, '1');
+                const uom = firstPresent(item.uom, item.unit, item.unitOfMeasure, 'Nos');
+
+                const rawRate = firstPresent(item.estimatedRate, item.rate, item.unitPrice, item.price, item.estimatedPrice);
+                const rate = (rawRate !== undefined && rawRate !== null && rawRate !== '' && rawRate !== '-')
+                  ? rawRate
+                  : (defaultEstimatedValue && Number(defaultEstimatedValue) > 0 ? defaultEstimatedValue : '-');
+
+                const tax = firstPresent(item.taxPercent, item.tax, item.gstPercent, item.gst, item.gstRate, '18%');
+
+                const rawTotal = firstPresent(item.total, item.amount, item.totalPrice, item.estimatedTotal);
+                const total = (rawTotal !== undefined && rawTotal !== null && rawTotal !== '' && rawTotal !== '-')
+                  ? rawTotal
+                  : (defaultEstimatedValue && Number(defaultEstimatedValue) > 0 ? defaultEstimatedValue : '-');
 
                 return (
                   <tr key={idx} className="hover:bg-slate-50/60">
@@ -1614,7 +1641,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   );
 
   const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue) : (props.publishedDate ? formatDateString(props.publishedDate) : 'N/A');
-  const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue, true) : (props.closingDate ? formatDateString(props.closingDate, true) : 'N/A');
+  const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue) : (props.closingDate ? formatDateString(props.closingDate) : 'N/A');
   const clarificationDateFormatted = clarificationDateValue ? formatDateString(clarificationDateValue, true) : (props.clarificationDate ? formatDateString(props.clarificationDate, true) : 'N/A');
   const technicalDateFormatted = technicalDateValue ? formatDateString(technicalDateValue, true) : (props.technicalDate || props.technicalOpeningDate ? formatDateString(props.technicalDate || props.technicalOpeningDate, true) : 'N/A');
   const presentationDateFormatted = presentationDateValue ? formatDateString(presentationDateValue, true) : (props.presentationDate ? formatDateString(props.presentationDate, true) : 'N/A');
@@ -1875,29 +1902,18 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
   const buyerContactPerson = contactPerson && contactPerson !== 'N/A' && contactPerson !== '—' ? contactPerson : (buyerOrgName !== 'N/A' ? buyerOrgName : 'Procurement Officer');
   const buyerPhoneNum = phone && phone !== 'N/A' && phone !== '—' ? phone : (props.buyerMobile && props.buyerMobile !== 'N/A' ? props.buyerMobile : '');
-  const buyerContactDisplay = buyerPhoneNum ? `${buyerContactPerson} (${buyerPhoneNum})` : buyerContactPerson;
 
   const summaryCards = [
     { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: 'slate' as Tone, subtext: 'Current lifecycle state' },
     {
       label: 'Submission Deadline',
-      value: (
-        <div className="space-y-1">
-          <div>{closingDateFormatted}</div>
-          {props.deadlineDate && (
-            <div>
-              <DeadlineCountdown targetDate={props.deadlineDate} />
-            </div>
-          )}
-        </div>
-      ),
+      value: closingDateFormatted || 'N/A',
       icon: Clock,
       tone: 'rose' as Tone,
       subtext: 'Bidding window closing'
     },
     { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' },
-    // { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
-    { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactDisplay, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: 'Procurement officer' },
+    { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactPerson, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: buyerPhoneNum || 'Procurement officer' },
     { label: 'Evaluation', value: formatPrimitiveValue(props.evaluationMethod || 'L1', 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone, subtext: 'Selection criteria' },
     ...(isBuyerOrAdmin ? [{ label: 'Responses', value: Math.max(props.participantsCount || 0, submittedParticipations.length).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone, subtext: 'Proposals submitted' }] : []),
   ];
@@ -2033,29 +2049,29 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         )}
 
         {/* Header */}
-        <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
+        <header className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 sm:py-3 shadow-2xs">
+          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <StatusBadge status={statusLabel} />
                 {buyerOrgName !== 'N/A' && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-indigo-700">
-                    <Building2 className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-indigo-700">
+                    <Building2 className="h-3 w-3" />
                     {formatPrimitiveValue(buyerOrgName, 'organization')}
                   </span>
                 )}
                 {props.deadlineDate && <DeadlineCountdown targetDate={props.deadlineDate} />}
                 {props.hasSubmittedProposal && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-700">
-                    <ShieldCheck className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                    <ShieldCheck className="h-3 w-3" />
                     {props.procurementType === 'RFQ' ? 'Quotation Submitted' : 'Proposal Submitted'}
                   </span>
                 )}
               </div>
               <div>
-                <h1 className="text-xl font-black leading-tight tracking-tight text-slate-950 md:text-3xl">{resolvedSubject}</h1>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                  <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-800">{displayIdStr}</span>
+                <h1 className="text-base sm:text-lg md:text-xl font-black leading-tight tracking-tight text-slate-950">{resolvedSubject}</h1>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800 text-[10px]">{displayIdStr}</span>
                   <span>•</span>
                   <span>{formatPrimitiveValue(procurementMethod, 'procurementMethod')}</span>
                   {category !== 'N/A' && (
@@ -2139,7 +2155,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         {/* EMD Section commented out */}
 
         {/* Summary Metrics */}
-        <section className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
+        <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {summaryCards.map(card => (
             <MetricCard key={card.label} {...card} />
           ))}
@@ -2268,11 +2284,11 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               )}
 
               {hasDetailData(lineItems) && (
-                <LineItemsTable items={lineItems} />
+                <LineItemsTable items={lineItems} defaultSubject={resolvedSubject} />
               )}
 
               {hasDetailData(boqTable) && (
-                <BoqTableList data={boqTable} />
+                <BoqTableList data={boqTable} defaultSubject={resolvedSubject} defaultCategory={category} defaultEstimatedValue={props.estimatedValue} />
               )}
             </section>
 
@@ -2354,7 +2370,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 bidValidityDate: firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline),
                 autoClose: firstPresent(rules.autoClose, schedule.autoClose, 'Yes'),
                 allowRevision: firstPresent(rules.allowRevision, schedule.allowRevision, 'Yes'),
-                rebidsAllowed: firstPresent(rules.rebidsAllowed, schedule.rebidsAllowed, 'Yes'),
+                // rebidsAllowed: firstPresent(rules.rebidsAllowed, schedule.rebidsAllowed, 'Yes'),
                 showSellerRank: firstPresent(rules.showSellerRank, schedule.showSellerRank, 'Yes'),
                 allowWithdrawal: firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal, 'Yes'),
                 showLowestPrice: firstPresent(rules.showLowestPrice, schedule.showLowestPrice, 'Yes'),

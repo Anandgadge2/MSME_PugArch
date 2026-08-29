@@ -45,6 +45,7 @@ export default function AdminCategoriesPage() {
   const [formDescription, setFormDescription] = useState('');
   const [formImageUrl, setFormImageUrl] = useState<string>('');
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchCategories = async () => {
@@ -85,6 +86,7 @@ export default function AdminCategoriesPage() {
     setFormDescription('');
     setFormImageUrl('');
     setImagePreview('');
+    setPendingImageFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setIsAddModalOpen(true);
   };
@@ -96,6 +98,7 @@ export default function AdminCategoriesPage() {
     setFormDescription(cat.description || '');
     setFormImageUrl(cat.imageUrl || '');
     setImagePreview(cat.imageUrl || '');
+    setPendingImageFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setIsAddModalOpen(true);
   };
@@ -104,29 +107,48 @@ export default function AdminCategoriesPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Image size should be less than 2MB');
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
       return;
     }
 
-    const allowedTypes = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
-    if (!allowedTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.svg')) {
-      toast.error('Please upload an SVG, PNG, JPG, or WebP image');
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Please upload a PNG, JPG, or WebP photo');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = (event.target?.result as string) || '';
-      setImagePreview(result);
-      setFormImageUrl(result);
-    };
-    reader.readAsDataURL(file);
+    setPendingImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const uploadCategoryImage = async (categoryId: number, file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      const res = await api.fetch(`/api/admin/categories/${categoryId}/image`, {
+        method: 'POST',
+        body: formData,
+        headers: {} // let browser set content-type with boundary
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        const newUrl = updated?.data?.imageUrl || updated?.imageUrl || '';
+        if (!newUrl) throw new Error('Cloud upload completed without an image URL');
+        return newUrl;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to upload image');
+      }
+    } catch (error) {
+      throw error instanceof Error ? error : new Error('Network error uploading image');
+    }
   };
 
   const handleRemoveImage = () => {
     setImagePreview('');
     setFormImageUrl('');
+    setPendingImageFile(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -141,9 +163,8 @@ export default function AdminCategoriesPage() {
 
     setIsSubmitting(true);
     try {
-      if (editingCategory) {
-        // Edit category
-        const res = await api.fetch(`/api/admin/categories/${editingCategory.id}`, {
+      const res = editingCategory
+        ? await api.fetch(`/api/admin/categories/${editingCategory.id}`, {
           method: 'PUT',
           body: JSON.stringify({
             name: formName.trim(),
@@ -151,37 +172,33 @@ export default function AdminCategoriesPage() {
             description: formDescription.trim() || undefined,
             imageUrl: formImageUrl || null
           })
-        });
-        if (res.ok) {
-          toast.success('Category updated successfully!');
-          setIsAddModalOpen(false);
-          fetchCategories();
-        } else {
-          const err = await res.json().catch(() => ({}));
-          toast.error(err.message || 'Failed to update category');
-        }
-      } else {
-        // Add category
-        const res = await api.fetch('/api/admin/categories', {
+        })
+        : await api.fetch('/api/admin/categories', {
           method: 'POST',
           body: JSON.stringify({
             name: formName.trim(),
             type: formType,
             description: formDescription.trim() || undefined,
-            imageUrl: formImageUrl || null
+            imageUrl: null
           })
         });
-        if (res.ok) {
-          toast.success('Category added successfully!');
-          setIsAddModalOpen(false);
-          fetchCategories();
-        } else {
-          const err = await res.json().catch(() => ({}));
-          toast.error(err.message || 'Failed to create category');
-        }
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `Failed to ${editingCategory ? 'update' : 'create'} category`);
       }
-    } catch {
-      toast.error('Network error while saving category');
+
+      const savedResponse = await res.json();
+      const savedCategory = savedResponse?.data || savedResponse;
+      if (pendingImageFile) {
+        await uploadCategoryImage(Number(savedCategory.id), pendingImageFile);
+      }
+
+      toast.success(`Category ${editingCategory ? 'updated' : 'created'} successfully!`);
+      setIsAddModalOpen(false);
+      await fetchCategories();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Network error while saving category');
     } finally {
       setIsSubmitting(false);
     }
@@ -468,11 +485,11 @@ export default function AdminCategoriesPage() {
                           {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <div className="h-10 w-10 mx-auto rounded-lg border border-slate-200/80 bg-white flex items-center justify-center p-1.5 shadow-2xs overflow-hidden">
+                          <div className="h-10 w-10 mx-auto rounded-lg border border-slate-200/80 bg-white flex items-center justify-center shadow-2xs overflow-hidden">
                             <img
                               src={displayImg}
                               alt={cat.name}
-                              className="h-full w-full object-contain drop-shadow-2xs"
+                              className="h-full w-full object-cover"
                               onError={(e) => {
                                 (e.target as HTMLElement).style.display = 'none';
                               }}
@@ -587,32 +604,32 @@ export default function AdminCategoriesPage() {
                 </select>
               </div>
 
-              {/* Category Image / SVG Upload */}
+              {/* Category photo upload */}
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
-                  Category Image / SVG Icon
+                  Category Photo
                 </label>
                 
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/svg+xml,image/png,image/jpeg,image/jpg,image/webp,.svg"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
                   onChange={handleImageChange}
                   className="hidden"
                 />
 
                 {imagePreview ? (
                   <div className="flex items-center gap-3.5 p-3 rounded-lg border border-slate-200 bg-slate-50/70">
-                    <div className="h-14 w-14 rounded-lg border border-slate-200 bg-white flex items-center justify-center p-2 shadow-2xs shrink-0">
+                    <div className="h-14 w-14 rounded-lg border border-slate-200 bg-white flex items-center justify-center shadow-2xs shrink-0 overflow-hidden">
                       <img
                         src={imagePreview}
                         alt="Category Preview"
-                        className="h-full w-full object-contain"
+                        className="h-full w-full object-cover"
                       />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-bold text-slate-800">Image Ready</div>
-                      <div className="text-[11px] text-slate-500">Stored directly in database</div>
+                      <div className="text-[11px] text-slate-500">Uploaded to GCP when the category is saved</div>
                       <div className="flex items-center gap-2 mt-1.5">
                         <button
                           type="button"
@@ -640,8 +657,8 @@ export default function AdminCategoriesPage() {
                     <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
                       <Upload className="h-4 w-4" />
                     </div>
-                    <div className="text-xs font-bold text-slate-700">Click to upload category image / SVG</div>
-                    <div className="text-[10px] text-slate-400 font-medium">SVG, PNG, JPG, or WebP (max 2MB)</div>
+                    <div className="text-xs font-bold text-slate-700">Click to upload a realistic category photo</div>
+                    <div className="text-[10px] text-slate-400 font-medium">PNG, JPG, or WebP (max 5MB); portrait or square works best</div>
                   </div>
                 )}
               </div>

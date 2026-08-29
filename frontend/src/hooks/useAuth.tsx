@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '../lib/api';
 import { COOKIE_SESSION_TOKEN, clearAuthCookie, clearStoredToken, getCookieValue, getStoredToken, setStoredToken } from '../lib/auth';
 import { clearGuestCart } from '../features/marketplace/hooks/useGuestCart';
+import { isShgUser } from '../lib/shg';
 
 interface User {
   id: string;
@@ -18,6 +19,8 @@ interface User {
   status?: string;
   emailVerified?: boolean;
   mobileVerified?: boolean;
+  mustChangePassword?: boolean;
+  requiresMobileVerification?: boolean;
   twoFactorEnabled?: boolean;
   adminFeedback?: string;
   permissions?: string[];
@@ -227,9 +230,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }).catch(() => undefined);
     }
 
-    const isShg = user.role === 'shg' || user.accountType === 'SHG';
     const targetUrl = redirectPath || (
-      user.role === 'master_admin' ? '/master-admin' : isShg ? '/shg/dashboard' : '/dashboard'
+      user.role === 'master_admin' ? '/master-admin' : isShgUser(user) ? '/shg/dashboard' : '/dashboard'
     );
 
     router.replace(targetUrl);

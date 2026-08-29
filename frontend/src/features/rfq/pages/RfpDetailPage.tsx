@@ -1354,11 +1354,21 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   }
   const seedProfile = seedRfps[Number(requestId)] || null;
 
+  const activeRfpId = explicitReqId || explicitRequestId || rawIdParam || pathnameId;
+  const isMatchingInitial = Boolean(
+    initialData && activeRfpId && (
+      String(initialData.id).toLowerCase() === String(activeRfpId).toLowerCase() ||
+      String(initialData.requirementNumber || '').toLowerCase() === String(activeRfpId).toLowerCase() ||
+      String(initialData.bidNumber || '').toLowerCase() === String(activeRfpId).toLowerCase() ||
+      String(initialData.displayId || '').toLowerCase() === String(activeRfpId).toLowerCase()
+    )
+  );
+
   const { data: bidData, isLoading: bidLoading, error: bidError } = useQuery({
     queryKey: ['procurement-bid-rfp-detail', requestId],
     queryFn: () => procurementBidApi.detail(requestId),
     enabled: !!requestId,
-    initialData: initialData?.sourceModel === 'BID' || initialData?.bidNumber ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
     retry: 1,
   });
@@ -1380,7 +1390,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       return getApi<any>(marketplaceEndpoint, true);
     },
     enabled: !!requirementId,
-    initialData: initialData?.title || initialData?.requirement ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
     staleTime: 60_000,
     retry: 1,
   });

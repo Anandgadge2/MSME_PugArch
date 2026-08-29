@@ -9,6 +9,15 @@ export interface CategoryVisualMeta {
 
 const GCS_BUCKET_NAME = process.env.NEXT_PUBLIC_GCS_BUCKET_NAME || 'jsgsmile1';
 const GCS_BASE_URL = `https://storage.googleapis.com/${GCS_BUCKET_NAME}/categories`;
+const BUNDLED_CATEGORY_PHOTO_VERSION = '1787987232675';
+
+const getBundledCategoryPhotoUrl = (category: MarketplaceCategory, rawUrl: unknown): string => {
+    if (typeof rawUrl !== 'string' || !category.slug) return '';
+    const expectedObject = `/categories/photos/${category.slug}-${BUNDLED_CATEGORY_PHOTO_VERSION}.webp`;
+    return rawUrl.includes(expectedObject)
+        ? `/category-photos/${BUNDLED_CATEGORY_PHOTO_VERSION}/${category.slug}.webp`
+        : '';
+};
 
 export const CATEGORY_SVG_FILE_MAP: Record<string, string> = {
     'electrical & electronics': 'electrical-electronics.svg',
@@ -197,9 +206,17 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
     const rawName = typeof category === 'string' ? category : category?.name || '';
     const rawSlug = typeof category === 'string' ? '' : category?.slug || '';
     
-    // 1. If category object has imageUrl stored in database (e.g. GCP storage URL or data-URI)
+    // 1. If category object has custom imageUrl stored in database
     if (typeof category === 'object' && category !== null) {
         const rawCustom = (category as any).imageUrl || (category as any).image || (category as any).photoUrl;
+        const bundledPhoto = getBundledCategoryPhotoUrl(category, rawCustom);
+        if (bundledPhoto) {
+            return {
+                imageUrl: bundledPhoto,
+                accentColor: '#2563eb',
+                categoryTag: rawName,
+            };
+        }
         const resolved = resolveMediaUrl(rawCustom);
         if (resolved) {
             return {
@@ -210,7 +227,7 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
         }
     }
 
-    // 2. Direct match to GCP Bucket
+    // 2. Direct match to GCS Bucket SVG
     const svgFile = findCategorySvgFilename(rawName, rawSlug);
     const cloudUrl = resolveMediaUrl(`${GCS_BASE_URL}/${svgFile}`) || `${GCS_BASE_URL}/${svgFile}`;
 
@@ -224,6 +241,8 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
 export const getCategoryImageUrl = (category: MarketplaceCategory | string): string => {
     if (typeof category === 'object' && category !== null) {
         const rawCustom = (category as any).imageUrl || (category as any).image || (category as any).photoUrl;
+        const bundledPhoto = getBundledCategoryPhotoUrl(category, rawCustom);
+        if (bundledPhoto) return bundledPhoto;
         const resolved = resolveMediaUrl(rawCustom);
         if (resolved) return resolved;
 

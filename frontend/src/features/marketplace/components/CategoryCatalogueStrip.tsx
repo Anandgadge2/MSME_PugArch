@@ -51,13 +51,12 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
                 loading="lazy"
                 decoding="async"
                 referrerPolicy="no-referrer"
-                crossOrigin="anonymous"
                 onError={handleImageError}
-                className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                className="absolute inset-0 h-full w-full bg-slate-100 object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
             />
             
             {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/50 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/55 via-[35%] to-white/5" />
             
             {/* Category Name */}
             <div className="relative z-10 w-full p-3 sm:p-4 text-center">

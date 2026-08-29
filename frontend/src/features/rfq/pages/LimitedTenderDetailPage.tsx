@@ -46,11 +46,21 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
   const requestId = searchParams.get('requestId') || searchParams.get('id') || pathnameId;
   const requirementId = searchParams.get('requirementId') || (!requestId ? pathnameId : '');
 
+  const activeLimitedId = requestId || requirementId || pathnameId;
+  const isMatchingInitial = Boolean(
+    initialData && activeLimitedId && (
+      String(initialData.id).toLowerCase() === String(activeLimitedId).toLowerCase() ||
+      String(initialData.requirementNumber || '').toLowerCase() === String(activeLimitedId).toLowerCase() ||
+      String(initialData.bidNumber || '').toLowerCase() === String(activeLimitedId).toLowerCase() ||
+      String(initialData.displayId || '').toLowerCase() === String(activeLimitedId).toLowerCase()
+    )
+  );
+
   const { data: bidData, isLoading: isBidLoading, error: bidError } = useQuery({
     queryKey: ['limited-tender-bid-detail', requestId],
     queryFn: () => procurementBidApi.detail(requestId!),
     enabled: !!requestId,
-    initialData: initialData?.sourceModel === 'BID' || initialData?.bidNumber ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
   });
 
@@ -70,7 +80,7 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
       return null;
     },
     enabled: !!targetReqId && (!bidData || !(bidData as any).items?.length),
-    initialData: initialData?.title || initialData?.requirement ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
     staleTime: 60_000,
   });
 

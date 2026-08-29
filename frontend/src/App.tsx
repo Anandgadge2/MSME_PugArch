@@ -3,6 +3,7 @@ import React, { Suspense, lazy, useState, useLayoutEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useIsFetching } from '@tanstack/react-query';
 import { useAuth } from './hooks/useAuth';
+import { usePermissions } from './hooks/useOrgRole';
 import { cn } from './lib/utils';
 import { isShgUser } from './lib/shg';
 import { getCookieValue } from './lib/auth';
@@ -63,7 +64,6 @@ const RbacPanel = lazy(() => import('./views/RbacPanel'));
 const OrganizationManagement = lazy(() => import('./views/OrganizationManagement'));
 const NotificationCenter = lazy(() => import('./views/NotificationCenter'));
 const MISReports = lazy(() => import('./views/MISReports'));
-const TeamManagementPage = lazy(() => import('./features/orgTeam/pages/TeamManagementPage'));
 const AcceptInvitePage = lazy(() => import('./features/orgTeam/pages/AcceptInvitePage'));
 const InviteSignupPage = lazy(() => import('./features/orgTeam/pages/InviteSignupPage'));
 const CartPage = lazy(() => import('./features/cart/pages/CartPage'));
@@ -128,6 +128,7 @@ const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotat
 const RfqComparisonPage = lazy(() => import('./features/rfq/pages/RfqComparisonPage'));
 const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLoginPopup'));
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
+const SubUserActivationGate = lazy(() => import('./features/auth/components/SubUserActivationGate'));
 
 import Sidebar, { Header } from './components/layout/Navbar';
 import { MarketplaceHeader } from './features/marketplace/components/MarketplaceHeader';
@@ -193,6 +194,44 @@ function RouteFallback() {
         <div className="h-12 bg-slate-200/40 rounded-xl w-full" />
         <div className="h-12 bg-slate-200/40 rounded-xl w-full" />
         <div className="h-12 bg-slate-200/40 rounded-xl w-full" />
+      </div>
+    </div>
+  );
+}
+
+const routePermissionRules: Array<{ matches: (path: string) => boolean; anyOf: string[] }> = [
+  { matches: path => path === '/dashboard', anyOf: ['dashboard.view'] },
+  { matches: path => path === '/cart', anyOf: ['cart.view'] },
+  { matches: path => path.startsWith('/buyer/procurement/create') || path.startsWith('/buyer/procurement/drafts'), anyOf: ['requirement.create', 'tender.create', 'reverse_auction.create'] },
+  { matches: path => path.startsWith('/buyer/my-procurements') || path.startsWith('/buyer/procurement/responses'), anyOf: ['requirement.view', 'tender.view', 'reverse_auction.view'] },
+  { matches: path => path === '/orders' || path.startsWith('/procurement-orders') || path.includes('repeat-orders'), anyOf: ['purchase_order.view'] },
+  { matches: path => path === '/grn' || path.startsWith('/buyer/grn') || path.startsWith('/grn/'), anyOf: ['grn.view'] },
+  { matches: path => path.startsWith('/orders/tracking') || path.startsWith('/seller/delivery-management') || path.startsWith('/admin/delivery'), anyOf: ['delivery.view'] },
+  { matches: path => path.startsWith('/payments/invoices'), anyOf: ['invoice.view'] },
+  { matches: path => path.startsWith('/payments/transactions'), anyOf: ['payment.view'] },
+  { matches: path => path.startsWith('/payments/escrow'), anyOf: ['escrow.view'] },
+  { matches: path => path === '/org/team' || path === '/admin/rbac' || path === '/roles-permissions', anyOf: ['team.member.view', 'team.role.view', 'team.role.manage'] },
+  { matches: path => path === '/reports' || path.startsWith('/admin/reports'), anyOf: ['report.view'] },
+  { matches: path => path.includes('/disputes'), anyOf: ['dispute.view'] },
+  { matches: path => path.startsWith('/seller/catalogue') || path.startsWith('/shg/catalogue'), anyOf: ['catalogue.product.view', 'catalogue.service.view'] },
+  { matches: path => path.startsWith('/seller/opportunities') || path.startsWith('/shg/opportunities'), anyOf: ['marketplace.view', 'tender.view', 'reverse_auction.view'] },
+  { matches: path => path.startsWith('/seller/bids') || path.startsWith('/shg/bids'), anyOf: ['bid.submit', 'purchase_order.view'] },
+  { matches: path => path === '/buyer/marketplace', anyOf: ['marketplace.view'] },
+  { matches: path => path.startsWith('/admin/onboarding'), anyOf: ['onboarding.review'] },
+  { matches: path => path.startsWith('/admin/users'), anyOf: ['user.view'] },
+  { matches: path => path.startsWith('/admin/organizations'), anyOf: ['organization.view'] },
+  { matches: path => path === '/admin/marketplace', anyOf: ['catalogue.product.view', 'catalogue.service.view'] },
+  { matches: path => path.startsWith('/admin/categories') || path.startsWith('/admin/banners') || path.startsWith('/admin/monthly-rankings') || path.startsWith('/admin/marketplace/home-sections') || path.startsWith('/admin/compliance-rules'), anyOf: ['settings.manage'] }
+];
+
+function PermissionDenied({ required }: { required: string[] }) {
+  return (
+    <div className="flex min-h-[55vh] items-center justify-center p-6">
+      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-xl">🔒</div>
+        <h2 className="mt-4 text-xl font-black text-slate-950">This page is not part of your role</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Ask your workspace administrator to assign one of the required permissions if you need this function.</p>
+        <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-slate-500">{required.join(' or ')}</p>
       </div>
     </div>
   );
@@ -389,6 +428,7 @@ let globalInitialLoadComplete = false;
 
 export default function App({ serverInitialLoadComplete = false }: { serverInitialLoadComplete?: boolean }) {
   const { user, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
+  const { hasPermission, loading: permissionsLoading } = usePermissions();
   const router = useRouter();
   const pathname = usePathname() || '/';
   const [initialLoadComplete, setInitialLoadComplete] = useState(() => {
@@ -431,9 +471,9 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   }, []);
 
   const isDataSettled = isFetchingQueries === 0 || safetyTimeoutPassed;
-  const isInitialReady = !loading && isPageMounted;
-  const isAuthTransitionReady = isPageMounted && !loading;
-  const isLogoutReady = isPageMounted;
+  const isInitialReady = (!loading && isDataSettled) || safetyTimeoutPassed;
+  const isAuthTransitionReady = isPageMounted && (!loading || safetyTimeoutPassed);
+  const isLogoutReady = isPageMounted || safetyTimeoutPassed;
 
   const [hasCookie, setHasCookie] = useState(false);
 
@@ -637,13 +677,18 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
       }
       return null;
     }
+
+    const permissionRule = routePermissionRules.find(rule => rule.matches(pathname));
+    if (!permissionsLoading && permissionRule && !permissionRule.anyOf.some(hasPermission)) {
+      return <PermissionDenied required={permissionRule.anyOf} />;
+    }
     const shgRouteOk = isCurrentShg || roleOk(user.role, ['shg']);
     if ((pathname === '/master-admin' || pathname.startsWith('/master-admin/')) && roleOk(user.role, ['master_admin'])) return <MasterAdminPage />;
     if (pathname === '/dashboard' && user.role === 'master_admin') return <Redirect to="/master-admin" />;
     if (pathname === '/dashboard' && isCurrentShg) return <Redirect to="/shg/dashboard" />;
     if (pathname === '/dashboard') return <Dashboard />;
+    if (pathname === '/shg/dashboard' && shgRouteOk) return <Dashboard />;
     if (pathname === '/shg/onboarding' && shgRouteOk) return <ShgOnboarding section="onboarding" />;
-    if (pathname === '/shg/dashboard' && shgRouteOk) return <ShgOnboarding section="dashboard" />;
     if (pathname === '/shg/profile' && shgRouteOk) return <ShgOnboarding section="profile" />;
     if (pathname === '/shg/members' && shgRouteOk) return <ShgOnboarding section="members" />;
     if (pathname === '/shg/bank-details' && shgRouteOk) return <ShgOnboarding section="bank-details" />;
@@ -799,7 +844,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/master-admin/rbac' && roleOk(user.role, ['master_admin'])) return <RbacPanel />;
     if (pathname === '/admin/organizations' && roleOk(user.role, ['admin'])) return <OrganizationManagement />;
     if (pathname === '/notifications') return <NotificationCenter />;
-    if (pathname === '/org/team') return <TeamManagementPage />;
+    if (pathname === '/org/team') return <RbacPanel />;
     if (pathname === '/cart') return <CartPage />;
     
     
@@ -909,6 +954,9 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
           onComplete={() => setIsLoggingOut(false)}
         />
       )}
+      <Suspense fallback={null}>
+        <SubUserActivationGate />
+      </Suspense>
 
       <div className={cn("flex bg-neutral-50 font-sans text-neutral-900", showDashboardLayout ? "h-dvh overflow-hidden" : "min-h-dvh flex-col")}>
         {showDashboardLayout && (

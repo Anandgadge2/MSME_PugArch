@@ -153,7 +153,7 @@ export function PageToolbar({
             <div className="space-y-2 sm:hidden">
                 <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-nowrap">
                     {hasSearch && (
-                        <div className="relative min-w-0 flex-1">
+                        <div className="relative flex-1 min-w-[200px]">
                             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <input
                                 value={search ?? ''}

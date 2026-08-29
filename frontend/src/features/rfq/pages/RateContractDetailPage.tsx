@@ -165,12 +165,22 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     }
   }
 
+  const activeRcId = requestId || requirementId || rawIdParam;
+  const isMatchingInitial = Boolean(
+    initialData && activeRcId && (
+      String(initialData.id).toLowerCase() === String(activeRcId).toLowerCase() ||
+      String(initialData.requirementNumber || '').toLowerCase() === String(activeRcId).toLowerCase() ||
+      String(initialData.bidNumber || '').toLowerCase() === String(activeRcId).toLowerCase() ||
+      String(initialData.displayId || '').toLowerCase() === String(activeRcId).toLowerCase()
+    )
+  );
+
   // Fetch ProcurementBid / Rate Contract data via the unified detail endpoint
   const { data: bidData, isLoading: bidLoading, error: bidError } = useQuery({
     queryKey: ['procurement-bid-rc-detail', requestId],
     queryFn: () => procurementBidApi.detail(requestId),
     enabled: !!requestId,
-    initialData: initialData?.sourceModel === 'BID' || initialData?.bidNumber ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
     retry: 1,
   });
@@ -183,7 +193,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       return data;
     },
     enabled: !!requirementId,
-    initialData: initialData?.title || initialData?.requirement ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
     staleTime: 60_000,
     retry: 1,
   });

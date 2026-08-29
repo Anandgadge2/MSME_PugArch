@@ -172,7 +172,10 @@ const inferCompletedSellerSections = (profile: any, orgVerified = false) => {
 export default function SellerOnboarding({ initialSection }: { initialSection?: string } = {}) {
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const getAuthHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token') || '') : '';
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   const cachedMe = api.peek('/api/auth/me', { headers: getAuthHeaders() });
   const isStale = !cachedMe || !(cachedMe.user?.role === 'seller' || cachedMe.user?.role === 'shg');

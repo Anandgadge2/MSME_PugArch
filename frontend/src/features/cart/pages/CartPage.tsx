@@ -622,12 +622,23 @@ export default function CartPage() {
                                     Request Quote {selectedItemIds.size > 0 ? `(${selectedItemIds.size} Selected)` : ''}
                                 </Button>
                                 {isSubmittable && (
-                                    <Button
-                                        onClick={() => router.push('/buyer/procurement/checkout')}
-                                        className="bg-[#12335f] text-white hover:bg-[#0e2a4f] font-bold"
-                                    >
-                                        Proceed to Procurement Checkout
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => router.push('/buyer/procurement/create?method=RFQ&fromCart=1')}
+                                            className="text-xs border-slate-300 font-semibold"
+                                        >
+                                            Create RFQ / Bid
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            onClick={() => router.push('/buyer/checkout')}
+                                            className="bg-[#12335f] text-white hover:bg-[#0e2a4f] font-bold text-xs px-5 shadow-sm"
+                                        >
+                                            Proceed to Direct Checkout
+                                        </Button>
+                                    </div>
                                 )}
                             </div>
                         </div>

@@ -2702,6 +2702,9 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
 
   const ext = path.extname(rawKey).toLowerCase();
   const contentType = RAW_MIME_TYPES[ext] || 'application/octet-stream';
+  const cacheControl = rawKey.startsWith('categories/photos/') && req.query.v
+    ? 'public, max-age=31536000, s-maxage=31536000, immutable'
+    : 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400';
 
   // 1. Try authenticated GCS client
   try {
@@ -2712,7 +2715,7 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
       const [buffer] = await file.download();
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', buffer.length);
-      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+      res.setHeader('Cache-Control', cacheControl);
       res.setHeader('Access-Control-Allow-Origin', '*');
       return res.end(buffer);
     }
@@ -2728,7 +2731,7 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
       const headerContentType = response.headers.get('content-type') || contentType;
       res.setHeader('Content-Type', headerContentType);
       res.setHeader('Content-Length', buffer.length);
-      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+      res.setHeader('Cache-Control', cacheControl);
       res.setHeader('Access-Control-Allow-Origin', '*');
       return res.end(buffer);
     }
@@ -4139,6 +4142,55 @@ router.delete('/admin/categories/:id', authenticate, authorizeAdmin, asyncRoute(
   await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
   await auditWrite(req, 'category.deleted', 'category', id);
   ok(res, category || { id, deleted: true });
+}));
+
+// ── Admin Category Image Upload (GCS-backed) ──
+import multer from 'multer';
+const categoryImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { files: 1, fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req: any, file: any, cb: any) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.mimetype)) {
+      return cb(new ApiError(400, 'Only JPEG, PNG, or WebP images are allowed'));
+    }
+    cb(null, true);
+  }
+});
+
+router.post('/admin/categories/:id/image', authenticate, authorizeAdmin, categoryImageUpload.single('image'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
+  const { id } = parse(idParams, req.params);
+  const file = req.file;
+  if (!file || !file.buffer?.length) throw new ApiError(400, 'Image file is required', 'IMAGE_REQUIRED');
+
+  const category = await db.category.findUnique({ where: { id } });
+  if (!category) throw new ApiError(404, 'Category not found', 'CATEGORY_NOT_FOUND');
+
+  const ext = file.mimetype === 'image/png' ? '.png' : file.mimetype === 'image/webp' ? '.webp' : '.jpg';
+  const timestamp = Date.now();
+  const gcsKey = `categories/photos/${category.slug}-${timestamp}${ext}`;
+  const bucket = getGCSBucket();
+  const bucketName = getGCSBucketName();
+
+  await bucket.file(gcsKey).save(file.buffer, {
+    contentType: file.mimetype,
+    resumable: false,
+    metadata: {
+      contentType: file.mimetype,
+      cacheControl: 'public, max-age=31536000, immutable',
+      metadata: { categoryId: String(id), categorySlug: category.slug, uploadedBy: String(userId(req)) }
+    }
+  });
+
+  const imageUrl = `https://storage.googleapis.com/${bucketName}/${gcsKey}?v=${timestamp}`;
+  const updated = await db.category.update({ where: { id }, data: { imageUrl } });
+
+  await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
+  await deleteCache(redisKeys.cacheMarketplaceFeaturedCategories()).catch(() => undefined);
+  await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
+  await auditWrite(req, 'category.image_uploaded', 'category', id);
+
+  ok(res, updated);
 }));
 
 router.post('/seller/products', authenticate, requirePermission('catalogue.product.create', orgScope), asyncRoute(async (req, res) => {

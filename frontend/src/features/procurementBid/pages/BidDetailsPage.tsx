@@ -32,22 +32,34 @@ export default function BidDetailsPage() {
 
       if (isReqPattern) {
         try {
+          const req = await getApi<any>(`/api/marketplace/requirements/${requestId}`);
+          const item = req?.requirement || req?.data || req;
+          if (item && (item.id || item.title || item.requirementNumber)) return item;
+        } catch {}
+        try {
           const req = await getApi<any>(`/api/requirements/${requestId}`);
-          if (req && (req.data || req.id || req.title)) return req.data || req;
+          const item = req?.data || req;
+          if (item && (item.id || item.title || item.requirementNumber)) return item;
         } catch {}
       }
 
-      const [bidRes, reqRes] = await Promise.allSettled([
+      const [mktRes, bidRes, reqRes] = await Promise.allSettled([
+        getApi<any>(`/api/marketplace/requirements/${requestId}`),
         procurementBidApi.detail(requestId),
         getApi<any>(`/api/requirements/${requestId}`)
       ]);
 
+      if (mktRes.status === 'fulfilled' && mktRes.value) {
+        const val: any = mktRes.value;
+        const item = val?.requirement || val?.data || val;
+        if (item && (item.id || item.title || item.requirementNumber)) return item;
+      }
       if (bidRes.status === 'fulfilled' && bidRes.value) {
         return bidRes.value;
       }
       if (reqRes.status === 'fulfilled' && reqRes.value) {
         const val: any = reqRes.value;
-        return val.data || val;
+        return val?.data || val;
       }
       return null;
     },

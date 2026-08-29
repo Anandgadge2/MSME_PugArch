@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
+import { isShgUser } from '../../../lib/shg';
 import { getApi } from '../../shared/apiClient';
 import { KpiCard, type KpiCardTone } from '../../shared/KpiCard';
 
@@ -97,7 +98,7 @@ function RoleAwareActionCards() {
     const data: DashboardSummary = summary.data || {};
     const isLoading = summary.isLoading && !summary.data;
     const isBuyer = user?.role === 'buyer';
-    const isSeller = user?.role === 'seller';
+    const isSeller = user?.role === 'seller' || user?.role === 'shg' || isShgUser(user);
     const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
     const hasPermission = useCallback((permissionCode: string) => {
         return permissions.includes('*') || permissions.includes(permissionCode);
