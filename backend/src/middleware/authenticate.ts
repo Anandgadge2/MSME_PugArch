@@ -20,6 +20,8 @@ export type AuthenticatedUser = {
   districtId?: string | number | null;
   activeScope?: { scopeType: string; scopeId: string | null };
   enabledFeatures?: string[];
+  mustChangePassword?: boolean;
+  requiresMobileVerification?: boolean;
 };
 
 export type AuthRequest = Request & {
@@ -36,6 +38,14 @@ const getNotificationStreamToken = (req: Request) =>
   isNoisyNotificationStream(req) && typeof req.query.token === 'string'
     ? req.query.token
     : '';
+
+const activationAllowedPaths = new Set([
+  '/api/auth/me',
+  '/api/auth/change-password',
+  '/api/auth/sub-user/mobile/send-otp',
+  '/api/auth/sub-user/mobile/verify',
+  '/api/auth/logout'
+]);
 
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization || '';
@@ -74,7 +84,18 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         async () => {
           const userDb = await (prisma as any).user.findUnique({
             where: { id: userId },
-            select: { id: true, role: true, accountType: true, accountTypeId: true, sessionVersion: true, lockedUntil: true, accountStatus: true, organizationId: true, }
+            select: {
+              id: true,
+              role: true,
+              accountType: true,
+              accountTypeId: true,
+              sessionVersion: true,
+              lockedUntil: true,
+              accountStatus: true,
+              organizationId: true,
+              mustChangePassword: true,
+              requiresMobileVerification: true
+            }
           });
 
           if (!userDb || userDb.role !== decoded.role || userDb.sessionVersion !== sessionVersion) {
@@ -116,6 +137,8 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
             districtId: districtAssignment?.scopeId || null,
             activeScope,
             enabledFeatures: [] as string[],
+            mustChangePassword: Boolean(userDb.mustChangePassword),
+            requiresMobileVerification: Boolean(userDb.requiresMobileVerification),
             lockedUntil: userDb.lockedUntil ? userDb.lockedUntil.toISOString() : null,
             accountStatus: userDb.accountStatus
           };
@@ -178,6 +201,16 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       return apiResponse.error(res, 403, 'Your account is inactive or blocked. Please contact the platform administrator.', 'ACCOUNT_DISABLED');
     }
 
+    const requestPath = req.originalUrl.split('?')[0];
+    if (!activationAllowedPaths.has(requestPath)) {
+      if (cachedUser.mustChangePassword) {
+        return apiResponse.error(res, 403, 'Change your temporary password to continue.', 'PASSWORD_CHANGE_REQUIRED');
+      }
+      if (cachedUser.requiresMobileVerification) {
+        return apiResponse.error(res, 403, 'Verify your mobile number to continue.', 'MOBILE_VERIFICATION_REQUIRED');
+      }
+    }
+
     req.user = {
       id: cachedUser.id,
       role: cachedUser.role,
@@ -189,7 +222,9 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       
       districtId: cachedUser.districtId,
       activeScope: cachedUser.activeScope,
-      enabledFeatures: cachedUser.enabledFeatures
+      enabledFeatures: cachedUser.enabledFeatures,
+      mustChangePassword: cachedUser.mustChangePassword,
+      requiresMobileVerification: cachedUser.requiresMobileVerification
     };
 
     return next();
@@ -215,7 +250,7 @@ export const optionalAuthenticate = async (req: Request, res: Response, next: Ne
     const decoded = verifyAccessToken(token);
     const user = await prisma.user.findUnique({
       where: { id: Number(decoded.id) },
-      select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true, }
+      select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true, mustChangePassword: true, requiresMobileVerification: true }
     });
     if (user && user.accountStatus === 'ACTIVE' && user.role === decoded.role && user.sessionVersion === Number(decoded.sessionVersion)) {
       (req as any).user = {
@@ -224,7 +259,8 @@ export const optionalAuthenticate = async (req: Request, res: Response, next: Ne
         sessionVersion: user.sessionVersion,
         permissions: [],
         organizationId: user.organizationId,
-        
+        mustChangePassword: user.mustChangePassword,
+        requiresMobileVerification: user.requiresMobileVerification,
         enabledFeatures: []
       };
     }

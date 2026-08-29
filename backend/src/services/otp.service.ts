@@ -15,6 +15,7 @@ export type OtpPurpose =
   | 'buyer_profile_update'
   | 'seller_profile_update'
   | 'onboarding_verification'
+  | 'sub_user_mobile_activation'
   | 'tender_alert'
   | 'transaction_2fa';
 

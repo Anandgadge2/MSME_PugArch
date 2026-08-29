@@ -18,6 +18,8 @@ interface User {
   status?: string;
   emailVerified?: boolean;
   mobileVerified?: boolean;
+  mustChangePassword?: boolean;
+  requiresMobileVerification?: boolean;
   twoFactorEnabled?: boolean;
   adminFeedback?: string;
   permissions?: string[];
