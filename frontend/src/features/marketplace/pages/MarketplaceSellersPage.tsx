@@ -604,12 +604,12 @@ export default function MarketplaceSellersPage() {
                                                         size="lg"
                                                     />
                                                 </div>
-                                                <h3 className="mt-3 text-sm sm:text-base font-extrabold text-[#0b2447] group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug px-1">
+                                                <h3 title={seller.organizationName} className="mt-3 text-sm sm:text-base font-extrabold text-[#0b2447] group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug px-1">
                                                     {seller.organizationName}
                                                 </h3>
                                                 <p className="mt-1 flex items-center justify-center gap-1 text-xs font-medium text-slate-500 px-1">
                                                     <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                    <span className="line-clamp-1">{location || 'Jharsuguda, Odisha'}</span>
+                                                    <span title={location || 'Jharsuguda, Odisha'} className="line-clamp-1">{location || 'Jharsuguda, Odisha'}</span>
                                                 </p>
 
                                                 {/* Capabilities */}

@@ -6,12 +6,13 @@ import { usePathname } from 'next/navigation';
 import { ClipboardCheck, CreditCard, ReceiptText, RefreshCcw, Search, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
-import { PageShell, ProcurementEmptyState, ProcurementErrorState, ProcurementHero, ProcurementLoadingState, StatusBadge } from '../components';
+import { PageShell, ProcurementEmptyState, ProcurementErrorState, ProcurementHero, StatusBadge } from '../components';
 import { money } from '../data';
 import { procurementOrderApi } from '../orderApi';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { Button } from '../../../components/ui/button';
+import { PageTableSkeleton } from '../../../components/ui/skeleton';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
@@ -137,7 +138,7 @@ export default function ProcurementOrdersPage() {
           action={<button onClick={load} className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-700"><RefreshCcw className="h-4 w-4" /> Refresh</button>}
         />
 
-        {loading ? <div className="mt-5"><ProcurementLoadingState message="Loading procurement order lifecycle..." /></div> : error ? <div className="mt-5"><ProcurementErrorState message={error} onRetry={load} /></div> : order ? (
+        {loading ? <div className="mt-5"><PageTableSkeleton kpiCount={0} /></div> : error ? <div className="mt-5"><ProcurementErrorState message={error} onRetry={load} /></div> : order ? (
           <OrderDetail order={order} role={user?.role} busy={busy} remarks={remarks} setRemarks={setRemarks} run={run} />
         ) : (
           <section className="mt-5 space-y-5">

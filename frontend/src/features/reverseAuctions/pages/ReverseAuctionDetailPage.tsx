@@ -180,7 +180,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{label}</p>
-        <p className={cn("mt-0.5 text-xs sm:text-[13px] font-black truncate", highlight ? "text-blue-600" : "text-slate-800")}>{value}</p>
+        <p title={value} className={cn("mt-0.5 text-xs sm:text-[13px] font-black truncate", highlight ? "text-blue-600" : "text-slate-800")}>{value}</p>
       </div>
     </div>
   );
@@ -282,7 +282,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-black uppercase tracking-wider text-blue-700/80">Current Lowest Bid</p>
-              <p className="mt-1 text-lg sm:text-xl font-black text-slate-900 tabular-nums truncate">
+              <p title={currentLowest > 0 ? formatCurrency(currentLowest) : 'No bid yet'} className="mt-1 text-lg sm:text-xl font-black text-slate-900 tabular-nums truncate">
                 {currentLowest > 0 ? formatCurrency(currentLowest) : 'No bid yet'}
               </p>
             </div>
@@ -295,7 +295,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700/80">Savings</p>
-              <p className="mt-1 text-lg sm:text-xl font-black text-slate-900 tabular-nums truncate">
+              <p title={savings > 0 ? `${formatCurrency(savings)} (${savingsPercent.toFixed(1)}%)` : '₹0.00 (0.0%)'} className="mt-1 text-lg sm:text-xl font-black text-slate-900 tabular-nums truncate">
                 {savings > 0 ? `${formatCurrency(savings)} (${savingsPercent.toFixed(1)}%)` : '₹0.00 (0.0%)'}
               </p>
             </div>
@@ -308,7 +308,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-black uppercase tracking-wider text-amber-700/80">Time Remaining</p>
-              <p className="mt-1 text-sm sm:text-base font-black text-slate-900 tabular-nums truncate">
+              <p title={formatDateTime(auction.data.endTime)} className="mt-1 text-sm sm:text-base font-black text-slate-900 tabular-nums truncate">
                 {formatDateTime(auction.data.endTime)}
               </p>
             </div>
@@ -650,7 +650,7 @@ function LinkedRequirementPanel({ requirement }: { requirement: NonNullable<impo
                     <tr key={i} className="hover:bg-blue-50/30 transition-colors">
                       <td className="p-3 text-slate-400 font-black text-center">{i + 1}</td>
                       <td className="p-3 font-bold text-slate-900">{item.itemName || '—'}</td>
-                      <td className="p-3 text-slate-500 max-w-[260px] truncate">{item.description || '—'}</td>
+                      <td title={item.description || '—'} className="p-3 text-slate-500 max-w-[260px] truncate">{item.description || '—'}</td>
                       <td className="p-3 text-right tabular-nums font-bold text-slate-900">{item.quantity ?? '—'}</td>
                       <td className="p-3">{item.unitOfMeasure || '—'}</td>
                     </tr>
@@ -670,7 +670,7 @@ function LinkedRequirementPanel({ requirement }: { requirement: NonNullable<impo
               {documents.map((doc, i) => (
                 <li key={i} className="flex items-center gap-2 text-xs font-semibold text-slate-700 bg-white p-2 rounded-xl border border-slate-200/60 shadow-2xs">
                   <FileText className="h-4 w-4 shrink-0 text-blue-600" />
-                  <span className="flex-1 truncate">{doc.name || doc.fileName || `Document ${i + 1}`}</span>
+                  <span title={doc.name || doc.fileName || `Document ${i + 1}`} className="flex-1 truncate">{doc.name || doc.fileName || `Document ${i + 1}`}</span>
                   {doc.required && <span className="text-red-500 font-black text-[10px] uppercase bg-red-50 px-1.5 py-0.5 rounded border border-red-200">Required</span>}
                 </li>
               ))}

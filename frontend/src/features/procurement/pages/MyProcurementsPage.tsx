@@ -41,6 +41,17 @@ import {
   ShieldCheck,
   Globe,
   Users,
+  Truck,
+
+  Sliders,
+  Wallet,
+  FileCheck2,
+  ScrollText,
+  Activity,
+  GitPullRequest,
+ 
+  Sparkles,
+ 
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -490,10 +501,10 @@ export default function MyProcurementsPage() {
 
   const openDetail = (p: NormalizedProcurement, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    
+
     const typeLower = String(p.type || '').toLowerCase();
     const methodLower = String(p.method || '').toLowerCase();
-    
+
     const isReverseAuction =
       typeLower === 'reverse_auction' ||
       methodLower === 'reverse_auction' ||
@@ -797,7 +808,7 @@ export default function MyProcurementsPage() {
         singleRowDesktop={true}
         search={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Search by Title, Ref No, Category, or Type..."
+        searchPlaceholder="Search by title, ref no, category..."
         filters={[
           {
             kind: 'select',
@@ -849,118 +860,118 @@ export default function MyProcurementsPage() {
             <>
               <div className="overflow-x-auto w-full max-w-full rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
                 <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
-                <thead>
-                  <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                    <th className="px-4 py-3 text-center w-16 select-none">Sr. No.</th>
-                    <th className="px-4 py-3 w-32"><SortableHeader label="Type" field="type" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 w-96"><SortableHeader label="Title & Reference" field="title" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 w-36"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 w-36"><SortableHeader label="Est. Value" field="estimatedValue" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 w-44"><SortableHeader label="Category & Location" field="category" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 w-32"><SortableHeader label="Updated" field="updatedAt" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                    <th className="px-4 py-3 text-right w-32 select-none font-black">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedProcurements.map((p: any, idx) => {
-                    const typeVal = getConsolidatedType(p);
-                    const TypeIcon = getTypeIcon(typeVal);
-                    return (
-                      <tr
-                        key={`${p.type}-${p.id}`}
-                        className="group bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 hover:bg-slate-50/70 transition-all duration-300 ease-out align-middle cursor-pointer"
-                        onClick={() => openDetail(p)}
-                      >
-                        {/* Serial Number */}
-                        <td className="rounded-l-xl px-4 py-4 text-xs font-black text-slate-400 text-center">
-                          {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
-                        </td>
+                  <thead>
+                    <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                      <th className="px-4 py-3 text-center w-16 select-none">Sr. No.</th>
+                      <th className="px-4 py-3 w-32"><SortableHeader label="Type" field="type" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                      <th className="px-4 py-3 w-96"><SortableHeader label="Title & Reference" field="title" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                      <th className="px-4 py-3 w-36"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                      <th className="px-4 py-3 w-36"><SortableHeader label="Est. Value" field="estimatedValue" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                      <th className="px-4 py-3 w-44"><SortableHeader label="Category & Location" field="category" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                      <th className="px-4 py-3 w-32"><SortableHeader label="Updated" field="updatedAt" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
+                      <th className="px-4 py-3 text-right w-32 select-none font-black">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedProcurements.map((p: any, idx) => {
+                      const typeVal = getConsolidatedType(p);
+                      const TypeIcon = getTypeIcon(typeVal);
+                      return (
+                        <tr
+                          key={`${p.type}-${p.id}`}
+                          className="group bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 hover:bg-slate-50/70 transition-all duration-300 ease-out align-middle cursor-pointer"
+                          onClick={() => openDetail(p)}
+                        >
+                          {/* Serial Number */}
+                          <td className="rounded-l-xl px-4 py-4 text-xs font-black text-slate-400 text-center">
+                            {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
+                          </td>
 
-                        {/* Type Badge */}
-                        <td className="px-4 py-4">
-                          <span className={cn(
-                            "inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border transition-transform group-hover:scale-105",
-                            TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
-                          )}>
-                            <TypeIcon className="h-3.5 w-3.5 shrink-0" />
-                            {typeVal}
-                          </span>
-                        </td>
-
-                        {/* Title & Reference */}
-                        <td className="px-4 py-4 space-y-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                              {p.referenceNumber}
+                          {/* Type Badge */}
+                          <td className="px-4 py-4">
+                            <span className={cn(
+                              "inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border transition-transform group-hover:scale-105",
+                              TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
+                            )}>
+                              <TypeIcon className="h-3.5 w-3.5 shrink-0" />
+                              {typeVal}
                             </span>
-                          </div>
-                          <p className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
-                            {p.title}
-                          </p>
-                          {p.description && (
-                            <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">
-                              {p.description}
+                          </td>
+
+                          {/* Title & Reference */}
+                          <td className="px-4 py-4 space-y-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                {p.referenceNumber}
+                              </span>
+                            </div>
+                            <p title={p.title} className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+                              {p.title}
                             </p>
-                          )}
-                        </td>
+                            {p.description && (
+                              <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">
+                                {p.description}
+                              </p>
+                            )}
+                          </td>
 
-                        {/* Status */}
-                        <td className="px-4 py-4">
-                          <span className={cn(
-                            'inline-flex whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
-                            p.statusGroup === 'draft' ? 'border-slate-200 bg-slate-50 text-slate-600' :
-                            p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                            p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
-                            p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                            'border-red-200 bg-red-50 text-red-700'
-                          )}>
-                            {p.statusLabel}
-                          </span>
-                        </td>
-
-                        {/* Est Value */}
-                        <td className="px-4 py-4">
-                          <span className="text-xs font-extrabold text-slate-900 block">
-                            {formatCurrency(p.estimatedValue)}
-                          </span>
-                        </td>
-
-                        {/* Category & Location */}
-                        <td className="px-4 py-4 space-y-1">
-                          <span className="text-xs font-bold text-slate-600 line-clamp-1">{p.category || '—'}</span>
-                          {p.deliveryLocation && (
-                            <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-400">
-                              <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
-                              {p.deliveryLocation}
+                          {/* Status */}
+                          <td className="px-4 py-4">
+                            <span className={cn(
+                              'inline-flex whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
+                              p.statusGroup === 'draft' ? 'border-slate-200 bg-slate-50 text-slate-600' :
+                                p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                                  p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
+                                    p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                                      'border-red-200 bg-red-50 text-red-700'
+                            )}>
+                              {p.statusLabel}
                             </span>
-                          )}
-                        </td>
+                          </td>
 
-                        {/* Updated */}
-                        <td className="px-4 py-4 text-xs font-bold text-slate-500">
-                          {formatDateTime(p.updatedAt)}
-                        </td>
+                          {/* Est Value */}
+                          <td className="px-4 py-4">
+                            <span className="text-xs font-extrabold text-slate-900 block">
+                              {formatCurrency(p.estimatedValue)}
+                            </span>
+                          </td>
 
-                        {/* Action */}
-                        <td className="rounded-r-xl px-4 py-4 text-right">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={e => openDetail(p, e)}
-                            className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
-                          >
-                            View Details
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          {/* Category & Location */}
+                          <td className="px-4 py-4 space-y-1">
+                            <span title={p.category || '—'} className="text-xs font-bold text-slate-600 line-clamp-1">{p.category || '—'}</span>
+                            {p.deliveryLocation && (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-400">
+                                <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
+                                {p.deliveryLocation}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Updated */}
+                          <td className="px-4 py-4 text-xs font-bold text-slate-500">
+                            {formatDateTime(p.updatedAt)}
+                          </td>
+
+                          {/* Action */}
+                          <td className="rounded-r-xl px-4 py-4 text-right">
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={e => openDetail(p, e)}
+                              className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
+                            >
+                              View Details
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
 
-          </>
+            </>
           )}
 
           {/* ═══ GRID VIEW ═══ */}
@@ -991,14 +1002,14 @@ export default function MyProcurementsPage() {
                       </div>
 
                       {/* Title */}
-                      <h3 className="text-sm font-black text-slate-900 leading-snug line-clamp-2 group-hover:text-[#12335f] transition-colors mb-2">
+                      <h3 title={p.title} className="text-sm font-black text-slate-900 leading-snug line-clamp-2 group-hover:text-[#12335f] transition-colors mb-2">
                         {p.title}
                       </h3>
 
                       {/* Source Ref & Category */}
                       <div className="text-[11px] text-slate-500 font-bold space-y-1 mb-4">
-                        {p.category && <p className="line-clamp-1">Category: {p.category}</p>}
-                        {p.description && <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
+                        {p.category && <p title={p.category} className="line-clamp-1">Category: {p.category}</p>}
+                        {p.description && <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
                       </div>
                     </div>
 
@@ -1010,10 +1021,10 @@ export default function MyProcurementsPage() {
                           <span className={cn(
                             'inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
                             p.statusGroup === 'draft' ? 'border-slate-200 bg-white text-slate-600' :
-                            p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                            p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
-                            p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                            'border-red-200 bg-red-50 text-red-700'
+                              p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                                p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
+                                  p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                                    'border-red-200 bg-red-50 text-red-700'
                           )}>
                             {p.statusLabel}
                           </span>
@@ -1125,14 +1136,14 @@ function ProcurementCard({ p, openDetail }: { p: any; openDetail: (p: any, e?: R
         </div>
 
         {/* Title */}
-        <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+        <h3 title={p.title} className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
           {p.title}
         </h3>
 
         {/* Source Ref & Category */}
         <div className="text-[11px] text-slate-500 font-bold space-y-1">
-          {p.category && <p className="line-clamp-1">Category: {p.category}</p>}
-          {p.description && <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
+          {p.category && <p title={p.category} className="line-clamp-1">Category: {p.category}</p>}
+          {p.description && <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
         </div>
       </div>
 
@@ -1145,10 +1156,10 @@ function ProcurementCard({ p, openDetail }: { p: any; openDetail: (p: any, e?: R
               <span className={cn(
                 'inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
                 p.statusGroup === 'draft' ? 'border-slate-200 bg-slate-50 text-slate-600' :
-                p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
-                p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                'border-red-200 bg-red-50 text-red-700'
+                  p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                    p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
+                      p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                        'border-red-200 bg-red-50 text-red-700'
               )}>
                 {p.statusLabel}
               </span>
@@ -1183,7 +1194,7 @@ function ProcurementCard({ p, openDetail }: { p: any; openDetail: (p: any, e?: R
 /* ── Helpers for details formatting ── */
 const parseDescription = (desc?: string) => {
   if (!desc) return { method: '', value: '', urgency: '', text: '' };
-  
+
   const cleanedDesc = desc.replace(/\r/g, '');
 
   const methodMatch = cleanedDesc.match(/Sourcing Method:\s*(.*?)(?=(?:Value:|Urgency:|$))/i);
@@ -1230,508 +1241,621 @@ const formatDisplayValue = (val: string, label?: string) => {
    PROCUREMENT DETAIL VIEW (Full Page – TenderDetailPage-style)
    ═══════════════════════════════════════════════ */
 
-function ProcurementDetailView({
+
+
+export function ProcurementDetailView({
   procurement: p,
   onBack,
   onGoTo,
 }: {
-  procurement: NormalizedProcurement;
+  procurement: any;
   onBack: () => void;
-  onGoTo: () => void;
+  onGoTo?: () => void;
 }) {
-  const statusTone = (status?: string) => {
-    const s = String(status || '').toLowerCase();
-    if (s === 'completed' || s === 'approved') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-    if (s === 'active' || s === 'pending') return 'border-amber-200 bg-amber-50 text-amber-700';
-    if (s === 'rejected' || s === 'cancelled') return 'border-red-200 bg-red-50 text-red-700';
-    return 'border-slate-200 bg-slate-50 text-slate-600';
-  };
+  /* ── 1. Timeline Calculations (Guaranteed Order) ── */
+  const rawSteps =
+    p.tracking && p.tracking.length > 0
+      ? p.tracking.map((t: any) => ({
+          label: t.label,
+          date: t.date ? formatDateTime(t.date) : 'Pending',
+          isActive: ['completed', 'approved', 'in_progress'].includes(
+            String(t.status || '').toLowerCase()
+          ),
+        }))
+      : [
+          { label: 'Created', date: formatDateTime(p.createdAt), isActive: true },
+          {
+            label: 'Submitted',
+            date: p.statusGroup !== 'draft' ? formatDateTime(p.updatedAt || p.createdAt) : 'Pending',
+            isActive: p.statusGroup !== 'draft',
+          },
+          {
+            label: 'Approval / Review',
+            date:
+              p.statusGroup === 'pending_approval'
+                ? 'In Progress'
+                : ['active', 'completed'].includes(p.statusGroup)
+                ? formatDateTime(p.updatedAt)
+                : 'Pending',
+            isActive: ['pending_approval', 'active', 'completed'].includes(p.statusGroup),
+          },
+          {
+            label: 'Approved / Ordered',
+            date: p.statusGroup === 'completed' ? formatDateTime(p.updatedAt) : 'Pending',
+            isActive: p.statusGroup === 'completed',
+          },
+        ];
 
+  const lastActiveIndex = rawSteps.map((s) => s.isActive).lastIndexOf(true);
 
-  /* Timeline steps from tracking data */
-  const timelineSteps = p.tracking && p.tracking.length > 0
-    ? p.tracking.map(t => ({
-        label: t.label,
-        date: t.date ? formatDateTime(t.date) : 'Pending',
-        active: String(t.status || '').toLowerCase() === 'completed' || String(t.status || '').toLowerCase() === 'approved',
-      }))
-    : [
-        { label: 'Created', date: formatDateTime(p.createdAt), active: true },
-        { label: p.statusGroup === 'pending_approval' ? 'Pending Approval' : 'Review', date: p.statusGroup === 'pending_approval' ? 'In Progress' : 'Pending', active: p.statusGroup === 'pending_approval' },
-        { label: 'Active', date: p.statusGroup === 'active' ? 'In Progress' : 'Pending', active: p.statusGroup === 'active' || p.statusGroup === 'completed' },
-        { label: 'Completed', date: p.statusGroup === 'completed' ? formatDateTime(p.updatedAt) : 'Pending', active: p.statusGroup === 'completed' },
-      ];
+  const timelineSteps = rawSteps.map((step, idx) => {
+    let state: 'completed' | 'current' | 'pending' = 'pending';
+    if (idx < lastActiveIndex) {
+      state = 'completed';
+    } else if (idx === lastActiveIndex) {
+      state = idx === rawSteps.length - 1 && step.isActive ? 'completed' : 'current';
+    }
+    return { ...step, state };
+  });
 
-  /* Row helper used in columns */
-  const InfoRow = ({ label, value, mono, highlight }: { label: string; value?: string | number | null; mono?: boolean; highlight?: boolean }) => {
-    if (!value && value !== 0) return null;
-    return (
-      <div className="flex justify-between items-start gap-4">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</span>
-        <span className={cn('text-xs font-black text-right', mono ? 'font-mono font-bold text-slate-700' : highlight ? 'font-extrabold text-red-600 tabular-nums' : 'text-slate-800')}>{value}</span>
-      </div>
-    );
-  };
+  const progressPercent =
+    timelineSteps.length > 1
+      ? (Math.max(0, lastActiveIndex) / (timelineSteps.length - 1)) * 100
+      : 0;
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-6 pb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out scroll-smooth">
-
+    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-4 pb-12 animate-in fade-in slide-in-from-bottom-3 duration-200">
+      
       {/* ── Breadcrumb Navigation ── */}
-      <nav className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
-        <span className="hover:text-slate-800 transition-colors cursor-pointer" onClick={onBack}>My Procurements</span>
-        <ChevronRight className="h-3 w-3" />
-        <span className="hover:text-slate-800 transition-colors cursor-pointer">{p.referenceNumber || p.title}</span>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-[#12335f] font-extrabold">Details</span>
+      <nav className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 px-1">
+        <button
+          onClick={onBack}
+          className="hover:text-slate-800 transition-colors flex items-center gap-1 cursor-pointer font-medium"
+        >
+          My Procurements
+        </button>
+        <ChevronRight className="h-3 w-3 text-slate-400" />
+        <span title={p.referenceNumber || p.title} className="text-slate-600 truncate max-w-[200px] sm:max-w-none font-medium">
+          {p.referenceNumber || p.title}
+        </span>
+        <ChevronRight className="h-3 w-3 text-slate-400" />
+        <span className="text-blue-950 font-bold bg-blue-50 text-blue-900 px-2 py-0.5 rounded-md border border-blue-100">
+          Details
+        </span>
       </nav>
 
-      {/* ── Page Header ── */}
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border border-slate-100 rounded-3xl bg-white p-6 shadow-sm hover:shadow-md transition-all duration-300">
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-xl md:text-2xl font-black tracking-tight text-slate-900">
+      {/* ── Executive Header Banner ── */}
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0d213f] via-[#12335f] to-[#1e4976] p-5 md:p-6 text-white shadow-md border border-blue-950/40">
+        <div className="absolute right-0 top-0 -mt-8 -mr-8 h-48 w-48 rounded-full bg-blue-400/10 blur-2xl pointer-events-none" />
+        <div className="absolute left-1/3 bottom-0 -mb-10 h-36 w-36 rounded-full bg-emerald-400/10 blur-xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  'inline-flex items-center rounded-md px-2.5 py-0.5 text-[11px] font-bold tracking-wider uppercase border backdrop-blur-md',
+                  TYPE_BADGE_STYLES[p.type] || 'border-blue-300/30 bg-blue-500/20 text-blue-100'
+                )}
+              >
+                {p.typeLabel || 'PROCUREMENT'}
+              </span>
+
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider border backdrop-blur-md',
+                  STATUS_BADGE_STYLES[p.statusGroup] || 'border-emerald-300/40 bg-emerald-500/20 text-emerald-200'
+                )}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                {p.statusLabel || p.status || 'Active'}
+              </span>
+
+              <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-white/10 text-blue-100 border border-white/10">
+                {p.referenceNumber || 'REF-PENDING'}
+              </span>
+            </div>
+
+            <h1 className="text-xl md:text-2xl font-black tracking-tight text-white drop-shadow-xs">
               {p.title}
             </h1>
-            <span
-              className={cn(
-                'inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold tracking-wide border',
-                TYPE_BADGE_STYLES[p.type] || 'border-slate-200 bg-slate-50 text-slate-700'
-              )}
-            >
-              {p.typeLabel}
-            </span>
-            <span
-              className={cn(
-                'inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold tracking-wide border',
-                STATUS_BADGE_STYLES[p.statusGroup] || 'border-slate-200 bg-slate-50 text-slate-700'
-              )}
-            >
-              {p.statusLabel}
-            </span>
-          </div>
-          <p className="text-sm font-semibold text-slate-500">
-            <span className="font-mono font-bold text-slate-600">{p.referenceNumber}</span>
-            <span className="mx-2">•</span>
-            Created on {formatDateTime(p.createdAt)}
-            {p.organizationName && <>{' '}by {p.organizationName}</>}
-          </p>
-        </div>
 
-        {/* Header Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onBack}
-            className="group h-10 rounded-xl border-slate-200 text-xs font-black uppercase text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 active:scale-95 cursor-pointer"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4 transition-transform duration-200 group-hover:-translate-x-1" /> Back to List
-          </Button>
+            <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-blue-100/80 font-medium">
+              <span className="flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-blue-300" />
+                Created {formatDateTime(p.createdAt)}
+              </span>
+              {p.organizationName && (
+                <>
+                  <span>•</span>
+                  <span>Org: <strong className="text-white">{p.organizationName}</strong></span>
+                </>
+              )}
+              {p.estimatedValue && (
+                <>
+                  <span>•</span>
+                  <span className="text-emerald-300 font-bold">
+                    Est. Value: {formatCurrency(p.estimatedValue)}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+            <Button
+              type="button"
+              onClick={onBack}
+              className="h-9 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 backdrop-blur-sm transition-all shadow-xs active:scale-95"
+            >
+              <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back to List
+            </Button>
+          </div>
         </div>
       </section>
 
-      {/* ── Timeline Section ── */}
-      <section className="border border-slate-100 rounded-3xl bg-white p-6 shadow-sm hover:shadow-md transition-all duration-300 overflow-x-auto">
-        <div className="min-w-[700px] flex items-center justify-between relative px-6 py-4">
-          {/* Horizontal Connection Line */}
-          <div className="absolute top-[38px] left-[50px] right-[50px] h-[3px] bg-slate-100 -z-0" />
+      {/* ── Compact Stepper Timeline ── */}
+      <section className="rounded-xl border border-slate-200/80 bg-white py-3.5 px-4 md:px-8 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-start justify-between relative gap-5 md:gap-0">
+          
+          {/* Horizontal Progress Bar */}
+          <div className="hidden md:block absolute top-[16px] left-[36px] right-[36px] h-[3px] bg-slate-100 rounded-full z-0">
+            <div
+              className="h-full bg-gradient-to-r from-blue-700 to-blue-900 rounded-full transition-all duration-700 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          {/* Vertical Progress Bar (Mobile) */}
+          <div className="block md:hidden absolute top-[16px] bottom-[16px] left-[15px] w-[3px] bg-slate-100 rounded-full z-0">
+            <div
+              className="w-full bg-blue-900 rounded-full transition-all duration-700 ease-out"
+              style={{ height: `${progressPercent}%` }}
+            />
+          </div>
 
           {timelineSteps.map((step, idx) => (
-            <div key={idx} className="flex flex-col items-center gap-3 relative z-10 w-28 text-center group cursor-pointer">
-              <div
-                className={cn(
-                  'flex h-9 w-9 items-center justify-center rounded-full border-2 transition-all duration-300 group-hover:scale-110',
-                  step.active
-                    ? 'bg-[#12335f] border-[#12335f] text-white shadow-md shadow-blue-100 ring-4 ring-[#12335f]/15'
-                    : 'bg-white border-slate-200 text-slate-400 group-hover:border-slate-350'
+            <div
+              key={idx}
+              className="flex flex-row md:flex-col items-center gap-3 md:gap-1.5 relative z-10 md:w-32 text-left md:text-center group"
+            >
+              <div className="relative">
+                {step.state === 'current' && (
+                  <div className="absolute inset-0 rounded-full bg-blue-600 animate-ping opacity-25 duration-1000" />
                 )}
-              >
-                {step.active ? (
-                  <Check className="h-4 w-4 stroke-[3]" />
-                ) : (
-                  <div className="h-2 w-2 rounded-full bg-slate-200 group-hover:bg-slate-400 transition-colors" />
-                )}
+
+                <div
+                  className={cn(
+                    'relative flex h-8 w-8 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 shadow-xs z-10',
+                    step.state === 'completed'
+                      ? 'bg-blue-950 border-blue-950 text-white'
+                      : step.state === 'current'
+                      ? 'bg-blue-700 border-blue-700 text-white ring-4 ring-blue-100'
+                      : 'bg-white border-slate-200 text-slate-300'
+                  )}
+                >
+                  {step.state === 'completed' ? (
+                    <Check className="h-4 w-4 stroke-[3]" />
+                  ) : step.state === 'current' ? (
+                    <div className="h-2 w-2 rounded-full bg-white" />
+                  ) : (
+                    <div className="h-1.5 w-1.5 rounded-full bg-slate-200" />
+                  )}
+                </div>
               </div>
-              <div className="space-y-1">
-                <p className={cn('text-xs font-black tracking-tight transition-colors', step.active ? 'text-[#12335f]' : 'text-slate-800 group-hover:text-[#12335f]')}>
+
+              <div className="space-y-0.5">
+                <p
+                  className={cn(
+                    'text-xs font-bold tracking-tight leading-none',
+                    step.state === 'current'
+                      ? 'text-blue-950 font-extrabold'
+                      : step.state === 'completed'
+                      ? 'text-slate-800'
+                      : 'text-slate-400'
+                  )}
+                >
                   {step.label}
                 </p>
-                <p className="text-[10px] font-semibold text-slate-500">{step.date}</p>
+                <p
+                  className={cn(
+                    'text-[10px] font-medium leading-tight',
+                    step.state === 'pending' ? 'text-slate-400' : 'text-slate-500'
+                  )}
+                >
+                  {step.date}
+                </p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── Main Structured Specification Cards Grid ── */}
-      <div className="space-y-6">
-
-        {/* ── 1. ITEM / BOQ DETAILS Table ── */}
-        <section className="border border-slate-200/80 rounded-2xl bg-white p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-4 bg-[#12335f] rounded-full" />
-              <h2 className="text-sm font-black text-[#12335f] uppercase tracking-wider">
-                ITEM / BOQ DETAILS
-              </h2>
-            </div>
-            <span className="text-xs font-bold text-slate-500">
-              {(p.items || []).length} {(p.items || []).length === 1 ? 'Item' : 'Items'} Listed
+      {/* ── BOQ & Item Specifications Table ── */}
+      <section className="rounded-xl border border-slate-200/90 bg-white shadow-xs overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-slate-50 via-blue-50/30 to-slate-50 border-b border-slate-200">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-900 text-white shadow-xs">
+              <Package className="h-4 w-4" />
             </span>
+            <div>
+              <h2 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
+                ITEM / BOQ SPECIFICATIONS
+              </h2>
+              <p className="text-[10px] text-slate-500 font-medium leading-none">
+                Detailed bill of quantities and compliance specs
+              </p>
+            </div>
           </div>
+          <span className="text-[11px] font-bold bg-white text-blue-950 border border-blue-200/80 px-2.5 py-0.5 rounded-md shadow-2xs">
+            {(p.items || []).length || 1} {(p.items || []).length === 1 ? 'Item' : 'Items'} Listed
+          </span>
+        </div>
 
-          <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-2xs">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 font-extrabold text-[10px] uppercase text-slate-500 tracking-wider">
-                <tr>
-                  <th className="p-3 w-12 text-center">S.NO</th>
-                  <th className="p-3 min-w-[180px]">ITEM NAME / DESCRIPTION</th>
-                  <th className="p-3 min-w-[160px]">TECHNICAL SPECS & FILES</th>
-                  <th className="p-3 min-w-[140px]">BRAND/MAKE/MODEL</th>
-                  <th className="p-3 min-w-[120px]">HSN/SAC/GST</th>
-                  <th className="p-3 w-24 text-center">QTY & UNIT</th>
-                  <th className="p-3 w-28 text-right">UNIT PRICE</th>
-                  <th className="p-3 w-28 text-right">TOTAL PRICE</th>
-                  <th className="p-3 min-w-[130px] text-center">DELIVERY / WARRANTY</th>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+              <tr>
+                <th className="px-3 py-2.5 w-10 text-center">#</th>
+                <th className="px-3 py-2.5 min-w-[200px]">Item Name & Description</th>
+                <th className="px-3 py-2.5 min-w-[150px]">Technical Specifications</th>
+                <th className="px-3 py-2.5 min-w-[130px]">Brand / Make</th>
+                <th className="px-3 py-2.5 min-w-[110px]">HSN / Tax</th>
+                <th className="px-3 py-2.5 w-20 text-center">Quantity</th>
+                <th className="px-3 py-2.5 w-28 text-right">Unit Price</th>
+                <th className="px-3 py-2.5 w-28 text-right bg-emerald-50/40">Total Amount</th>
+                <th className="px-3 py-2.5 min-w-[130px] text-center">Warranty & SLA</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+              {p.items && p.items.length > 0 ? (
+                p.items.map((item: any, idx: number) => {
+                  const spec = item.specifications || {};
+                  const unitPrice = item.estimatedUnitPrice || item.price || item.unitPrice || 0;
+                  const qty = Number(item.quantity || 1);
+                  const totalPrice = unitPrice ? unitPrice * qty : 0;
+                  const hsn = spec.hsn_sac_code || spec.hsn || '—';
+                  const gst =
+                    spec.gst !== undefined
+                      ? `${spec.gst}%`
+                      : spec.gstPercent
+                      ? `${spec.gstPercent}%`
+                      : '18%';
+
+                  return (
+                    <tr
+                      key={idx}
+                      className="hover:bg-blue-50/20 transition-colors align-top group"
+                    >
+                      <td className="px-3 py-3 text-center font-bold text-slate-400">
+                        {idx + 1}
+                      </td>
+                      <td className="px-3 py-3 space-y-1">
+                        <p className="font-bold text-slate-900 group-hover:text-blue-900 transition-colors">
+                          {item.itemName}
+                        </p>
+                        {item.description && (
+                          <p title={item.description} className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
+                            {item.description}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-[11px] text-slate-600">
+                        <span className="bg-slate-100/80 px-2 py-0.5 rounded text-slate-700 border border-slate-200/60 inline-block">
+                          {spec.technicalSpecs || item.technicalSpecs || 'Refer to BOQ'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-[11px] space-y-1 text-slate-700">
+                        <div>
+                          <span className="text-slate-400">Make:</span>{' '}
+                          <span className="font-bold text-slate-800">
+                            {spec.brand_preference || item.brand || 'Any Standard'}
+                          </span>
+                        </div>
+                        <div className="text-[10px]">
+                          <span className="text-slate-400">Alt Allowed:</span>{' '}
+                          <span
+                            className={cn(
+                              'font-bold px-1.5 py-0.2 rounded text-[10px]',
+                              spec.brand_flexible?.toLowerCase() === 'no'
+                                ? 'bg-rose-50 text-rose-700'
+                                : 'bg-emerald-50 text-emerald-700'
+                            )}
+                          >
+                            {spec.brand_flexible?.toLowerCase() === 'no' ? 'No' : 'Yes'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-[11px] space-y-0.5 text-slate-700">
+                        <div className="font-mono text-slate-600">{hsn}</div>
+                        <span className="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/60 font-bold text-[10px]">
+                          GST {gst}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <p className="font-black text-slate-900">{qty}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">
+                          {item.unitOfMeasure || 'Nos'}
+                        </p>
+                      </td>
+                      <td className="px-3 py-3 text-right font-semibold text-slate-800 tabular-nums">
+                        {unitPrice ? formatCurrency(unitPrice) : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-right font-black text-emerald-800 tabular-nums bg-emerald-50/40">
+                        {totalPrice
+                          ? formatCurrency(totalPrice)
+                          : p.estimatedValue
+                          ? formatCurrency(p.estimatedValue)
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-center text-[11px] space-y-1 text-slate-600">
+                        <div className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 text-[10px]">
+                          {spec.warranty || '12M Warranty'}
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-medium">
+                          {spec.deliverySchedule || 'Standard SLA'}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr className="hover:bg-slate-50/80">
+                  <td className="px-3 py-3 text-center font-bold text-slate-400">1</td>
+                  <td className="px-3 py-3">
+                    <p className="font-bold text-slate-900">{p.title || 'Procurement Item'}</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {p.description || 'Standard procurement items'}
+                    </p>
+                  </td>
+                  <td className="px-3 py-3 text-[11px] text-slate-600">Refer to attached BOQ</td>
+                  <td className="px-3 py-3 text-[11px] text-slate-700">Any Standard Make</td>
+                  <td className="px-3 py-3 text-[11px] text-slate-700">GST 18%</td>
+                  <td className="px-3 py-3 text-center font-bold">{p.quantity || 1} Nos</td>
+                  <td className="px-3 py-3 text-right font-semibold">
+                    {p.estimatedValue ? formatCurrency(p.estimatedValue) : '—'}
+                  </td>
+                  <td className="px-3 py-3 text-right font-black text-emerald-800 bg-emerald-50/40">
+                    {p.estimatedValue ? formatCurrency(p.estimatedValue) : '—'}
+                  </td>
+                  <td className="px-3 py-3 text-center text-[11px] text-slate-600">12 Months</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                {(p.items && p.items.length > 0) ? (
-                  p.items.map((item: any, idx: number) => {
-                    const spec = item.specifications || {};
-                    const unitPrice = item.estimatedUnitPrice || item.price || item.unitPrice || 0;
-                    const qty = Number(item.quantity || 1);
-                    const totalPrice = unitPrice ? unitPrice * qty : 0;
-                    const hsn = spec.hsn_sac_code || spec.hsn || '-';
-                    const gst = spec.gst !== undefined ? `${spec.gst}%` : (spec.gstPercent ? `${spec.gstPercent}%` : '18%');
-                    const brandPref = spec.brand_preference || item.brand || '-';
-
-                    return (
-                      <tr key={idx} className="hover:bg-slate-50/60 transition-colors align-top">
-                        <td className="p-3 text-center font-extrabold text-slate-400">{idx + 1}</td>
-                        <td className="p-3 space-y-1">
-                          <p className="font-extrabold text-slate-900 leading-snug">{item.itemName}</p>
-                          {item.description && (
-                            <p className="text-[11px] font-medium text-slate-500 leading-relaxed whitespace-pre-wrap">{item.description}</p>
-                          )}
-                        </td>
-                        <td className="p-3 text-[11px] text-slate-600">
-                          <p>{spec.technicalSpecs || item.technicalSpecs || 'Refer to BOQ Details'}</p>
-                        </td>
-                        <td className="p-3 text-[11px] space-y-0.5 text-slate-700">
-                          <div><span className="font-semibold text-slate-400">Brand:</span> {brandPref}</div>
-                          <div><span className="font-semibold text-slate-400">Alt Allowed:</span> {spec.brand_flexible?.toLowerCase() === 'no' ? 'No' : 'Yes'}</div>
-                        </td>
-                        <td className="p-3 text-[11px] space-y-0.5 text-slate-700">
-                          <div><span className="font-semibold text-slate-400">HSN:</span> {hsn}</div>
-                          <div><span className="font-semibold text-slate-400">GST:</span> {gst}</div>
-                        </td>
-                        <td className="p-3 text-center">
-                          <p className="font-black text-slate-900">{qty}</p>
-                          <p className="text-[10px] font-semibold text-slate-400 uppercase">{item.unitOfMeasure || 'Nos'}</p>
-                        </td>
-                        <td className="p-3 text-right font-bold text-slate-900 tabular-nums">
-                          {unitPrice ? formatCurrency(unitPrice) : '—'}
-                        </td>
-                        <td className="p-3 text-right font-black text-emerald-800 tabular-nums">
-                          {totalPrice ? formatCurrency(totalPrice) : (p.estimatedValue ? formatCurrency(p.estimatedValue) : '—')}
-                        </td>
-                        <td className="p-3 text-center text-[11px] text-slate-600 space-y-1">
-                          <div><span className="font-semibold text-slate-400 block">Delivery:</span> {spec.deliverySchedule || 'As per SLA'}</div>
-                          <div><span className="font-semibold text-slate-400 block">Warranty:</span> {spec.warranty || '12 Months'}</div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="p-3 text-center font-extrabold text-slate-400">1</td>
-                    <td className="p-3">
-                      <p className="font-black text-slate-900">{p.title || 'Procurement Item'}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{p.description || 'Item specifications as requested'}</p>
-                    </td>
-                    <td className="p-3 text-[11px] text-slate-600">Refer to attached documents</td>
-                    <td className="p-3 text-[11px] text-slate-700">
-                      <div><span className="font-semibold text-slate-400">Brand:</span> -</div>
-                      <div><span className="font-semibold text-slate-400">Alt Allowed:</span> Yes</div>
-                    </td>
-                    <td className="p-3 text-[11px] text-slate-700">
-                      <div><span className="font-semibold text-slate-400">HSN:</span> -</div>
-                      <div><span className="font-semibold text-slate-400">GST:</span> 18%</div>
-                    </td>
-                    <td className="p-3 text-center">
-                      <p className="font-black text-slate-900">{p.quantity || 1}</p>
-                      <p className="text-[10px] font-semibold text-slate-400 uppercase">{p.unit || 'Nos'}</p>
-                    </td>
-                    <td className="p-3 text-right font-bold text-slate-900 tabular-nums">{p.estimatedValue ? formatCurrency(p.estimatedValue) : '—'}</td>
-                    <td className="p-3 text-right font-black text-emerald-800 tabular-nums">{p.estimatedValue ? formatCurrency(p.estimatedValue) : '—'}</td>
-                    <td className="p-3 text-center text-[11px] text-slate-600">
-                      <div><span className="font-semibold text-slate-400 block">Delivery:</span> -</div>
-                      <div><span className="font-semibold text-slate-400 block">Warranty:</span> -</div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* ── 2. TWO-COLUMN GRID: DELIVERY & CONSIGNEE & SUPPLIER CONFIGURATION ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* DELIVERY & CONSIGNEE */}
-          <div className="group bg-white rounded-2xl p-6 shadow-2xs hover:shadow-md border border-slate-200/90 hover:border-slate-300 transition-all duration-300 ease-out hover:-translate-y-1 space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <div className="w-1.5 h-4 bg-[#12335f] rounded-full transition-transform duration-300 group-hover:scale-y-125" />
-              <h3 className="text-xs font-black text-[#12335f] uppercase tracking-wider">DELIVERY & CONSIGNEE</h3>
-            </div>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">DELIVERY LOCATION</span>
-                <span className="font-bold text-slate-900 text-right max-w-[65%] break-words">{p.deliveryLocation || 'Mahabad: jalgaon, Jalgaon, Jalgaon, Maharashtra - 425001.'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">DELIVERY PERIOD</span>
-                <span className="font-bold text-slate-900">{p.endDate ? formatDateTime(p.endDate) : '7 Working Days'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">CONSIGNEE NAME</span>
-                <span className="font-bold text-slate-900">{p.organizationName || 'VANSIKA DAWANI'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">TOTAL QUANTITY</span>
-                <span className="font-bold text-slate-900">{p.quantity ? `${p.quantity} ${p.unit || 'Nos'}` : '1 Nos'}</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">INSTALLATION ADDRESS</span>
-                <span className="font-bold text-slate-900 text-right max-w-[65%] break-words">{p.deliveryLocation || 'Same as Delivery Location'}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* SUPPLIER CONFIGURATION & ELIGIBILITY */}
-          <div className="group bg-white rounded-2xl p-6 shadow-2xs hover:shadow-md border border-slate-200/90 hover:border-slate-300 transition-all duration-300 ease-out hover:-translate-y-1 space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <div className="w-1.5 h-4 bg-[#12335f] rounded-full transition-transform duration-300 group-hover:scale-y-125" />
-              <h3 className="text-xs font-black text-[#12335f] uppercase tracking-wider">SUPPLIER CONFIGURATION & ELIGIBILITY</h3>
-            </div>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">VENDOR SELECTION</span>
-                <span className="font-bold text-slate-900">Open</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">STARTUP/MSME PREF.</span>
-                <span className="font-bold text-emerald-700">Yes</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">EXCLUDE BLACKLISTED</span>
-                <span className="font-bold text-emerald-700">Yes</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">EXPERIENCE REQ.</span>
-                <span className="font-bold text-slate-900">0 Years</span>
-              </div>
-            </div>
-            {(p.eligibilityCriteria && p.eligibilityCriteria.length > 0) && (
-              <div className="mt-3 pt-3 border-t border-slate-100">
-                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">Qualifications & Eligibility</h4>
-                <ul className="space-y-1 text-xs text-slate-700">
-                  {p.eligibilityCriteria.map((crit, idx) => (
-                    <li key={idx} className="flex items-start gap-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                      <span>{crit}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
+              )}
+            </tbody>
+          </table>
         </div>
+      </section>
 
-        {/* ── 3. TWO-COLUMN GRID: EVALUATION BASIS & FINANCIAL REQUIREMENTS ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* EVALUATION BASIS */}
-          <div className="group bg-white rounded-2xl p-6 shadow-2xs hover:shadow-md border border-slate-200/90 hover:border-slate-300 transition-all duration-300 ease-out hover:-translate-y-1 space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <div className="w-1.5 h-4 bg-[#12335f] rounded-full transition-transform duration-300 group-hover:scale-y-125" />
-              <h3 className="text-xs font-black text-[#12335f] uppercase tracking-wider">EVALUATION BASIS</h3>
-            </div>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">EVALUATION METHOD</span>
-                <span className="font-bold text-slate-900">L1 total value</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">TECHNICAL WEIGHT</span>
-                <span className="font-bold text-slate-900">70%</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">COMMERCIAL WEIGHT</span>
-                <span className="font-bold text-slate-900">30%</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">MIN QUAL MARKS</span>
-                <span className="font-bold text-slate-900">60</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">TECH SPECS</span>
-                <span className="font-bold text-slate-900">Refer to BOQ Details</span>
-              </div>
-            </div>
+      {/* ── Rich Multi-Tonal Cards Grid ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        {/* Card 1: Delivery & Consignee (Blue Tone) */}
+        <div className="rounded-xl border border-blue-100 bg-gradient-to-b from-blue-50/40 to-white p-4 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between space-y-3">
+          <div className="flex items-center gap-2 pb-2.5 border-b border-blue-100/80">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 text-blue-800 shrink-0">
+              <Truck className="h-4 w-4" />
+            </span>
+            <h3 className="text-xs font-extrabold text-blue-950 uppercase tracking-wider">
+              Delivery & Consignee
+            </h3>
           </div>
-
-          {/* FINANCIAL REQUIREMENTS */}
-          <div className="group bg-white rounded-2xl p-6 shadow-2xs hover:shadow-md border border-slate-200/90 hover:border-slate-300 transition-all duration-300 ease-out hover:-translate-y-1 space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <div className="w-1.5 h-4 bg-[#12335f] rounded-full transition-transform duration-300 group-hover:scale-y-125" />
-              <h3 className="text-xs font-black text-[#12335f] uppercase tracking-wider">FINANCIAL REQUIREMENTS</h3>
+          <div className="space-y-2 text-xs">
+            <div className="bg-white/80 p-2 rounded-lg border border-blue-100/60">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                Delivery Location
+              </span>
+              <p className="font-semibold text-slate-800 leading-snug mt-0.5">
+                {p.deliveryLocation || 'Mahabad: Jalgaon, Maharashtra - 425001'}
+              </p>
             </div>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">ESTIMATED VALUE</span>
-                <span className="font-black text-emerald-800">{p.estimatedValue ? formatCurrency(p.estimatedValue) : '—'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">EMD AMOUNT</span>
-                <span className="font-bold text-slate-900">Exempted</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">PAYMENT TERMS</span>
-                <span className="font-bold text-slate-900">{p.paymentTerms || '100% after delivery and acceptance'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">GST INCLUDED</span>
-                <span className="font-bold text-slate-900">No</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">FREIGHT INCLUDED</span>
-                <span className="font-bold text-emerald-700">Yes</span>
-              </div>
+            <div className="flex justify-between items-center py-1 border-b border-slate-100 text-[11px]">
+              <span className="text-slate-500 font-medium">Delivery Period</span>
+              <span className="font-bold text-slate-900 bg-blue-50 text-blue-900 px-2 py-0.5 rounded border border-blue-100">
+                {p.endDate ? formatDateTime(p.endDate) : '7 Working Days'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-1 text-[11px]">
+              <span className="text-slate-500 font-medium">Consignee</span>
+              <span title={p.organizationName || 'VANSIKA DAWANI'} className="font-bold text-slate-800 truncate max-w-[140px]">
+                {p.organizationName || 'VANSIKA DAWANI'}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* ── 4. TWO-COLUMN GRID: REQUIRED SELLER DOCUMENTS & TERMS & CONDITIONS ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* REQUIRED SELLER DOCUMENTS */}
-          <div className="group bg-white rounded-2xl p-6 shadow-2xs hover:shadow-md border border-slate-200/90 hover:border-slate-300 transition-all duration-300 ease-out hover:-translate-y-1 space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <div className="w-1.5 h-4 bg-[#12335f] rounded-full transition-transform duration-300 group-hover:scale-y-125" />
-              <h3 className="text-xs font-black text-[#12335f] uppercase tracking-wider">REQUIRED SELLER DOCUMENTS</h3>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {['GST Certificate', 'PAN Card', 'Bank Details', 'Technical Compliance Sheet', 'Detailed Price Breakup', 'Experience Certificate', 'Turnover Certificate', 'No-Deviation Certificate'].map((docName, idx) => (
-                <div key={idx} className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200/90 bg-slate-50/50 text-xs font-bold text-slate-800 hover:bg-indigo-50/40 hover:border-indigo-200 hover:scale-[1.02] transition-all duration-200 cursor-default">
-                  <FileText className="h-4 w-4 text-blue-600 shrink-0" />
-                  <span>{docName}</span>
-                </div>
-              ))}
-            </div>
+        {/* Card 2: Supplier Eligibility (Teal/Emerald Tone) */}
+        <div className="rounded-xl border border-emerald-100 bg-gradient-to-b from-emerald-50/40 to-white p-4 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between space-y-3">
+          <div className="flex items-center gap-2 pb-2.5 border-b border-emerald-100/80">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 shrink-0">
+              <ShieldCheck className="h-4 w-4" />
+            </span>
+            <h3 className="text-xs font-extrabold text-emerald-950 uppercase tracking-wider">
+              Eligibility & Rules
+            </h3>
           </div>
-
-          {/* TERMS & CONDITIONS */}
-          <div className="group bg-white rounded-2xl p-6 shadow-2xs hover:shadow-md border border-slate-200/90 hover:border-slate-300 transition-all duration-300 ease-out hover:-translate-y-1 space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <div className="w-1.5 h-4 bg-[#12335f] rounded-full transition-transform duration-300 group-hover:scale-y-125" />
-              <h3 className="text-xs font-black text-[#12335f] uppercase tracking-wider">TERMS & CONDITIONS</h3>
-            </div>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">WITHDRAWAL</span>
-                <span className="font-bold text-emerald-700">Allowed</span>
+          <div className="space-y-2 text-xs">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-white/80 p-2 rounded-lg border border-emerald-100/60">
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">MSME Pref.</span>
+                <span className="inline-flex items-center gap-1 font-extrabold text-emerald-700 text-xs mt-0.5">
+                  <Check className="h-3 w-3" /> Applicable
+                </span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">REVISION</span>
-                <span className="font-bold text-emerald-700">Allowed</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">SELLER QUERIES</span>
-                <span className="font-bold text-emerald-700">Allowed</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">DELIVERY TERMS</span>
-                <span className="font-bold text-slate-900">Door delivery to site</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">WARRANTY TERMS</span>
-                <span className="font-bold text-slate-900">12 Months standard warranty</span>
+              <div className="bg-white/80 p-2 rounded-lg border border-emerald-100/60">
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Vendor Selection</span>
+                <span className="font-bold text-slate-800 text-xs mt-0.5 block">Open Bidding</span>
               </div>
             </div>
-            {(p.termsAndConditions && p.termsAndConditions.length > 0) && (
-              <div className="mt-3 pt-3 border-t border-slate-100">
-                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">ADDITIONAL T&C</h4>
-                <ul className="space-y-1 text-xs text-slate-700 list-disc pl-4">
-                  {p.termsAndConditions.map((term, idx) => (
-                    <li key={idx}>{term}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className="flex justify-between items-center py-1 border-b border-slate-100 text-[11px]">
+              <span className="text-slate-500 font-medium">Exclude Blacklisted</span>
+              <span className="font-bold text-emerald-700">Yes</span>
+            </div>
+            <div className="flex justify-between items-center py-1 text-[11px]">
+              <span className="text-slate-500 font-medium">Exp. Required</span>
+              <span className="font-bold text-slate-800">0 Years (Open to all)</span>
+            </div>
           </div>
         </div>
 
-        {/* ── 5. TWO-COLUMN GRID: APPROVAL & WORKFLOW & ACTIVITY & STATUS ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* APPROVAL & WORKFLOW */}
-          <div className="group bg-white rounded-2xl p-6 shadow-2xs hover:shadow-md border border-slate-200/90 hover:border-slate-300 transition-all duration-300 ease-out hover:-translate-y-1 space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <div className="w-1.5 h-4 bg-[#12335f] rounded-full transition-transform duration-300 group-hover:scale-y-125" />
-              <h3 className="text-xs font-black text-[#12335f] uppercase tracking-wider">APPROVAL & WORKFLOW</h3>
-            </div>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">WORKFLOW</span>
-                <span className="font-bold text-slate-900">Finance + Procurement</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">NOTES</span>
-                <span className="font-bold text-slate-900">{p.description || 'Approved as per departmental requirement.'}</span>
-              </div>
-            </div>
+        {/* Card 3: Evaluation Criteria (Purple Tone) */}
+        <div className="rounded-xl border border-purple-100 bg-gradient-to-b from-purple-50/40 to-white p-4 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between space-y-3">
+          <div className="flex items-center gap-2 pb-2.5 border-b border-purple-100/80">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-100 text-purple-800 shrink-0">
+              <Sliders className="h-4 w-4" />
+            </span>
+            <h3 className="text-xs font-extrabold text-purple-950 uppercase tracking-wider">
+              Evaluation Basis
+            </h3>
           </div>
-
-          {/* ACTIVITY & STATUS */}
-          <div className="group bg-white rounded-2xl p-6 shadow-2xs hover:shadow-md border border-slate-200/90 hover:border-slate-300 transition-all duration-300 ease-out hover:-translate-y-1 space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <div className="w-1.5 h-4 bg-[#12335f] rounded-full transition-transform duration-300 group-hover:scale-y-125" />
-              <h3 className="text-xs font-black text-[#12335f] uppercase tracking-wider">ACTIVITY & STATUS</h3>
+          <div className="space-y-2 text-xs">
+            <div className="bg-white/80 p-2 rounded-lg border border-purple-100/60 flex justify-between items-center">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Method</span>
+              <span className="font-bold text-purple-950 text-xs">L1 Total Value</span>
             </div>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">STATUS</span>
-                <span className="font-black text-emerald-700 uppercase">{p.status || 'ACTIVE'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">CURRENT STAGE</span>
-                <span className="font-bold text-slate-900">Open for Bidding / Active Contract</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">PARTICIPANTS</span>
-                <span className="font-bold text-slate-900">{p.participantsCount || (p.eligibilityCriteria?.length || 0)}</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="font-semibold text-slate-500 uppercase tracking-wide text-[10px]">CLARIFICATIONS</span>
-                <span className="font-bold text-slate-900">0</span>
-              </div>
+            <div className="flex justify-between items-center py-1 border-b border-slate-100 text-[11px]">
+              <span className="text-slate-500 font-medium">Technical Weight</span>
+              <span className="font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
+                70%
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-1 text-[11px]">
+              <span className="text-slate-500 font-medium">Commercial Weight</span>
+              <span className="font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
+                30%
+              </span>
             </div>
           </div>
         </div>
+
+        {/* Card 4: Financial Summary (Amber Tone) */}
+        <div className="rounded-xl border border-amber-200/80 bg-gradient-to-b from-amber-50/50 to-white p-4 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between space-y-3">
+          <div className="flex items-center gap-2 pb-2.5 border-b border-amber-200/60">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100 text-amber-800 shrink-0">
+              <Wallet className="h-4 w-4" />
+            </span>
+            <h3 className="text-xs font-extrabold text-amber-950 uppercase tracking-wider">
+              Financial Terms
+            </h3>
+          </div>
+          <div className="space-y-2 text-xs">
+            <div className="bg-amber-100/40 p-2 rounded-lg border border-amber-200/70 flex justify-between items-center">
+              <span className="text-[10px] font-bold text-amber-900 uppercase">Est. Budget</span>
+              <span className="font-black text-emerald-800 text-sm">
+                {p.estimatedValue ? formatCurrency(p.estimatedValue) : '—'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-1 border-b border-slate-100 text-[11px]">
+              <span className="text-slate-500 font-medium">EMD Amount</span>
+              <span className="font-bold text-slate-800">Exempted</span>
+            </div>
+            <div className="flex justify-between items-center py-1 text-[11px]">
+              <span className="text-slate-500 font-medium">Freight Charges</span>
+              <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                Included in Price
+              </span>
+            </div>
+          </div>
+        </div>
+
       </div>
 
-      {/* Comprehensive Detail Sections (Creative Side-by-Side 2-Column Grid) */}
-      {p.detailSections && p.detailSections.length > 0 && (
-        <section className="mt-8 space-y-6">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-            <h2 className="text-base font-black text-[#12335f] uppercase tracking-wider flex items-center gap-2">
-              <span>COMPREHENSIVE PROCUREMENT SPECIFICATIONS</span>
-            </h2>
-            <span className="text-xs font-extrabold bg-[#12335f] text-white px-3 py-1 rounded-full shadow-2xs">
-              {p.detailSections.length} {p.detailSections.length === 1 ? 'Section' : 'Sections'} Defined
+      {/* ── Lower 2-Column Grid: Compliance & Terms ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        {/* Required Documents */}
+        <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-xs space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-100 text-slate-700">
+                <FileCheck2 className="h-3.5 w-3.5" />
+              </span>
+              <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+                Mandatory Seller Documents
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold text-slate-400 uppercase">8 Required</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              'GST Certificate',
+              'PAN Card',
+              'Bank Details',
+              'Compliance Sheet',
+              'Price Breakup',
+              'Experience Cert',
+              'Turnover Cert',
+              'No-Deviation',
+            ].map((docName, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-2 p-2 rounded-lg border border-slate-100 bg-slate-50/70 text-[11px] font-semibold text-slate-700 hover:bg-blue-50/50 hover:border-blue-200 transition-colors"
+              >
+                <FileText className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                <span title={docName} className="truncate">{docName}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Terms & Conditions */}
+        <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-xs space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-100 text-slate-700">
+                <ScrollText className="h-3.5 w-3.5" />
+              </span>
+              <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+                Contract Terms & Permissions
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+              Standard SLA
             </span>
           </div>
 
-          <div className="columns-1 lg:columns-2 gap-6 space-y-6 [&>div]:break-inside-avoid-column">
-            {p.detailSections.map((section, idx) => {
+          <div className="grid grid-cols-3 gap-2">
+            <div className="p-2 rounded-lg bg-slate-50/70 border border-slate-100 text-center">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Withdrawal</span>
+              <span className="text-xs font-extrabold text-emerald-700">Allowed</span>
+            </div>
+            <div className="p-2 rounded-lg bg-slate-50/70 border border-slate-100 text-center">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Bid Revision</span>
+              <span className="text-xs font-extrabold text-emerald-700">Allowed</span>
+            </div>
+            <div className="p-2 rounded-lg bg-slate-50/70 border border-slate-100 text-center">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Seller Queries</span>
+              <span className="text-xs font-extrabold text-emerald-700">Allowed</span>
+            </div>
+          </div>
+
+          {p.termsAndConditions && p.termsAndConditions.length > 0 && (
+            <div className="pt-2 border-t border-slate-100">
+              <ul className="space-y-1 text-xs text-slate-600 list-disc pl-4">
+                {p.termsAndConditions.map((term: string, idx: number) => (
+                  <li key={idx} className="leading-tight">{term}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* ── Dynamic Additional Specification Cards (If Present) ── */}
+      {p.detailSections && p.detailSections.length > 0 && (
+        <section className="space-y-3 pt-2">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+            <h2 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4 text-blue-800" />
+              Additional Procurement Parameters
+            </h2>
+            <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+              {p.detailSections.length} Sections
+            </span>
+          </div>
+
+          <div className="columns-1 md:columns-2 gap-4 space-y-4 [&>div]:break-inside-avoid-column">
+            {p.detailSections.map((section: any, idx: number) => {
               const getSectionIcon = (title: string) => {
                 const t = title.toLowerCase();
                 if (t.includes('intent') || t.includes('scope')) return ClipboardList;
@@ -1739,88 +1863,71 @@ function ProcurementDetailView({
                 if (t.includes('item') || t.includes('qty')) return Package;
                 if (t.includes('date') || t.includes('time') || t.includes('schedule')) return CalendarDays;
                 if (t.includes('price') || t.includes('budget') || t.includes('cost') || t.includes('value')) return IndianRupee;
-                if (t.includes('terms') || t.includes('eligibility') || t.includes('criteria') || t.includes('rule')) return ClipboardCheck;
                 return Layers;
               };
 
               const SectionIcon = getSectionIcon(section.title);
 
-              const longTextFields = section.fields.filter(f => {
+              const longTextFields = section.fields.filter((f: any) => {
                 const val = String(f.value || '');
-                return val.length > 80 || f.label.toLowerCase().includes('description') || f.label.toLowerCase().includes('reason') || f.label.toLowerCase().includes('justification') || f.label.toLowerCase().includes('notes') || f.label.toLowerCase().includes('scope') || f.label.toLowerCase().includes('terms');
+                return (
+                  val.length > 80 ||
+                  f.label.toLowerCase().includes('description') ||
+                  f.label.toLowerCase().includes('scope') ||
+                  f.label.toLowerCase().includes('notes')
+                );
               });
 
-              const propertyFields = section.fields.filter(f => !longTextFields.includes(f));
-              const titleField = propertyFields.find(f => f.label.toLowerCase().includes('title'));
-              const normalFields = propertyFields.filter(f => f !== titleField);
+              const propertyFields = section.fields.filter((f: any) => !longTextFields.includes(f));
 
               return (
-                <div 
-                  key={`${section.title}-${idx}`} 
-                  className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all duration-200 space-y-3.5 inline-block w-full"
+                <div
+                  key={`${section.title}-${idx}`}
+                  className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-2xs space-y-3 inline-block w-full"
                 >
-                  {/* Card Header */}
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#12335f]/10 text-[#12335f] font-black shrink-0">
-                        <SectionIcon className="h-4 w-4" />
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-900 font-bold shrink-0">
+                        <SectionIcon className="h-3.5 w-3.5" />
                       </span>
-                      <div>
-                        <h3 className="text-xs font-black uppercase tracking-wider text-[#12335f]">{section.title}</h3>
-                        <p className="text-[10px] text-slate-400 font-semibold">{section.fields.length} {section.fields.length === 1 ? 'parameter' : 'parameters'}</p>
-                      </div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                        {section.title}
+                      </h3>
                     </div>
-                    <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
-                      #{idx + 1}
+                    <span className="text-[10px] font-semibold text-slate-400">
+                      {section.fields.length} params
                     </span>
                   </div>
 
-                  {/* Title Banner if available */}
-                  {titleField && (
-                    <div className="rounded-xl bg-slate-50/80 border border-slate-200/80 p-3">
-                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">{titleField.label}</span>
-                      <p className="text-xs font-bold text-slate-900 leading-snug">{formatDisplayValue(titleField.value, titleField.label)}</p>
-                    </div>
-                  )}
-
-                  {/* Parameters Grid */}
-                  {normalFields.length > 0 && (
-                    <div className="rounded-xl border border-slate-200/70 bg-slate-50/40 p-3.5">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-                        {normalFields.map((field, fieldIdx) => {
-                          const formattedVal = formatDisplayValue(field.value, field.label);
-                          const isValueKey = field.label.toLowerCase().includes('value') || field.label.toLowerCase().includes('price') || field.label.toLowerCase().includes('budget');
-
-                          return (
-                            <div key={`${field.label}-${fieldIdx}`} className="space-y-0.5">
-                              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                                {field.label}
-                              </span>
-                              <p className={cn(
-                                "text-xs font-medium text-slate-900 leading-snug break-words",
-                                isValueKey ? "text-emerald-700 font-bold" : ""
-                              )}>
-                                {formattedVal}
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Unified Long-text callout block at bottom */}
-                  {longTextFields.length > 0 && (
-                    <div className="rounded-xl border border-sky-100 bg-sky-50/30 p-3.5 space-y-2.5 divide-y divide-sky-100/80 text-left">
-                      {longTextFields.map((field, fieldIdx) => (
+                  {propertyFields.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {propertyFields.map((field: any, fieldIdx: number) => (
                         <div
-                          key={`long-${field.label}-${fieldIdx}`}
-                          className={cn("space-y-1", fieldIdx > 0 ? "pt-2.5" : "")}
+                          key={fieldIdx}
+                          className="bg-slate-50/60 p-2 rounded-lg border border-slate-100 space-y-0.5"
                         >
-                          <span className="text-[10px] font-bold uppercase text-sky-900 tracking-wider block">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
                             {field.label}
                           </span>
-                          <p className="text-xs font-normal text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
+                          <p title={formatDisplayValue(field.value, field.label)} className="text-xs font-bold text-slate-800 truncate">
+                            {formatDisplayValue(field.value, field.label)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {longTextFields.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      {longTextFields.map((field: any, fieldIdx: number) => (
+                        <div
+                          key={fieldIdx}
+                          className="p-2.5 rounded-lg bg-blue-50/30 border border-blue-100/60 space-y-1"
+                        >
+                          <span className="text-[10px] font-bold uppercase text-blue-900 tracking-wider block">
+                            {field.label}
+                          </span>
+                          <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
                             {formatDisplayValue(field.value, field.label)}
                           </p>
                         </div>

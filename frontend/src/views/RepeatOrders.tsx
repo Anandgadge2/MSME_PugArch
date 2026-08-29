@@ -1,4 +1,5 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -29,15 +30,18 @@ import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { Card, CardContent } from '../components/ui/card';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
-import { EmptyState, LoadingState } from '../features/shared/FeatureStates';
+import { EmptyState, InlineError } from '../features/shared/FeatureStates';
 import { formatCurrency, formatDate, maskEmail } from '../features/shared/format';
-import { useFeatureQuery, usePaginatedFeatureQuery, useResponsiveViewMode } from '../features/shared/hooks';
+import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
-import { ViewModeToggle } from '../features/shared/ViewModeToggle';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
+import { postApi } from '../features/shared/apiClient';
+import { ViewModeToggle } from '../features/shared/ViewModeToggle';
+import { PageToolbar } from '../features/shared/PageToolbar';
 import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
+import { PageTableSkeleton } from '../components/ui/skeleton';
 
 type StatusTab = 'Delivered' | 'All';
 
@@ -48,9 +52,16 @@ export default function RepeatOrders() {
   // Filters & UI state
   const [activeTab, setActiveTab] = useState<StatusTab>('All');
   const [activeKpiFilter, setActiveKpiFilter] = useState<'all' | 'highest_value' | 'vendors' | 'avg_value'>('all');
+  // Filter states
   const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('All Suppliers');
+  const [procurementFilter, setProcurementFilter] = useState('All Procurements');
+  const [amountFilter, setAmountFilter] = useState('All Amounts');
+  const [qtyFilter, setQtyFilter] = useState('All Quantities');
+  const [deliveredDateFilter, setDeliveredDateFilter] = useState('All Dates');
+  const [customDate, setCustomDate] = useState({ start: '', end: '' });
   const [sortBy, setSortBy] = useState('newest');
+  
   const [viewMode, setViewMode] = useResponsiveViewMode('repeat-orders:view-mode');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
@@ -72,92 +83,18 @@ export default function RepeatOrders() {
     return () => window.removeEventListener('click', handleClickOutside);
   }, [openKebabId]);
 
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedSearch(searchTerm), 400);
-    return () => clearTimeout(handler);
-  }, [searchTerm]);
-
   const viewerScope = `${user?.role || 'buyer'}-${user?.id || 'none'}`;
 
-  // Paginated query – only delivered orders for "Delivered" tab
-  const {
-    records: pagedOrders,
-    loading,
-    refreshing,
-    error,
-    reload,
-    page,
-    pageSize,
-    total,
-    setPage,
-    setPageSize
-  } = usePaginatedFeatureQuery<PurchaseOrderDto>(
-    '/api/purchase-orders',
-    {
-      q: debouncedSearch,
-      status: activeTab === 'Delivered' ? 'delivered' : undefined,
-      sortBy,
-      viewerScope
-    },
-    10
-  );
-
-  const sortedOrders = useMemo(() => {
-    if (!pagedOrders || pagedOrders.length === 0) return [];
-    return [...pagedOrders].sort((a, b) => {
-      const getVal = (o: PurchaseOrderDto) => Number(o.amount || o.totalValue || 0);
-      const getTitle = (o: PurchaseOrderDto) => String(o.items?.[0]?.itemName || o.title || '').toLowerCase();
-      const getSupplier = (o: PurchaseOrderDto) => String(o.seller?.name || '').toLowerCase();
-      const getDate = (o: PurchaseOrderDto) => new Date(o.updatedAt || o.createdAt || 0).getTime();
-
-      switch (sortBy) {
-        case 'value_high':
-          return getVal(b) - getVal(a);
-        case 'value_low':
-          return getVal(a) - getVal(b);
-        case 'title_asc':
-          return getTitle(a).localeCompare(getTitle(b));
-        case 'title_desc':
-          return getTitle(b).localeCompare(getTitle(a));
-        case 'party_asc':
-          return getSupplier(a).localeCompare(getSupplier(b));
-        case 'party_desc':
-          return getSupplier(b).localeCompare(getSupplier(a));
-        case 'updated_asc':
-          return getDate(a) - getDate(b);
-        case 'updated_desc':
-          return getDate(b) - getDate(a);
-        case 'newest':
-        default:
-          return getDate(b) - getDate(a);
-      }
-    });
-  }, [pagedOrders, sortBy]);
-
-  const filteredOrders = useMemo(() => {
-    if (!searchTerm.trim()) return sortedOrders;
-    const q = searchTerm.trim().toLowerCase();
-    return sortedOrders.filter(o => {
-      const po = String(o.poNumber || '').toLowerCase();
-      const title = String(o.title || o.items?.[0]?.itemName || '').toLowerCase();
-      const supplier = String(o.seller?.name || '').toLowerCase();
-      return po.includes(q) || title.includes(q) || supplier.includes(q);
-    });
-  }, [sortedOrders, searchTerm]);
-
-  // All orders for KPI stats
-  const { data: rawAllOrders, reload: reloadAll, loading: loadingAll } = useFeatureQuery<PurchaseOrderDto[]>(
+  // Fetch all orders for complete frontend filtering
+  const { data: rawAllOrders, reload, loading: loadingAll, refreshing } = useFeatureQuery<PurchaseOrderDto[]>(
     `/api/purchase-orders?take=500&viewerScope=${encodeURIComponent(viewerScope)}`,
     []
   );
 
   const allOrdersList = useMemo(() => {
-    if (Array.isArray(rawAllOrders) && rawAllOrders.length > 0) return rawAllOrders;
-    if (Array.isArray(pagedOrders) && pagedOrders.length > 0) return pagedOrders;
-    return [];
-  }, [rawAllOrders, pagedOrders]);
+    return Array.isArray(rawAllOrders) ? rawAllOrders : [];
+  }, [rawAllOrders]);
 
-  // KPI metrics computed from all orders (or fallback to pagedOrders)
   const deliveredOrders = useMemo(() => {
     if (allOrdersList.length === 0) return [];
     const isRepeatable = (o: PurchaseOrderDto) => {
@@ -172,15 +109,180 @@ export default function RepeatOrders() {
     return allOrdersList.filter(isRepeatable);
   }, [allOrdersList]);
 
+  // Dynamic filter dropdown options
+  const uniqueSuppliers = useMemo(() => {
+    const set = new Set(deliveredOrders.map(o => o.seller?.name || `Seller #${o.sellerId || '-'}`).filter(Boolean));
+    return Array.from(set).sort();
+  }, [deliveredOrders]);
+
+  const uniqueProcurements = useMemo(() => {
+    const set = new Set(deliveredOrders.map(o => {
+      const item = o.items?.[0] || { itemName: o.title };
+      return o.title || (o as any).tender?.title || item.itemName || 'Procurement Order';
+    }).filter(Boolean));
+    return Array.from(set).sort();
+  }, [deliveredOrders]);
+
+  // Combined Filtering & Sorting
+  const processedOrders = useMemo(() => {
+    let result = [...deliveredOrders];
+    
+    // Search
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase();
+      result = result.filter(o => {
+        const po = String(o.poNumber || '').toLowerCase();
+        const item = o.items?.[0] || { itemName: o.title };
+        const procurementName = String(o.title || (o as any).tender?.title || item.itemName || 'Procurement Order').toLowerCase();
+        const supplier = String(o.seller?.name || '').toLowerCase();
+        const itemDesc = String((item as any).itemDescription || item.itemName || '').toLowerCase();
+        return po.includes(q) || procurementName.includes(q) || supplier.includes(q) || itemDesc.includes(q);
+      });
+    }
+
+    // Supplier Filter
+    if (supplierFilter !== 'All Suppliers') {
+      result = result.filter(o => {
+        const name = o.seller?.name || `Seller #${o.sellerId || '-'}`;
+        return name === supplierFilter;
+      });
+    }
+
+    // Procurement Filter
+    if (procurementFilter !== 'All Procurements') {
+      result = result.filter(o => {
+        const item = o.items?.[0] || { itemName: o.title };
+        const procurementName = o.title || (o as any).tender?.title || item.itemName || 'Procurement Order';
+        return procurementName === procurementFilter;
+      });
+    }
+
+    // Amount Filter
+    if (amountFilter !== 'All Amounts') {
+      result = result.filter(o => {
+        const val = Number(o.amount || o.totalValue || 0);
+        if (amountFilter === 'Below ₹10,000') return val < 10000;
+        if (amountFilter === '₹10,000 – ₹50,000') return val >= 10000 && val <= 50000;
+        if (amountFilter === '₹50,000 – ₹1,00,000') return val > 50000 && val <= 100000;
+        if (amountFilter === 'Above ₹1,00,000') return val > 100000;
+        return true;
+      });
+    }
+
+    // Quantity Filter
+    if (qtyFilter !== 'All Quantities') {
+      result = result.filter(o => {
+        const item = o.items?.[0] || { quantity: 1 };
+        const qty = Number(item.quantity || 0);
+        if (qtyFilter === '1–10') return qty >= 1 && qty <= 10;
+        if (qtyFilter === '11–50') return qty >= 11 && qty <= 50;
+        if (qtyFilter === '51–100') return qty >= 51 && qty <= 100;
+        if (qtyFilter === '100+') return qty > 100;
+        return true;
+      });
+    }
+
+    // Delivered On Filter
+    if (deliveredDateFilter !== 'All Dates') {
+      const now = new Date();
+      result = result.filter(o => {
+        const dt = new Date(o.updatedAt || o.createdAt || 0);
+        if (isNaN(dt.getTime())) return false;
+        
+        if (deliveredDateFilter === 'Today') {
+          return dt.toDateString() === now.toDateString();
+        }
+        if (deliveredDateFilter === 'Last 7 Days') {
+          const sevenDaysAgo = new Date(now);
+          sevenDaysAgo.setDate(now.getDate() - 7);
+          return dt >= sevenDaysAgo && dt <= now;
+        }
+        if (deliveredDateFilter === 'Last 30 Days') {
+          const thirtyDaysAgo = new Date(now);
+          thirtyDaysAgo.setDate(now.getDate() - 30);
+          return dt >= thirtyDaysAgo && dt <= now;
+        }
+        if (deliveredDateFilter === 'Custom Date Range') {
+          if (!customDate.start && !customDate.end) return true;
+          const start = customDate.start ? new Date(customDate.start) : new Date(0);
+          start.setHours(0,0,0,0);
+          const end = customDate.end ? new Date(customDate.end) : new Date(8640000000000000);
+          end.setHours(23,59,59,999);
+          return dt >= start && dt <= end;
+        }
+        return true;
+      });
+    }
+
+    // KPI Filters overriding normal sorts (Optional support, but maintaining feature parity)
+    if (activeKpiFilter === 'highest_value') {
+      return result.sort((a, b) => Number(b.amount || b.totalValue || 0) - Number(a.amount || a.totalValue || 0));
+    }
+    if (activeKpiFilter === 'avg_value') {
+      return result.sort((a, b) => Number(a.amount || a.totalValue || 0) - Number(b.amount || b.totalValue || 0));
+    }
+    if (activeKpiFilter === 'vendors') {
+      return result.sort((a, b) => {
+        const partyA = String(a.seller?.name || '').toLowerCase();
+        const partyB = String(b.seller?.name || '').toLowerCase();
+        return partyA.localeCompare(partyB);
+      });
+    }
+
+    // Sorting
+    result.sort((a, b) => {
+      const getVal = (o: PurchaseOrderDto) => Number(o.amount || o.totalValue || 0);
+      const getQty = (o: PurchaseOrderDto) => Number(o.items?.[0]?.quantity || 1);
+      const getDate = (o: PurchaseOrderDto) => new Date(o.updatedAt || o.createdAt || 0).getTime();
+      const getTitle = (o: PurchaseOrderDto) => String(o.items?.[0]?.itemName || o.title || '').toLowerCase();
+      const getSupplier = (o: PurchaseOrderDto) => String(o.seller?.name || '').toLowerCase();
+
+      switch (sortBy) {
+        case 'value_high':
+          return getVal(b) - getVal(a);
+        case 'value_low':
+          return getVal(a) - getVal(b);
+        case 'qty_high':
+        case 'qty_desc':
+          return getQty(b) - getQty(a);
+        case 'qty_low':
+        case 'qty_asc':
+          return getQty(a) - getQty(b);
+        case 'po_asc':
+          return String(a.poNumber || '').localeCompare(String(b.poNumber || ''));
+        case 'po_desc':
+          return String(b.poNumber || '').localeCompare(String(a.poNumber || ''));
+        case 'title_asc':
+          return getTitle(a).localeCompare(getTitle(b));
+        case 'title_desc':
+          return getTitle(b).localeCompare(getTitle(a));
+        case 'party_asc':
+          return getSupplier(a).localeCompare(getSupplier(b));
+        case 'party_desc':
+          return getSupplier(b).localeCompare(getSupplier(a));
+        case 'oldest':
+        case 'updated_asc':
+          return getDate(a) - getDate(b);
+        case 'updated_desc':
+        case 'newest':
+        default:
+          return getDate(b) - getDate(a);
+      }
+    });
+
+    return result;
+  }, [deliveredOrders, searchTerm, supplierFilter, procurementFilter, amountFilter, qtyFilter, deliveredDateFilter, customDate, sortBy, activeKpiFilter]);
+
+  const { page, pageSize, total, pageItems: visibleOrders, setPage, setPageSize } = usePagination(processedOrders, 10);
+
+  // KPI metrics computed from deliveredOrders
+
   const deliveredCount = deliveredOrders.length;
   const totalDeliveredValue = useMemo(
     () => deliveredOrders.reduce((s, o) => s + Number(o.amount || o.totalValue || 0), 0),
     [deliveredOrders]
   );
-  const uniqueSuppliers = useMemo(
-    () => new Set(deliveredOrders.map(o => o.sellerId || (o.seller as any)?.id || o.seller?.name).filter(Boolean)).size,
-    [deliveredOrders]
-  );
+  const uniqueSuppliersCount = uniqueSuppliers.length;
   const avgOrderValue = deliveredCount > 0 ? totalDeliveredValue / deliveredCount : 0;
 
   // Repeat modal handlers
@@ -247,7 +349,6 @@ export default function RepeatOrders() {
       toast.success('Repeat Purchase Order created successfully!');
       setRepeatingOrder(null);
       reload();
-      reloadAll();
       if (data.id) {
         router.push(`/purchase-orders`);
       }
@@ -259,7 +360,7 @@ export default function RepeatOrders() {
   };
 
   const refreshAll = async () => {
-    await Promise.all([reload(), reloadAll()]);
+    await Promise.all([reload()]);
   };
 
   // Sort header helper
@@ -289,6 +390,10 @@ export default function RepeatOrders() {
     );
   };
 
+  if (loadingAll && (!deliveredOrders || deliveredOrders.length === 0)) {
+    return <PageTableSkeleton kpiCount={4} />;
+  }
+
   return (
     <div className="space-y-4">
       {/* Tricolor Header Accent */}
@@ -317,7 +422,7 @@ export default function RepeatOrders() {
           subtext="Fulfilled orders ready for 1-click re-order"
           icon={RotateCcw}
           color="green"
-          loading={loadingAll && pagedOrders.length === 0}
+          loading={loadingAll && allOrdersList.length === 0}
           active={activeKpiFilter === 'all' && sortBy === 'newest'}
           onClick={() => {
             setActiveKpiFilter('all');
@@ -331,7 +436,7 @@ export default function RepeatOrders() {
           subtext="Total historical spend available for repeat"
           icon={TrendingUp}
           color="indigo"
-          loading={loadingAll && pagedOrders.length === 0}
+          loading={loadingAll && allOrdersList.length === 0}
           active={activeKpiFilter === 'highest_value' || sortBy === 'value_high'}
           onClick={() => {
             setActiveKpiFilter('highest_value');
@@ -340,11 +445,11 @@ export default function RepeatOrders() {
         />
         <KpiCard
           label="Active Vendors"
-          value={uniqueSuppliers}
+          value={uniqueSuppliersCount}
           subtext="Verified suppliers in repeat catalog"
           icon={Building2}
           color="blue"
-          loading={loadingAll && pagedOrders.length === 0}
+          loading={loadingAll && allOrdersList.length === 0}
           active={activeKpiFilter === 'vendors' || sortBy === 'party_asc'}
           onClick={() => {
             setActiveKpiFilter('vendors');
@@ -357,7 +462,7 @@ export default function RepeatOrders() {
           subtext="Average spend per repeated consignment"
           icon={BarChart3}
           color="amber"
-          loading={loadingAll && pagedOrders.length === 0}
+          loading={loadingAll && allOrdersList.length === 0}
           active={activeKpiFilter === 'avg_value' || sortBy === 'value_low'}
           onClick={() => {
             setActiveKpiFilter('avg_value');
@@ -369,54 +474,167 @@ export default function RepeatOrders() {
       {/* ── Search + Filter + View Toggle Toolbar ── */}
       <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
         <ResponsiveFilterBar
-          activeFilterCount={(searchTerm ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0)}
+          activeFilterCount={
+            (searchTerm ? 1 : 0) + 
+            (supplierFilter !== 'All Suppliers' ? 1 : 0) + 
+            (procurementFilter !== 'All Procurements' ? 1 : 0) + 
+            (amountFilter !== 'All Amounts' ? 1 : 0) + 
+            (qtyFilter !== 'All Quantities' ? 1 : 0) + 
+            (deliveredDateFilter !== 'All Dates' ? 1 : 0) + 
+            (sortBy !== 'newest' ? 1 : 0)
+          }
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Search PO number, supplier, title..."
+                onChange={event => setSearchTerm(event.target.value)}
+                placeholder="Search PO number, procurement, supplier..."
                 className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
             </div>
           }
           filters={
-            <div className="w-full sm:w-auto sm:min-w-[130px]">
-              <select
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-              >
-                <option value="newest">Newest</option>
-                <option value="value_high">Value High</option>
-                <option value="value_low">Value Low</option>
-                <option value="title_asc">Title A-Z</option>
-                <option value="party_asc">Supplier A-Z</option>
-              </select>
-            </div>
+            <>
+              {/* Supplier */}
+              <div className="w-full sm:w-[140px]">
+                <select
+                  value={supplierFilter}
+                  onChange={e => setSupplierFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="All Suppliers">Supplier: All</option>
+                  {uniqueSuppliers.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Procurement */}
+              <div className="w-full sm:w-[150px]">
+                <select
+                  value={procurementFilter}
+                  onChange={e => setProcurementFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="All Procurements">Procurement: All</option>
+                  {uniqueProcurements.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Amount */}
+              <div className="w-full sm:w-[130px]">
+                <select
+                  value={amountFilter}
+                  onChange={e => setAmountFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="All Amounts">Amount: All</option>
+                  <option value="Below ₹10,000">Below ₹10,000</option>
+                  <option value="₹10,000 – ₹50,000">₹10,000 – ₹50,000</option>
+                  <option value="₹50,000 – ₹1,00,000">₹50,000 – ₹1,00,000</option>
+                  <option value="Above ₹1,00,000">Above ₹1,00,000</option>
+                </select>
+              </div>
+
+              {/* Quantity */}
+              <div className="w-full sm:w-[110px]">
+                <select
+                  value={qtyFilter}
+                  onChange={e => setQtyFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="All Quantities">Qty: All</option>
+                  <option value="1–10">1–10</option>
+                  <option value="11–50">11–50</option>
+                  <option value="51–100">51–100</option>
+                  <option value="100+">100+</option>
+                </select>
+              </div>
+
+              {/* Delivered On Date */}
+              <div className="w-full sm:w-[140px]">
+                <select
+                  value={deliveredDateFilter}
+                  onChange={e => setDeliveredDateFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="All Dates">Delivered: All</option>
+                  <option value="Today">Today</option>
+                  <option value="Last 7 Days">Last 7 Days</option>
+                  <option value="Last 30 Days">Last 30 Days</option>
+                  <option value="Custom Date Range">Custom Date Range</option>
+                </select>
+              </div>
+              
+              {deliveredDateFilter === 'Custom Date Range' && (
+                <div 
+                  className="grid items-center gap-1 w-full sm:w-auto h-10"
+                  style={{ gridTemplateColumns: 'minmax(0, 1fr) 20px minmax(0, 1fr)' }}
+                >
+                  <input 
+                    type="date" 
+                    value={customDate.start} 
+                    onChange={e => setCustomDate({ ...customDate, start: e.target.value })} 
+                    className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
+                    title="Start Date" 
+                  />
+                  <span className="text-slate-400 font-bold text-center">-</span>
+                  <input 
+                    type="date" 
+                    value={customDate.end} 
+                    onChange={e => setCustomDate({ ...customDate, end: e.target.value })} 
+                    className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
+                    title="End Date" 
+                  />
+                </div>
+              )}
+
+              {/* Sorting */}
+              <div className="w-full sm:w-[130px]">
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
+                  <option value="value_high">Highest Amount</option>
+                  <option value="value_low">Lowest Amount</option>
+                  <option value="qty_high">Highest Quantity</option>
+                  <option value="qty_low">Lowest Quantity</option>
+                </select>
+              </div>
+              {(searchTerm || supplierFilter !== 'All Suppliers' || procurementFilter !== 'All Procurements' || amountFilter !== 'All Amounts' || qtyFilter !== 'All Quantities' || deliveredDateFilter !== 'All Dates' || sortBy !== 'newest') && (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSupplierFilter('All Suppliers');
+                    setProcurementFilter('All Procurements');
+                    setAmountFilter('All Amounts');
+                    setQtyFilter('All Quantities');
+                    setDeliveredDateFilter('All Dates');
+                    setCustomDate({ start: '', end: '' });
+                    setSortBy('newest');
+                    setActiveKpiFilter('all');
+                  }}
+                  className="h-10 px-3 text-xs font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl shrink-0"
+                >
+                  Clear Filters
+                </Button>
+              )}
+            </>
           }
-          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+          viewToggle={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
         />
       </div>
 
+
       {/* Content */}
-      {loading && filteredOrders.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200/85 bg-white p-6 shadow-sm">
-          <div className="space-y-4">
-            <div className="h-5 w-48 rounded bg-slate-100 animate-pulse" />
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/60 p-4 animate-pulse">
-                  <div className="h-6 w-20 rounded bg-slate-200/60" />
-                  <div className="h-5 flex-1 rounded bg-slate-200/60" />
-                  <div className="h-6 w-24 rounded bg-slate-200/60" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : filteredOrders.length === 0 ? (
+      {processedOrders.length === 0 ? (
         <EmptyState
           title="No repeat orders available"
           description={
@@ -428,7 +646,7 @@ export default function RepeatOrders() {
       ) : viewMode === 'grid' ? (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredOrders.map((order, index) => {
+            {visibleOrders.map((order, index) => {
               const rowIndex = (page - 1) * pageSize + index + 1;
               const item: any = order.items?.[0] || { itemName: order.title, quantity: 1 };
               const itemCount = order.items?.length || 1;
@@ -449,7 +667,7 @@ export default function RepeatOrders() {
                           </span>
                           <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
                         </div>
-                        <h3 className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{procurementName}</h3>
+                        <h3 title={procurementName} className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{procurementName}</h3>
                       </div>
                       <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-700 border border-emerald-200">
                         <CheckCircle2 className="h-3 w-3" /> Repeatable
@@ -521,7 +739,7 @@ export default function RepeatOrders() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                {filteredOrders.map((order, index) => {
+                {visibleOrders.map((order, index) => {
                   const rowIndex = (page - 1) * pageSize + index + 1;
                   const item = order.items?.[0] || { itemName: order.title, quantity: 1 };
                   const procurementName = order.title || (order as any).tender?.title || item.itemName || 'Procurement Order';
@@ -544,47 +762,13 @@ export default function RepeatOrders() {
                       <td className="p-3 font-bold text-slate-900">{formatCurrency(order.amount || order.totalValue)}</td>
                       <td className="p-3 text-slate-500">{formatDate(order.updatedAt)}</td>
                       <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        <div className="relative inline-flex items-center justify-end">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenKebabId(openKebabId === order.id ? null : order.id);
-                            }}
-                            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
-                            title="Actions"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-
-                          {openKebabId === order.id && (
-                            <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenKebabId(null);
-                                  setViewingOrder(order);
-                                }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                              >
-                                <Eye className="h-3.5 w-3.5 text-slate-500" />
-                                <span>View Details</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenKebabId(null);
-                                  handleOpenRepeatModal(order);
-                                }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
-                              >
-                                <RotateCcw className="h-3.5 w-3.5 text-[#12335f]" />
-                                <span>Repeat Order</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        <ActionMenu 
+                          order={order}
+                          onView={setViewingOrder}
+                          onRepeat={handleOpenRepeatModal}
+                          openKebabId={openKebabId}
+                          setOpenKebabId={setOpenKebabId}
+                        />
                       </td>
                     </tr>
                   );
@@ -732,6 +916,94 @@ export default function RepeatOrders() {
         </div>
       )}
     </div>
+  );
+}
+
+function ActionMenu({ order, onView, onRepeat, openKebabId, setOpenKebabId }: any) {
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const isOpen = openKebabId === order.id;
+
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      setRect(buttonRef.current.getBoundingClientRect());
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isOpen && buttonRef.current) {
+        setRect(buttonRef.current.getBoundingClientRect());
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('scroll', handleScroll, true);
+      window.addEventListener('resize', handleScroll);
+    }
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [isOpen]);
+
+  const spaceBelow = rect ? window.innerHeight - rect.bottom : 0;
+  const shouldOpenUp = spaceBelow < 120;
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpenKebabId(isOpen ? null : order.id);
+        }}
+        className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+
+      {isOpen && rect && typeof window !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[9999]"
+          style={{
+            top: shouldOpenUp ? undefined : rect.bottom + 4,
+            bottom: shouldOpenUp ? window.innerHeight - rect.top + 4 : undefined,
+            right: window.innerWidth - rect.right,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in duration-100">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenKebabId(null);
+                onView(order);
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+            >
+              <Eye className="h-3.5 w-3.5 text-slate-500" />
+              <span>View Details</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenKebabId(null);
+                onRepeat(order);
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-[#12335f]" />
+              <span>Repeat Order</span>
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
 

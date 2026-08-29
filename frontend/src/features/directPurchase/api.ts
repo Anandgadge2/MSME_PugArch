@@ -54,10 +54,36 @@ export interface DirectPurchaseCheckoutPayload {
 export const directPurchaseCheckout = (payload: DirectPurchaseCheckoutPayload) =>
     postApi<DirectPurchaseDto[]>(`/api/direct-purchases/checkout`, payload);
 
+export interface PlaceDirectOrderPayload {
+    deliveryAddressId?: number | null;
+    deliveryAddress: string;
+    city: string;
+    state: string;
+    pincode: string;
+    contactName: string;
+    mobileNumber: string;
+
+    sameAsDelivery?: boolean;
+    billingAddress?: string | null;
+    companyName?: string | null;
+    gstin?: string | null;
+
+    deliveryInstructions?: string | null;
+    expectedDeliveryDate?: string | null;
+    paymentMethod?: string;
+}
+
+export const placeDirectOrder = (payload: PlaceDirectOrderPayload) =>
+    postApi<{ orders: Array<{ poId: number; poNumber: string; sellerId: number; totalAmount: number }> }>(
+        `/api/direct-purchases/place-order`,
+        payload
+    );
+
 export const sendDirectPurchaseToSeller = (id: number) =>
     postApi<DirectPurchaseDto>(`/api/direct-purchases/${id}/send-to-seller`, {});
 
 // ─── Delivery Address Book APIs ──────────────────────────────────────────────
+
 
 export interface DeliveryAddressDto {
     id: number;

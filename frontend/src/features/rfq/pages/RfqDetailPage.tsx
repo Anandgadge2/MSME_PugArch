@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner';
 import { EmdCard, EmdInfo } from '../components/EmdCard';
 import { EmdPaymentModal } from '../components/EmdPaymentModal';
-import { getApi } from '../../shared/apiClient';
+import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
@@ -166,26 +166,33 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const pathnameId = (rawPathId && !['bids', 'tenders', 'details', 'rfq'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
 
   let requirementId = explicitReqId;
-  let requestId = explicitRequestId || (initialData?.bidNumber || initialData?.id ? String(initialData.bidNumber || initialData.id) : pathnameId);
+  let requestId = explicitRequestId;
 
-  if (!requirementId && !requestId && (rawIdParam || pathnameId)) {
-    const idToken = rawIdParam || pathnameId;
-    if (idToken.startsWith('req-')) {
-      requirementId = idToken.replace('req-', '');
-    } else if (idToken.startsWith('bid-') || idToken.startsWith('qr-')) {
-      requestId = idToken.replace(/^(bid|qr)-/, '');
-    } else {
-      requirementId = idToken;
-      requestId = idToken;
-    }
+  const activeId = explicitReqId || explicitRequestId || rawIdParam || pathnameId;
+
+  if (activeId) {
+    requirementId = requirementId || activeId;
+    requestId = requestId || activeId;
+  } else if (initialData) {
+    requirementId = String(initialData.requirementId || initialData.id || '');
+    requestId = String(initialData.bidNumber || initialData.id || '');
   }
+
+  const isMatchingInitial = Boolean(
+    initialData && activeId && (
+      String(initialData.id).toLowerCase() === String(activeId).toLowerCase() ||
+      String(initialData.requirementNumber || '').toLowerCase() === String(activeId).toLowerCase() ||
+      String(initialData.bidNumber || '').toLowerCase() === String(activeId).toLowerCase() ||
+      String(initialData.displayId || '').toLowerCase() === String(activeId).toLowerCase()
+    )
+  );
 
   /* ── Queries ── */
   const { data: bidData, isLoading: bidLoading } = useQuery({
     queryKey: ['rfq-detail-bid', requestId],
     queryFn:  () => procurementBidApi.detail(requestId),
     enabled:  !!requestId,
-    initialData: initialData?.sourceModel === 'BID' || initialData?.bidNumber ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
   });
 
@@ -193,7 +200,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     queryKey: ['rfq-detail-req', requirementId],
     queryFn:  async () => getApi<any>(`/api/marketplace/requirements/${requirementId}`),
     enabled:  !!requirementId,
-    initialData: initialData?.title || initialData?.requirement ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
     staleTime: 60_000,
   });
 
@@ -683,6 +690,48 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     router.push(`/seller/rfq/submit-quotation?${param}=${encodeURIComponent(String(id))}`);
   };
 
+  const isAwarded = String(status).toUpperCase() === 'AWARDED' || 
+    (Array.isArray(ownParticipation?.awards) && ownParticipation.awards.some((a: any) => String(a?.awardStatus || '').toUpperCase() === 'ADMIN_APPROVED' || !!a?.awardedAt));
+
+  const { data: invoiceStatusData, isLoading: invoiceStatusLoading } = useQuery({
+    queryKey: ['rfq-invoice-status', requestId],
+    queryFn: async () => {
+      if (!requestId) return { exists: false };
+      try {
+        const res = await getApi<any>(`/api/seller/procurement-bids/${requestId}/invoice`);
+        return res?.data || res || { exists: false };
+      } catch (err) {
+        return { exists: false };
+      }
+    },
+    enabled: !!requestId && user?.role === 'seller' && isAwarded,
+    staleTime: 0,
+  });
+
+  const [isConvertingInvoice, setIsConvertingInvoice] = useState(false);
+
+  const handleConvertToInvoice = async () => {
+    if (!requestId) return;
+    setIsConvertingInvoice(true);
+    try {
+      const result = await postApi<any>(`/api/seller/procurement-bids/${requestId}/convert-to-invoice`, {});
+      toast.success('Invoice generated successfully!');
+      
+      const createdInvoiceId = result?.id || result?.data?.id;
+      
+      if (createdInvoiceId) {
+        router.push(`/seller/invoices/${createdInvoiceId}`);
+      } else {
+        router.push('/seller/invoices');
+      }
+    } catch (err: any) {
+      console.error('[Convert Invoice Error]', err);
+      toast.error(err?.message || 'Failed to convert to invoice.');
+    } finally {
+      setIsConvertingInvoice(false);
+    }
+  };
+
   /* ── Status Badge Styling Helper ── */
   const getStatusBadgeStyle = (st: string) => {
     const s = String(st || '').toUpperCase();
@@ -824,6 +873,13 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (submitted ? 'View Quotation' : 'Submit Quotation')}
       onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}
       onDownloadClick={handleDownloadPdf}
+      invoiceStatus={user?.role === 'seller' && isAwarded ? { 
+        exists: Boolean(invoiceStatusData?.exists), 
+        invoiceId: invoiceStatusData?.invoiceId, 
+        loading: invoiceStatusLoading 
+      } : null}
+      isConvertingInvoice={isConvertingInvoice}
+      onConvertToInvoiceClick={handleConvertToInvoice}
       clarificationKind={requirementId || (rawBid?.sourceModel === 'REQUIREMENT') ? 'requirement' : 'quote-request'}
       clarificationEntityId={requirementId || rawBid?.sourceId || targetReqId || requestId}
     />

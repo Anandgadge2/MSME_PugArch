@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../../hooks/useAuth';
 import { api } from '../../../lib/api';
-import { MarketplaceHomeSkeleton } from '../../../components/ui/skeleton';
 import {
     marketplaceApi,
     type MarketplaceHomeData,
@@ -133,12 +132,6 @@ export default function MarketplaceHome() {
         return Array.from(map.values());
     }, [data?.largeIndustries, buyerFallbackData?.buyers, data?.featuredRequirements]);
 
-    const isPreparingPage = isHomeLoading && !data;
-
-    if (isPreparingPage) {
-        return <MarketplaceHomeSkeleton />;
-    }
-
     const categories = homeLayoutData?.categories?.length ? homeLayoutData.categories : data?.categories || [];
     const layoutSections = homeLayoutData?.sections || [];
     const itemLayoutSections = layoutSections.filter((section: MarketplaceLayoutSection) =>
@@ -181,8 +174,9 @@ export default function MarketplaceHome() {
     });
 
     return (
-        <div className="flex min-h-dvh flex-col overflow-x-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/60 via-slate-50 to-slate-100/80 text-slate-800">
-            <main className="flex-1 overflow-x-hidden">
+        <Suspense fallback={null}>
+                <div className="flex min-h-dvh flex-col overflow-x-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/60 via-slate-50 to-slate-100/80 text-slate-800">
+                    <main className="flex-1 overflow-x-hidden">
                 <MarketplaceNav categories={categories} />
                 <HeroBanner banners={activeBannerData?.banners?.length ? activeBannerData.banners : (data?.banners || [])} />
                 <div className="hidden md:block">
@@ -315,9 +309,10 @@ export default function MarketplaceHome() {
                 <NoticeBoard notices={data?.notices || []} />
             </main>
 
-            <CompareTray />
-            <MarketplaceFooter />
-        </div>
+                    <CompareTray />
+                    <MarketplaceFooter />
+                </div>
+            </Suspense>
     );
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   Search,
@@ -32,6 +33,7 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
+import { PageTableSkeleton } from '../../../components/ui/skeleton';
 import { api } from '../../../lib/api';
 import { procurementBidApi } from '../../procurementBid/api';
 import { marketplaceApi } from '../../marketplace/api';
@@ -185,6 +187,7 @@ type SortKey = 'index' | 'type' | 'title' | 'status' | 'estimatedValue' | 'respo
 type SortDir = 'asc' | 'desc';
 
 export default function SupplierResponsesPage() {
+  const router = useRouter();
   const { user } = useAuth();
 
   // Clear legacy cached bids from browser storage
@@ -313,12 +316,12 @@ export default function SupplierResponsesPage() {
     if (bid.isMarketplaceRequirement) {
       const method = String(bid.procurementType || '').toUpperCase();
       if (method === 'REVERSE_AUCTION' || method.includes('AUCTION')) {
-        window.location.href = `/reverse-auctions/${bid.requirementId}`;
+        router.push(`/reverse-auctions/${bid.requirementId}`);
       } else {
-        window.location.href = `/marketplace/requirements/${bid.requirementId}`;
+        router.push(`/marketplace/requirements/${bid.requirementId}`);
       }
     } else {
-      window.location.href = `/bids/${bid.id}`;
+      router.push(`/bids/${bid.id}`);
     }
   };
 
@@ -581,6 +584,14 @@ export default function SupplierResponsesPage() {
 
   const isKpisLoading = loading && bids.length === 0;
 
+  if (isKpisLoading) {
+    return (
+       <div className="mx-auto max-w-[1560px] space-y-3.5 sm:space-y-5 px-2.5 sm:px-4 pb-12 pt-4">
+          <PageTableSkeleton kpiCount={6} />
+       </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-[1560px] space-y-3.5 sm:space-y-5 px-2.5 sm:px-4 pb-12">
       {/* ── Transparent Header ── */}
@@ -807,25 +818,7 @@ export default function SupplierResponsesPage() {
       </div>
 
       {/* Content */}
-      {loading && bids.length === 0 ? (
-        <div className="space-y-4">
-          <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                <div className="h-4 w-12 animate-pulse rounded bg-slate-100" />
-                <div className="h-5 w-24 animate-pulse rounded-full bg-slate-100" />
-                <div className="flex-1 space-y-1.5 min-w-[200px]">
-                  <div className="h-4 w-3/4 animate-pulse rounded bg-slate-200" />
-                  <div className="h-3 w-1/2 animate-pulse rounded bg-slate-100" />
-                </div>
-                <div className="h-4 w-20 animate-pulse rounded bg-slate-100" />
-                <div className="h-6 w-20 animate-pulse rounded-full bg-slate-100" />
-                <div className="h-8 w-24 animate-pulse rounded-lg bg-slate-100" />
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : filteredBids.length === 0 ? (
+      {filteredBids.length === 0 ? (
         <EmptyState
           title="No Supplier Responses Found"
           description={hasActiveFilters

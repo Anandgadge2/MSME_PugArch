@@ -47,7 +47,7 @@ export default function Login() {
         router.replace(safeInternalPath(returnUrl));
       } else {
         if (isShgUser(user)) {
-          router.replace('/shg/onboarding');
+          router.replace('/shg/dashboard');
         } else {
           router.replace(user.role === 'master_admin' ? '/master-admin' : '/dashboard');
         }
@@ -73,7 +73,7 @@ export default function Login() {
           return;
         }
         const destination = returnUrl ? safeInternalPath(returnUrl) : (
-          isShgUser(data.user) ? '/shg/onboarding' : (data.user.role === 'master_admin' ? '/master-admin' : '/dashboard')
+          isShgUser(data.user) ? '/shg/dashboard' : (data.user.role === 'master_admin' ? '/master-admin' : '/dashboard')
         );
         toast.success(`Welcome back, ${data.user.name}!`, { id: loadToast });
         login(data.accessToken || data.token, data.user, data.refreshToken, destination);
@@ -100,7 +100,7 @@ export default function Login() {
         return;
       }
       const destination = returnUrl ? safeInternalPath(returnUrl) : (
-        isShgUser(data.user) ? '/shg/onboarding' : (data.user.role === 'master_admin' ? '/master-admin' : '/dashboard')
+        isShgUser(data.user) ? '/shg/dashboard' : (data.user.role === 'master_admin' ? '/master-admin' : '/dashboard')
       );
       toast.success(`Welcome back, ${data.user.name}!`, { id: loadToast });
       login(data.accessToken || data.token, data.user, data.refreshToken, destination);
@@ -248,7 +248,7 @@ export default function Login() {
           </div>
 
           {/* Form */}
-          <form onSubmit={twoFactorPending ? handleTwoFactorSubmit : handleSubmit} className="space-y-5">
+          <form onSubmit={twoFactorPending ? handleTwoFactorSubmit : handleSubmit} className="space-y-5" suppressHydrationWarning>
             {twoFactorPending ? (
               <div className="space-y-3">
                 <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] ml-1">Two-Factor Code</label>
@@ -263,6 +263,7 @@ export default function Login() {
                   onChange={(e) => setTwoFactorOtp(e.target.value.replace(/\D/g, ''))}
                   className="w-full h-14 rounded-2xl border border-slate-200 bg-white px-4 text-center text-xl font-black tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all shadow-sm"
                   required
+                  suppressHydrationWarning
                 />
                 {canSms && (
                   <div className="flex justify-between items-center pt-1 px-1">
@@ -285,12 +286,13 @@ export default function Login() {
                         }
                       }}
                       className="text-xs font-bold text-[#12335f] underline decoration-blue-200 underline-offset-4 animate-pulse"
+                      suppressHydrationWarning
                     >
                       Receive OTP via {twoFactorChannel === 'sms' ? 'Email' : 'SMS'} instead
                     </button>
                   </div>
                 )}
-                <button type="button" onClick={() => setTwoFactorPending(false)} className="text-xs font-bold text-slate-500 underline decoration-slate-300 underline-offset-4 block mt-1">
+                <button type="button" onClick={() => setTwoFactorPending(false)} className="text-xs font-bold text-slate-500 underline decoration-slate-300 underline-offset-4 block mt-1" suppressHydrationWarning>
                   Use different credentials
                 </button>
               </div>
@@ -308,6 +310,7 @@ export default function Login() {
                       onChange={(e) => setEmail(e.target.value)}
                       required
                       className="w-full h-12 pl-12 pr-4 rounded-2xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all font-semibold shadow-sm hover:border-slate-300"
+                      suppressHydrationWarning
                     />
                   </div>
                 </div>
@@ -329,11 +332,13 @@ export default function Login() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       className="w-full h-12 pl-12 pr-12 rounded-2xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all font-semibold shadow-sm hover:border-slate-300"
+                      suppressHydrationWarning
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#12335f] focus:outline-none transition-colors"
+                      suppressHydrationWarning
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -348,6 +353,7 @@ export default function Login() {
                 type="submit"
                 className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#0b2447] to-[#12335f] hover:from-[#12335f] hover:to-[#0b2447] text-white font-black uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(18,51,95,0.3)] transition-all hover:translate-y-[-2px] hover:shadow-[0_24px_48px_-12px_rgba(18,51,95,0.4)] active:scale-[0.98] disabled:opacity-50 text-sm"
                 disabled={isLoading}
+                suppressHydrationWarning
               >
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">

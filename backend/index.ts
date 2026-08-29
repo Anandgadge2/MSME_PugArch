@@ -26,6 +26,7 @@ import { upload } from './src/config/storage.js';
 import { errorHandler } from './src/middleware/errorHandler.js';
 import { checkOwnership } from './src/middleware/ownership.js';
 import { handleUpgrade } from './src/services/websocket.service.js';
+import { authorizePusherChannel, isPusherConfigured, publishConversationEvent } from './src/services/pusher.service.js';
 import { safeAsync } from './src/utils/safeAsync.js';
 import { TimeConstants } from './src/constants/time.js';
 import {
@@ -203,6 +204,87 @@ app.use('/api', (req, res, next) => {
   return next();
 });
 
+app.post('/api/pusher/auth', authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!isPusherConfigured()) {
+      return res.status(503).json({ message: 'Pusher service is not configured' });
+    }
+
+    const socketId = req.body.socket_id || req.body.socketId;
+    const channelName = req.body.channel_name || req.body.channelName;
+
+    if (!socketId || !channelName) {
+      return res.status(400).json({ message: 'Missing socket_id or channel_name' });
+    }
+
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+
+    if (channelName.startsWith('private-dispute-')) {
+      const disputeId = Number(channelName.replace('private-dispute-', ''));
+      if (!disputeId || Number.isNaN(disputeId)) {
+        return res.status(400).json({ message: 'Invalid dispute channel name' });
+      }
+
+      const dispute = await prisma.dispute.findUnique({
+        where: { id: disputeId },
+        select: { buyerId: true, sellerId: true, againstOrgId: true }
+      });
+
+      if (!dispute) {
+        return res.status(404).json({ message: 'Dispute not found' });
+      }
+
+      const isAdmin = ['admin', 'master_admin'].includes(user.role || '');
+      const isParticipant =
+        user.id === dispute.buyerId ||
+        user.id === dispute.sellerId ||
+        (user.organizationId && user.organizationId === dispute.againstOrgId);
+
+      if (!isAdmin && !isParticipant) {
+        return res.status(403).json({ message: 'Forbidden: Unauthorized for this dispute channel' });
+      }
+    } else if (channelName.startsWith('private-conversation-')) {
+      const conversationId = Number(channelName.replace('private-conversation-', ''));
+      if (!conversationId || Number.isNaN(conversationId)) {
+        return res.status(400).json({ message: 'Invalid conversation channel name' });
+      }
+
+      const conversation = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { buyerId: true, sellerId: true }
+      });
+
+      if (!conversation) {
+        return res.status(404).json({ message: 'Conversation not found' });
+      }
+
+      const isAdmin = ['admin', 'master_admin'].includes(user.role || '');
+      const isParticipant = user.id === conversation.buyerId || user.id === conversation.sellerId;
+
+      if (!isAdmin && !isParticipant) {
+        return res.status(403).json({ message: 'Forbidden: Unauthorized for this conversation channel' });
+      }
+    } else if (channelName.startsWith('private-user-')) {
+      const targetUserId = Number(channelName.replace('private-user-', ''));
+      const isAdmin = ['admin', 'master_admin'].includes(user.role || '');
+      if (user.id !== targetUserId && !isAdmin) {
+        return res.status(403).json({ message: 'Forbidden: Cannot subscribe to another user channel' });
+      }
+    }
+
+    const authData = authorizePusherChannel(socketId, channelName, {
+      user_id: String(user.id),
+      user_info: { role: user.role }
+    });
+
+    return res.json(authData);
+  } catch (err: any) {
+    logger.error({ err }, '[Pusher Auth] Authorization failed');
+    return res.status(500).json({ message: 'Pusher authorization failed' });
+  }
+});
+
 const ensureOnboardingEditable = async (
   userId: number
 ): Promise<{ editable: boolean; status?: number; message?: string }> => {
@@ -319,11 +401,20 @@ const emitNotification = (userId: number, notification: any) => {
   if (clients.size === 0) notificationClients.delete(userId);
 };
 
-const sanitizePortalText = (value: unknown, maxLength = 2000) =>
-  normalizeSpaces(value)
+const sanitizePortalText = (value: unknown, maxLength = 2000, preserveNewlines = true) => {
+  if (preserveNewlines) {
+    return String(value || '')
+      .replace(/\r\n/g, '\n')
+      .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
+      .replace(/[<>]/g, '')
+      .trim()
+      .slice(0, maxLength);
+  }
+  return normalizeSpaces(value)
     .replace(/[\u0000-\u001F\u007F]/g, '')
     .replace(/[<>]/g, '')
     .slice(0, maxLength);
+};
 
 const NOTIFICATION_READ_RETENTION_MS = TimeConstants.NOTIFICATION_READ_RETENTION_MS;
 
@@ -1134,9 +1225,44 @@ const enrichMessageAttachments = async (messages: any[] = []) => {
 };
 
 const enrichConversationPayload = async (conversation: any) => {
-  if (!conversation?.messages?.length) return conversation;
+  let quoteRequest: any = null;
+  try {
+    const idMatch = conversation.subject?.match(/Quote Request #(\d+)/i);
+    if (idMatch) {
+      const qid = Number(idMatch[1]);
+      quoteRequest = await prisma.quoteRequest.findUnique({
+        where: { id: qid },
+        include: {
+          quoteResponses: {
+            select: { id: true, status: true, totalAmount: true, responseNumber: true, createdAt: true, deliveryDays: true }
+          }
+        }
+      });
+    }
+    if (!quoteRequest && conversation.subject?.toLowerCase().includes('quote request')) {
+      const cleanSubject = conversation.subject.replace(/Quote Request:?/i, '').trim();
+      quoteRequest = await prisma.quoteRequest.findFirst({
+        where: {
+          buyerId: conversation.buyerId,
+          sellerId: conversation.sellerId,
+          ...(cleanSubject ? { subject: { contains: cleanSubject.slice(0, 30), mode: 'insensitive' } } : {})
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          quoteResponses: {
+            select: { id: true, status: true, totalAmount: true, responseNumber: true, createdAt: true, deliveryDays: true }
+          }
+        }
+      });
+    }
+  } catch (err) {
+    // Non-critical enrichment error
+  }
+
+  const withQuote = quoteRequest ? { ...conversation, quoteRequest } : conversation;
+  if (!conversation?.messages?.length) return withQuote;
   return {
-    ...conversation,
+    ...withQuote,
     messages: await enrichMessageAttachments(conversation.messages)
   };
 };
@@ -3608,21 +3734,32 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
     // Verify dynamic mandatory documents
     const profile = existingUser.sellerProfile;
     if (!profile) return res.status(400).json({ message: 'Seller profile not found' });
+    const regDetails = (existingUser.registrationDetails as Record<string, any>) || {};
+    const shgKeywords = ['shg', 'hershg', 'women_shg', 'farmer_shg', 'artisan_shg', 'dairy_shg', 'livelihood_shg', 'tribal_shg', 'youth_shg', 'other_shg'];
+    const isHerShg = existingUser.role === 'shg'
+      || Boolean((existingUser as any).shgProfile)
+      || shgKeywords.some(keyword =>
+        String(profile.organizationType || '').toLowerCase().includes(keyword) ||
+        String(regDetails.businessType || '').toLowerCase().includes(keyword) ||
+        String(regDetails.stakeholderCategory || '').toLowerCase().includes(keyword) ||
+        String(regDetails.shgType || '').toLowerCase().includes(keyword)
+      );
+
     const finalSellerErrors: Record<string, string> = {};
-    if (!profile.panVerified) finalSellerErrors.pan = 'Business PAN must be verified before final submission.';
-    if (!onboardingPatterns.pan.test(normalizeSpaces(profile.pan).toUpperCase())) finalSellerErrors.pan = 'Business PAN must follow valid government PAN format.';
-    if (!onboardingPatterns.name.test(normalizeSpaces(profile.nameAsInPan))) finalSellerErrors.nameAsInPan = 'Name as per PAN is required and must be valid.';
-    if (!profile.dateAsInPan || !isPastOrToday(profile.dateAsInPan)) finalSellerErrors.dateAsInPan = 'PAN date is required and cannot be future dated.';
-    if (!onboardingPatterns.orgName.test(normalizeSpaces(profile.businessName))) finalSellerErrors.businessName = 'Business / organisation name is required and must be valid.';
-    if (!profile.dateOfIncorporation || !isPastOrToday(profile.dateOfIncorporation)) finalSellerErrors.dateOfIncorporation = 'Date of incorporation is required and cannot be future dated.';
+    if (!isHerShg) {
+      if (!profile.panVerified) finalSellerErrors.pan = 'Business PAN must be verified before final submission.';
+      if (!onboardingPatterns.pan.test(normalizeSpaces(profile.pan).toUpperCase())) finalSellerErrors.pan = 'Business PAN must follow valid government PAN format.';
+      if (!onboardingPatterns.name.test(normalizeSpaces(profile.nameAsInPan))) finalSellerErrors.nameAsInPan = 'Name as per PAN is required and must be valid.';
+      if (!profile.dateAsInPan || !isPastOrToday(profile.dateAsInPan)) finalSellerErrors.dateAsInPan = 'PAN date is required and cannot be future dated.';
+      if (!onboardingPatterns.orgName.test(normalizeSpaces(profile.businessName))) finalSellerErrors.businessName = 'Business / organisation name is required and must be valid.';
+      if (!profile.dateOfIncorporation || !isPastOrToday(profile.dateOfIncorporation)) finalSellerErrors.dateOfIncorporation = 'Date of incorporation is required and cannot be future dated.';
+    }
     if (!profile.offices?.length) finalSellerErrors.offices = 'At least one registered office is required.';
     if (!profile.bankAccounts?.length) finalSellerErrors.bankAccounts = 'At least one bank account is required.';
     if (Object.keys(finalSellerErrors).length > 0) {
       return res.status(400).json({ message: Object.values(finalSellerErrors)[0], errors: finalSellerErrors });
     }
 
-    const regDetails = (existingUser.registrationDetails as Record<string, any>) || {};
-    const isHerShg = String(profile.organizationType || regDetails.businessType || '').toLowerCase() === 'hershg';
     const shgType = String(regDetails.shgType || '').trim();
     const requiredDocs: string[] = isHerShg
       ? [
@@ -3635,36 +3772,8 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
       : ['pan_copy', 'bank_passbook', 'address_proof'];
 
     if (isHerShg) {
-      requiredDocs.push('pan_card_group_representative');
-      requiredDocs.push('udyam_registration_certificate');
       if (regDetails.gstin || profile.offices?.some((o: any) => o.gst)) {
         requiredDocs.push('gst_certificate');
-      }
-      if (shgType === 'Women SHG (Mahila Bachat Gat)') {
-        requiredDocs.push('nrlm_mission_certificate');
-        requiredDocs.push('women_empowerment_training_certificate');
-      } else if (shgType === 'Farmer SHG') {
-        requiredDocs.push('farmer_id_card');
-        requiredDocs.push('land_record_7_12');
-        requiredDocs.push('fpo_fpc_certificate');
-      } else if (shgType === 'Artisan / Handicraft SHG') {
-        requiredDocs.push('artisan_card');
-        requiredDocs.push('handicraft_certification');
-        requiredDocs.push('product_catalogue');
-      } else if (shgType === 'Dairy SHG') {
-        requiredDocs.push('dairy_cooperative_membership_certificate');
-        requiredDocs.push('livestock_ownership_proof');
-      } else if (shgType === 'Livelihood SHG') {
-        requiredDocs.push('skill_development_certificates');
-        requiredDocs.push('business_activity_proof');
-      } else if (shgType === 'Tribal SHG') {
-        requiredDocs.push('tribal_community_certificate');
-        requiredDocs.push('tribal_development_scheme_registration');
-      } else if (shgType === 'Youth SHG') {
-        requiredDocs.push('skill_training_certificate');
-        requiredDocs.push('startup_entrepreneurship_training_certificate');
-      } else if (shgType === 'Other SHG') {
-        requiredDocs.push('activity_specific_supporting_documents');
       }
     } else {
       requiredDocs.push('udyam_certificate');
@@ -3690,7 +3799,27 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
     }
 
     const uploadedDocs = profile.sellerDocuments?.map((d: any) => d.documentType) || [];
-    const missingDocs = requiredDocs.filter(d => !uploadedDocs.includes(d));
+    const matchesDocType = (reqType: string, uploadedTypes: string[]) =>
+      uploadedTypes.some(u => {
+        const normU = String(u || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normR = String(reqType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normU === normR) return true;
+        const aliases: Record<string, string[]> = {
+          bankpassbook: ['bankpassbook', 'bankpassbookcancelledcheque'],
+          bankpassbookcancelledcheque: ['bankpassbook', 'bankpassbookcancelledcheque'],
+          leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard', 'aadhaarcard'],
+          groupleaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard', 'aadhaarcard'],
+          registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate'],
+          shgregistrationcertificate: ['registrationcertificate', 'shgregistrationcertificate'],
+          pancopy: ['pancopy', 'pancard', 'pancardgrouprepresentative'],
+          pancardgrouprepresentative: ['pancopy', 'pancard', 'pancardgrouprepresentative'],
+          udyamcertificate: ['udyamcertificate', 'udyamregistrationcertificate'],
+          udyamregistrationcertificate: ['udyamcertificate', 'udyamregistrationcertificate']
+        };
+        return (aliases[normR] || []).includes(normU) || (aliases[normU] || []).includes(normR);
+      });
+
+    const missingDocs = requiredDocs.filter(d => !matchesDocType(d, uploadedDocs));
 
     if (missingDocs.length > 0) {
       const labels: Record<string, string> = {
@@ -5565,9 +5694,17 @@ app.post('/api/conversations', authenticate, authorize('buyer', 'seller', 'admin
         messages: { include: { attachments: true, sender: { select: conversationUserSelect } }, orderBy: { createdAt: 'asc' } }
       }
     });
+    const enrichedMsg = message ? (await enrichMessageAttachments([message]))[0] : null;
+    if (enrichedMsg) {
+      void publishConversationEvent(conversation.id, {
+        type: 'MESSAGE_CREATED',
+        conversationId: conversation.id,
+        message: enrichedMsg
+      });
+    }
     res.status(201).json(maskSensitive({
       conversation: enrichedConversation ? await enrichConversationPayload(enrichedConversation) : conversation,
-      message: message ? (await enrichMessageAttachments([message]))[0] : null
+      message: enrichedMsg
     }));
     const actorUserId = Number(actor.id);
     const actorRole = actor.role;
@@ -5717,6 +5854,11 @@ app.post('/api/conversations/:id/messages', authenticate, async (req: AuthReques
     await linkMessageFileAssets(message.id, payload.fileAssetIds || [], Number(req.user?.id));
     await prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
     const enrichedMessage = (await enrichMessageAttachments([message]))[0];
+    void publishConversationEvent(conversation.id, {
+      type: 'MESSAGE_CREATED',
+      conversationId: conversation.id,
+      message: enrichedMessage
+    });
     res.status(201).json(maskSensitive(enrichedMessage));
     const actorUserId = Number(req.user?.id);
     const actorRole = req.user?.role;
@@ -5744,6 +5886,157 @@ app.post('/api/conversations/:id/messages', authenticate, async (req: AuthReques
     ]).catch(logMessageSideEffectFailure);
   } catch (err: any) {
     handleSecureRouteError(res, err, 'Unable to send message');
+  }
+});
+
+app.post('/api/conversations/:id/quotation', authenticate, authorize('seller', 'admin'), async (req: AuthRequest, res) => {
+  try {
+    const convId = Number(req.params.id);
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: convId },
+      include: {
+        buyer: { select: conversationUserSelect },
+        seller: { select: conversationUserSelect }
+      }
+    });
+    if (!conversation || (req.user?.role !== 'admin' && conversation.sellerId !== Number(req.user?.id))) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    const {
+      offeredPrice,
+      totalAmount,
+      deliveryTimeline,
+      deliveryDays,
+      terms,
+      notes,
+      message: quoteMessage,
+      attachmentUrl,
+      documentUrl,
+      warrantyPeriod
+    } = req.body || {};
+
+    const finalAmount = Number(totalAmount ?? offeredPrice ?? 0);
+    let finalDeliveryDays = Number(deliveryDays);
+    if (!finalDeliveryDays && deliveryTimeline) {
+      const dMatch = String(deliveryTimeline).match(/(\d+)/);
+      if (dMatch) finalDeliveryDays = Number(dMatch[1]);
+    }
+    const finalDoc = documentUrl || attachmentUrl || undefined;
+    const finalNotes = notes || quoteMessage || terms || '';
+
+    // Find or create QuoteRequest for this conversation
+    let quoteRequest: any = null;
+    const idMatch = conversation.subject?.match(/Quote Request #(\d+)/i);
+    if (idMatch) {
+      quoteRequest = await prisma.quoteRequest.findUnique({ where: { id: Number(idMatch[1]) } });
+    }
+    if (!quoteRequest) {
+      const cleanSubject = conversation.subject.replace(/Quote Request:?/i, '').trim();
+      quoteRequest = await prisma.quoteRequest.findFirst({
+        where: {
+          buyerId: conversation.buyerId,
+          sellerId: conversation.sellerId,
+          ...(cleanSubject ? { subject: { contains: cleanSubject.slice(0, 30), mode: 'insensitive' } } : {})
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+    }
+    if (!quoteRequest) {
+      quoteRequest = await prisma.quoteRequest.create({
+        data: {
+          buyerId: conversation.buyerId,
+          sellerId: conversation.sellerId,
+          subject: conversation.subject,
+          message: `Product quote request from chat: ${conversation.subject}`,
+          status: 'pending',
+          statusEnum: 'SENT',
+          estimatedValue: finalAmount || undefined
+        }
+      });
+    }
+
+    // Update conversation subject to link quoteRequest id if not already linked
+    if (!conversation.subject.includes(`#${quoteRequest.id}`)) {
+      const cleanSub = conversation.subject.replace(/^Quote Request #?\d*:?\s*/i, '').trim();
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          subject: `Quote Request #${quoteRequest.id}: ${cleanSub || 'Product'}`
+        }
+      });
+    }
+
+    // Check if QuoteResponse exists or create
+    let quoteResponse = await prisma.quoteResponse.findFirst({
+      where: { quoteRequestId: quoteRequest.id, sellerId: conversation.sellerId }
+    });
+
+    const responseNumber = quoteResponse?.responseNumber || `QR-${Date.now().toString(36).toUpperCase()}`;
+    const ack = {
+      acknowledgementId: `ACK-${responseNumber}`,
+      responseId: responseNumber,
+      timestamp: new Date().toISOString(),
+      message: 'Quotation submitted successfully.'
+    };
+
+    if (quoteResponse) {
+      quoteResponse = await prisma.quoteResponse.update({
+        where: { id: quoteResponse.id },
+        data: {
+          totalAmount: finalAmount,
+          deliveryDays: finalDeliveryDays || undefined,
+          notes: finalNotes || undefined,
+          documentUrl: finalDoc,
+          warrantyPeriod: warrantyPeriod || undefined,
+          status: 'SUBMITTED',
+          acknowledgement: ack
+        }
+      });
+    } else {
+      quoteResponse = await prisma.quoteResponse.create({
+        data: {
+          quoteRequestId: quoteRequest.id,
+          sellerId: conversation.sellerId,
+          responseNumber,
+          totalAmount: finalAmount,
+          deliveryDays: finalDeliveryDays || undefined,
+          notes: finalNotes || undefined,
+          documentUrl: finalDoc,
+          warrantyPeriod: warrantyPeriod || undefined,
+          status: 'SUBMITTED',
+          acknowledgement: ack
+        }
+      });
+    }
+
+    await prisma.quoteRequest.update({
+      where: { id: quoteRequest.id },
+      data: { status: 'responded', statusEnum: 'RESPONDED' }
+    });
+
+    // Post notification into chat
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        senderId: Number(req.user?.id),
+        content: `📄 **Formal Quotation Submitted**\n\n- **Quotation Ref**: ${responseNumber}\n- **Total Amount**: ₹${finalAmount.toLocaleString('en-IN')}\n- **Delivery Timeline**: ${deliveryTimeline || (finalDeliveryDays ? `${finalDeliveryDays} Days` : 'As specified')}\n- **Terms & Notes**: ${finalNotes || 'Standard Terms'}\n\n*The buyer can now review and accept this quotation to generate a Purchase Order.*`
+      }
+    });
+
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: new Date() }
+    });
+
+    res.status(201).json({
+      success: true,
+      quoteRequest,
+      quoteResponse,
+      quotation: quoteResponse
+    });
+  } catch (err: any) {
+    handleSecureRouteError(res, err, 'Unable to submit quotation for conversation');
   }
 });
 

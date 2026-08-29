@@ -3,6 +3,7 @@ import { api, unwrapApiData } from '../lib/api';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../hooks/useAuth';
+import { isShgUser } from '../lib/shg';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, Badge } from '../components/ui/card';
 import { AlertTriangle, CheckCircle2, Clock, XCircle, FileText, ArrowRight, ShieldCheck, Bell, Info, ShoppingBag, MessageSquare, Gavel, Briefcase, Users, BarChart3, ClipboardCheck, FileSearch, Loader2, Images, Trophy, Package, Wrench, KeyRound, UserPlus, Truck, CreditCard, Store, PlusCircle } from 'lucide-react';
@@ -297,6 +298,7 @@ export default function Dashboard() {
     },
     enabled: !!token,
     staleTime: 60_000,
+    refetchInterval: 15000,
   });
   const notifications = notificationsData || [];
 
@@ -311,6 +313,7 @@ export default function Dashboard() {
     },
     enabled: !!token && user?.role === 'admin',
     staleTime: 5 * 60_000,
+    refetchInterval: 15000,
   });
 
   const canCheckBannerEligibility = Boolean(
@@ -347,6 +350,7 @@ export default function Dashboard() {
     },
     enabled: !!token && user?.role !== 'admin',
     staleTime: 5 * 60_000,
+    refetchInterval: 15000,
   });
 
   const dashboardData = useMemo(() => {
@@ -719,13 +723,13 @@ export default function Dashboard() {
         </section>
       )}
 
-      {user?.role === 'seller' && (
+      {(user?.role === 'seller' || isShgUser(user) || user?.role === 'shg') && (
         <section className="rounded-xl bg-gradient-to-r from-[#12335f] to-indigo-900 p-4 text-white shadow-sm ring-1 ring-slate-200/70 relative overflow-hidden">
           <div className="pointer-events-none absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-white/10 to-transparent" />
           <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-white">Seller Control Desk</h2>
+                <h2 className="text-sm font-bold text-white">{isShgUser(user) || user?.role === 'shg' ? 'SHG Control Desk' : 'Seller Control Desk'}</h2>
                 <Badge className="bg-white/10 text-emerald-300 hover:bg-white/10 border-white/20 px-1.5 py-0 text-[8px] uppercase tracking-wider rounded">Primary</Badge>
               </div>
               <p className="mt-0.5 text-[11px] font-medium text-blue-100/80">
@@ -733,16 +737,11 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
-              <Link href="/seller/catalogue">
+              <Link href={isShgUser(user) || user?.role === 'shg' ? '/shg/products' : '/seller/catalogue'}>
                 <Button className="h-8 rounded bg-white px-3 text-[10px] font-bold uppercase tracking-wide text-[#12335f] hover:bg-slate-50 shadow-sm transition">
                   My Catalogue
                 </Button>
               </Link>
-              {/* <Link href="/">
-                <Button className="h-8 rounded border border-white/20 bg-white/10 px-3 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20 transition">
-                  Public Market
-                </Button>
-              </Link> */}
             </div>
           </div>
         </section>

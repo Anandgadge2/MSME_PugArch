@@ -436,16 +436,36 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-stretch gap-2">
-                {/* Search box: takes ~80% on desktop */}
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap">
+                {/* Search box: flexible width on mobile */}
                 <div className="relative min-w-0 flex-1">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
                     value={searchTerm}
                     onChange={event => setSearchTerm(event.target.value)}
                     placeholder="Search name, GST, PAN, state..."
-                    className="h-11 w-full rounded-md border-slate-200 pl-9 text-xs"
+                    className="h-10 sm:h-11 w-full rounded-md border-slate-200 pl-9 text-xs"
                   />
+                </div>
+
+                {/* Mobile filters toggle */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowMobileFilters(!showMobileFilters)}
+                  className={cn(
+                    "md:hidden h-10 gap-1.5 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wider border transition-all shrink-0",
+                    showMobileFilters ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm" : "border-slate-200 bg-slate-50 text-slate-700 shadow-xs active:scale-[0.98]"
+                  )}
+                  aria-expanded={showMobileFilters}
+                >
+                  <Filter className="h-3.5 w-3.5 text-slate-500" />
+                  <span>Filters</span>
+                </Button>
+
+                {/* Mobile & Desktop ViewModeToggle on the same row */}
+                <div className="shrink-0 flex items-center">
+                  <ViewModeToggle value={viewMode} onChange={setViewMode} />
                 </div>
 
                 {/* Desktop filters inline */}
@@ -461,20 +481,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
                       <option key={status} value={status}>{status === 'all' ? 'All Status' : statusLabel(status)}</option>
                     ))}
                   </select>
-                  <ViewModeToggle value={viewMode} onChange={setViewMode} />
                 </div>
-
-                {/* Mobile filters toggle */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowMobileFilters(!showMobileFilters)}
-                  className="md:hidden h-11 gap-2 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0"
-                  aria-expanded={showMobileFilters}
-                >
-                  <Filter className="h-4 w-4 text-slate-500" />
-                  <span>Filters</span>
-                </Button>
               </div>
 
               {/* Mobile filters drawer */}

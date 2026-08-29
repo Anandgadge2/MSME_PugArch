@@ -16,7 +16,7 @@ import ForgotPassword from './views/ForgotPassword';
 // load shipped the entire portal). React.lazy + Suspense lets Next.js
 // stream chunks per route so navigation only downloads what the user needs.
 const MarketplaceProductList = lazy(() => import('./features/marketplace/pages/MarketplaceProductList'));
-const MarketplaceHome = lazy(() => import('./features/marketplace/pages/MarketplaceHome'));
+import MarketplaceHome from './features/marketplace/pages/MarketplaceHome';
 const Dashboard = lazy(() => import('./views/Dashboard'));
 const MarketplaceProductDetail = lazy(() => import('./features/marketplace/pages/MarketplaceProductDetail'));
 const MarketplaceServiceDetail = lazy(() => import('./features/marketplace/pages/MarketplaceServiceDetail'));
@@ -56,7 +56,9 @@ const RatingsPage = lazy(() => import('./features/ratings/pages/RatingsPage'));
 const ComplianceRulesPage = lazy(() => import('./features/compliance/pages/ComplianceRulesPage'));
 const FraudAlertsPage = lazy(() => import('./features/fraudAlerts/pages/FraudAlertsPage'));
 const DirectPurchasePage = lazy(() => import('./features/directPurchase/pages/DirectPurchasePage'));
+const DirectCheckoutPage = lazy(() => import('./features/directPurchase/pages/DirectCheckoutPage'));
 const AddressBookPage = lazy(() => import('./features/directPurchase/pages/AddressBookPage'));
+
 const RbacPanel = lazy(() => import('./views/RbacPanel'));
 const OrganizationManagement = lazy(() => import('./views/OrganizationManagement'));
 const NotificationCenter = lazy(() => import('./views/NotificationCenter'));
@@ -131,6 +133,7 @@ import Sidebar, { Header } from './components/layout/Navbar';
 import { MarketplaceHeader } from './features/marketplace/components/MarketplaceHeader';
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
+import { SubUserActivationGate } from './features/auth/components/SubUserActivationGate';
 
 function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKey: string }) {
   React.useEffect(() => {
@@ -277,6 +280,9 @@ const rolePreloaders = {
 const roleOk = (role?: string, allowed?: string[]) => {
   if (!allowed) return true;
   if (role === 'master_admin' && allowed.includes('admin')) return true;
+  // SHGs participate in procurement as suppliers. Treat the dedicated SHG
+  // account type as seller-compatible while retaining SHG-only routes.
+  if (role === 'shg' && allowed.includes('seller')) return true;
   return Boolean(role && allowed.includes(role));
 };
 
@@ -382,15 +388,21 @@ function LegacyNoticePage({ title, target = '/buyer/procurement/create' }: { tit
 
 let globalInitialLoadComplete = false;
 
-export default function App() {
+export default function App({ serverInitialLoadComplete = false }: { serverInitialLoadComplete?: boolean }) {
   const { user, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '/';
-  const [initialLoadComplete, setInitialLoadComplete] = useState(globalInitialLoadComplete);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(() => {
+    return serverInitialLoadComplete || globalInitialLoadComplete;
+  });
 
   const completeInitialLoad = () => {
     globalInitialLoadComplete = true;
     setInitialLoadComplete(true);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('jsg_initial_load', 'true');
+      document.cookie = "jsg_initial_load=true; path=/";
+    }
   };
   const [isPageMounted, setIsPageMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -420,9 +432,9 @@ export default function App() {
   }, []);
 
   const isDataSettled = isFetchingQueries === 0 || safetyTimeoutPassed;
-  const isInitialReady = !loading && isPageMounted;
-  const isAuthTransitionReady = isPageMounted && !loading;
-  const isLogoutReady = isPageMounted;
+  const isInitialReady = (!loading && isDataSettled) || safetyTimeoutPassed;
+  const isAuthTransitionReady = isPageMounted && (!loading || safetyTimeoutPassed);
+  const isLogoutReady = isPageMounted || safetyTimeoutPassed;
 
   const [hasCookie, setHasCookie] = useState(false);
 
@@ -517,7 +529,7 @@ export default function App() {
 
   const renderRoute = () => {
     const isCurrentShg = isShgUser(user);
-    const authenticatedHome = user?.role === 'master_admin' ? '/master-admin' : isCurrentShg ? '/shg/onboarding' : '/dashboard';
+    const authenticatedHome = user?.role === 'master_admin' ? '/master-admin' : isCurrentShg ? '/shg/dashboard' : '/dashboard';
 
     // Show RouteFallback skeleton for non-public routes while auth loading is in progress
     if (loading) {
@@ -555,7 +567,7 @@ export default function App() {
         (pathname.startsWith('/master-admin') && user.role !== 'master_admin') ||
         (pathname.startsWith('/admin') && user.role !== 'admin') ||
         (pathname.startsWith('/buyer/') && user.role !== 'buyer') ||
-        (pathname.startsWith('/seller/') && user.role !== 'seller') ||
+        (pathname.startsWith('/seller/') && !['seller', 'shg'].includes(user.role)) ||
         (pathname.startsWith('/shg/') && !isCurrentShg);
       if (roleRestricted) return <Redirect to={authenticatedHome} />;
     }
@@ -574,7 +586,7 @@ export default function App() {
     if (pathname === '/tenders') return <TenderDetailPage />;
     
     if (/^\/bids\/[^/]+\/participate$/.test(pathname)) {
-      if (user && user.role !== 'seller') {
+      if (user && !['seller', 'shg'].includes(user.role)) {
         const bidId = pathname.split('/')[2];
         return <Redirect to={`/bids/${bidId}`} />;
       }
@@ -629,17 +641,17 @@ export default function App() {
     const shgRouteOk = isCurrentShg || roleOk(user.role, ['shg']);
     if ((pathname === '/master-admin' || pathname.startsWith('/master-admin/')) && roleOk(user.role, ['master_admin'])) return <MasterAdminPage />;
     if (pathname === '/dashboard' && user.role === 'master_admin') return <Redirect to="/master-admin" />;
-    if (pathname === '/dashboard' && isCurrentShg) return <Redirect to="/shg/onboarding" />;
+    if (pathname === '/dashboard' && isCurrentShg) return <Redirect to="/shg/dashboard" />;
     if (pathname === '/dashboard') return <Dashboard />;
+    if (pathname === '/shg/dashboard' && shgRouteOk) return <Dashboard />;
     if (pathname === '/shg/onboarding' && shgRouteOk) return <ShgOnboarding section="onboarding" />;
-    if (pathname === '/shg/dashboard' && shgRouteOk) return <ShgOnboarding section="dashboard" />;
     if (pathname === '/shg/profile' && shgRouteOk) return <ShgOnboarding section="profile" />;
     if (pathname === '/shg/members' && shgRouteOk) return <ShgOnboarding section="members" />;
     if (pathname === '/shg/bank-details' && shgRouteOk) return <ShgOnboarding section="bank-details" />;
     if (pathname === '/shg/documents' && shgRouteOk) return <ShgOnboarding section="documents" />;
-    if (pathname === '/shg/products' && shgRouteOk) return <ShgOnboarding section="products" />;
-    if (pathname === '/shg/orders' && shgRouteOk) return <ShgOnboarding section="orders" />;
-    if (pathname === '/shg/payments' && shgRouteOk) return <ShgOnboarding section="payments" />;
+    if (pathname === '/shg/products' && shgRouteOk) return <CataloguePage mode="seller" />;
+    if (pathname === '/shg/orders' && shgRouteOk) return <PurchaseOrders />;
+    if (pathname === '/shg/payments' && shgRouteOk) return <PaymentHistoryPage />;
     if (pathname === '/shg/meetings' && shgRouteOk) return <ShgOnboarding section="meetings" />;
     if (pathname === '/shg/schemes' && shgRouteOk) return <ShgOnboarding section="schemes" />;
     if (pathname === '/shg/support' && shgRouteOk) return <ShgOnboarding section="support" />;
@@ -649,43 +661,43 @@ export default function App() {
     if (pathname === '/admin' && roleOk(user.role, ['admin'])) return <Dashboard />;
     if (pathname === '/seller/onboarding' && roleOk(user.role, ['seller'])) return <SellerOnboarding />;
     
-    // Seller Opportunities (explicit route-to-prop mapping)
-    if (pathname === '/seller/opportunities' && roleOk(user.role, ['seller'])) return <SellerOpportunitiesPage key={pathname} subRouteType="" />;
-    if (pathname === '/seller/opportunities/rfqs' && roleOk(user.role, ['seller'])) return <SellerOpportunitiesPage key={pathname} subRouteType="RFQ" />;
-    if (pathname === '/seller/opportunities/rfps' && roleOk(user.role, ['seller'])) return <SellerOpportunitiesPage key={pathname} subRouteType="RFP" />;
-    if (pathname === '/seller/opportunities/open-tenders' && roleOk(user.role, ['seller'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Open Tender" />;
-    if (pathname === '/seller/opportunities/invitations' && roleOk(user.role, ['seller'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Limited Tender" />;
-    if (pathname === '/seller/opportunities/auctions' && roleOk(user.role, ['seller'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Reverse Auction" />;
-    if (pathname === '/seller/opportunities/rate-contracts' && roleOk(user.role, ['seller'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Rate Contract" />;
-    
-    if (pathname === '/seller/procurement/events' && roleOk(user.role, ['seller'])) return <SellerEventListPage />;
+    // Seller & SHG Opportunities (explicit route-to-prop mapping)
+    if ((pathname === '/seller/opportunities' || pathname === '/shg/opportunities') && roleOk(user.role, ['seller', 'shg'])) return <SellerOpportunitiesPage key={pathname} subRouteType="" />;
+    if ((pathname === '/seller/opportunities/rfqs' || pathname === '/shg/opportunities/rfqs') && roleOk(user.role, ['seller', 'shg'])) return <SellerOpportunitiesPage key={pathname} subRouteType="RFQ" />;
+    if ((pathname === '/seller/opportunities/rfps' || pathname === '/shg/opportunities/rfps') && roleOk(user.role, ['seller', 'shg'])) return <SellerOpportunitiesPage key={pathname} subRouteType="RFP" />;
+    if ((pathname === '/seller/opportunities/open-tenders' || pathname === '/shg/opportunities/open-tenders') && roleOk(user.role, ['seller', 'shg'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Open Tender" />;
+    if ((pathname === '/seller/opportunities/invitations' || pathname === '/shg/opportunities/invitations') && roleOk(user.role, ['seller', 'shg'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Limited Tender" />;
+    if ((pathname === '/seller/opportunities/auctions' || pathname === '/shg/opportunities/auctions') && roleOk(user.role, ['seller', 'shg'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Reverse Auction" />;
+    if ((pathname === '/seller/opportunities/rate-contracts' || pathname === '/shg/opportunities/rate-contracts') && roleOk(user.role, ['seller', 'shg'])) return <SellerOpportunitiesPage key={pathname} subRouteType="Rate Contract" />;
+
+    if ((pathname === '/seller/procurement/events' || pathname === '/shg/procurement/events') && roleOk(user.role, ['seller', 'shg'])) return <SellerEventListPage />;
     {
-      const sellerEventDetailMatch = pathname.match(/^\/seller\/procurement\/events\/([^/]+)$/);
-      if (sellerEventDetailMatch && roleOk(user.role, ['seller'])) {
-        return <SellerEventDetailPage id={sellerEventDetailMatch[1]} />;
+      const sellerEventDetailMatch = pathname.match(/^\/(seller|shg)\/procurement\/events\/([^/]+)$/);
+      if (sellerEventDetailMatch && roleOk(user.role, ['seller', 'shg'])) {
+        return <SellerEventDetailPage id={sellerEventDetailMatch[2]} />;
       }
     }
-    if ((pathname === '/seller/rfq/submit-quotation' || pathname === '/seller/rfp/submit-quotation' || pathname === '/seller/rfp/respond' || pathname === '/seller/rate-contract/submit-quotation' || pathname === '/seller/rate-contracts/submit-quotation') && roleOk(user.role, ['seller'])) return <SubmitQuotationPage />;
-    if (pathname === '/seller/marketplace' && roleOk(user.role, ['seller'])) return <MarketplaceProductList />;
-    if (pathname === '/seller/catalogue' && roleOk(user.role, ['seller'])) return <CataloguePage mode="seller" />;
-    if (pathname === '/seller/products/new' && roleOk(user.role, ['seller'])) return <CatalogueFormPage />;
-    if (/^\/seller\/products\/[^/]+\/edit$/.test(pathname) && roleOk(user.role, ['seller'])) return <CatalogueFormPage />;
-    if (pathname === '/seller/services/new' && roleOk(user.role, ['seller'])) return <CatalogueFormPage />;
-    if (/^\/seller\/services\/[^/]+\/edit$/.test(pathname) && roleOk(user.role, ['seller'])) return <CatalogueFormPage />;
-    if (pathname === '/seller/orders' && roleOk(user.role, ['seller'])) return <PurchaseOrders />;
-    if (pathname === '/seller/delivery' && roleOk(user.role, ['seller'])) return <Redirect to="/seller/delivery-management" />;
-    if (pathname === '/seller/delivery-management' && roleOk(user.role, ['seller'])) return <SellerDeliveryManagementPage />;
-    if (pathname === '/seller/invoices' && roleOk(user.role, ['seller'])) return <InvoiceRegisterPage role="seller" />;
-    if (pathname === '/seller/disputes' && roleOk(user.role, ['seller'])) return <DisputesPage />;
-    if (pathname === '/seller/messages' && roleOk(user.role, ['seller'])) return <MessagesPage />;
-    if (pathname === '/seller/ratings' && roleOk(user.role, ['seller'])) return <RatingsPage endpoint={`/api/ratings/supplier/${user.id}`} mode="supplier" />;
-    
-    if (pathname === '/seller/settings' && roleOk(user.role, ['seller'])) return <SellerSettings />;
-    
-    // Seller Bids (explicit route-to-prop mapping)
-    if (pathname === '/seller/bids/submitted' && roleOk(user.role, ['seller'])) return <SellerBidsPage key={pathname} subRouteType="submitted" />;
-    if (pathname === '/seller/bids/draft' && roleOk(user.role, ['seller'])) return <SellerBidsPage key={pathname} subRouteType="draft" />;
-    if (pathname === '/seller/bids/awarded' && roleOk(user.role, ['seller'])) return <SellerBidsPage key={pathname} subRouteType="awarded" />;
+    if ((pathname === '/seller/rfq/submit-quotation' || pathname === '/seller/rfp/submit-quotation' || pathname === '/seller/rfp/respond' || pathname === '/seller/rate-contract/submit-quotation' || pathname === '/seller/rate-contracts/submit-quotation' || pathname.startsWith('/shg/rfq/submit-quotation') || pathname.startsWith('/shg/rate-contract/submit-quotation')) && roleOk(user.role, ['seller', 'shg'])) return <SubmitQuotationPage />;
+    if ((pathname === '/seller/marketplace' || pathname === '/shg/marketplace') && roleOk(user.role, ['seller', 'shg'])) return <MarketplaceProductList />;
+    if ((pathname === '/seller/catalogue' || pathname === '/shg/catalogue') && roleOk(user.role, ['seller', 'shg'])) return <CataloguePage mode="seller" />;
+    if ((pathname === '/seller/products/new' || pathname === '/shg/products/new') && roleOk(user.role, ['seller', 'shg'])) return <CatalogueFormPage />;
+    if (/^\/(seller|shg)\/products\/[^/]+\/edit$/.test(pathname) && roleOk(user.role, ['seller', 'shg'])) return <CatalogueFormPage />;
+    if ((pathname === '/seller/services/new' || pathname === '/shg/services/new') && roleOk(user.role, ['seller', 'shg'])) return <CatalogueFormPage />;
+    if (/^\/(seller|shg)\/services\/[^/]+\/edit$/.test(pathname) && roleOk(user.role, ['seller', 'shg'])) return <CatalogueFormPage />;
+    if ((pathname === '/seller/orders' || pathname === '/shg/orders') && roleOk(user.role, ['seller', 'shg'])) return <PurchaseOrders />;
+    if ((pathname === '/seller/delivery' || pathname === '/shg/delivery') && roleOk(user.role, ['seller', 'shg'])) return <Redirect to={isCurrentShg ? "/shg/delivery-management" : "/seller/delivery-management"} />;
+    if ((pathname === '/seller/delivery-management' || pathname === '/shg/delivery-management') && roleOk(user.role, ['seller', 'shg'])) return <SellerDeliveryManagementPage />;
+    if ((pathname === '/seller/invoices' || pathname === '/shg/invoices') && roleOk(user.role, ['seller', 'shg'])) return <InvoiceRegisterPage role="seller" />;
+    if ((pathname === '/seller/disputes' || pathname === '/shg/disputes') && roleOk(user.role, ['seller', 'shg'])) return <DisputesPage />;
+    if ((pathname === '/seller/messages' || pathname === '/shg/messages') && roleOk(user.role, ['seller', 'shg'])) return <MessagesPage />;
+    if ((pathname === '/seller/ratings' || pathname === '/shg/ratings') && roleOk(user.role, ['seller', 'shg'])) return <RatingsPage endpoint={`/api/ratings/supplier/${user.id}`} mode="supplier" />;
+
+    if ((pathname === '/seller/settings' || pathname === '/shg/settings') && roleOk(user.role, ['seller', 'shg'])) return <SellerSettings />;
+
+    // Seller & SHG Bids (explicit route-to-prop mapping)
+    if ((pathname === '/seller/bids/submitted' || pathname === '/shg/bids/submitted') && roleOk(user.role, ['seller', 'shg'])) return <SellerBidsPage key={pathname} subRouteType="submitted" />;
+    if ((pathname === '/seller/bids/draft' || pathname === '/shg/bids/draft') && roleOk(user.role, ['seller', 'shg'])) return <SellerBidsPage key={pathname} subRouteType="draft" />;
+    if ((pathname === '/seller/bids/awarded' || pathname === '/shg/bids/awarded') && roleOk(user.role, ['seller', 'shg'])) return <SellerBidsPage key={pathname} subRouteType="awarded" />;
     
     // Seller & Buyer repeat orders
     if (pathname === '/orders/repeat' && roleOk(user.role, ['buyer', 'seller'])) return <RepeatOrders />;
@@ -699,10 +711,13 @@ export default function App() {
     if (pathname === '/buyer/procurement/drafts' && roleOk(user.role, ['buyer'])) return <ProcurementDraftsPage />;
     if (pathname === '/buyer/procurement/responses' && roleOk(user.role, ['buyer'])) return <SupplierResponsesPage />;
     {
-      const rfqCompareMatch = pathname.match(/^\/buyer\/quote-requests\/(\d+)\/compare$/);
-      if (rfqCompareMatch && roleOk(user.role, ['buyer'])) {
+      const rfqCompareMatch = pathname.match(/^\/buyer\/(?:quote-requests|rfq|quotations)\/(\d+)(?:\/compare|\/review)?$/);
+      if (rfqCompareMatch && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
         const id = Number(rfqCompareMatch[1]);
         if (Number.isFinite(id) && id > 0) return <RfqComparisonPage id={id} />;
+      }
+      if ((pathname === '/buyer/rfq/compare' || pathname === '/buyer/quote-requests/compare' || pathname === '/buyer/quotations/review') && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
+        return <RfqComparisonPage />;
       }
     }
     
@@ -717,8 +732,10 @@ export default function App() {
     if (pathname === '/buyer/rfq/detail' && roleOk(user.role, ['buyer'])) return <RfqDetailPage />;
     if (pathname === '/buyer/rfp/detail' && roleOk(user.role, ['buyer'])) return <RfpDetailPage />;
     if (pathname === '/buyer/rate-contracts' && roleOk(user.role, ['buyer'])) return <RateContractsPage />;
+    if ((pathname === '/buyer/checkout' || pathname === '/buyer/direct-purchase/checkout') && roleOk(user.role, ['buyer'])) return <DirectCheckoutPage />;
     if (pathname === '/buyer/procurement/checkout' && roleOk(user.role, ['buyer'])) return <ProcurementCheckoutPage />;
     if (pathname === '/buyer/address-book' && roleOk(user.role, ['buyer'])) return <AddressBookPage />;
+
     
     
     if (pathname === '/buyer/vendors' && roleOk(user.role, ['buyer'])) return <Vendors />;
@@ -738,7 +755,7 @@ export default function App() {
     if (pathname === '/payments' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
     if (pathname === '/payments/payment-status' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
     if (pathname === '/payments/transactions' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
-    if (pathname === '/payments/invoices' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <InvoiceRegisterPage role={user.role === 'admin' ? 'admin' : user.role === 'seller' ? 'seller' : 'buyer'} />;
+    if (pathname === '/payments/invoices' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <InvoiceRegisterPage role={user.role === 'admin' ? 'admin' : roleOk(user.role, ['seller']) ? 'seller' : 'buyer'} />;
     if (pathname === '/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <EscrowPage />;
     if (pathname === '/payments/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <EscrowPage />;
     
@@ -865,16 +882,18 @@ export default function App() {
     '/invite/signup',
   ].includes(pathname) || pathname.startsWith('/register');
 
+  if (!initialLoadComplete) {
+    return (
+      <PremiumLoader
+        mode="initial"
+        isReady={isInitialReady}
+        onComplete={completeInitialLoad}
+      />
+    );
+  }
+
   return (
     <>
-      {!initialLoadComplete && (
-        (() => { console.log('[APP LOADER] reason: INITIALIZATION'); return true; })() && 
-        <PremiumLoader
-          mode="initial"
-          isReady={isInitialReady}
-          onComplete={completeInitialLoad}
-        />
-      )}
       {isLoggingIn && (
         (() => { console.log('[APP LOADER] reason: LOGIN'); return true; })() && 
         <PremiumLoader
@@ -937,6 +956,7 @@ export default function App() {
             <InviteLoginPopup />
           </Suspense>
         )}
+        <SubUserActivationGate />
       </div>
     </>
   );

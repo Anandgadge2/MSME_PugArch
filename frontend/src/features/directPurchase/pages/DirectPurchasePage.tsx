@@ -1142,7 +1142,7 @@ function Party({
                     {email && (
                         <p className="flex items-center gap-1.5">
                             <span className="font-bold text-[9px] uppercase tracking-wider text-slate-400 w-16 shrink-0">Email:</span>
-                            <span className="truncate text-slate-700 select-all font-mono">{email}</span>
+                            <span title={email} className="truncate text-slate-700 select-all font-mono">{email}</span>
                         </p>
                     )}
                     {mobile && (
@@ -1154,7 +1154,7 @@ function Party({
                     {location && (
                         <p className="flex items-center gap-1.5">
                             <span className="font-bold text-[9px] uppercase tracking-wider text-slate-400 w-16 shrink-0">Location:</span>
-                            <span className="text-slate-700 truncate">{location}</span>
+                            <span title={location} className="text-slate-700 truncate">{location}</span>
                         </p>
                     )}
                 </div>

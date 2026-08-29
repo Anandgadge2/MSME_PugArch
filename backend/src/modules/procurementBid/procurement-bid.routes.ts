@@ -12,6 +12,7 @@ import { verifyAccessToken } from '../../services/token.service.js';
 import { getAccessTokenFromRequest } from '../../services/auth-cookie.service.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { logger } from '../../config/logger.js';
+import { fulfillmentWorkflow } from '../../services/workflow/fulfillment-workflow.service.js';
 
 const router = Router();
 
@@ -1123,6 +1124,73 @@ router.get('/seller/procurement-bids', authenticate, requireAccountType('seller'
   });
   return apiResponse.success(res, rows.map((row: any) => ({ ...service.serializeParticipation(row, { canSeeFinancial: true, ownView: true }), bid: service.serializeBid(row.bid, { actor: req.user }) })), 200, 'Seller bids fetched');
 }));
+
+router.get('/seller/procurement-bids/:bidId/invoice', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
+  const bidId = Number(req.params.bidId);
+  
+  const award = await (prisma as any).procurementBidAward.findFirst({
+    where: { bidId, sellerId: req.user!.id, awardStatus: 'ADMIN_APPROVED' },
+    orderBy: { createdAt: 'desc' }
+  });
+  
+  if (!award) return apiResponse.success(res, { exists: false }, 200, 'Invoice status fetched');
+  
+  const po = await (prisma as any).purchaseOrder.findFirst({
+    where: { sourceType: 'procurement_bid_award', sourceId: award.id }
+  });
+  
+  if (!po) return apiResponse.success(res, { exists: false }, 200, 'Invoice status fetched');
+  
+  const invoice = await (prisma as any).invoice.findFirst({
+    where: { purchaseOrderId: po.id }
+  });
+  
+  if (invoice) {
+    return apiResponse.success(res, { exists: true, invoiceId: invoice.id }, 200, 'Invoice status fetched');
+  }
+  
+  return apiResponse.success(res, { exists: false }, 200, 'Invoice status fetched');
+}));
+
+router.post('/seller/procurement-bids/:bidId/convert-to-invoice', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
+  const bid = await service.resolveBid(req.params.bidId, {});
+  const bidId = bid.id;
+  
+  const award = await (prisma as any).procurementBidAward.findFirst({
+    where: { bidId, sellerId: req.user!.id, awardStatus: 'ADMIN_APPROVED' },
+    orderBy: { createdAt: 'desc' }
+  });
+  
+  if (!award) throw new ApiError(404, 'No approved award found for this bid.', 'AWARD_NOT_FOUND');
+  
+  const po = await (prisma as any).purchaseOrder.findFirst({
+    where: { sourceType: 'procurement_bid_award', sourceId: award.id }
+  });
+  
+  if (!po) throw new ApiError(404, 'Purchase order has not been generated for this award yet.', 'PO_NOT_FOUND');
+  
+  let invoice = await (prisma as any).invoice.findFirst({
+    where: { purchaseOrderId: po.id }
+  });
+  
+  if (invoice) {
+    return apiResponse.success(res, invoice, 200, 'Existing invoice returned');
+  }
+  
+  const actor = {
+    id: Number(req.user!.id),
+    role: req.user!.role,
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent']
+  };
+    try {
+      invoice = await fulfillmentWorkflow.createInvoice(actor, { purchaseOrderId: po.id });
+      return apiResponse.created(res, invoice, 'Invoice created successfully');
+    } catch (error: any) {
+      console.error('[CONVERT_TO_INVOICE_ERROR]', error);
+      throw new ApiError(500, error?.message || 'Failed to generate invoice from purchase order.', 'INVOICE_GENERATION_FAILED', error);
+    }
+  }));
 
 router.get('/seller/procurement-bids/:bidId/status', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
   const bid = await service.resolveBid(req.params.bidId, { participations: { where: { OR: [{ sellerId: req.user!.id }, ...(req.user!.organizationId ? [{ seller: { organizationId: req.user!.organizationId } }] : [])] }, include: { documents: true, clarifications: { include: { files: true } }, evaluations: true, awards: true } } });

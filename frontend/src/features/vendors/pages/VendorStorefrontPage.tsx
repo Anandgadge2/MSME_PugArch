@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Award, Building2, Calendar, CheckCircle2, Globe, Mail, MapPin, Package, Phone, Send, ShieldCheck, ShoppingCart, Star, Store, Wrench } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { useRouter } from 'next/navigation';
+import { StorefrontSkeleton } from '@/components/ui/skeleton';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { useAuth } from '../../../hooks/useAuth';
@@ -28,24 +29,27 @@ export default function VendorStorefrontPage({ id }: Props) {
     const vendor = useQuery({
         queryKey: ['vendor', id] as const,
         queryFn: () => getApi<any>(`/api/vendors/${id}`),
-        enabled: id > 0
+        enabled: id > 0,
+        refetchInterval: 15000,
     });
 
     const products = useQuery({
         queryKey: ['vendor-products', id] as const,
         queryFn: () => getApi<any>(`/api/products/search?sellerId=${id}&take=24`),
-        enabled: id > 0 && tab === 'catalogue'
+        enabled: id > 0 && tab === 'catalogue',
+        refetchInterval: 15000,
     });
 
     const services = useQuery({
         queryKey: ['vendor-services', id] as const,
         queryFn: () => getApi<any>(`/api/services/search?sellerId=${id}&take=24`),
-        enabled: id > 0 && tab === 'catalogue'
+        enabled: id > 0 && tab === 'catalogue',
+        refetchInterval: 15000,
     });
 
     const ratingSummary = useSupplierSummary(id);
 
-    if (vendor.isLoading) return <LoadingState label="Loading vendor profile..." />;
+    if (vendor.isLoading) return <div className="mx-auto max-w-[1560px] pb-16"><StorefrontSkeleton /></div>;
     if (vendor.error) return <InlineError message={(vendor.error as Error).message} onRetry={() => vendor.refetch()} />;
     if (!vendor.data) return <InlineError message="Vendor not found" />;
 
@@ -304,9 +308,9 @@ function ProductCard({ item, kind }: { item: any; kind: 'product' | 'service' })
                         {kind === 'product' ? <Package className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
                     </div>
                     <div className="min-w-0 flex-1">
-                        <p className="text-sm font-black text-slate-900 text-wrap-anywhere line-clamp-2">{item.name}</p>
+                        <p title={item.name} className="text-sm font-black text-slate-900 text-wrap-anywhere line-clamp-2">{item.name}</p>
                         {item.description && (
-                            <p className="mt-1 text-[11px] text-slate-600 line-clamp-2 text-wrap-anywhere">{item.description}</p>
+                            <p title={item.description} className="mt-1 text-[11px] text-slate-600 line-clamp-2 text-wrap-anywhere">{item.description}</p>
                         )}
                         <p className="mt-2 text-sm font-black text-emerald-700">{formatCurrency(price)}</p>
                     </div>

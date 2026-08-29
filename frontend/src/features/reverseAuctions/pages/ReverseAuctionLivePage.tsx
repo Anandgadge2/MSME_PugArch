@@ -640,7 +640,7 @@ function StatsCard({ icon: Icon, label, value, color }: { icon: any; label: stri
       <CardContent className="p-5 flex justify-between items-start gap-3">
         <div className="min-w-0 space-y-1">
           <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{label}</p>
-          <p className={cn("text-lg font-mono font-extrabold truncate", colorMap[color].split(' ')[0])}>{value}</p>
+          <p title={value} className={cn("text-lg font-mono font-extrabold truncate", colorMap[color].split(' ')[0])}>{value}</p>
         </div>
         <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border", colorMap[color])}>
           <Icon className="h-4.5 w-4.5" />

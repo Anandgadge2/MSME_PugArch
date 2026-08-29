@@ -5,6 +5,7 @@ import { Card, CardContent } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Loader2 } from '@/components/ui/loader';
+import { PageTableSkeleton } from '../../../components/ui/skeleton';
 import {
     fetchDeliveryAddresses,
     createDeliveryAddress,
@@ -259,8 +260,8 @@ export default function AddressBookPage() {
 
     if (loading && addresses.length === 0) {
         return (
-            <div className="flex h-96 items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-[#12335f]" />
+            <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12 pt-4">
+                <PageTableSkeleton kpiCount={0} />
             </div>
         );
     }

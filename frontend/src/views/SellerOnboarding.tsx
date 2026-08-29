@@ -15,6 +15,7 @@ import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts'
 import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES, PRODUCT_CATEGORIES, PRODUCT_CATEGORY_OTHER } from '../constants/dropdowns';
 import { cn } from '../lib/utils';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
+import { isShgBusinessType, isShgUser } from '../lib/shg';
 
 const toDateInputValue = (value: unknown) => {
   if (!value) return '';
@@ -43,7 +44,7 @@ const getProfileStatus = (userRecord: any, profileRecord: any) => {
 
 const shouldShowSubmissionOverlay = (userRecord: any, profileRecord: any) => {
   const status = getProfileStatus(userRecord, profileRecord);
-  const isSubmitted = userRecord?.sectionStatus?.submitted === true || ['under_review', 'verified', 'approved_for_procurement', 'under_compliance_review'].includes(status.toLowerCase());
+  const isSubmitted = userRecord?.sectionStatus?.submitted === true;
   return isSubmitted && SUBMITTED_REVIEW_STATUSES.has(status);
 };
 
@@ -51,7 +52,7 @@ const shouldLockSellerProfile = (userRecord: any, profileRecord: any) => {
   const status = getProfileStatus(userRecord, profileRecord).toLowerCase();
   if (status === 'resubmission_required') return false;
   if (userRecord?.sectionStatus?.submitted === true) return true;
-  return ['approved_for_procurement', 'approved', 'verified', 'under_review', 'under_compliance_review', 'pending_validation', 'manual_review_required'].includes(status);
+  return ['approved_for_procurement', 'approved', 'verified'].includes(status);
 };
 
 const SELLER_SAVED_SECTIONS_KEY_PREFIX = 'seller-onboarding-saved-sections';
@@ -63,6 +64,24 @@ const normalizeSavedSections = (value: unknown) =>
 const hasItems = (value: unknown) => Array.isArray(value) && value.length > 0;
 const bankAccountDisplay = (bank: any) =>
   bank?.accountNumberMasked || bank?.maskedAccountNumber || bank?.accountNumber || bank?.bankAccountNumber || '-';
+
+const matchesDocumentType = (typeA?: string, typeB?: string) => {
+  if (!typeA || !typeB) return false;
+  const normA = String(typeA).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normB = String(typeB).toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (normA === normB) return true;
+
+  const aliases: Record<string, string[]> = {
+    groupleaderaadhaar: ['groupleaderaadhaar', 'leaderaadhaar', 'aadhaarcard', 'groupleaderaadhaarcard', 'group_leader_aadhaar'],
+    leaderaadhaar: ['groupleaderaadhaar', 'leaderaadhaar', 'aadhaarcard', 'groupleaderaadhaarcard', 'group_leader_aadhaar'],
+    bankpassbookcancelledcheque: ['bankpassbookcancelledcheque', 'bankpassbook', 'bankpassbookcheque'],
+    bankpassbook: ['bankpassbookcancelledcheque', 'bankpassbook', 'bankpassbookcheque'],
+    shgregistrationcertificate: ['shgregistrationcertificate', 'registrationcertificate'],
+    registrationcertificate: ['shgregistrationcertificate', 'registrationcertificate'],
+  };
+
+  return Boolean(aliases[normA]?.includes(normB) || aliases[normB]?.includes(normA));
+};
 const ACCOUNT_SETTINGS_ITEMS = [
   { id: 'sellerProfile', label: 'Seller Profile' },
   { id: 'updateAadhaar', label: 'Update Aadhaar' },
@@ -150,10 +169,13 @@ const inferCompletedSellerSections = (profile: any, orgVerified = false) => {
   return Array.from(completed);
 };
 
-export default function SellerOnboarding() {
+export default function SellerOnboarding({ initialSection }: { initialSection?: string } = {}) {
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const getAuthHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token') || '') : '';
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   const cachedMe = api.peek('/api/auth/me', { headers: getAuthHeaders() });
   const isStale = !cachedMe || !(cachedMe.user?.role === 'seller' || cachedMe.user?.role === 'shg');
@@ -163,7 +185,7 @@ export default function SellerOnboarding() {
   const router = useRouter();
   const sectionParam = searchParams?.get('section');
 
-  const [currentSection, setCurrentSection] = useState(sectionParam || 'pan');
+  const [currentSection, setCurrentSection] = useState(sectionParam || initialSection || 'pan');
   const isAccountSettings = ['sellerProfile', 'updateAadhaar', 'changePassword', 'changeEmail', 'closeAccount'].includes(currentSection);
   const [bankTab, setBankTab] = useState<'manage' | 'add'>('manage');
   const [officeTab, setOfficeTab] = useState<'manage' | 'add'>('manage');
@@ -360,8 +382,11 @@ export default function SellerOnboarding() {
     };
   });
 
-  const isHerShg = String(cachedRegDetails.businessType || cachedProfile.organizationType || '').toLowerCase() === 'hershg';
-  const shgType = String(cachedRegDetails.shgType || cachedProfile.shgType || '').trim();
+  const isHerShg = isShgUser(user)
+    || isShgBusinessType(regDetails.businessType)
+    || isShgBusinessType(regDetails.stakeholderCategory)
+    || isShgBusinessType(formData.organizationType);
+  const shgType = String(regDetails.shgType || formData.shgType || cachedRegDetails.shgType || cachedProfile.shgType || '').trim();
 
   const getRequiredDocuments = useCallback(() => {
     if (isHerShg) {
@@ -471,17 +496,24 @@ export default function SellerOnboarding() {
       if (orgVerified && ['pan_copy', 'gst_certificate', 'address_proof', 'business_registration_proof'].includes(reqDoc.id)) {
         return true;
       }
-      return uploadedTypes.includes(reqDoc.id);
+      return uploadedTypes.some(uploadedType => matchesDocumentType(uploadedType, reqDoc.id));
     });
   }, [getRequiredDocuments, sellerDocuments, orgVerified]);
 
   const submittedOnboardingDocuments = useMemo(() => {
-    const allDocIds = new Set(getRequiredDocuments().map(doc => doc.id));
-    return (Array.isArray(sellerDocuments) ? sellerDocuments : []).filter((doc: any) => allDocIds.has(doc.documentType));
+    const allDocs = getRequiredDocuments();
+    return (Array.isArray(sellerDocuments) ? sellerDocuments : []).filter((doc: any) =>
+      allDocs.some(reqDoc => matchesDocumentType(reqDoc.id, doc.documentType))
+    );
   }, [getRequiredDocuments, sellerDocuments]);
 
   const isApprovedProfile = onboardingStatus === 'approved_for_procurement' || onboardingStatus === 'verified' || onboardingStatus === 'VERIFIED';
-  const lockBadgeText = isApprovedProfile ? 'Approved profile locked' : 'Submitted profile under review';
+  const isExplicitlySubmitted = Boolean((cachedMe?.user?.sectionStatus as any)?.submitted || (user?.sectionStatus as any)?.submitted);
+  const lockBadgeText = isApprovedProfile
+    ? 'Approved profile locked'
+    : isExplicitlySubmitted
+      ? 'Submitted profile under review'
+      : null;
   const lockToastText = isApprovedProfile
     ? 'Approved profiles are locked'
     : 'Submitted profiles are locked during compliance review';
@@ -578,7 +610,13 @@ export default function SellerOnboarding() {
     if (sectionParam && sectionParam !== currentSection) {
       setCurrentSection(sectionParam);
     }
-  }, [sectionParam]);
+  }, [currentSection, sectionParam]);
+
+  useEffect(() => {
+    if (!sectionParam && initialSection && initialSection !== currentSection) {
+      setCurrentSection(initialSection);
+    }
+  }, [currentSection, initialSection, sectionParam]);
 
   const handleSectionChange = (id: string) => {
     setCurrentSection(id);
@@ -713,7 +751,7 @@ export default function SellerOnboarding() {
   };
 
   const handleSendOwnershipOtp = async () => {
-    if (isProfileLocked) return;
+    if (isProfileLocked && currentSection !== 'documents' && !isHerShg) return;
 
     setIsSendingOwnershipOtp(true);
     try {
@@ -738,7 +776,7 @@ export default function SellerOnboarding() {
   };
 
   const handleFinalSubmit = async () => {
-    if (isProfileLocked) return;
+    if (isProfileLocked && currentSection !== 'documents' && !isHerShg) return;
     if (!/^\d{6}$/.test(ownershipOtp.trim())) {
       toast.error(submissionChannel === 'sms' ? 'Enter the 6-digit OTP sent to your registered mobile.' : 'Enter the 6-digit OTP sent to your login email.');
       return;
@@ -776,7 +814,7 @@ export default function SellerOnboarding() {
   };
 
   const handleUploadDocument = async (documentType: string, file: File) => {
-    if (isProfileLocked) return;
+    if (isProfileLocked && currentSection !== 'documents' && !isHerShg) return;
 
     // File validation: PDF, JPG, JPEG, PNG <= 10MB
     const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
@@ -2076,7 +2114,7 @@ export default function SellerOnboarding() {
 
                       <div className="space-y-4">
                         {getRequiredDocuments().map((doc) => {
-                          const uploadedDoc = submittedOnboardingDocuments.find((d: any) => d.documentType === doc.id);
+                          const uploadedDoc = (Array.isArray(sellerDocuments) ? sellerDocuments : []).find((d: any) => matchesDocumentType(d.documentType, doc.id));
                           const fileAsset = uploadedDoc?.fileAsset;
                           const isUploading = isUploadingMap[doc.id];
                           const status = (orgVerified && ['pan_copy', 'gst_certificate', 'address_proof', 'business_registration_proof'].includes(doc.id))
@@ -2107,7 +2145,7 @@ export default function SellerOnboarding() {
                                     </div>
                                     {fileAsset ? (
                                       <div className="mt-1 flex items-center gap-2">
-                                        <span className="text-xs text-slate-500 font-medium truncate max-w-[200px] sm:max-w-xs">
+                                        <span title={fileAsset.originalName || 'Uploaded Document'} className="text-xs text-slate-500 font-medium truncate max-w-[200px] sm:max-w-xs">
                                           {fileAsset.originalName || 'Uploaded Document'}
                                         </span>
                                         <button
@@ -2148,7 +2186,7 @@ export default function SellerOnboarding() {
                                   )}
 
                                   {/* Upload Action */}
-                                  {!isProfileLocked && (
+                                  {(!isProfileLocked || currentSection === 'documents' || isHerShg) && (
                                     <label className="relative cursor-pointer">
                                       <input
                                         type="file"
@@ -2239,7 +2277,7 @@ export default function SellerOnboarding() {
                               onClick={handleSendOwnershipOtp}
                               isLoading={isSendingOwnershipOtp}
                               loadingText="Sending..."
-                              disabled={isSendingOwnershipOtp || !areAllDocumentsUploaded() || isProfileLocked}
+                              disabled={isSendingOwnershipOtp || !areAllDocumentsUploaded() || (isProfileLocked && currentSection !== 'documents' && !isHerShg)}
                               className="bg-[#12335f] text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-slate-800"
                             >
                               {ownershipOtpSent ? 'Resend OTP' : 'Send OTP'}
@@ -2250,14 +2288,14 @@ export default function SellerOnboarding() {
                               inputMode="numeric"
                               maxLength={6}
                               placeholder="Enter 6-digit OTP"
-                              disabled={!ownershipOtpSent || isProfileLocked}
+                              disabled={!ownershipOtpSent || (isProfileLocked && currentSection !== 'documents' && !isHerShg)}
                               className="h-9 w-44 rounded border border-slate-300 px-3 text-center text-xs font-bold tracking-widest text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
                             />
                             <Button
                               onClick={() => handleFinalSubmit()}
                               isLoading={isLoading}
                               loadingText="Submitting..."
-                              disabled={isLoading || !ownershipOtpSent || !areAllDocumentsUploaded() || !/^\d{6}$/.test(ownershipOtp) || isProfileLocked}
+                              disabled={isLoading || !ownershipOtpSent || !areAllDocumentsUploaded() || !/^\d{6}$/.test(ownershipOtp) || (isProfileLocked && currentSection !== 'documents' && !isHerShg)}
                               className="bg-gray-900 text-white rounded px-6 h-9 font-bold uppercase text-xs tracking-wide disabled:cursor-not-allowed disabled:opacity-60 hover:bg-gray-800"
                             >
                               Final Submission

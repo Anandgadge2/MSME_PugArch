@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
-import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft, Wrench, SlidersHorizontal, FileText, Minus, Plus } from 'lucide-react';
+import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft, Wrench, SlidersHorizontal, FileText, Minus, Plus, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
@@ -90,6 +90,7 @@ export default function MarketplaceProductList() {
     const [brandSearchFilter, setBrandSearchFilter] = useState(searchParams?.get('brand') || '');
     const [sellerSearchQuery, setSellerSearchQuery] = useState('');
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+    const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
     const [page, setPage] = useState(Number(searchParams?.get('page')) || 1);
     const [pageSize, setPageSize] = useState(Number(searchParams?.get('pageSize')) || 16);
 
@@ -428,7 +429,7 @@ export default function MarketplaceProductList() {
             toast.info('Login is required to proceed to checkout.', {
                 action: {
                     label: 'Login',
-                    onClick: () => router.push(`/login?redirect=${encodeURIComponent('/buyer/procurement/checkout')}`),
+                    onClick: () => router.push(`/login?redirect=${encodeURIComponent('/buyer/checkout')}`),
                 },
             });
             return;
@@ -455,8 +456,9 @@ export default function MarketplaceProductList() {
                 },
                 { source: isServices ? 'services-list-buy' : 'products-list-buy', showToast: false }
             );
-            router.push('/buyer/procurement/checkout');
+            router.push('/buyer/checkout');
         } catch {
+
             toast.error('Unable to prepare checkout. Please try again.');
         }
     };
@@ -621,7 +623,7 @@ export default function MarketplaceProductList() {
                                     }}
                                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                 />
-                                <span className="truncate flex-1">{cat.name}</span>
+                                <span title={cat.name} className="truncate flex-1">{cat.name}</span>
                             </label>
                         );
                     })}
@@ -661,7 +663,7 @@ export default function MarketplaceProductList() {
                                         }}
                                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span className="truncate flex-1">{sub}</span>
+                                    <span title={sub} className="truncate flex-1">{sub}</span>
                                 </label>
                             );
                         })}
@@ -726,7 +728,7 @@ export default function MarketplaceProductList() {
                                         }}
                                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span className="truncate">{sellerName}</span>
+                                    <span title={sellerName} className="truncate">{sellerName}</span>
                                 </label>
                             );
                         })}
@@ -888,20 +890,62 @@ export default function MarketplaceProductList() {
                             </button>
 
                             {/* Sort By Dropdown */}
-                            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">
+                            <div className="relative flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">
                                 <span className="text-slate-500 font-semibold hidden min-[400px]:inline">Sort By:</span>
-                                <select
-                                    value={sort}
-                                    onChange={e => { setSort(e.target.value); setPage(1); syncUrl({ sort: e.target.value, page: 1 }); }}
-                                    className="bg-transparent font-black text-[#0b2447] outline-none cursor-pointer pr-1"
+                                
+                                <button
+                                    type="button"
+                                    onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
+                                    className="flex items-center gap-1.5 bg-transparent font-black text-[#0b2447] outline-none cursor-pointer"
                                 >
-                                    <option value="popular">Popularity</option>
-                                    {canViewPrice && <option value="price_asc">Price: Low to High</option>}
-                                    {canViewPrice && <option value="price_desc">Price: High to Low</option>}
-                                    <option value="rating">Customer Rating</option>
-                                    {canViewPrice && <option value="discount">Discount: High to Low</option>}
-                                    <option value="latest">Newest</option>
-                                </select>
+                                    <span>
+                                        {sort === 'popular' ? 'Popularity' :
+                                         sort === 'price_asc' ? 'Price: Low to High' :
+                                         sort === 'price_desc' ? 'Price: High to Low' :
+                                         sort === 'rating' ? 'Customer Rating' :
+                                         sort === 'discount' ? 'Discount: High to Low' :
+                                         sort === 'latest' ? 'Newest' : 'Popularity'}
+                                    </span>
+                                    <ChevronDown className="h-4 w-4 text-slate-500" />
+                                </button>
+                                
+                                {sortDropdownOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-[90]" onClick={() => setSortDropdownOpen(false)} />
+                                        <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-[190px] sm:w-[220px] max-w-[calc(100vw-32px)] rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-[100] flex flex-col gap-0.5">
+                                            {[
+                                                { value: 'popular', label: 'Popularity' },
+                                                { value: 'price_asc', label: 'Price: Low to High', hideWithoutPrice: true },
+                                                { value: 'price_desc', label: 'Price: High to Low', hideWithoutPrice: true },
+                                                { value: 'rating', label: 'Customer Rating' },
+                                                { value: 'discount', label: 'Discount: High to Low', hideWithoutPrice: true },
+                                                { value: 'latest', label: 'Newest' },
+                                            ].map(opt => {
+                                                if (opt.hideWithoutPrice && !canViewPrice) return null;
+                                                return (
+                                                    <button
+                                                        key={opt.value}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSort(opt.value);
+                                                            setPage(1);
+                                                            syncUrl({ sort: opt.value, page: 1 });
+                                                            setSortDropdownOpen(false);
+                                                        }}
+                                                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[13px] sm:text-sm font-semibold transition-colors ${
+                                                            sort === opt.value
+                                                                ? 'bg-blue-50 text-blue-700'
+                                                                : 'text-slate-700 hover:bg-slate-50'
+                                                        }`}
+                                                    >
+                                                        <span>{opt.label}</span>
+                                                        {sort === opt.value && <BadgeCheck className="h-4 w-4 text-blue-600" />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -1169,15 +1213,15 @@ export default function MarketplaceProductList() {
                                         return (
                                             <div
                                                 key={item.id}
-                                                className="group flex flex-col justify-between bg-white rounded-2xl border border-slate-200/90 p-4 shadow-sm hover:shadow-md hover:border-blue-400 transition-all duration-200"
+                                                className="group flex flex-col justify-between bg-white rounded-2xl border border-slate-200/90 p-2.5 sm:p-4 shadow-sm hover:shadow-md hover:border-blue-400 transition-all duration-200"
                                             >
                                                 <div>
                                                     {/* Top Badge Header */}
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/60">
+                                                    <div className="flex flex-wrap sm:flex-nowrap items-start sm:items-center justify-between gap-1 mb-2">
+                                                        <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/60">
                                                             {dispatchBadge}
                                                         </span>
-                                                        <span className="text-[10px] font-black text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200">
+                                                        <span className="text-[9px] sm:text-[10px] font-black text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200 whitespace-nowrap">
                                                             {pricing.discountPercent}% OFF
                                                         </span>
                                                     </div>
@@ -1186,7 +1230,7 @@ export default function MarketplaceProductList() {
                                                     <Link
                                                         href={detailUrl}
                                                         onClick={() => { if (!isFallback) cacheAndTrackItem(item); }}
-                                                        className="relative block h-44 w-full bg-white flex items-center justify-center overflow-hidden my-2 cursor-pointer"
+                                                        className="relative block h-28 sm:h-44 w-full bg-white flex items-center justify-center overflow-hidden my-1.5 sm:my-2 cursor-pointer"
                                                     >
                                                         {imageUrl ? (
                                                             <img
@@ -1197,20 +1241,20 @@ export default function MarketplaceProductList() {
                                                                 onError={(e) => {
                                                                     e.currentTarget.src = resolveMarketplaceImage({}, 'product');
                                                                 }}
-                                                                className="max-h-full max-w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+                                                                className="max-h-full max-w-full object-contain p-1.5 sm:p-2 transition-transform duration-300 group-hover:scale-105"
                                                             />
                                                         ) : (
-                                                            <Package className="h-16 w-16 text-slate-300" />
+                                                            <Package className="h-10 w-10 sm:h-16 sm:w-16 text-slate-300" />
                                                         )}
                                                     </Link>
 
                                                     {/* Star Rating Badge */}
-                                                    <div className="flex items-center gap-1.5 mt-3 mb-2">
-                                                        <span className="inline-flex items-center gap-1 bg-[#15803d] text-white px-2 py-0.5 rounded text-[10px] font-black">
+                                                    <div className="flex items-center gap-1 sm:gap-1.5 mt-2 mb-1.5 sm:mt-3 sm:mb-2">
+                                                        <span className="inline-flex items-center gap-1 bg-[#15803d] text-white px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-black">
                                                             ★ {ratingScore}
                                                         </span>
-                                                        <span className="text-[10px] font-semibold text-slate-400">
-                                                            ({reviewCount} Reviews)
+                                                        <span className="text-[9px] sm:text-[10px] font-semibold text-slate-400">
+                                                            ({reviewCount} <span className="hidden sm:inline">Reviews</span><span className="sm:hidden">Rev</span>)
                                                         </span>
                                                     </div>
 
@@ -1218,60 +1262,60 @@ export default function MarketplaceProductList() {
                                                     <Link
                                                         href={detailUrl}
                                                         onClick={() => { if (!isFallback) cacheAndTrackItem(item); }}
-                                                        className="block my-2"
+                                                        className="block my-1.5 sm:my-2"
                                                     >
-                                                        <h3 className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-2 min-h-[38px] leading-snug group-hover:text-blue-600 transition">
+                                                        <h3 title={item.name} className="text-[11px] sm:text-sm font-bold text-slate-900 line-clamp-2 min-h-[32px] sm:min-h-[38px] leading-tight sm:leading-snug group-hover:text-blue-600 transition">
                                                             {item.name}
                                                         </h3>
                                                     </Link>
 
                                                     {/* By Seller */}
-                                                    <p className="mt-1.5 text-[11px] font-semibold text-slate-500 flex items-center gap-1 truncate">
-                                                        <span>By: {sellerName}</span>
-                                                        {isVerified && <BadgeCheck className="h-3.5 w-3.5 text-blue-600 shrink-0" />}
+                                                    <p title={`By: ${sellerName}`} className="mt-1 sm:mt-1.5 text-[9.5px] sm:text-[11px] font-semibold text-slate-500 flex items-center gap-1 truncate">
+                                                        <span className="truncate">By: {sellerName}</span>
+                                                        {isVerified && <BadgeCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-blue-600 shrink-0" />}
                                                     </p>
                                                 </div>
 
                                                 {/* Price & Action Buttons */}
-                                                <div className="mt-4 border-t border-slate-100 pt-3">
+                                                <div className="mt-2.5 sm:mt-4 border-t border-slate-100 pt-2.5 sm:pt-3">
                                                     {/* Price Section */}
                                                     {user ? (
-                                                        <div className="flex items-baseline gap-2 flex-wrap mb-3">
-                                                            <span className="text-lg font-black text-slate-900">
+                                                        <div className="flex items-baseline gap-1.5 sm:gap-2 flex-wrap mb-2 sm:mb-3">
+                                                            <span className="text-sm sm:text-lg font-black text-slate-900">
                                                                 ₹{pricing.effectivePrice.toLocaleString('en-IN')}
                                                             </span>
-                                                            <span className="text-xs text-slate-400 line-through">
+                                                            <span className="text-[9.5px] sm:text-xs text-slate-400 line-through">
                                                                 ₹{pricing.originalPrice.toLocaleString('en-IN')}
                                                             </span>
-                                                            <span className="text-xs font-black text-emerald-600">
+                                                            <span className="text-[9.5px] sm:text-xs font-black text-emerald-600 whitespace-nowrap">
                                                                 {pricing.discountPercent}% OFF
                                                             </span>
                                                         </div>
                                                     ) : (
-                                                        <div className="mb-3 mt-1">
-                                                            <span className="inline-block rounded bg-slate-100 border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-500">
+                                                        <div className="mb-2 sm:mb-3 mt-1">
+                                                            <span className="inline-block rounded bg-slate-100 border border-slate-200 px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold text-slate-500">
                                                                 Login to view price
                                                             </span>
                                                         </div>
                                                     )}
 
                                                     {/* Actions Row */}
-                                                    <div className="flex gap-2 items-center">
+                                                    <div className="flex gap-1.5 sm:gap-2 items-center justify-between">
                                                         {showBuyerMarketplaceActions && (
                                                             cartQuantity > 0 ? (
-                                                                <div className="flex-1 inline-flex h-8 items-center justify-between rounded-xl border border-[#0b2447]/30 bg-white text-[#0b2447] shadow-sm px-1">
+                                                                <div className="flex-1 inline-flex h-7 sm:h-8 items-center justify-between rounded-xl border border-[#0b2447]/30 bg-white text-[#0b2447] shadow-sm px-1">
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleCartQuantityChange(item, cartQuantity - 1)}
-                                                                        className="h-6 w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200"
+                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200"
                                                                     >
                                                                         <Minus className="h-3 w-3" />
                                                                     </button>
-                                                                    <span className="text-xs font-black tabular-nums">{cartQuantity}</span>
+                                                                    <span className="text-[10px] sm:text-xs font-black tabular-nums">{cartQuantity}</span>
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleCartQuantityChange(item, cartQuantity + 1)}
-                                                                        className="h-6 w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200"
+                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200"
                                                                     >
                                                                         <Plus className="h-3 w-3" />
                                                                     </button>
@@ -1280,10 +1324,10 @@ export default function MarketplaceProductList() {
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => handleAddToCart(item, { showToast: true })}
-                                                                    className="flex-1 h-8 rounded-xl bg-[#0b2447] text-white text-xs font-black hover:bg-[#12335f] transition flex items-center justify-center gap-1.5"
+                                                                    className="flex-1 h-7 sm:h-8 rounded-lg sm:rounded-xl bg-[#0b2447] text-white text-[10px] sm:text-xs font-black hover:bg-[#12335f] transition flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-2"
                                                                 >
-                                                                    <ShoppingCart className="h-3.5 w-3.5" />
-                                                                    Add to Cart
+                                                                    <ShoppingCart className="h-3 w-3 hidden sm:block" />
+                                                                    <span className="whitespace-nowrap">Add <span className="hidden sm:inline">to Cart</span></span>
                                                                 </button>
                                                             )
                                                         )}
@@ -1291,7 +1335,7 @@ export default function MarketplaceProductList() {
                                                         <button
                                                             type="button"
                                                             onClick={() => handleRequestQuote(item)}
-                                                            className="h-8 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 transition"
+                                                            className="h-7 sm:h-8 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 bg-white text-slate-700 text-[10px] sm:text-xs font-bold hover:bg-slate-50 transition shrink-0"
                                                             title="Request Quote"
                                                         >
                                                             Quote

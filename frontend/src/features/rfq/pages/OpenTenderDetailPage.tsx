@@ -46,11 +46,21 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   const requestId = searchParams.get('requestId') || searchParams.get('id') || pathnameId;
   const requirementId = searchParams.get('requirementId') || (!requestId ? pathnameId : '');
 
+  const activeOpenId = requestId || requirementId || pathnameId;
+  const isMatchingInitial = Boolean(
+    initialData && activeOpenId && (
+      String(initialData.id).toLowerCase() === String(activeOpenId).toLowerCase() ||
+      String(initialData.requirementNumber || '').toLowerCase() === String(activeOpenId).toLowerCase() ||
+      String(initialData.bidNumber || '').toLowerCase() === String(activeOpenId).toLowerCase() ||
+      String(initialData.displayId || '').toLowerCase() === String(activeOpenId).toLowerCase()
+    )
+  );
+
   const { data: bidData, isLoading: isBidLoading, error: bidError } = useQuery({
     queryKey: ['open-tender-bid-detail', requestId],
     queryFn: () => procurementBidApi.detail(requestId!),
     enabled: !!requestId,
-    initialData: initialData?.sourceModel === 'BID' || initialData?.bidNumber ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
   });
 
@@ -70,7 +80,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
       return null;
     },
     enabled: !!targetReqId && (!bidData || !(bidData as any).items?.length),
-    initialData: initialData?.title || initialData?.requirement ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
     staleTime: 60_000,
   });
 

@@ -26,7 +26,7 @@ import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { ensureOrgMembership } from '../services/org-membership.service.js';
-import { getTransporter } from '../services/mail.service.js';
+import { getTransporter, sendSubUserInvitationEmail } from '../services/mail.service.js';
 import { env } from '../config/env.js';
 import { hashPassword, validatePasswordStrength } from '../services/password.service.js';
 import { issueCookieAuth } from '../services/auth-cookie.service.js';
@@ -52,8 +52,6 @@ const asyncRoute = (
         } catch (err: any) {
             const status = err?.statusCode || 500;
             const message = status < 500 ? err.message : 'Unable to complete request';
-            // Log the actual error for diagnosis. Without this we lose Prisma /
-            // database errors entirely and the frontend just sees a 500.
             if (status >= 500) {
                 console.error('[org.routes] Unhandled error:', {
                     path: req.originalUrl,
@@ -111,7 +109,9 @@ const ORGANIZATION_TYPE_VALUES = [
 ] as const;
 
 const inviteSchema = z.object({
+    name: z.string().trim().min(2).max(120).optional(),
     email: z.string().email().toLowerCase().trim(),
+    mobile: z.string().trim().max(20).optional(),
     orgRole: z.enum(ORG_ROLE_VALUES as [string, ...string[]]).optional(),
     customRoleId: z.number().int().positive().optional(),
     message: z.string().max(1000).optional()
@@ -838,6 +838,71 @@ router.post(
         const token = generateToken();
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
+        // Auto-generate secure temporary password
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+        const tempPassword = 'Msme@' + Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        const hashedPassword = await hashPassword(tempPassword);
+
+        // Check if user already exists or create new sub-user
+        let targetUser = await prisma.user.findUnique({
+            where: { email: body.email.toLowerCase().trim() }
+        });
+
+        if (targetUser) {
+            targetUser = await prisma.user.update({
+                where: { id: targetUser.id },
+                data: {
+                    name: body.name || targetUser.name,
+                    mobile: body.mobile || targetUser.mobile,
+                    organizationId: orgId(req),
+                    password: hashedPassword,
+                    mustChangePassword: true,
+                    isSubUser: true,
+                    requiresMobileVerification: true,
+                    accountStatus: 'ACTIVE' as any
+                }
+            });
+        } else {
+            const newUserId = await generateAlphanumericUserId();
+            targetUser = await prisma.user.create({
+                data: {
+                    userId: newUserId,
+                    name: body.name || 'Sub User',
+                    email: body.email.toLowerCase().trim(),
+                    mobile: body.mobile || null,
+                    password: hashedPassword,
+                    role: req.user!.role as any,
+                    organizationId: orgId(req),
+                    accountTypeId: req.user!.accountTypeId || 3,
+                    accountStatus: 'ACTIVE' as any,
+                    registrationStatus: 'completed',
+                    onboardingStatus: 'approved_for_procurement',
+                    mustChangePassword: true,
+                    mobileVerified: false,
+                    isSubUser: true,
+                    requiresMobileVerification: true
+                }
+            });
+        }
+
+        // Create or update OrgMembership
+        await prisma.orgMembership.upsert({
+            where: { userId_organizationId: { userId: targetUser.id, organizationId: orgId(req) } },
+            update: {
+                isActive: true,
+                orgRole: fallbackRole,
+                customRoleId: customRole?.id || null
+            },
+            create: {
+                userId: targetUser.id,
+                organizationId: orgId(req),
+                orgRole: fallbackRole,
+                customRoleId: customRole?.id || null,
+                isActive: true,
+                invitedById: userId(req)
+            }
+        });
+
         const invitation = await prisma.orgInvitation.create({
             data: {
                 organizationId: orgId(req),
@@ -853,33 +918,16 @@ router.post(
             }
         });
 
-        // Send invite email
-        const inviteUrl = `${env.FRONTEND_URL || 'http://localhost:3000'}/invite/accept?token=${token}`;
         const roleName = customRole?.name || fallbackRole.replace(/_/g, ' ');
+        const loginUrl = `${env.FRONTEND_URL || 'http://localhost:3000'}/login`;
 
-        try {
-            await getTransporter().sendMail({
-                from: `"JsgSmile Portal" <${env.SMTP_USER}>`,
-                to: body.email,
-                subject: `You're invited to join ${org?.organizationName} on JsgSmile`,
-                html: `
-                  <div style="font-family:Arial,sans-serif;max-width:560px;margin:20px auto;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-                    <div style="background:#12335f;color:white;padding:18px;text-align:center;font-weight:700;">JsgSmile Procurement Portal</div>
-                    <div style="padding:28px;color:#1e293b;">
-                      <h2 style="margin:0 0 16px;">You've been invited!</h2>
-                      <p>You have been invited to join <strong>${org?.organizationName}</strong> as a <strong>${roleName}</strong>.</p>
-                      <p>Click the button below to accept the invitation. This link expires in 7 days.</p>
-                      <div style="text-align:center;margin:28px 0;">
-                        <a href="${inviteUrl}" style="background:#12335f;color:white;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:700;">Accept Invitation</a>
-                      </div>
-                      <p style="font-size:12px;color:#64748b;">If you did not expect this invitation, you can safely ignore this email.</p>
-                    </div>
-                  </div>
-                `
-            });
-        } catch {
-            // Email failure is non-fatal — invitation is still created
-        }
+        await sendSubUserInvitationEmail(body.email, {
+            name: body.name || targetUser.name,
+            organizationName: org?.organizationName || 'Your Organization',
+            roleName,
+            tempPassword,
+            loginUrl
+        });
 
         await auditLog({
             actorUserId: userId(req),

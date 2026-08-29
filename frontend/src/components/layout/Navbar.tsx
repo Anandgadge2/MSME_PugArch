@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
@@ -221,6 +222,15 @@ const ALL_MENU_PATHS = [
   '/seller/bids/submitted',
   '/seller/bids/draft',
   '/seller/bids/awarded',
+  '/shg/opportunities/rfqs',
+  '/shg/opportunities/rfps',
+  '/shg/opportunities/open-tenders',
+  '/shg/opportunities/invitations',
+  '/shg/opportunities/auctions',
+  '/shg/opportunities/rate-contracts',
+  '/shg/bids/submitted',
+  '/shg/bids/draft',
+  '/shg/bids/awarded',
 ];
 
 const isSidebarRouteActive = (targetPath: string | undefined, pathname?: string | null, currentPathWithQuery?: string) => {
@@ -378,49 +388,38 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
 
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  const { data: countsData } = useQuery({
+    queryKey: ['navigation-counts'],
+    queryFn: async () => {
+      const res = await api.get('/api/navigation/summary');
+      const body = await readJsonResponse(res);
+      const data = unwrapApiData(body);
+      if (!data) return {} as Record<string, number>;
 
-  useEffect(() => {
-    if (user?.role !== 'seller') return;
+      const rfqsCount = Number(data.rfqsCount || 0);
+      const rfpsCount = Number(data.rfpsCount || 0);
+      const openTendersCount = Number(data.openTendersCount || 0);
+      const invitationsCount = Number(data.invitationsCount || 0);
+      const auctionsCount = Number(data.auctionsCount || 0);
+      const rateContractsCount = Number(data.rateContractsCount || 0);
 
-    let alive = true;
-    const fetchCounts = async () => {
-      try {
-        const res = await api.get('/api/navigation/summary');
-        const body = await readJsonResponse(res);
-        const data = unwrapApiData(body);
-        if (!alive || !data) return;
+      const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount + rateContractsCount;
 
-        const rfqsCount = Number(data.rfqsCount || 0);
-        const rfpsCount = Number(data.rfpsCount || 0);
-        const openTendersCount = Number(data.openTendersCount || 0);
-        const invitationsCount = Number(data.invitationsCount || 0);
-        const auctionsCount = Number(data.auctionsCount || 0);
-        const rateContractsCount = Number(data.rateContractsCount || 0);
+      return {
+        '/seller/opportunities': allCount,
+        '/seller/opportunities/rfqs': rfqsCount,
+        '/seller/opportunities/rfps': rfpsCount,
+        '/seller/opportunities/open-tenders': openTendersCount,
+        '/seller/opportunities/invitations': invitationsCount,
+        '/seller/opportunities/auctions': auctionsCount,
+        '/seller/opportunities/rate-contracts': rateContractsCount
+      };
+    },
+    enabled: user?.role === 'seller',
+    refetchInterval: 15000,
+  });
 
-        const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount + rateContractsCount;
-
-        setCounts({
-          '/seller/opportunities': allCount,
-          '/seller/opportunities/rfqs': rfqsCount,
-          '/seller/opportunities/rfps': rfpsCount,
-          '/seller/opportunities/open-tenders': openTendersCount,
-          '/seller/opportunities/invitations': invitationsCount,
-          '/seller/opportunities/auctions': auctionsCount,
-          '/seller/opportunities/rate-contracts': rateContractsCount
-        });
-      } catch (err) {
-        console.warn('Navigation counts fetch error:', err);
-      }
-    };
-
-    fetchCounts();
-    const interval = setInterval(fetchCounts, 30000);
-    return () => {
-      alive = false;
-      clearInterval(interval);
-    };
-  }, [user]);
+  const counts = countsData || {};
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -497,16 +496,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const accountLabel = isShgAccount ? 'SHG' : user?.role || 'user';
 
   const navItems: SidebarItem[] = useMemo(() => [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['seller', 'buyer', 'admin'] },
-    { label: 'Onboarding Hub', path: '/shg/onboarding', icon: Store, roles: ['shg'] },
-    { label: 'SHG Dashboard', path: '/shg/dashboard', icon: LayoutDashboard, roles: ['shg'] },
-    { label: 'Members', path: '/shg/members', icon: Users, roles: ['shg'] },
-    { label: 'Bank Details', path: '/shg/bank-details', icon: Landmark, roles: ['shg'] },
-    { label: 'Documents', path: '/shg/documents', icon: FileText, roles: ['shg'] },
-    { label: 'Products', path: '/shg/products', icon: ShoppingCart, roles: ['shg'] },
-    { label: 'SHG Orders', path: '/shg/orders', icon: ClipboardList, roles: ['shg'] },
-    { label: 'Meetings', path: '/shg/meetings', icon: ClipboardCheck, roles: ['shg'] },
-    { label: 'Support', path: '/shg/support', icon: Bell, roles: ['shg'] },
+    { label: 'Dashboard', path: isShgAccount ? '/shg/dashboard' : '/dashboard', icon: LayoutDashboard, roles: ['seller', 'buyer', 'admin', 'shg'], permission: 'dashboard.view' },
     { label: 'Master Console', path: '/master-admin', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Organizations', path: '/master-admin/organizations', icon: Store, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Users & Roles', path: '/master-admin/users', icon: UsersRound, roles: ['master_admin'], permission: 'company.manage' },
@@ -623,44 +613,59 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     // Seller Ratings
     { label: 'Ratings', path: '/seller/ratings', icon: CheckCircle2, roles: ['seller'] },
     // Seller Administration
-    { label: 'Administration', icon: Settings, roles: ['seller'], children: [
-      { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['seller'], permission: 'team.member.view' },
-      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller'] }
+    { label: 'Administration', icon: Settings, roles: ['seller', 'shg'], children: [
+      { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['seller', 'shg'], permission: 'team.member.view' },
+      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller', 'shg'] }
     ] },
     // Seller Disputes
     { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'] },
 
     // Common items
-    { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin'] },
-    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin'] },
+    { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin', 'shg'] },
+    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin', 'shg'] },
     { label: 'Disputes', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
-    ...(!isShgAccount ? [{ label: 'Onboarding Hub', path: user ? getSellerPortalPath(user) : '/seller/onboarding', icon: Store, roles: ['seller'] }] : []),
+    { label: 'Onboarding Hub', path: isShgAccount ? '/shg/onboarding' : (user ? getSellerPortalPath(user) : '/seller/onboarding'), icon: Store, roles: ['seller', 'shg'] },
     { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
     // { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
   ], [isShgAccount, user]);
 
   const isAllowed = useCallback((item: SidebarItem) => {
     if (!user) return false;
-    const hasRole = item.roles.includes(user.role) || (isShgAccount && item.roles.includes('shg'));
+    const hasRole = item.roles.includes(user.role)
+      || (isShgAccount && (item.roles.includes('shg') || item.roles.includes('seller')));
     if (!hasRole) return false;
     if (item.featureCode && user.role !== 'master_admin' && Array.isArray(user.enabledFeatures) && user.enabledFeatures.length > 0) {
       if (!user.enabledFeatures.includes(item.featureCode)) return false;
     }
     if (item.permission) {
       if (user.role === 'admin' || user.role === 'master_admin') return true;
-      return user.permissions?.includes(item.permission);
+      if (!user.isSubUser) return true;
+      return user.permissions?.includes(item.permission) || user.permissions?.includes('*') || false;
     }
     return true;
   }, [user, isShgAccount]);
 
-  const filteredNav = useMemo(() => navItems
-    .map(item => {
-      if (!isAllowed(item)) return null;
-      if (!item.children?.length) return item;
-      const children = item.children.filter(isAllowed);
-      return children.length ? { ...item, children } : null;
-    })
-    .filter(Boolean) as SidebarItem[], [isAllowed, navItems]);
+  const filteredNav = useMemo(() => {
+    const mapItemForShg = (item: SidebarItem): SidebarItem => {
+      if (!isShgAccount) return item;
+      const newPath = item.path?.startsWith('/seller/') ? item.path.replace(/^\/seller\//, '/shg/') : item.path;
+      const newChildren = item.children?.map(mapItemForShg);
+      return {
+        ...item,
+        ...(newPath ? { path: newPath } : {}),
+        ...(newChildren ? { children: newChildren } : {})
+      };
+    };
+
+    return navItems
+      .map(item => {
+        if (!isAllowed(item)) return null;
+        if (!item.children?.length) return mapItemForShg(item);
+        const children = item.children.filter(isAllowed);
+        return children.length ? mapItemForShg({ ...item, children }) : null;
+      })
+      .filter(Boolean) as SidebarItem[];
+  }, [isAllowed, navItems, isShgAccount]);
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_GROUP_STATE_KEY, JSON.stringify(openGroups));

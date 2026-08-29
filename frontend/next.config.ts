@@ -60,6 +60,19 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true
   },
+  async headers() {
+    return [
+      {
+        source: '/category-photos/:version/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     const backendUrl = getBackendUrl();
     if (process.env.VERCEL_URL && backendUrl) {

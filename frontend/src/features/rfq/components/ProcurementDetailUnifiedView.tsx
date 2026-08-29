@@ -34,6 +34,8 @@ import {
   Award,
   Trash2,
   Tag,
+  AlertCircle,
+  HelpCircle,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -506,7 +508,7 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
 
   const processedItems = (rawItems.length ? rawItems : standardPresets).map((item: any, idx: number) => {
     const preset = standardPresets[idx % standardPresets.length];
-    
+
     if (typeof item === 'string') {
       const strLower = item.toLowerCase();
       if (strLower.includes('gst')) return { name: 'GST Certificate', instructions: 'Upload verified GST registration document.', fileType: 'PDF', maxSize: '5', required: true };
@@ -514,7 +516,7 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
       if (strLower.includes('bank') || strLower.includes('cheque')) return { name: 'Bank Details', instructions: 'Cancelled cheque or passbook.', fileType: 'PDF', maxSize: '2', required: true };
       if (strLower.includes('tech') || strLower.includes('compliance')) return { name: 'Technical Compliance Sheet', instructions: 'Compliance report against specified standards.', fileType: 'PDF, DOCX', maxSize: '10', required: true };
       if (strLower.includes('price') || strLower.includes('financial') || strLower.includes('rate') || strLower.includes('breakup')) return { name: 'Detailed Price Breakup', instructions: 'Itemized cost schedule.', fileType: 'PDF, XLSX', maxSize: '5', required: true };
-      
+
       if (strLower.includes('attached_doc') || strLower.includes('document') || !item.trim()) {
         return preset;
       }
@@ -780,7 +782,7 @@ function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
   );
 }
 
-function LineItemsTable({ items }: { items: any }) {
+function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?: string }) {
   const list = asArray(items).filter(hasDetailData);
   if (!list.length) return null;
 
@@ -810,18 +812,21 @@ function LineItemsTable({ items }: { items: any }) {
               {list.map((item: any, idx: number) => {
                 const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
 
-                const name = firstPresent(
+                const rawName = firstPresent(
                   item.name,
                   item.itemName,
                   item.title,
                   item.productName,
                   item.materialName,
                   item.serviceName,
-                  item.category,
                   sp.itemName,
-                  sp.name,
-                  `Item ${idx + 1}`
+                  sp.name
                 );
+
+                const isGeneric = !rawName || /^item\s*#?\d+$/i.test(String(rawName).trim()) || String(rawName).trim().toLowerCase() === 'item';
+                const name = !isGeneric
+                  ? String(rawName)
+                  : (defaultSubject && !/^item\s*#?\d+$/i.test(defaultSubject) ? defaultSubject : `Item #${idx + 1}`);
 
                 const rawQty = firstPresent(
                   item.quantity,
@@ -951,7 +956,17 @@ function LineItemsTable({ items }: { items: any }) {
   );
 }
 
-function BoqTableList({ data }: { data: any }) {
+function BoqTableList({
+  data,
+  defaultSubject,
+  defaultCategory,
+  defaultEstimatedValue
+}: {
+  data: any;
+  defaultSubject?: string;
+  defaultCategory?: string;
+  defaultEstimatedValue?: any;
+}) {
   const list = asArray(data).filter(hasDetailData);
   if (!list.length) return null;
 
@@ -980,12 +995,26 @@ function BoqTableList({ data }: { data: any }) {
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
               {list.map((item: any, idx: number) => {
                 const sr = firstPresent(item.srNo, item.sr, item.sr_no, item.id, idx + 1);
-                const category = firstPresent(item.category, item.itemCategory, item.name, item.itemName, item.title, `Category ${idx + 1}`);
-                const qty = firstPresent(item.quantity, item.qty, item.targetQty, item.count, '-');
-                const uom = firstPresent(item.uom, item.unit, item.unitOfMeasure, '');
-                const rate = firstPresent(item.estimatedRate, item.rate, item.unitPrice, item.price, item.estimatedPrice, '-');
-                const tax = firstPresent(item.taxPercent, item.tax, item.gstPercent, item.gst, item.gstRate, '-');
-                const total = firstPresent(item.total, item.amount, item.totalPrice, item.estimatedTotal, '-');
+                const rawCat = firstPresent(item.category, item.itemCategory, item.name, item.itemName, item.title);
+                const isGenericCat = !rawCat || String(rawCat).trim().toLowerCase() === 'general' || /^category\s*#?\d+$/i.test(String(rawCat).trim()) || /^item\s*#?\d+$/i.test(String(rawCat).trim());
+                const category = !isGenericCat
+                  ? String(rawCat)
+                  : (defaultCategory && defaultCategory !== 'General Procurement' ? defaultCategory : (defaultSubject || 'General'));
+
+                const qty = firstPresent(item.quantity, item.qty, item.targetQty, item.count, '1');
+                const uom = firstPresent(item.uom, item.unit, item.unitOfMeasure, 'Nos');
+
+                const rawRate = firstPresent(item.estimatedRate, item.rate, item.unitPrice, item.price, item.estimatedPrice);
+                const rate = (rawRate !== undefined && rawRate !== null && rawRate !== '' && rawRate !== '-')
+                  ? rawRate
+                  : (defaultEstimatedValue && Number(defaultEstimatedValue) > 0 ? defaultEstimatedValue : '-');
+
+                const tax = firstPresent(item.taxPercent, item.tax, item.gstPercent, item.gst, item.gstRate, '18%');
+
+                const rawTotal = firstPresent(item.total, item.amount, item.totalPrice, item.estimatedTotal);
+                const total = (rawTotal !== undefined && rawTotal !== null && rawTotal !== '' && rawTotal !== '-')
+                  ? rawTotal
+                  : (defaultEstimatedValue && Number(defaultEstimatedValue) > 0 ? defaultEstimatedValue : '-');
 
                 return (
                   <tr key={idx} className="hover:bg-slate-50/60">
@@ -1223,6 +1252,11 @@ export interface ProcurementDetailUnifiedViewProps {
   clarificationKind?: 'quote-request' | 'requirement';
   /** Override the entity ID used for clarifications (defaults to props.id) */
   clarificationEntityId?: string | number;
+  
+  // Invoice conversion feature
+  invoiceStatus?: { exists: boolean; invoiceId?: number; loading?: boolean } | null;
+  isConvertingInvoice?: boolean;
+  onConvertToInvoiceClick?: () => void;
 }
 
 export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedViewProps) {
@@ -1234,7 +1268,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [selectedQuotationForReview, setSelectedQuotationForReview] = useState<any | null>(null);
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
-const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
+  const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
 
   const [nowMs] = useState(() => Date.now());
@@ -1316,25 +1350,25 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
           const reqRes: any = await getApi(`/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`, true);
           const reqItems = extractArray(reqRes);
           if (reqItems.length > 0) return reqItems.map(normalizeItem);
-        } catch {}
+        } catch { }
 
         try {
           const directRes: any = await getApi(`/api/buyer/procurement-bids/${encodeURIComponent(idToken)}/participants`, true);
           const directItems = extractArray(directRes);
           if (directItems.length > 0) return directItems.map(normalizeItem);
-        } catch {}
+        } catch { }
 
         try {
           const bidRes: any = await procurementBidApi.detail(idToken);
           const bidItems = extractArray(bidRes);
           if (bidItems.length > 0) return bidItems.map(normalizeItem);
-        } catch {}
+        } catch { }
 
         try {
           const genRes: any = await getApi(`/api/marketplace/requirements/${encodeURIComponent(idToken)}/responses`, true);
           const genItems = extractArray(genRes);
           if (genItems.length > 0) return genItems.map(normalizeItem);
-        } catch {}
+        } catch { }
       }
 
       return [];
@@ -1607,7 +1641,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   );
 
   const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue) : (props.publishedDate ? formatDateString(props.publishedDate) : 'N/A');
-  const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue, true) : (props.closingDate ? formatDateString(props.closingDate, true) : 'N/A');
+  const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue) : (props.closingDate ? formatDateString(props.closingDate) : 'N/A');
   const clarificationDateFormatted = clarificationDateValue ? formatDateString(clarificationDateValue, true) : (props.clarificationDate ? formatDateString(props.clarificationDate, true) : 'N/A');
   const technicalDateFormatted = technicalDateValue ? formatDateString(technicalDateValue, true) : (props.technicalDate || props.technicalOpeningDate ? formatDateString(props.technicalDate || props.technicalOpeningDate, true) : 'N/A');
   const presentationDateFormatted = presentationDateValue ? formatDateString(presentationDateValue, true) : (props.presentationDate ? formatDateString(props.presentationDate, true) : 'N/A');
@@ -1745,8 +1779,8 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   const consigneeDetails = consigneeList.length
     ? consigneeList
     : (deliveryLocation && deliveryLocation !== '—' && deliveryLocation !== 'N/A'
-        ? [{ name: contactPerson && contactPerson !== '—' && contactPerson !== 'N/A' ? contactPerson : buyerOrgName, quantity: (lineItems[0]?.quantity || boqTable[0]?.quantity || '100'), location: deliveryLocation }]
-        : []);
+      ? [{ name: contactPerson && contactPerson !== '—' && contactPerson !== 'N/A' ? contactPerson : buyerOrgName, quantity: (lineItems[0]?.quantity || boqTable[0]?.quantity || '100'), location: deliveryLocation }]
+      : []);
 
   const isEmdRequired = Boolean(
     props.isEmdRequired ??
@@ -1868,29 +1902,18 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
 
   const buyerContactPerson = contactPerson && contactPerson !== 'N/A' && contactPerson !== '—' ? contactPerson : (buyerOrgName !== 'N/A' ? buyerOrgName : 'Procurement Officer');
   const buyerPhoneNum = phone && phone !== 'N/A' && phone !== '—' ? phone : (props.buyerMobile && props.buyerMobile !== 'N/A' ? props.buyerMobile : '');
-  const buyerContactDisplay = buyerPhoneNum ? `${buyerContactPerson} (${buyerPhoneNum})` : buyerContactPerson;
 
   const summaryCards = [
     { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: 'slate' as Tone, subtext: 'Current lifecycle state' },
     {
       label: 'Submission Deadline',
-      value: (
-        <div className="space-y-1">
-          <div>{closingDateFormatted}</div>
-          {props.deadlineDate && (
-            <div>
-              <DeadlineCountdown targetDate={props.deadlineDate} />
-            </div>
-          )}
-        </div>
-      ),
+      value: closingDateFormatted || 'N/A',
       icon: Clock,
       tone: 'rose' as Tone,
       subtext: 'Bidding window closing'
     },
     { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' },
-    // { label: 'EMD', value: emdDisplay, icon: ShieldCheck, tone: 'amber' as Tone },
-    { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactDisplay, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: 'Procurement officer' },
+    { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactPerson, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: buyerPhoneNum || 'Procurement officer' },
     { label: 'Evaluation', value: formatPrimitiveValue(props.evaluationMethod || 'L1', 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone, subtext: 'Selection criteria' },
     ...(isBuyerOrAdmin ? [{ label: 'Responses', value: Math.max(props.participantsCount || 0, submittedParticipations.length).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone, subtext: 'Proposals submitted' }] : []),
   ];
@@ -2026,29 +2049,29 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
         )}
 
         {/* Header */}
-        <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
+        <header className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 sm:py-3 shadow-2xs">
+          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <StatusBadge status={statusLabel} />
                 {buyerOrgName !== 'N/A' && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-indigo-700">
-                    <Building2 className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-indigo-700">
+                    <Building2 className="h-3 w-3" />
                     {formatPrimitiveValue(buyerOrgName, 'organization')}
                   </span>
                 )}
                 {props.deadlineDate && <DeadlineCountdown targetDate={props.deadlineDate} />}
                 {props.hasSubmittedProposal && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-700">
-                    <ShieldCheck className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                    <ShieldCheck className="h-3 w-3" />
                     {props.procurementType === 'RFQ' ? 'Quotation Submitted' : 'Proposal Submitted'}
                   </span>
                 )}
               </div>
               <div>
-                <h1 className="text-xl font-black leading-tight tracking-tight text-slate-950 md:text-3xl">{resolvedSubject}</h1>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                  <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-800">{displayIdStr}</span>
+                <h1 className="text-base sm:text-lg md:text-xl font-black leading-tight tracking-tight text-slate-950">{resolvedSubject}</h1>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800 text-[10px]">{displayIdStr}</span>
                   <span>•</span>
                   <span>{formatPrimitiveValue(procurementMethod, 'procurementMethod')}</span>
                   {category !== 'N/A' && (
@@ -2077,6 +2100,28 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                 <Download className="h-4 w-4" />
                 Download
               </Button>
+              {props.invoiceStatus && props.onConvertToInvoiceClick && (
+                props.invoiceStatus.exists ? (
+                  <Button
+                    type="button"
+                    onClick={() => router.push(`/seller/invoices/${props.invoiceStatus!.invoiceId}`)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    View Invoice
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    disabled={props.isConvertingInvoice || props.invoiceStatus.loading}
+                    onClick={props.onConvertToInvoiceClick}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                  >
+                    {props.isConvertingInvoice ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileText className="h-4 w-4 mr-1" />}
+                    {props.isConvertingInvoice ? 'Converting...' : 'Convert to Invoice'}
+                  </Button>
+                )
+              )}
               {props.onDiscardClick && (
                 <Button
                   type="button"
@@ -2110,7 +2155,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
         {/* EMD Section commented out */}
 
         {/* Summary Metrics */}
-        <section className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+        <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {summaryCards.map(card => (
             <MetricCard key={card.label} {...card} />
           ))}
@@ -2239,11 +2284,11 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
               )}
 
               {hasDetailData(lineItems) && (
-                <LineItemsTable items={lineItems} />
+                <LineItemsTable items={lineItems} defaultSubject={resolvedSubject} />
               )}
 
               {hasDetailData(boqTable) && (
-                <BoqTableList data={boqTable} />
+                <BoqTableList data={boqTable} defaultSubject={resolvedSubject} defaultCategory={category} defaultEstimatedValue={props.estimatedValue} />
               )}
             </section>
 
@@ -2325,7 +2370,7 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                 bidValidityDate: firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline),
                 autoClose: firstPresent(rules.autoClose, schedule.autoClose, 'Yes'),
                 allowRevision: firstPresent(rules.allowRevision, schedule.allowRevision, 'Yes'),
-                rebidsAllowed: firstPresent(rules.rebidsAllowed, schedule.rebidsAllowed, 'Yes'),
+                // rebidsAllowed: firstPresent(rules.rebidsAllowed, schedule.rebidsAllowed, 'Yes'),
                 showSellerRank: firstPresent(rules.showSellerRank, schedule.showSellerRank, 'Yes'),
                 allowWithdrawal: firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal, 'Yes'),
                 showLowestPrice: firstPresent(rules.showLowestPrice, schedule.showLowestPrice, 'Yes'),
@@ -2465,8 +2510,8 @@ const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
                               || participation.seller?.name
                               || participation.sellerUser?.name
                               || (participation.sellerId || participation.sellerUserId || (participation.id && !String(participation.id).startsWith('id-'))
-                                  ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
-                                  : `Supplier ${idx + 1}`);
+                                ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
+                                : `Supplier ${idx + 1}`);
                             const contactName = participation.sellerName || participation.contactPerson || participation.seller?.name || participation.sellerUser?.name || '';
                             const amount = Number(participation.totalAmount || participation.quotedAmount || participation.offeredPrice || 0);
                             const qty = participation.offeredQuantity || participation.quantity || 'Specified Qty';
@@ -2663,8 +2708,8 @@ export function SellerQuotationReviewModal({
     || participation.seller?.name
     || participation.sellerUser?.name
     || (participation.sellerId || participation.sellerUserId || (participation.id && !String(participation.id).startsWith('id-'))
-        ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
-        : 'Supplier Partner');
+      ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
+      : 'Supplier Partner');
 
   const contactPerson = participation.sellerName || participation.contactPerson || participation.seller?.name || participation.sellerUser?.name || 'N/A';
   const email = participation.sellerEmail || participation.seller?.email || participation.sellerUser?.email || 'N/A';
@@ -3118,9 +3163,8 @@ export function QuotationComparisonModal({
                         <th key={r.id || i} className={`p-3.5 border-r border-slate-200 text-center min-w-[200px] ${isL1 ? 'bg-emerald-50/70' : ''}`}>
                           <div className="font-extrabold text-slate-950 text-xs">{sellerOrg}</div>
                           <div className="mt-1 flex items-center justify-center gap-1">
-                            <span className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
-                              isL1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
-                            }`}>
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${isL1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
+                              }`}>
                               {isL1 ? 'L1 - Lowest Quote' : `L${i + 1}`}
                             </span>
                           </div>
@@ -3364,7 +3408,7 @@ export function SelectQuotationsToCompareModal({
                     <input
                       type="checkbox"
                       checked={isChecked}
-                      onChange={() => {}}
+                      onChange={() => { }}
                       className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
                     />
                     <div>

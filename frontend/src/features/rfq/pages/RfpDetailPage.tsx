@@ -33,6 +33,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
+import { Skeleton } from '../../../components/ui/skeleton';
 import { useAuth } from '../../../hooks/useAuth';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
@@ -1353,11 +1354,21 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   }
   const seedProfile = seedRfps[Number(requestId)] || null;
 
+  const activeRfpId = explicitReqId || explicitRequestId || rawIdParam || pathnameId;
+  const isMatchingInitial = Boolean(
+    initialData && activeRfpId && (
+      String(initialData.id).toLowerCase() === String(activeRfpId).toLowerCase() ||
+      String(initialData.requirementNumber || '').toLowerCase() === String(activeRfpId).toLowerCase() ||
+      String(initialData.bidNumber || '').toLowerCase() === String(activeRfpId).toLowerCase() ||
+      String(initialData.displayId || '').toLowerCase() === String(activeRfpId).toLowerCase()
+    )
+  );
+
   const { data: bidData, isLoading: bidLoading, error: bidError } = useQuery({
     queryKey: ['procurement-bid-rfp-detail', requestId],
     queryFn: () => procurementBidApi.detail(requestId),
     enabled: !!requestId,
-    initialData: initialData?.sourceModel === 'BID' || initialData?.bidNumber ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
     retry: 1,
   });
@@ -1379,7 +1390,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       return getApi<any>(marketplaceEndpoint, true);
     },
     enabled: !!requirementId,
-    initialData: initialData?.title || initialData?.requirement ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
     staleTime: 60_000,
     retry: 1,
   });
@@ -1603,9 +1614,125 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
 
   if (isLoading) {
     return (
-      <div className="flex h-[80vh] flex-col items-center justify-center gap-3">
-        <Loader2 className="h-10 w-10 animate-spin text-slate-700" />
-        <p className="text-sm font-bold text-slate-500">Loading RFP details...</p>
+      <div className="min-h-screen bg-slate-50">
+        <div className="mx-auto max-w-7xl space-y-4 px-4 py-4 sm:px-6 lg:px-8">
+          {/* Navigation Breadcrumb Skeleton */}
+          <div className="flex flex-wrap items-center gap-3">
+            <Skeleton className="h-8 w-20 rounded-lg" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-32" />
+              <span className="text-slate-300">/</span>
+              <Skeleton className="h-4 w-24" />
+            </div>
+          </div>
+
+          {/* Header Skeleton */}
+          <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0 space-y-3 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Skeleton className="h-6 w-24 rounded-full" />
+                  <Skeleton className="h-6 w-32 rounded-full" />
+                  <Skeleton className="h-6 w-28 rounded-full" />
+                </div>
+                <div>
+                  <Skeleton className="h-8 w-3/4 max-w-lg mb-2" />
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <Skeleton className="h-5 w-16 rounded-md" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <Skeleton className="h-8 w-24 rounded-full" />
+                <Skeleton className="h-8 w-32 rounded-lg" />
+              </div>
+            </div>
+          </header>
+
+          {/* KPI Cards Skeleton */}
+          <section className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-5 w-24" />
+                  </div>
+                  <Skeleton className="h-8 w-8 rounded-lg" />
+                </div>
+                <Skeleton className="mt-4 h-3 w-32" />
+              </div>
+            ))}
+          </section>
+
+          {/* Tabs Skeleton */}
+          <nav className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xs">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-9 w-36 rounded-lg" />
+            ))}
+          </nav>
+
+          {/* Content Area Skeleton */}
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-4">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-lg" />
+                  <Skeleton className="h-6 w-48" />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="space-y-1.5">
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-4 w-full" />
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-1.5">
+                  <Skeleton className="h-3 w-32" />
+                  <Skeleton className="h-16 w-full rounded-lg" />
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-4">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-lg" />
+                  <Skeleton className="h-6 w-40" />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="space-y-1.5">
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-4 w-full" />
+                    </div>
+                  ))}
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-4 w-full" />
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-4">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <Skeleton className="h-6 w-48" />
+              </div>
+              <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="rounded-lg border border-slate-100 p-2.5 space-y-2">
+                    <Skeleton className="h-7 w-7 rounded-md" />
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </div>
       </div>
     );
   }
@@ -2202,7 +2329,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
           </div>
         </header>
 
-        <section className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+        <section className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
           {summaryCards.map(card => (
             <MetricCard key={card.label} {...card} />
           ))}

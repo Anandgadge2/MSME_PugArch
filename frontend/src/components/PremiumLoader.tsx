@@ -74,10 +74,12 @@ export default function PremiumLoader({
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime;
-      const ready = isReadyRef.current;
+      // Safety timeout (3.5 seconds max) guarantees the loader never gets stuck at 95%
+      const forceReady = elapsed >= Math.max(duration * 2, 3500);
+      const ready = isReadyRef.current || forceReady;
 
       // Ensure minimum display duration so animation feels natural and smooth
-      if (!ready || elapsed < duration * 0.75) {
+      if (!ready || (elapsed < duration * 0.75 && !forceReady)) {
         // Smoothly progress up to 90% while waiting for isReady
         const ratio = Math.min(elapsed / duration, 1);
         const target = Math.floor(90 * (1 - Math.pow(1 - ratio, 2.2)));

@@ -26,42 +26,42 @@ interface CategoryCardItemProps {
 }
 
 function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCardItemProps) {
-    const meta = getCategoryVisualMeta(category);
     const [imgSrc, setImgSrc] = useState<string>(() => getCategoryImageUrl(category));
     const [imgError, setImgError] = useState(false);
 
     React.useEffect(() => {
         setImgSrc(getCategoryImageUrl(category));
         setImgError(false);
-    }, [category, category.imageUrl]);
+    }, [category, (category as any).imageUrl]);
 
     const handleImageError = () => {
         if (!imgError) {
             setImgError(true);
+            const meta = getCategoryVisualMeta(category);
             setImgSrc(buildCategoryFallbackSvg(category.name, meta.accentColor));
         }
     };
 
     const cardInner = (
-        <div className="flex flex-col items-center justify-between text-center w-full h-full group select-none p-3 sm:p-4">
-            {/* Category 3D Vector Icon Box with soft subtle backdrop */}
-            <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 md:h-18 md:w-18 items-center justify-center mb-2 rounded-2xl bg-gradient-to-br from-blue-50/90 via-sky-50/50 to-indigo-50/70 border border-blue-100/90 p-2.5 transition-all duration-300 group-hover:scale-110 group-hover:shadow-md group-hover:border-blue-400 group-hover:bg-blue-50">
-                <img
-                    src={imgSrc}
-                    alt={category.name}
-                    loading="lazy"
-                    decoding="async"
-                    referrerPolicy="no-referrer"
-                    crossOrigin="anonymous"
-                    onError={handleImageError}
-                    className="h-full w-full object-contain drop-shadow-sm transition-transform duration-300 ease-out"
-                />
-            </div>
-
+        <div className="relative flex h-full w-full flex-col justify-end overflow-hidden rounded-2xl sm:rounded-3xl">
+            {/* Background Image */}
+            <img
+                src={imgSrc}
+                alt={category.name}
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                onError={handleImageError}
+                className="absolute inset-0 h-full w-full bg-slate-100 object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
+            />
+            
+            {/* Gradient Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/55 via-[35%] to-white/5" />
+            
             {/* Category Name */}
-            <div className="w-full flex-1 flex items-center justify-center">
+            <div className="relative z-10 w-full p-3 sm:p-4 text-center">
                 <span className={cn(
-                    "block w-full text-center text-xs sm:text-[13px] font-extrabold leading-tight line-clamp-2 transition-colors duration-200",
+                    "block w-full text-xs sm:text-[13px] font-extrabold leading-tight line-clamp-2 transition-colors duration-200",
                     selected
                         ? "text-blue-700 font-black"
                         : "text-slate-800 group-hover:text-blue-600"
@@ -73,8 +73,8 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     );
 
     const containerClassName = cn(
-        'group relative flex flex-col items-center justify-between bg-white rounded-2xl sm:rounded-3xl transition-all duration-300 text-center cursor-pointer overflow-hidden border border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-blue-300 w-full min-h-[135px] sm:min-h-[150px] md:min-h-[160px]',
-        selected && 'shadow-xl ring-2 ring-blue-500 scale-[1.02] bg-blue-50/60 border-blue-400'
+        'group relative flex flex-col bg-white rounded-2xl sm:rounded-3xl transition-all duration-300 cursor-pointer border border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-blue-300 w-full aspect-[4/5] sm:aspect-square md:aspect-[4/5] xl:aspect-[3/4]',
+        selected && 'shadow-xl ring-2 ring-blue-500 border-blue-400 scale-[1.02] z-10'
     );
 
     if (onSelect) {

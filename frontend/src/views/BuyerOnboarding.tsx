@@ -203,7 +203,7 @@ const getProfileStatus = (userRecord: any, profileRecord: any) => {
 
 const shouldShowSubmissionOverlay = (userRecord: any, profileRecord: any) => {
   const status = getProfileStatus(userRecord, profileRecord);
-  const isSubmitted = userRecord?.sectionStatus?.submitted === true || ['under_review', 'verified', 'approved_for_procurement', 'under_compliance_review'].includes(status.toLowerCase());
+  const isSubmitted = userRecord?.sectionStatus?.submitted === true;
   return isSubmitted && SUBMITTED_REVIEW_STATUSES.has(status);
 };
 
@@ -211,7 +211,7 @@ const shouldLockBuyerProfile = (userRecord: any, profileRecord: any) => {
   const status = getProfileStatus(userRecord, profileRecord).toLowerCase();
   if (status === 'resubmission_required') return false;
   if (userRecord?.sectionStatus?.submitted === true) return true;
-  return ['approved_for_procurement', 'approved', 'verified', 'under_review', 'under_compliance_review', 'pending_validation', 'manual_review_required'].includes(status);
+  return ['approved_for_procurement', 'approved', 'verified'].includes(status);
 };
 
 const DEFAULT_BUYER_FORM_DATA: any = {

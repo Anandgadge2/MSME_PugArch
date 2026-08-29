@@ -10,7 +10,9 @@ import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureState
 import { formatCurrency, formatDate } from '../../shared/format';
 import { useFeatureQuery, usePaginatedFeatureQuery, useResponsiveViewMode } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
+import { PageTableSkeleton } from '../../../components/ui/skeleton';
 import { usePurchaseOrders } from '../../purchaseOrders/hooks';
+import { procurementBidApi } from '../../procurementBid/api';
 import { postApi, getApi } from '../../shared/apiClient';
 import { Pagination } from '../../shared/Pagination';
 import { EntityIdLink } from '../../shared/EntityIdLink';
@@ -72,7 +74,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [viewProofInvoiceId, setViewProofInvoiceId] = useState<number | null>(null);
 
   // Invoice Branding & Copy Type States
-  const [invoiceCopyType, setInvoiceCopyType] = useState<string>('Duplicate Copy');
+  const [invoiceCopyType, setInvoiceCopyType] = useState<string>('Original Copy');
   const [invoiceLogoUrl, setInvoiceLogoUrl] = useState<string | null>(null);
   const [invoiceStampUrl, setInvoiceStampUrl] = useState<string | null>(null);
   const [invoiceSignatureUrl, setInvoiceSignatureUrl] = useState<string | null>(null);
@@ -215,13 +217,18 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [createInvoiceModalOpen, setCreateInvoiceModalOpen] = useState(false);
   const [createInvoiceSubmitting, setCreateInvoiceSubmitting] = useState(false);
   const [createInvoiceError, setCreateInvoiceError] = useState<string | null>(null);
+  const [createInvoiceSourceType, setCreateInvoiceSourceType] = useState<'po' | 'quotation'>('po');
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState<number | null>(null);
+  const [selectedQuotationId, setSelectedQuotationId] = useState<number | null>(null);
+  const [submittedQuotations, setSubmittedQuotations] = useState<any[]>([]);
+  const [quotationsLoading, setQuotationsLoading] = useState(false);
   const [purchaseOrderSearch, setPurchaseOrderSearch] = useState('');
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [invoiceGstRate, setInvoiceGstRate] = useState('18');
   const [invoiceTdsRate, setInvoiceTdsRate] = useState('0');
   const [invoiceInterstate, setInvoiceInterstate] = useState(false);
   const [invoiceOtherTax, setInvoiceOtherTax] = useState('0');
+
 
   const toggleSort = (field: 'invoiceNumber' | 'poNumber' | 'party' | 'taxableAmount' | 'totalTaxAmount' | 'tdsAmount' | 'totalAmount' | 'dueDate' | 'status') => {
     if (sortField === field) {
@@ -301,6 +308,22 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       String(po.id).includes(query)
     );
   }, [acceptedPurchaseOrders, purchaseOrderSearch]);
+
+  const selectedQuotation = useMemo(
+    () => submittedQuotations.find(q => q.id === selectedQuotationId) ?? null,
+    [submittedQuotations, selectedQuotationId]
+  );
+
+  const filteredQuotations = useMemo(() => {
+    const query = purchaseOrderSearch.trim().toLowerCase();
+    if (!query) return submittedQuotations;
+    return submittedQuotations.filter(q =>
+      String(q.id).includes(query) ||
+      q.requirement?.title?.toLowerCase().includes(query) ||
+      q.message?.toLowerCase().includes(query)
+    );
+  }, [submittedQuotations, purchaseOrderSearch]);
+
 
 
 
@@ -521,6 +544,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const openCreateInvoiceModal = () => {
     setCreateInvoiceError(null);
     setSelectedPurchaseOrderId(null);
+    setSelectedQuotationId(null);
+    setCreateInvoiceSourceType('po');
     setPurchaseOrderSearch('');
     setInvoiceAmount('');
     setInvoiceGstRate('18');
@@ -528,6 +553,14 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     setInvoiceInterstate(false);
     setInvoiceOtherTax('0');
     setCreateInvoiceModalOpen(true);
+
+    setQuotationsLoading(true);
+    procurementBidApi.getSellerMarketplaceResponses()
+      .then(res => {
+        setSubmittedQuotations(Array.isArray(res) ? res : []);
+      })
+      .catch(() => setSubmittedQuotations([]))
+      .finally(() => setQuotationsLoading(false));
   };
 
   const closeCreateInvoiceModal = () => {
@@ -539,8 +572,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const handleSubmitCreateInvoice = async () => {
     if (createInvoiceSubmitting) return;
 
-    if (!selectedPurchaseOrderId) {
+    if (createInvoiceSourceType === 'po' && !selectedPurchaseOrderId) {
       setCreateInvoiceError('Select a purchase order before submitting.');
+      return;
+    }
+
+    if (createInvoiceSourceType === 'quotation' && !selectedQuotationId) {
+      setCreateInvoiceError('Select a submitted quotation before submitting.');
       return;
     }
 
@@ -572,7 +610,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     setCreateInvoiceError(null);
     try {
       await postApi('/api/invoices', {
-        purchaseOrderId: selectedPurchaseOrderId,
+        ...(createInvoiceSourceType === 'po' ? { purchaseOrderId: selectedPurchaseOrderId } : { quotationId: selectedQuotationId }),
         amount,
         gstRate,
         otherTaxRate,
@@ -589,6 +627,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       setCreateInvoiceSubmitting(false);
     }
   };
+
 
   const handleOpenCheckout = (invoice: InvoiceRow) => {
     setCheckoutInvoice(invoice);
@@ -667,6 +706,16 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       setSubmitting(false);
     }
   };
+
+  const isKpisLoading = loading && pagedInvoices.length === 0;
+
+  if (isKpisLoading) {
+    return (
+      <div className="space-y-6 pt-4">
+        <PageTableSkeleton kpiCount={5} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -814,22 +863,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         />
       </div>
 
-      {loading && pagedInvoices.length === 0 ? (
-        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-          <div className="space-y-4">
-            <div className="h-5 w-48 rounded bg-slate-100 animate-pulse" />
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/60 p-4 animate-pulse">
-                  <div className="h-6 w-20 rounded bg-slate-200/60" />
-                  <div className="h-5 flex-1 rounded bg-slate-200/60" />
-                  <div className="h-6 w-24 rounded bg-slate-200/60" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : total === 0 ? (
+      {total === 0 ? (
         <EmptyState
           title="No invoices found"
           description={
@@ -1123,8 +1157,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Create Invoice</p>
-                <h2 className="mt-1 text-lg font-black text-slate-950 sm:text-xl">New invoice for accepted PO</h2>
-                <p className="mt-1 text-xs leading-5 text-slate-500">Choose an accepted purchase order, then enter amount and tax details.</p>
+                <h2 className="mt-1 text-lg font-black text-slate-950 sm:text-xl">New invoice for PO or Quotation</h2>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Choose an accepted purchase order or submitted quotation, then enter amount and tax details.</p>
               </div>
               <button
                 type="button"
@@ -1136,54 +1170,143 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
             </div>
 
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+              {/* Source Type Selector Tabs */}
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateInvoiceSourceType('po');
+                    setSelectedQuotationId(null);
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer",
+                    createInvoiceSourceType === 'po'
+                      ? "bg-[#12335f] text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  )}
+                >
+                  Accepted Purchase Orders ({acceptedPurchaseOrders.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateInvoiceSourceType('quotation');
+                    setSelectedPurchaseOrderId(null);
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1",
+                    createInvoiceSourceType === 'quotation'
+                      ? "bg-[#12335f] text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  )}
+                >
+                  Submitted Quotations ({submittedQuotations.length})
+                </button>
+              </div>
+
               <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">Search Purchase Order</label>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  {createInvoiceSourceType === 'po' ? 'Search Purchase Order' : 'Search Submitted Quotation'}
+                </label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     value={purchaseOrderSearch}
                     onChange={event => setPurchaseOrderSearch(event.target.value)}
-                    placeholder="Search PO #, title, or ID"
+                    placeholder={createInvoiceSourceType === 'po' ? "Search PO #, title, or ID" : "Search Quotation ID, requirement title..."}
                     className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
                   />
                 </div>
 
                 <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs sm:max-h-44">
-                  {purchaseOrdersLoading ? (
-                    <div className="flex items-center justify-center py-8 text-slate-500">Loading purchase orders…</div>
-                  ) : filteredPurchaseOrders.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-slate-500">
-                      No accepted purchase orders found. Confirm the buyer has accepted the PO before creating an invoice.
-                    </div>
+                  {createInvoiceSourceType === 'po' ? (
+                    purchaseOrdersLoading ? (
+                      <div className="flex items-center justify-center py-8 text-slate-500">Loading purchase orders…</div>
+                    ) : filteredPurchaseOrders.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-slate-500">
+                        No accepted purchase orders found. Confirm the buyer has accepted the PO before creating an invoice.
+                      </div>
+                    ) : (
+                      filteredPurchaseOrders.map(po => (
+                        <button
+                          key={po.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPurchaseOrderId(po.id);
+                            const poAmt = po.totalValue || po.amount || 0;
+                            if (poAmt) setInvoiceAmount(String(poAmt));
+                            setPurchaseOrderSearch('');
+                          }}
+                          className={`w-full rounded-lg px-3 py-2.5 text-left transition ${selectedPurchaseOrderId === po.id ? 'bg-[#12335f] text-white' : 'bg-white text-slate-800 hover:bg-slate-100'
+                            }`}
+                        >
+                          <p className="break-all text-sm font-black">{po.poNumber}</p>
+                          <p className={cn('mt-0.5 text-[11px]', selectedPurchaseOrderId === po.id ? 'text-slate-200' : 'text-slate-500')}>{po.title}</p>
+                          <p className={cn('mt-1 text-[11px]', selectedPurchaseOrderId === po.id ? 'text-slate-200' : 'text-slate-400')}>Amount: {formatCurrency(po.totalValue || po.amount || 0)}</p>
+                        </button>
+                      ))
+                    )
                   ) : (
-                    filteredPurchaseOrders.map(po => (
-                      <button
-                        key={po.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedPurchaseOrderId(po.id);
-                          setPurchaseOrderSearch('');
-                        }}
-                        className={`w-full rounded-lg px-3 py-2.5 text-left transition ${selectedPurchaseOrderId === po.id ? 'bg-[#12335f] text-white' : 'bg-white text-slate-800 hover:bg-slate-100'
-                          }`}
-                      >
-                        <p className="break-all text-sm font-black">{po.poNumber}</p>
-                        <p className={cn('mt-0.5 text-[11px]', selectedPurchaseOrderId === po.id ? 'text-slate-200' : 'text-slate-500')}>{po.title}</p>
-                        <p className={cn('mt-1 text-[11px]', selectedPurchaseOrderId === po.id ? 'text-slate-200' : 'text-slate-400')}>Amount: {formatCurrency(po.totalValue || po.amount || 0)}</p>
-                      </button>
-                    ))
+                    quotationsLoading ? (
+                      <div className="flex items-center justify-center py-8 text-slate-500">Loading submitted quotations…</div>
+                    ) : filteredQuotations.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-slate-500">
+                        No submitted quotations found. Submit a quotation for a buyer requirement first.
+                      </div>
+                    ) : (
+                      filteredQuotations.map(q => {
+                        const totalVal = (Number(q.offeredPrice || 0) * Number(q.offeredQuantity || 1)) || Number(q.offeredPrice || 0);
+                        return (
+                          <button
+                            key={q.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedQuotationId(q.id);
+                              if (totalVal > 0) setInvoiceAmount(String(totalVal));
+                              setPurchaseOrderSearch('');
+                            }}
+                            className={`w-full rounded-lg px-3 py-2.5 text-left transition ${selectedQuotationId === q.id ? 'bg-[#12335f] text-white' : 'bg-white text-slate-800 hover:bg-slate-100'
+                              }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="break-all text-sm font-black">Quote #Q-{q.id}</p>
+                              <span className={cn('text-[9px] font-black uppercase px-2 py-0.5 rounded', selectedQuotationId === q.id ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-700')}>
+                                {q.status || 'SUBMITTED'}
+                              </span>
+                            </div>
+                            <p className={cn('mt-0.5 text-[11px]', selectedQuotationId === q.id ? 'text-slate-200' : 'text-slate-500')}>
+                              Requirement: {q.requirement?.title || 'B2B Requirement'}
+                            </p>
+                            <p className={cn('mt-1 text-[11px]', selectedQuotationId === q.id ? 'text-slate-200' : 'text-slate-400')}>
+                              Offered Amount: {formatCurrency(totalVal)}
+                            </p>
+                          </button>
+                        );
+                      })
+                    )
                   )}
                 </div>
               </div>
 
-              {selectedPurchaseOrder && (
+              {createInvoiceSourceType === 'po' && selectedPurchaseOrder && (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
                   <p className="font-black uppercase tracking-widest text-[10px] text-slate-500">Selected Purchase Order</p>
                   <p className="mt-2 font-black text-slate-900">{selectedPurchaseOrder.poNumber} · {selectedPurchaseOrder.title}</p>
                   <p className="mt-1 text-xs text-slate-500">Total value: {formatCurrency(selectedPurchaseOrder.totalValue || selectedPurchaseOrder.amount || 0)}</p>
                 </div>
               )}
+
+              {createInvoiceSourceType === 'quotation' && selectedQuotation && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                  <p className="font-black uppercase tracking-widest text-[10px] text-slate-500">Selected Submitted Quotation</p>
+                  <p className="mt-2 font-black text-slate-900">Quote #Q-{selectedQuotation.id} · Requirement: {selectedQuotation.requirement?.title || 'B2B Requirement'}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Offered total: {formatCurrency((Number(selectedQuotation.offeredPrice || 0) * Number(selectedQuotation.offeredQuantity || 1)) || Number(selectedQuotation.offeredPrice || 0))}
+                  </p>
+                </div>
+              )}
+
 
               <div className="grid gap-4 sm:grid-cols-3">
                 <div>
@@ -1268,7 +1391,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               <Button
                 type="button"
                 onClick={handleSubmitCreateInvoice}
-                disabled={createInvoiceSubmitting || purchaseOrdersLoading || filteredPurchaseOrders.length === 0}
+                disabled={createInvoiceSubmitting || (createInvoiceSourceType === 'po' ? !selectedPurchaseOrderId : !selectedQuotationId)}
                 className="h-10 rounded-lg bg-[#12335f] text-xs font-black uppercase tracking-wider hover:bg-slate-800"
               >
                 {createInvoiceSubmitting ? 'Creating...' : 'Create Invoice'}

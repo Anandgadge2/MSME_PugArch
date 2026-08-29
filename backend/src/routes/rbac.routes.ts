@@ -8,6 +8,10 @@ import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { ACCOUNT_TYPE_IDS, DEFAULT_DYNAMIC_ROLE_TEMPLATES, RBAC_PERMISSION_CATALOG } from '../constants/dynamic-rbac.js';
 import { assertCanAssignRole, assertCanManageRole, ensureAssignablePermissions, getActivePermissionCodes, isMasterAdmin, userHasPermission, type RbacScope } from '../services/rbac.service.js';
+import { hashPassword } from '../services/password.service.js';
+import { sendSubUserInvitationEmail } from '../services/mail.service.js';
+import { env } from '../config/env.js';
+import { generateAlphanumericUserId } from '../utils/userId.js';
 
 const router = Router();
 router.use(authenticate);
@@ -363,12 +367,104 @@ router.post('/team/invite', asyncHandler(async (req, res) => {
   for (const roleId of body.roleIds) {
     await assertCanAssignRole(user, -1, roleId, scope.scopeType, scope.scopeId);
   }
+
   const token = randomBytes(32).toString('hex');
   const accountTypeId = body.accountType ? ACCOUNT_TYPE_IDS[body.accountType] : user.organizationId ? user.accountTypeId : ACCOUNT_TYPE_IDS.SUPERADMIN;
+
+  // Auto-generate secure temporary password
+  const tempPassword = 'Msme@' + randomBytes(4).toString('hex').toUpperCase();
+  const hashedPassword = await hashPassword(tempPassword);
+
+  const orgIdNum = user.organizationId || (scope.scopeType === 'ORGANIZATION' && scope.scopeId ? Number(scope.scopeId) : null);
+  const org = orgIdNum ? await prisma.organization.findUnique({ where: { id: orgIdNum }, select: { id: true, organizationName: true } }) : null;
+
+  // Check if user already exists
+  let targetUser = await prisma.user.findUnique({
+    where: { email: body.email.toLowerCase().trim() }
+  });
+
+  if (targetUser) {
+    if (orgIdNum && targetUser.organizationId && targetUser.organizationId !== orgIdNum) {
+      return apiResponse.error(res, 409, 'User belongs to another organization.', 'USER_ALREADY_MEMBER_OTHER');
+    }
+    targetUser = await prisma.user.update({
+      where: { id: targetUser.id },
+      data: {
+        name: body.name || targetUser.name,
+        mobile: body.mobile || targetUser.mobile,
+        organizationId: orgIdNum || targetUser.organizationId,
+        password: hashedPassword,
+        mustChangePassword: true,
+        isSubUser: true,
+        requiresMobileVerification: true,
+        accountStatus: 'ACTIVE' as any
+      }
+    });
+  } else {
+    const newUserId = await generateAlphanumericUserId();
+    targetUser = await prisma.user.create({
+      data: {
+        userId: newUserId,
+        name: body.name || 'Sub User',
+        email: body.email.toLowerCase().trim(),
+        mobile: body.mobile || null,
+        password: hashedPassword,
+        role: user.role === 'buyer' ? 'buyer' : user.role === 'seller' ? 'seller' : user.role === 'shg' ? 'shg' : 'admin',
+        organizationId: orgIdNum,
+        accountTypeId,
+        accountStatus: 'ACTIVE' as any,
+        registrationStatus: 'completed',
+        onboardingStatus: 'approved_for_procurement',
+        mustChangePassword: true,
+        mobileVerified: false,
+        isSubUser: true,
+        requiresMobileVerification: true
+      }
+    });
+  }
+
+  // Create or update OrgMembership if in an organization
+  if (orgIdNum) {
+    await prisma.orgMembership.upsert({
+      where: { userId_organizationId: { userId: targetUser.id, organizationId: orgIdNum } },
+      update: { isActive: true, orgRole: 'MEMBER' as any },
+      create: {
+        userId: targetUser.id,
+        organizationId: orgIdNum,
+        orgRole: 'MEMBER' as any,
+        isActive: true,
+        invitedById: user.id
+      }
+    });
+  }
+
+  // Assign RBAC roles
+  for (const roleId of body.roleIds) {
+    await (prisma as any).userRole.upsert({
+      where: {
+        userId_roleId_scopeType_scopeId: {
+          userId: targetUser.id,
+          roleId,
+          scopeType: scope.scopeType,
+          scopeId: scope.scopeId || '0'
+        }
+      },
+      update: { isActive: true, assignedById: user.id },
+      create: {
+        userId: targetUser.id,
+        roleId,
+        scopeType: scope.scopeType,
+        scopeId: scope.scopeId || '0',
+        isActive: true,
+        assignedById: user.id
+      }
+    });
+  }
+
   const invitation = await (prisma as any).scopedInvitation.create({
     data: {
       name: body.name || null,
-      email: body.email,
+      email: body.email.toLowerCase().trim(),
       mobile: body.mobile || null,
       accountTypeId,
       scopeType: scope.scopeType,
@@ -379,8 +475,25 @@ router.post('/team/invite', asyncHandler(async (req, res) => {
       invitedById: user.id
     }
   });
+
+  // Fetch assigned role names for email
+  const assignedRoles = body.roleIds.length
+    ? await (prisma as any).rbacRole.findMany({ where: { id: { in: body.roleIds } }, select: { name: true } })
+    : [];
+  const roleName = assignedRoles.map((r: any) => r.name).join(', ') || 'Team Member';
+
+  // Send invitation email with credentials
+  const loginUrl = `${env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+  await sendSubUserInvitationEmail(body.email.toLowerCase().trim(), {
+    name: body.name || targetUser.name,
+    organizationName: org?.organizationName || 'Your Organization',
+    roleName,
+    tempPassword,
+    loginUrl
+  });
+
   await writeAudit(req, 'team.invite.created', 'scopedInvitation', invitation.id, { email: body.email, roleIds: body.roleIds, scope });
-  return apiResponse.created(res, invitation, 'Invitation created');
+  return apiResponse.created(res, { ...invitation, tempPassword, user: { id: targetUser.id, email: targetUser.email, name: targetUser.name } }, 'Sub-user created and invitation email sent successfully.');
 }));
 
 router.patch('/team/members/:id/disable', asyncHandler(async (req, res) => {

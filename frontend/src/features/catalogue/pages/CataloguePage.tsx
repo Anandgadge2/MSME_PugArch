@@ -1366,6 +1366,13 @@ function CatalogueForm({
   onChange: (field: keyof typeof blankForm, value: string) => void;
   onPreviewDocument: (preview: DocumentPreview) => void;
 }) {
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+
+  const markTouched = (field: string) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+
   const rawPrice = kind === 'product' ? toNumber(form.price) : toNumber(form.basePrice);
   const discountPercent = toNumber(form.discount);
 
@@ -1375,6 +1382,112 @@ function CatalogueForm({
   const taxBreakdown = calculateGstBreakdown(taxableAmount, form.splitTaxRate, form.igstTaxRate, form.otherTaxRate);
   const taxAmount = taxBreakdown.totalTaxAmount;
   const finalTotal = taxableAmount + taxAmount;
+
+  const isProductValid = useMemo(() => {
+    return (
+      Boolean(form.name.trim()) &&
+      Boolean(form.categoryId) &&
+      Boolean(form.description.trim()) &&
+      Boolean(form.unitOfMeasure.trim()) &&
+      Boolean(form.itemCondition.trim()) &&
+      Boolean(form.hsnCode.trim()) &&
+      form.price !== '' &&
+      toNumber(form.price) > 0 &&
+      ((form.splitTaxRate !== '' && Number(form.splitTaxRate) >= 0) || (form.igstTaxRate !== '' && Number(form.igstTaxRate) >= 0)) &&
+      uploadedImages.length >= 1
+    );
+  }, [form.name, form.categoryId, form.description, form.unitOfMeasure, form.itemCondition, form.hsnCode, form.price, form.splitTaxRate, form.igstTaxRate, uploadedImages.length]);
+
+  const isServiceValid = useMemo(() => {
+    return (
+      Boolean(form.name.trim()) &&
+      Boolean(form.categoryId) &&
+      Boolean(form.description.trim()) &&
+      Boolean(form.serviceArea.trim()) &&
+      Boolean(form.pricingModel.trim()) &&
+      form.basePrice !== '' &&
+      toNumber(form.basePrice) > 0 &&
+      ((form.splitTaxRate !== '' && Number(form.splitTaxRate) >= 0) || (form.igstTaxRate !== '' && Number(form.igstTaxRate) >= 0)) &&
+      uploadedImages.length >= 1
+    );
+  }, [form.name, form.categoryId, form.description, form.serviceArea, form.pricingModel, form.basePrice, form.splitTaxRate, form.igstTaxRate, uploadedImages.length]);
+
+  const isFormValid = kind === 'product' ? isProductValid : isServiceValid;
+
+  const isFieldInvalid = (field: string) => {
+    switch (field) {
+      case 'name':
+        return !form.name.trim();
+      case 'categoryId':
+        return !form.categoryId;
+      case 'description':
+        return !form.description.trim();
+      case 'unitOfMeasure':
+        return kind === 'product' && !form.unitOfMeasure.trim();
+      case 'itemCondition':
+        return kind === 'product' && !form.itemCondition.trim();
+      case 'hsnCode':
+        return kind === 'product' && !form.hsnCode.trim();
+      case 'serviceArea':
+        return kind === 'service' && !form.serviceArea.trim();
+      case 'pricingModel':
+        return kind === 'service' && !form.pricingModel.trim();
+      case 'price':
+        return kind === 'product' && (form.price === '' || toNumber(form.price) <= 0);
+      case 'basePrice':
+        return kind === 'service' && (form.basePrice === '' || toNumber(form.basePrice) <= 0);
+      case 'taxRate':
+        return form.splitTaxRate === '' && form.igstTaxRate === '';
+      case 'images':
+        return uploadedImages.length < 1;
+      default:
+        return false;
+    }
+  };
+
+  const getFieldError = (field: string): string | undefined => {
+    if (!touched[field] && !attemptedSubmit) return undefined;
+    if (!isFieldInvalid(field)) return undefined;
+
+    switch (field) {
+      case 'name':
+        return `${kind === 'product' ? 'Product' : 'Service'} name is required.`;
+      case 'categoryId':
+        return 'Category is required.';
+      case 'description':
+        return 'Description is required.';
+      case 'unitOfMeasure':
+        return 'Unit of measure is required.';
+      case 'itemCondition':
+        return 'Item condition is required.';
+      case 'hsnCode':
+        return 'HSN code is required.';
+      case 'serviceArea':
+        return 'Service area is required.';
+      case 'pricingModel':
+        return 'Pricing model is required.';
+      case 'price':
+        return 'Price is required and must be greater than 0.';
+      case 'basePrice':
+        return 'Base price is required and must be greater than 0.';
+      case 'taxRate':
+        return 'GST / Tax rate is required.';
+      case 'images':
+        return `At least 1 ${kind} image is required.`;
+      default:
+        return undefined;
+    }
+  };
+
+  const handleFormSubmit = (e: FormEvent) => {
+    setAttemptedSubmit(true);
+    if (!isFormValid) {
+      e.preventDefault();
+      toast.error(`Please complete all required fields and upload at least 1 image.`);
+      return;
+    }
+    onSubmit(e);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in duration-200">
@@ -1399,36 +1512,110 @@ function CatalogueForm({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-          <form onSubmit={onSubmit} className="grid gap-3 lg:grid-cols-2">
-            <Input label={`${kind === 'product' ? 'Product' : 'Service'} Name`} value={form.name} onChange={event => onChange('name', event.target.value)} required placeholder="e.g. Structural Steel Beams, IT Advisory Services" className="bg-white" />
+          <form onSubmit={handleFormSubmit} className="grid gap-3 lg:grid-cols-2">
+            <Input
+              label={`${kind === 'product' ? 'Product' : 'Service'} Name`}
+              value={form.name}
+              onChange={event => { onChange('name', event.target.value); markTouched('name'); }}
+              onBlur={() => markTouched('name')}
+              error={getFieldError('name')}
+              required
+              placeholder="e.g. Structural Steel Beams, IT Advisory Services"
+              className="bg-white"
+            />
             <Select label="Visibility Status" value={form.status} onChange={event => onChange('status', event.target.value)} className="bg-white">
               <option value="ACTIVE">Active</option>
               <option value="DRAFT">Draft</option>
               <option value="INACTIVE">Inactive</option>
             </Select>
-            <Select label="Category" value={form.categoryId} onChange={event => onChange('categoryId', event.target.value)} className="bg-white">
+            <Select
+              label="Category"
+              value={form.categoryId}
+              onChange={event => { onChange('categoryId', event.target.value); markTouched('categoryId'); }}
+              onBlur={() => markTouched('categoryId')}
+              error={getFieldError('categoryId')}
+              required
+              className="bg-white"
+            >
               <option value="">Select Category</option>
               {categoryList.map(cat => <option key={cat.id} value={String(cat.id)}>{cat.name}</option>)}
             </Select>
             {kind === 'product' ? (
               <>
-                <Input label="Price (INR)" type="number" min="0" value={form.price} onChange={event => onChange('price', event.target.value)} placeholder="0.00" className="bg-white" />
-                <Input label="Discount (%)" type="number" min="0" max="100" step="0.01" value={form.discount} onChange={event => onChange('discount', event.target.value)} placeholder="0.00" className="bg-white" />
-                <Select label="Unit Of Measure" value={form.unitOfMeasure} onChange={event => onChange('unitOfMeasure', event.target.value)} className="bg-white">
+                <Input
+                  label="Price (INR)"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.price}
+                  onChange={event => { onChange('price', event.target.value); markTouched('price'); }}
+                  onBlur={() => markTouched('price')}
+                  error={getFieldError('price')}
+                  required
+                  placeholder="0.00"
+                  className="bg-white"
+                />
+                <Input label="Discount (%)" type="number" min="0" max="100" step="0.01" value={form.discount} onChange={event => onChange('discount', event.target.value)} placeholder="0.00 (Optional)" className="bg-white" />
+                <Select
+                  label="Unit Of Measure"
+                  value={form.unitOfMeasure}
+                  onChange={event => { onChange('unitOfMeasure', event.target.value); markTouched('unitOfMeasure'); }}
+                  onBlur={() => markTouched('unitOfMeasure')}
+                  error={getFieldError('unitOfMeasure')}
+                  required
+                  className="bg-white"
+                >
                   <option value="">Select Unit</option>
                   {QUANTITY_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                 </Select>
-                <Select label="Item Condition" value={form.itemCondition} onChange={event => onChange('itemCondition', event.target.value)} className="bg-white">
+                <Select
+                  label="Item Condition"
+                  value={form.itemCondition}
+                  onChange={event => { onChange('itemCondition', event.target.value); markTouched('itemCondition'); }}
+                  onBlur={() => markTouched('itemCondition')}
+                  error={getFieldError('itemCondition')}
+                  required
+                  className="bg-white"
+                >
                   <option value="">Select Condition</option>
                   {ITEM_CONDITIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </Select>
-                <Input label="HSN Code" value={form.hsnCode} onChange={event => onChange('hsnCode', event.target.value)} placeholder="8-digit HSN code" className="bg-white" />
+                <Input
+                  label="HSN Code"
+                  value={form.hsnCode}
+                  onChange={event => { onChange('hsnCode', event.target.value); markTouched('hsnCode'); }}
+                  onBlur={() => markTouched('hsnCode')}
+                  error={getFieldError('hsnCode')}
+                  required
+                  placeholder="8-digit HSN code"
+                  className="bg-white"
+                />
               </>
             ) : (
               <>
-                <Input label="Base Price (INR)" type="number" min="0" value={form.basePrice} onChange={event => onChange('basePrice', event.target.value)} placeholder="0.00" className="bg-white" />
-                <Input label="Discount (%)" type="number" min="0" max="100" step="0.01" value={form.discount} onChange={event => onChange('discount', event.target.value)} placeholder="0.00" className="bg-white" />
-                <Select label="Pricing Model" value={form.pricingModel} onChange={event => onChange('pricingModel', event.target.value)} className="bg-white">
+                <Input
+                  label="Base Price (INR)"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.basePrice}
+                  onChange={event => { onChange('basePrice', event.target.value); markTouched('basePrice'); }}
+                  onBlur={() => markTouched('basePrice')}
+                  error={getFieldError('basePrice')}
+                  required
+                  placeholder="0.00"
+                  className="bg-white"
+                />
+                <Input label="Discount (%)" type="number" min="0" max="100" step="0.01" value={form.discount} onChange={event => onChange('discount', event.target.value)} placeholder="0.00 (Optional)" className="bg-white" />
+                <Select
+                  label="Pricing Model"
+                  value={form.pricingModel}
+                  onChange={event => { onChange('pricingModel', event.target.value); markTouched('pricingModel'); }}
+                  onBlur={() => markTouched('pricingModel')}
+                  error={getFieldError('pricingModel')}
+                  required
+                  className="bg-white"
+                >
                   <option value="FIXED">Fixed</option>
                   <option value="HOURLY">Hourly</option>
                   <option value="DAILY">Daily</option>
@@ -1436,10 +1623,22 @@ function CatalogueForm({
                   <option value="PER_PROJECT">Per Project</option>
                   <option value="CUSTOM">Custom</option>
                 </Select>
-                <Input label="Service Area" value={form.serviceArea} onChange={event => onChange('serviceArea', event.target.value)} placeholder="e.g. Delhi NCR, Pan-India" className="bg-white" />
+                <Input
+                  label="Service Area"
+                  value={form.serviceArea}
+                  onChange={event => { onChange('serviceArea', event.target.value); markTouched('serviceArea'); }}
+                  onBlur={() => markTouched('serviceArea')}
+                  error={getFieldError('serviceArea')}
+                  required
+                  placeholder="e.g. Delhi NCR, Pan-India"
+                  className="bg-white"
+                />
               </>
             )}
             <div className="lg:col-span-2">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                GST & Taxation <span className="text-red-500 ml-0.5 font-bold">*</span>
+              </label>
               <GstTaxPicker
                 splitRate={form.splitTaxRate}
                 igstRate={form.igstTaxRate}
@@ -1449,12 +1648,31 @@ function CatalogueForm({
                   onChange('splitTaxRate', next.splitRate);
                   onChange('igstTaxRate', next.igstRate);
                   onChange('otherTaxRate', next.additionalRate);
+                  markTouched('taxRate');
                 }}
               />
+              {getFieldError('taxRate') && (
+                <p className="mt-1 text-[10px] sm:text-xs text-red-500 font-semibold">{getFieldError('taxRate')}</p>
+              )}
             </div>
-            <div className="lg:col-span-2">
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Description</label>
-              <textarea value={form.description} onChange={event => onChange('description', event.target.value)} rows={3} placeholder="Provide descriptive details, technical specifications, and delivery terms..." className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20" />
+            <div className="lg:col-span-2 space-y-1">
+              <label className="block text-[10px] font-bold sm:font-extrabold uppercase tracking-wide sm:tracking-widest text-slate-500 sm:text-[11px]">
+                Description <span className="text-red-500 ml-1 font-bold">*</span>
+              </label>
+              <textarea
+                value={form.description}
+                onChange={event => { onChange('description', event.target.value); markTouched('description'); }}
+                onBlur={() => markTouched('description')}
+                rows={3}
+                placeholder="Provide descriptive details, technical specifications, and delivery terms..."
+                className={cn(
+                  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20",
+                  getFieldError('description') && "border-red-500 focus:ring-red-500/20 bg-red-50/30"
+                )}
+              />
+              {getFieldError('description') && (
+                <p className="text-[10px] sm:text-xs text-red-500">{getFieldError('description')}</p>
+              )}
             </div>
 
             {/* Real-time Quotation Total Preview */}
@@ -1496,7 +1714,7 @@ function CatalogueForm({
               {/* Image upload section */}
               <div className="space-y-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Product/Service Images (Optional)
+                  {kind === 'product' ? 'Product Images' : 'Service Images'} <span className="text-red-500 ml-1 font-bold">*</span>
                 </label>
 
                 {uploadedImages.length > 0 && (
@@ -1539,9 +1757,12 @@ function CatalogueForm({
                   </div>
                 )}
 
-                <label className="flex flex-col items-center justify-center border border-dashed border-slate-300 rounded-lg p-4 bg-white cursor-pointer hover:bg-slate-55 transition-colors">
-                  <Upload className="h-5 w-5 text-slate-400 mb-1" />
-                  <span className="text-[10px] font-bold text-slate-500">Click to Upload Image</span>
+                <label className={cn(
+                  "flex flex-col items-center justify-center border border-dashed rounded-lg p-4 bg-white cursor-pointer transition-colors",
+                  getFieldError('images') ? "border-red-400 bg-red-50/20" : "border-slate-300 hover:bg-slate-50"
+                )}>
+                  <Upload className={cn("h-5 w-5 mb-1", getFieldError('images') ? "text-red-400" : "text-slate-400")} />
+                  <span className="text-[10px] font-bold text-slate-500">Click to Upload Image (Required)</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -1551,6 +1772,9 @@ function CatalogueForm({
                     className="hidden"
                   />
                 </label>
+                {getFieldError('images') && (
+                  <p className="text-[10px] sm:text-xs text-red-500 font-semibold">{getFieldError('images')}</p>
+                )}
               </div>
 
               {/* Document upload section */}
@@ -1625,7 +1849,11 @@ function CatalogueForm({
 
             <div className="flex justify-end gap-2 border-t border-slate-200/80 pt-3 lg:col-span-2">
               <Button type="button" variant="outline" onClick={onCancel} className="h-9 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50">Cancel</Button>
-              <Button type="submit" disabled={saving || uploading} className={cn("h-9 rounded-lg text-xs font-black uppercase tracking-wider text-white", kind === 'product' ? 'bg-[#059669] hover:bg-emerald-800' : 'bg-emerald-600 hover:bg-emerald-700')}>
+              <Button
+                type="submit"
+                disabled={!isFormValid || saving || uploading}
+                className={cn("h-9 rounded-lg text-xs font-black uppercase tracking-wider text-white", !isFormValid && "opacity-50 cursor-not-allowed", kind === 'product' ? 'bg-[#059669] hover:bg-emerald-800' : 'bg-emerald-600 hover:bg-emerald-700')}
+              >
                 <Plus className="mr-1.5 h-3.5 w-3.5" />{saving ? 'Saving...' : isEdit ? `Save Changes` : `Create ${kind}`}
               </Button>
             </div>

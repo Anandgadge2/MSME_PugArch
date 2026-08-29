@@ -1937,10 +1937,16 @@ const quoteRequestBody = z.object({
 
 const quoteResponseBody = z.object({
   totalAmount: z.coerce.number().nonnegative().optional(),
+  offeredPrice: z.coerce.number().nonnegative().optional(),
+  offeredQuantity: z.coerce.number().nonnegative().optional(),
   deliveryDays: z.coerce.number().int().positive().optional(),
+  deliveryTimeline: z.string().trim().optional(),
   validityDate: safeCoercedDate.optional(),
-  notes: z.string().trim().max(2000).optional(),
+  notes: z.string().trim().max(4000).optional(),
+  message: z.string().trim().max(4000).optional(),
+  terms: z.string().trim().max(2000).optional(),
   documentUrl: z.string().trim().max(1000).optional(),
+  attachmentUrl: z.string().trim().max(1000).optional(),
   currency: z.string().trim().max(10).optional(),
   warrantyPeriod: z.string().trim().max(200).optional(),
   paymentTerms: z.string().trim().max(500).optional(),
@@ -1949,7 +1955,22 @@ const quoteResponseBody = z.object({
   complianceStatus: z.string().trim().max(50).optional(),
   unitPrice: z.coerce.number().nonnegative().optional(),
   quantity: z.coerce.number().int().positive().optional(),
-  discountPercent: z.coerce.number().min(0).max(100).optional()
+  discountPercent: z.coerce.number().min(0).max(100).optional(),
+  status: z.enum(['DRAFT', 'SUBMITTED']).optional(),
+  responseData: z.any().optional()
+}).transform(val => {
+  let deliveryDays = val.deliveryDays;
+  if (!deliveryDays && val.deliveryTimeline) {
+    const dMatch = val.deliveryTimeline.match(/(\d+)/);
+    if (dMatch) deliveryDays = Number(dMatch[1]);
+  }
+  return {
+    ...val,
+    totalAmount: val.totalAmount ?? val.offeredPrice,
+    documentUrl: val.documentUrl ?? val.attachmentUrl,
+    notes: val.notes ?? val.message ?? val.terms,
+    deliveryDays
+  };
 });
 
 const actorFrom = (req: AuthRequest) => ({
@@ -2376,7 +2397,19 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     }
 
     const uploadedDocs = profile.sellerDocuments?.map((d: any) => d.documentType) || [];
-    const missingDocs = requiredDocs.filter(d => !uploadedDocs.includes(d));
+    const matchesDocType = (reqType: string, uploadedTypes: string[]) =>
+      uploadedTypes.some(u => {
+        const normU = String(u || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normR = String(reqType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normU === normR) return true;
+        const aliases: Record<string, string[]> = {
+          bankpassbook: ['bankpassbook', 'bankpassbookcancelledcheque'],
+          leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard'],
+          registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate']
+        };
+        return (aliases[normR] || []).includes(normU) || (aliases[normU] || []).includes(normR);
+      });
+    const missingDocs = requiredDocs.filter(d => !matchesDocType(d, uploadedDocs));
 
     if (missingDocs.length > 0) {
       const labels: Record<string, string> = {
@@ -2669,6 +2702,9 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
 
   const ext = path.extname(rawKey).toLowerCase();
   const contentType = RAW_MIME_TYPES[ext] || 'application/octet-stream';
+  const cacheControl = rawKey.startsWith('categories/photos/') && req.query.v
+    ? 'public, max-age=31536000, s-maxage=31536000, immutable'
+    : 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400';
 
   // 1. Try authenticated GCS client
   try {
@@ -2679,7 +2715,7 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
       const [buffer] = await file.download();
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', buffer.length);
-      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+      res.setHeader('Cache-Control', cacheControl);
       res.setHeader('Access-Control-Allow-Origin', '*');
       return res.end(buffer);
     }
@@ -2695,7 +2731,7 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
       const headerContentType = response.headers.get('content-type') || contentType;
       res.setHeader('Content-Type', headerContentType);
       res.setHeader('Content-Length', buffer.length);
-      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+      res.setHeader('Cache-Control', cacheControl);
       res.setHeader('Access-Control-Allow-Origin', '*');
       return res.end(buffer);
     }
@@ -3910,7 +3946,7 @@ router.post('/profile/verify-gst-dashboard', authenticate, asyncRoute(async (req
   let onboardingStatus = user.onboardingStatus;
   let registrationStatus = user.registrationStatus;
 
-  if (onboardingStatus !== 'approved_for_procurement') {
+  if (onboardingStatus !== 'approved_for_procurement' && (user.sectionStatus as any)?.submitted === true) {
     onboardingStatus = 'under_compliance_review';
     registrationStatus = 'completed';
   }
@@ -4106,6 +4142,55 @@ router.delete('/admin/categories/:id', authenticate, authorizeAdmin, asyncRoute(
   await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
   await auditWrite(req, 'category.deleted', 'category', id);
   ok(res, category || { id, deleted: true });
+}));
+
+// ── Admin Category Image Upload (GCS-backed) ──
+import multer from 'multer';
+const categoryImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { files: 1, fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req: any, file: any, cb: any) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.mimetype)) {
+      return cb(new ApiError(400, 'Only JPEG, PNG, or WebP images are allowed'));
+    }
+    cb(null, true);
+  }
+});
+
+router.post('/admin/categories/:id/image', authenticate, authorizeAdmin, categoryImageUpload.single('image'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
+  const { id } = parse(idParams, req.params);
+  const file = req.file;
+  if (!file || !file.buffer?.length) throw new ApiError(400, 'Image file is required', 'IMAGE_REQUIRED');
+
+  const category = await db.category.findUnique({ where: { id } });
+  if (!category) throw new ApiError(404, 'Category not found', 'CATEGORY_NOT_FOUND');
+
+  const ext = file.mimetype === 'image/png' ? '.png' : file.mimetype === 'image/webp' ? '.webp' : '.jpg';
+  const timestamp = Date.now();
+  const gcsKey = `categories/photos/${category.slug}-${timestamp}${ext}`;
+  const bucket = getGCSBucket();
+  const bucketName = getGCSBucketName();
+
+  await bucket.file(gcsKey).save(file.buffer, {
+    contentType: file.mimetype,
+    resumable: false,
+    metadata: {
+      contentType: file.mimetype,
+      cacheControl: 'public, max-age=31536000, immutable',
+      metadata: { categoryId: String(id), categorySlug: category.slug, uploadedBy: String(userId(req)) }
+    }
+  });
+
+  const imageUrl = `https://storage.googleapis.com/${bucketName}/${gcsKey}?v=${timestamp}`;
+  const updated = await db.category.update({ where: { id }, data: { imageUrl } });
+
+  await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
+  await deleteCache(redisKeys.cacheMarketplaceFeaturedCategories()).catch(() => undefined);
+  await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
+  await auditWrite(req, 'category.image_uploaded', 'category', id);
+
+  ok(res, updated);
 }));
 
 router.post('/seller/products', authenticate, requirePermission('catalogue.product.create', orgScope), asyncRoute(async (req, res) => {
@@ -7186,7 +7271,8 @@ for (const [path, status, action] of [
 
 router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(async (req, res) => {
   const body = parse(z.object({
-    purchaseOrderId: z.coerce.number().int().positive(),
+    purchaseOrderId: z.coerce.number().int().positive().optional(),
+    quotationId: z.coerce.number().int().positive().optional(),
     amount: z.coerce.number().positive().optional(),
     gstRate: z.coerce.number().min(0).max(100).optional(),
     otherTaxRate: z.coerce.number().min(0).max(100).optional(),
@@ -7201,12 +7287,80 @@ router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(
       totalAmount: z.coerce.number().nonnegative().optional()
     })).optional()
   }), req.body);
-  const po = await db.purchaseOrder.findUnique({ where: { id: body.purchaseOrderId } });
+
+  let targetPoId = body.purchaseOrderId;
+
+  if (!targetPoId && body.quotationId) {
+    const quoteResp = await db.requirementResponse.findUnique({
+      where: { id: body.quotationId },
+      include: { requirement: true }
+    });
+
+    if (!quoteResp) {
+      throw new ApiError(404, 'Submitted quotation not found', 'QUOTATION_NOT_FOUND');
+    }
+
+    let po = await db.purchaseOrder.findFirst({
+      where: {
+        sellerId: quoteResp.sellerUserId,
+        title: { contains: `Quotation #${quoteResp.id}` }
+      }
+    });
+
+    if (!po) {
+      const unitPrice = Number(quoteResp.offeredPrice || 0);
+      const qty = Number(quoteResp.offeredQuantity || 1);
+      const totalVal = unitPrice * qty || Number(body.amount || 0);
+      const poNum = `PO-${Date.now().toString().slice(-6)}`;
+      const buyerId = quoteResp.requirement.createdById || userId(req);
+
+      po = await db.purchaseOrder.create({
+        data: {
+          poNumber: poNum,
+          title: `Purchase Order from Quotation #${quoteResp.id}: ${quoteResp.requirement.title}`,
+          status: 'accepted',
+          poStatus: 'ACCEPTED',
+          amount: totalVal,
+          totalValue: totalVal,
+          buyerId,
+          sellerId: quoteResp.sellerUserId,
+          sourceType: 'quotation',
+          paymentTerms: 'PAY_ON_INVOICE',
+          deliveryAddress: quoteResp.requirement.location || 'As per quotation terms',
+          items: {
+            create: [{
+              itemName: quoteResp.requirement.title,
+              description: quoteResp.message || 'Quotation item',
+              quantity: qty,
+              unitOfMeasure: quoteResp.requirement.unit || 'units',
+              unitPrice: unitPrice || totalVal,
+              taxRate: body.gstRate || 18,
+              totalAmount: totalVal
+            }]
+          }
+        }
+      });
+    }
+
+    targetPoId = po.id;
+  }
+
+  if (!targetPoId) {
+    throw new ApiError(400, 'Either purchaseOrderId or quotationId must be provided', 'INVALID_INPUT');
+  }
+
+  const po = await db.purchaseOrder.findUnique({ where: { id: targetPoId } });
   if (!po || (!isAdmin(req) && po.sellerId !== userId(req))) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-  const invoice = await fulfillmentWorkflow.createInvoice(actorFrom(req), body);
+
+  const invoice = await fulfillmentWorkflow.createInvoice(actorFrom(req), {
+    ...body,
+    purchaseOrderId: targetPoId
+  });
+
   await auditWrite(req, 'invoice.created', 'invoice', invoice.id);
   ok(res, invoice, 201);
 }));
+
 
 router.get('/invoices', authenticate, asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);

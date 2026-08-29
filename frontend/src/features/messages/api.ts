@@ -50,6 +50,19 @@ export interface ConversationDto {
     createdAt: string;
     updatedAt: string;
     tender?: { id: number; tenderId: string; title: string; status: string } | null;
+    quoteRequest?: {
+        id: number;
+        status?: string;
+        estimatedValue?: number | null;
+        quoteResponses?: Array<{
+            id: number;
+            status: string;
+            totalAmount?: number | null;
+            responseNumber?: string | null;
+            createdAt?: string;
+            deliveryDays?: number | null;
+        }>;
+    } | null;
     buyer?: MessageUserDto;
     seller?: MessageUserDto;
     messages?: MessageDto[];

@@ -2247,7 +2247,7 @@ export default function MasterAdminPage() {
                       </div>
                       {feature.enabled ? <ToggleRight className="h-6 w-6 text-emerald-600" /> : <ToggleLeft className="h-6 w-6 text-slate-400" />}
                     </div>
-                    <p className="mt-3 line-clamp-2 text-xs text-slate-500">{feature.description || 'Feature availability can be governed per company.'}</p>
+                    <p title={feature.description || 'Feature availability can be governed per company.'} className="mt-3 line-clamp-2 text-xs text-slate-500">{feature.description || 'Feature availability can be governed per company.'}</p>
                   </button>
                 ))}
               </div>
@@ -2426,7 +2426,7 @@ export default function MasterAdminPage() {
                         <tr key={tpl.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70 transition-colors">
                           <td className="px-4 py-2.5 font-semibold text-slate-800">{tpl.name}</td>
                           <td className="px-4 py-2.5 font-mono text-slate-500">{tpl.slug}</td>
-                          <td className="px-4 py-2.5 text-slate-600 max-w-[200px] truncate">{tpl.subject}</td>
+                          <td title={tpl.subject} className="px-4 py-2.5 text-slate-600 max-w-[200px] truncate">{tpl.subject}</td>
                           <td className="px-4 py-2.5">
                             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tpl.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
                               {tpl.isActive ? 'Active' : 'Inactive'}
@@ -2877,7 +2877,7 @@ const KpiCard = memo(function KpiCard({ label, value, subtext, icon: Icon, tone,
         </div>
         <div className="mt-3 flex items-center gap-1.5 border-t border-slate-100/80 pt-2.5">
           <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse" />
-          <p className="text-[11px] font-medium text-slate-500 truncate">{subtext}</p>
+          <p title={subtext} className="text-[11px] font-medium text-slate-500 truncate">{subtext}</p>
         </div>
       </CardContent>
     </Card>
@@ -2921,7 +2921,7 @@ const QueueCard = memo(function QueueCard({
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5">
-        <p className="text-xs font-medium text-slate-600 line-clamp-1">{detail}</p>
+        <p title={detail} className="text-xs font-medium text-slate-600 line-clamp-1">{detail}</p>
         <ArrowRight className="h-4 w-4 shrink-0 text-[#12335f] transition-transform duration-300 group-hover:translate-x-1" />
       </div>
     </button>
@@ -4415,7 +4415,7 @@ const Detail = memo(function Detail({ label, value }: { label: string; value: un
   return (
     <div>
       <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-0.5 truncate text-sm font-bold text-slate-800">{formatCell(value)}</p>
+      <p title={formatCell(value)} className="mt-0.5 truncate text-sm font-bold text-slate-800">{formatCell(value)}</p>
     </div>
   );
 });

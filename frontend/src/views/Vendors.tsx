@@ -11,6 +11,7 @@ import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
+import { GridCardSkeleton } from '../components/ui/skeleton';
 import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { useSupplierSummary } from '../features/ratings/hooks';
@@ -323,6 +324,14 @@ const Vendors = () => {
     };
   }, [vendors]);
 
+  if (loading && vendors.length === 0) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto">
+        <GridCardSkeleton count={6} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Transparent Header */}
@@ -497,13 +506,7 @@ const Vendors = () => {
           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Verified procurement suppliers</span>
         </div>
 
-          {loading ? (
-            <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" : "space-y-3"}>
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="h-40 bg-white border border-slate-200 rounded-2xl animate-pulse" />
-              ))}
-            </div>
-          ) : filteredVendors.length === 0 ? (
+          {filteredVendors.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
               <div className="h-16 w-16 bg-[#f8f9fa] border border-[#dadce0] rounded-full flex items-center justify-center mx-auto mb-4">
                 <Building2 className="h-8 w-8 text-[#12335f]/30" />
@@ -547,7 +550,7 @@ const Vendors = () => {
                     )}
                   </div>
 
-                  <p className="text-[11px] leading-relaxed text-slate-600 mb-4 flex-1 line-clamp-2 border-t border-b border-[#f1f3f5] py-3 my-2">
+                  <p title={`Specialized provider in ${(vendor.sellerProfile?.productCategories || []).join(', ') || 'Enterprise Supplies'}. Recognized for reliability.`} className="text-[11px] leading-relaxed text-slate-600 mb-4 flex-1 line-clamp-2 border-t border-b border-[#f1f3f5] py-3 my-2">
                     Specialized provider in {(vendor.sellerProfile?.productCategories || []).join(', ') || 'Enterprise Supplies'}. Recognized for reliability.
                   </p>
 

@@ -12,14 +12,19 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { runWithToast } from '../../../lib/toast';
 import { changePassword, disable2fa, enable2faRequest } from '../api';
+import { ProfileSkeleton } from '../../../components/ui/skeleton';
 
 export default function SecuritySettingsPage() {
-    const { user, logout, refreshUser } = useAuth();
+    const { user, loading, logout, refreshUser } = useAuth();
     const [enableModal, setEnableModal] = useState(false);
     const [disableModal, setDisableModal] = useState(false);
     const [pwModal, setPwModal] = useState(false);
 
     const has2fa = !!user?.twoFactorEnabled;
+
+    if (loading) {
+        return <ProfileSkeleton />;
+    }
 
     return (
         <div className="space-y-4 max-w-3xl">

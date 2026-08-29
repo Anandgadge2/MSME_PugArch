@@ -21,6 +21,8 @@ import {
   Clipboard,
   Truck
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { BuyerRequirementDetailSkeleton } from '@/components/ui/skeleton';
 import { getApi, postApi, peekApi, authHeaders } from '../../shared/apiClient';
 
 /* ── helpers ─────────────────────────────────────────────────────── */
@@ -316,57 +318,7 @@ const BuyerRequirementDetailsPage = () => {
   if (loading || redirecting) {
     return (
       <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
-        {/* Back Link Skeleton */}
-        <div className="h-4 w-36 rounded bg-slate-200 animate-pulse" />
-
-        {/* Top Alert Banner Skeleton */}
-        <div className="h-16 w-full rounded-2xl border border-blue-100 bg-blue-50/40 p-4 animate-pulse flex items-center justify-between">
-          <div className="space-y-1">
-            <div className="h-4 w-64 rounded bg-slate-200" />
-            <div className="h-3 w-80 rounded bg-slate-200" />
-          </div>
-          <div className="h-9 w-36 rounded-xl bg-slate-200" />
-        </div>
-
-        {/* Main Requirement Detail Card Skeleton */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm animate-pulse space-y-6">
-          {/* Header & Badges Skeleton */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="h-4 w-32 rounded bg-slate-200" />
-              <div className="flex gap-2">
-                <div className="h-6 w-16 rounded-full bg-slate-200" />
-                <div className="h-6 w-14 rounded-full bg-slate-200" />
-              </div>
-            </div>
-            <div className="h-8 w-3/4 rounded bg-slate-200" />
-          </div>
-
-          {/* Description Skeleton */}
-          <div className="space-y-2">
-            <div className="h-3 w-24 rounded bg-slate-200" />
-            <div className="h-4 w-full rounded bg-slate-200" />
-          </div>
-
-          {/* 2-Column Specs Grid Skeleton */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
-            <div className="space-y-4">
-              <div className="h-10 w-48 rounded bg-slate-200" />
-              <div className="h-10 w-48 rounded bg-slate-200" />
-              <div className="h-10 w-48 rounded bg-slate-200" />
-            </div>
-            <div className="space-y-4">
-              <div className="h-10 w-48 rounded bg-slate-200" />
-              <div className="h-10 w-48 rounded bg-slate-200" />
-              <div className="h-10 w-48 rounded bg-slate-200" />
-            </div>
-          </div>
-
-          {/* Action Button Skeleton */}
-          <div className="pt-4">
-            <div className="h-10 w-56 rounded-xl bg-slate-200" />
-          </div>
-        </div>
+        <BuyerRequirementDetailSkeleton />
       </div>
     );
   }

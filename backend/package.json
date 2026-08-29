@@ -23,6 +23,7 @@
     "cleanup:seed-data": "tsx scripts/cleanup-seed-data.ts",
     "backfill:org-membership": "tsx scripts/backfill-org-membership.ts",
     "attach-user-to-org": "tsx scripts/attach-user-to-org.ts",
+    "upload:category-photos": "tsx scripts/upload-category-photos.ts",
     "security:check": "npm run typecheck && npm run prisma:validate && npm run lint:security && npm run test:security && npm run audit:deps",
     "vercel-build:with-migrate": "npm run db:migrate && npm run vercel-build"
   },
@@ -43,6 +44,7 @@
     "nodemailer": "^9.0.3",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
+    "pusher": "^5.3.4",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "ws": "^8.21.3",

@@ -18,6 +18,9 @@ import {
   sendEmailOtpSchema,
   sendMobileOtpSchema,
   sendUnifiedOtpSchema,
+  subUserActivatePasswordSchema,
+  subUserSendMobileOtpSchema,
+  subUserVerifyMobileOtpSchema,
   verifyEmailOtpSchema,
   verifyMobileOtpSchema,
   verifyUnifiedOtpSchema
@@ -44,6 +47,12 @@ authRoutes.post('/forgot-password', forgotPasswordRateLimit, validate({ body: fo
 authRoutes.post('/forgot-password/send-otp', forgotPasswordRateLimit, validate({ body: forgotPasswordSchema }), authController.forgotPassword);
 authRoutes.post('/forgot-password/verify-otp', forgotPasswordRateLimit, validate({ body: verifyUnifiedOtpSchema }), authController.verifyForgotPasswordOtp);
 authRoutes.post('/reset-password', forgotPasswordRateLimit, validate({ body: resetPasswordSchema }), authController.resetPassword);
+
+// Sub-User First-Login Activation Routes
+authRoutes.post('/sub-user/activate/password', authenticate, validate({ body: subUserActivatePasswordSchema }), authController.subUserActivatePassword);
+authRoutes.post('/sub-user/activate/send-mobile-otp', authenticate, otpSendRateLimit, validate({ body: subUserSendMobileOtpSchema }), authController.subUserSendMobileOtp);
+authRoutes.post('/sub-user/activate/verify-mobile-otp', authenticate, validate({ body: subUserVerifyMobileOtpSchema }), authController.subUserVerifyMobileOtp);
+
 // Authenticated Routes
 authRoutes.post('/logout', optionalAuthenticate, authController.logout);
 authRoutes.get('/me', authenticate, authController.me);

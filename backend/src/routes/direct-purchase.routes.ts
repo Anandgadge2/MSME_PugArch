@@ -51,6 +51,26 @@ const checkoutSchema = z.object({
     requiredDeliveryDate: z.string().trim().optional().nullable()
 });
 
+const placeOrderSchema = z.object({
+    deliveryAddressId: z.number().int().positive().optional().nullable(),
+    deliveryAddress: z.string().trim().min(3, 'Delivery address line is required'),
+    city: z.string().trim().min(1, 'City is required'),
+    state: z.string().trim().min(1, 'State is required'),
+    pincode: z.string().trim().min(3, 'Pincode is required'),
+    contactName: z.string().trim().min(1, 'Contact person name is required'),
+    mobileNumber: z.string().trim().min(5, 'Mobile number is required'),
+
+    sameAsDelivery: z.boolean().optional().default(true),
+    billingAddress: z.string().trim().optional().nullable(),
+    companyName: z.string().trim().optional().nullable(),
+    gstin: z.string().trim().optional().nullable(),
+
+    deliveryInstructions: z.string().trim().max(1000).optional().nullable(),
+    expectedDeliveryDate: z.string().trim().optional().nullable(),
+    paymentMethod: z.string().trim().optional().default('PAY_ON_INVOICE')
+});
+
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 // 1. GET /api/direct-purchases
@@ -387,5 +407,192 @@ router.post(
     })
 );
 
+// 5. POST /api/direct-purchases/place-order
+// Direct Purchase checkout: Creates PurchaseOrder(s) directly from Cart without creating Procurement/RFQ
+router.post(
+    '/direct-purchases/place-order',
+    asyncRoute(async (req, res) => {
+        const buyerId = req.user!.id;
+        const orgId = req.user!.organizationId;
+
+        const body = placeOrderSchema.parse(req.body);
+
+        // Fetch active cart (by orgId or createdById)
+        const cart = await prisma.cart.findFirst({
+            where: {
+                ...(orgId ? { organizationId: orgId } : { createdById: buyerId }),
+                status: 'ACTIVE'
+            },
+            include: {
+                items: true
+            }
+        });
+
+        if (!cart || cart.items.length === 0) {
+            throw new ApiError(400, 'Your active cart is empty.', 'CART_EMPTY');
+        }
+
+        // Group items by sellerId
+        const itemsBySeller: Record<number, typeof cart.items> = {};
+        for (const item of cart.items) {
+            if (!itemsBySeller[item.sellerId]) {
+                itemsBySeller[item.sellerId] = [];
+            }
+            itemsBySeller[item.sellerId].push(item);
+        }
+
+        const createdOrders: any[] = [];
+
+        await prisma.$transaction(async (tx) => {
+            for (const [sellerIdStr, items] of Object.entries(itemsBySeller)) {
+                const sellerId = parseInt(sellerIdStr, 10);
+                let totalAmount = 0;
+                const poItemsData: any[] = [];
+
+                for (const item of items) {
+                    let unitPrice = Number(item.unitPrice);
+                    let taxRate = 0;
+                    let itemName = item.itemName;
+                    let unitOfMeasure = item.unitOfMeasure;
+
+                    if (item.productId) {
+                        const product = await tx.product.findUnique({
+                            where: { id: item.productId }
+                        });
+                        if (!product || product.status !== 'ACTIVE') {
+                            throw new ApiError(400, `Product "${item.itemName}" is unavailable.`, 'PRODUCT_UNAVAILABLE');
+                        }
+                        unitPrice = Number(product.discountPrice || product.price || unitPrice);
+                        taxRate = Number(product.taxRate || 0);
+                        itemName = product.name;
+                        unitOfMeasure = product.unitOfMeasure || 'units';
+                    } else if (item.serviceId) {
+                        const service = await tx.service.findUnique({
+                            where: { id: item.serviceId }
+                        });
+                        if (!service || service.status !== 'ACTIVE') {
+                            throw new ApiError(400, `Service "${item.itemName}" is unavailable.`, 'SERVICE_UNAVAILABLE');
+                        }
+                        unitPrice = Number(service.discountPrice || service.basePrice || unitPrice);
+                        taxRate = Number(service.taxRate || 0);
+                        itemName = service.name;
+                        unitOfMeasure = 'service';
+                    }
+
+                    const qty = Number(item.quantity);
+                    const excl = qty * unitPrice;
+                    const lineTotal = excl + excl * (taxRate / 100);
+                    totalAmount += lineTotal;
+
+                    poItemsData.push({
+                        productId: item.productId || null,
+                        itemName,
+                        quantity: item.quantity,
+                        unitOfMeasure,
+                        unitPrice,
+                        taxRate,
+                        totalAmount: lineTotal
+                    });
+                }
+
+                const poNum = numberSeries('PO');
+                const firstItemName = poItemsData[0]?.itemName || 'Items';
+                const poTitle = poItemsData.length === 1
+                    ? `Direct Purchase of ${firstItemName}`
+                    : `Direct Purchase of ${firstItemName} & ${poItemsData.length - 1} other item(s)`;
+
+                const fullDeliveryAddress = `${body.deliveryAddress}, ${body.city}, ${body.state} - ${body.pincode}. Contact: ${body.contactName} (${body.mobileNumber})`;
+                const fullBillingAddress = body.sameAsDelivery
+                    ? fullDeliveryAddress
+                    : (body.billingAddress || fullDeliveryAddress);
+
+                const daysToAdd = body.expectedDeliveryDate ? 14 : 30;
+                const expectedDelivery = body.expectedDeliveryDate
+                    ? new Date(body.expectedDeliveryDate)
+                    : new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000);
+
+                const po = await tx.purchaseOrder.create({
+                    data: {
+                        poNumber: poNum,
+                        buyerId,
+                        sellerId,
+                        title: poTitle,
+                        amount: totalAmount,
+                        totalValue: totalAmount,
+                        status: 'ORDER_PLACED',
+                        poStatus: 'ISSUED',
+                        sourceType: 'direct_purchase',
+                        deliveryAddress: fullDeliveryAddress,
+                        paymentTerms: body.paymentMethod || 'PAY_ON_INVOICE',
+                        expectedDelivery,
+                        items: {
+                            create: poItemsData
+                        },
+                        metadata: {
+                            deliveryDetails: {
+                                address: body.deliveryAddress,
+                                city: body.city,
+                                state: body.state,
+                                pincode: body.pincode,
+                                contactName: body.contactName,
+                                mobileNumber: body.mobileNumber,
+                                instructions: body.deliveryInstructions || null
+                            },
+                            billingDetails: {
+                                sameAsDelivery: body.sameAsDelivery,
+                                billingAddress: fullBillingAddress,
+                                companyName: body.companyName || null,
+                                gstin: body.gstin || null
+                            },
+                            paymentMethod: body.paymentMethod,
+                            sellerAcceptance: 'PENDING',
+                            placedAt: new Date().toISOString()
+                        }
+                    }
+                });
+
+                await tx.deliveryWorkflow.create({
+                    data: { purchaseOrderId: po.id, status: 'created' }
+                });
+
+                createdOrders.push({
+                    poId: po.id,
+                    poNumber: poNum,
+                    sellerId,
+                    totalAmount
+                });
+
+                // Notify seller
+                try {
+                    await tx.notification.create({
+                        data: {
+                            userId: sellerId,
+                            title: 'New Direct Order Received',
+                            message: `Purchase Order ${poNum} for "${poTitle}" requires your acceptance.`,
+                            type: 'purchase_order_created',
+                            priority: 'high',
+                            redirectUrl: '/seller/orders'
+                        }
+                    });
+                } catch {
+                    // non-fatal
+                }
+            }
+
+            // Update cart status to CONVERTED_TO_ORDER
+            await tx.cart.update({
+                where: { id: cart.id },
+                data: {
+                    status: 'CONVERTED_TO_ORDER',
+                    convertedAt: new Date()
+                }
+            });
+        }, { timeout: 30000 });
+
+        return ok(res, { orders: createdOrders }, 201);
+    })
+);
+
 export default router;
 export { router as directPurchaseRoutes };
+
