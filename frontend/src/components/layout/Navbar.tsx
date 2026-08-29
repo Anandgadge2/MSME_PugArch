@@ -490,7 +490,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const isActuallyCollapsed = isCollapsed && !isHovered;
 
   const handleLogout = useCallback(() => {
-    logout();
+    logout('/');
   }, [logout]);
   const isShgAccount = isShgUser(user);
   const accountLabel = isShgAccount ? 'SHG' : user?.role || 'user';
@@ -853,8 +853,8 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   const displayRole = isShgAccount ? 'SHG' : user?.role || 'user';
 
   const handleLogout = async () => {
-    await logout();
-    router.push('/');
+    await logout('/');
+    router.replace('/');
   };
 
   const handleSwitchRole = async (targetRole: 'buyer' | 'seller') => {

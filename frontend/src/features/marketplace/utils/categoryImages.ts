@@ -274,7 +274,7 @@ export const getCategoryVisualMeta = (category: MarketplaceCategory | string): C
                 };
             }
             const resolved = resolveMediaUrl(trimmed);
-            if (resolved && !resolved.includes('/api/files/raw/categories/')) {
+            if (resolved) {
                 return {
                     imageUrl: resolved,
                     accentColor: '#2563eb',
@@ -299,11 +299,11 @@ export const getCategoryImageUrl = (category: MarketplaceCategory | string): str
         const rawCustom = (category as any).imageUrl || (category as any).image || (category as any).photoUrl;
         if (typeof rawCustom === 'string' && rawCustom.trim()) {
             const trimmed = rawCustom.trim();
-            if (trimmed.startsWith('data:')) {
+            if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
                 return normalizeDataUri(trimmed);
             }
             const resolved = resolveMediaUrl(trimmed);
-            if (resolved && !resolved.includes('/api/files/raw/categories/')) {
+            if (resolved) {
                 return resolved;
             }
         }
