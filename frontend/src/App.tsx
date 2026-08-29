@@ -431,9 +431,9 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   }, []);
 
   const isDataSettled = isFetchingQueries === 0 || safetyTimeoutPassed;
-  const isInitialReady = !loading;
-  const isAuthTransitionReady = isPageMounted && !loading;
-  const isLogoutReady = isPageMounted;
+  const isInitialReady = !loading || safetyTimeoutPassed;
+  const isAuthTransitionReady = isPageMounted && (!loading || safetyTimeoutPassed);
+  const isLogoutReady = isPageMounted || safetyTimeoutPassed;
 
   const [hasCookie, setHasCookie] = useState(false);
 
