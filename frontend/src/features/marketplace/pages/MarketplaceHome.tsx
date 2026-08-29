@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../../hooks/useAuth';
 import { api } from '../../../lib/api';
-import PremiumLoader from '../../../components/PremiumLoader';
 import {
     marketplaceApi,
     type MarketplaceHomeData,
@@ -133,9 +132,6 @@ export default function MarketplaceHome() {
         return Array.from(map.values());
     }, [data?.largeIndustries, buyerFallbackData?.buyers, data?.featuredRequirements]);
 
-    const [loaderFinished, setLoaderFinished] = useState(false);
-    const isPreparingPage = isHomeLoading && !data;
-
     const categories = homeLayoutData?.categories?.length ? homeLayoutData.categories : data?.categories || [];
     const layoutSections = homeLayoutData?.sections || [];
     const itemLayoutSections = layoutSections.filter((section: MarketplaceLayoutSection) =>
@@ -178,15 +174,7 @@ export default function MarketplaceHome() {
     });
 
     return (
-        <>
-            {(!loaderFinished || isPreparingPage) && (
-                <PremiumLoader 
-                    mode="initial" 
-                    isReady={!isPreparingPage} 
-                    onComplete={() => setLoaderFinished(true)} 
-                />
-            )}
-            <Suspense fallback={null}>
+        <Suspense fallback={null}>
                 <div className="flex min-h-dvh flex-col overflow-x-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/60 via-slate-50 to-slate-100/80 text-slate-800">
                     <main className="flex-1 overflow-x-hidden">
                 <MarketplaceNav categories={categories} />
@@ -325,7 +313,6 @@ export default function MarketplaceHome() {
                     <MarketplaceFooter />
                 </div>
             </Suspense>
-        </>
     );
 }
 

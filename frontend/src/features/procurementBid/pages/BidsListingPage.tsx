@@ -28,6 +28,7 @@ import { useResponsiveViewMode } from '../../shared/hooks';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { openFileAsset } from '../../../lib/files';
+import { cn } from '../../../lib/utils';
 
 const pageSize = 10;
 const selectClass = 'h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10';
@@ -312,7 +313,7 @@ export default function BidsListingPage() {
           <section className="min-w-0 space-y-4">
             {/* ── Search + View Toggle Toolbar ── */}
             <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
+              <div className="flex items-center gap-1.5 sm:gap-3 flex-nowrap">
                 <div className="relative flex-1 min-w-0">
                   <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
@@ -322,13 +323,18 @@ export default function BidsListingPage() {
                     className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
                   />
                 </div>
-                <div className="flex items-center gap-2 justify-between sm:justify-end">
-                  <button
-                    onClick={() => setMobileFilters(v => !v)}
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 lg:hidden shadow-xs hover:border-slate-300 transition-colors"
-                  >
-                    <SlidersHorizontal className="h-4 w-4" /> Filters
-                  </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileFilters(v => !v)}
+                  className={cn(
+                    "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-2.5 sm:px-3.5 text-[10px] font-black uppercase tracking-wider transition-all lg:hidden",
+                    mobileFilters ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm" : "border-slate-200 bg-slate-50 text-slate-700 shadow-xs active:scale-[0.98]"
+                  )}
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
+                  <span>Filters</span>
+                </button>
+                <div className="shrink-0 flex items-center">
                   <ViewModeToggle value={viewMode} onChange={setViewMode} />
                 </div>
               </div>

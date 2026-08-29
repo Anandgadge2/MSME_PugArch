@@ -346,97 +346,97 @@ export default function GrnListPage() {
 
             {/* Search + Filter + View Toggle Toolbar */}
             <div className={cn("rounded-[18px] border border-slate-200/90 bg-white p-3 shadow-sm", activeFilterCount > 0 ? "space-y-3" : "")}>
-                
-                <div className="flex flex-wrap lg:flex-nowrap items-center gap-3 w-full">
-                    {/* Search */}
-                    <div className="flex-[1_1_auto] min-w-[240px] relative">
-                        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={event => { setSearch(event.target.value); setPage(1); }}
-                            placeholder="Search GRN, PO, seller, receiver, status..."
-                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 !text-[13px] lg:!text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-                        />
-                    </div>
+                <ResponsiveFilterBar
+                    activeFilterCount={activeFilterCount}
+                    searchInput={
+                        <div className="relative w-full">
+                            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                value={search}
+                                onChange={event => { setSearch(event.target.value); setPage(1); }}
+                                placeholder="Search GRN, PO, seller, receiver, status..."
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                            />
+                        </div>
+                    }
+                    filters={
+                        <>
+                            {/* Status */}
+                            <div className="w-full sm:w-[130px]">
+                                <select value={filter} onChange={e => { setFilter(e.target.value as any); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
+                                    <option value="ALL">Status: All</option>
+                                    <option value="DRAFT">Draft</option>
+                                    <option value="SUBMITTED">Submitted</option>
+                                    <option value="APPROVED">Approved</option>
+                                    <option value="PARTIAL">Partial</option>
+                                    <option value="REJECTED">Rejected</option>
+                                </select>
+                            </div>
 
-                    {/* Status */}
-                    <div className="flex-[0_0_auto] w-full sm:w-[130px]">
-                        <select value={filter} onChange={e => { setFilter(e.target.value as any); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
-                            <option value="ALL">Status: All</option>
-                            <option value="DRAFT">Draft</option>
-                            <option value="SUBMITTED">Submitted</option>
-                            <option value="APPROVED">Approved</option>
-                            <option value="PARTIAL">Partial</option>
-                            <option value="REJECTED">Rejected</option>
-                        </select>
-                    </div>
+                            {/* PO */}
+                            <div className="w-full sm:w-[135px]">
+                                <select value={filterPo} onChange={e => { setFilterPo(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
+                                    <option value="ALL">PO: All</option>
+                                    {uniquePos.map(po => <option key={po} value={po}>{po.length > 20 ? po.substring(0, 20) + '...' : po}</option>)}
+                                </select>
+                            </div>
 
-                    {/* PO */}
-                    <div className="flex-[0_0_auto] w-full sm:w-[135px]">
-                        <select value={filterPo} onChange={e => { setFilterPo(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
-                            <option value="ALL">PO: All</option>
-                            {uniquePos.map(po => <option key={po} value={po}>{po.length > 20 ? po.substring(0, 20) + '...' : po}</option>)}
-                        </select>
-                    </div>
+                            {/* Seller */}
+                            <div className="w-full sm:w-[135px]">
+                                <select value={filterSeller} onChange={e => { setFilterSeller(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
+                                    <option value="ALL">Seller: All</option>
+                                    {uniqueSellers.map(s => <option key={s} value={s}>{s.length > 20 ? s.substring(0, 20) + '...' : s}</option>)}
+                                </select>
+                            </div>
 
-                    {/* Seller */}
-                    <div className="flex-[0_0_auto] w-full sm:w-[135px]">
-                        <select value={filterSeller} onChange={e => { setFilterSeller(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
-                            <option value="ALL">Seller: All</option>
-                            {uniqueSellers.map(s => <option key={s} value={s}>{s.length > 20 ? s.substring(0, 20) + '...' : s}</option>)}
-                        </select>
-                    </div>
+                            {/* Items */}
+                            <div className="w-full sm:w-[110px]">
+                                <select value={filterItems} onChange={e => { setFilterItems(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
+                                    <option value="ALL">Items: All</option>
+                                    <option value="1">1 line</option>
+                                    <option value="2">2 lines</option>
+                                    <option value="3+">3+ lines</option>
+                                </select>
+                            </div>
 
-                    {/* Items */}
-                    <div className="flex-[0_0_auto] w-full sm:w-[110px]">
-                        <select value={filterItems} onChange={e => { setFilterItems(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
-                            <option value="ALL">Items: All</option>
-                            <option value="1">1 line</option>
-                            <option value="2">2 lines</option>
-                            <option value="3+">3+ lines</option>
-                        </select>
-                    </div>
-
-                    {/* Date Filter Component */}
-                    <div className="flex-[0_0_auto] w-full sm:w-[130px]">
-                        <DateFilterPopover 
-                            receivedFrom={filterReceivedFrom} setReceivedFrom={(v) => { setFilterReceivedFrom(v); setPage(1); }}
-                            receivedTo={filterReceivedTo} setReceivedTo={(v) => { setFilterReceivedTo(v); setPage(1); }}
-                            updatedFrom={filterUpdatedFrom} setUpdatedFrom={(v) => { setFilterUpdatedFrom(v); setPage(1); }}
-                            updatedTo={filterUpdatedTo} setUpdatedTo={(v) => { setFilterUpdatedTo(v); setPage(1); }}
-                            activeCount={(filterReceivedFrom || filterReceivedTo ? 1 : 0) + (filterUpdatedFrom || filterUpdatedTo ? 1 : 0)}
-                            clearDates={() => {
-                                setFilterReceivedFrom('');
-                                setFilterReceivedTo('');
-                                setFilterUpdatedFrom('');
-                                setFilterUpdatedTo('');
-                                setPage(1);
-                            }}
-                        />
-                    </div>
-
-                    {/* Right Actions */}
-                    <div className="flex-[0_0_auto] flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
-                        {activeFilterCount > 0 && (
-                            <Button
-                                variant="ghost"
-                                onClick={clearFilters}
-                                className="h-9 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 shrink-0 hidden lg:inline-flex"
-                            >
-                                Clear Filters
-                            </Button>
-                        )}
-                        <div className="shrink-0 flex items-center gap-2 ml-auto">
-                            <ViewModeToggle value={viewMode} onChange={setViewMode} />
-                            {canCreate && (
-                                <Button onClick={() => setShowCreate(true)} className="h-10 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-xs font-black uppercase rounded-lg shadow-sm whitespace-nowrap px-4 shrink-0 transition-all hover:-translate-y-[1px] active:scale-[0.98]">
-                                    <Plus className="mr-1.5 h-4 w-4 shrink-0" /> New GRN
+                            {/* Date Filter Component */}
+                            <div className="w-full sm:w-[130px]">
+                                <DateFilterPopover 
+                                    receivedFrom={filterReceivedFrom} setReceivedFrom={(v) => { setFilterReceivedFrom(v); setPage(1); }}
+                                    receivedTo={filterReceivedTo} setReceivedTo={(v) => { setFilterReceivedTo(v); setPage(1); }}
+                                    updatedFrom={filterUpdatedFrom} setUpdatedFrom={(v) => { setFilterUpdatedFrom(v); setPage(1); }}
+                                    updatedTo={filterUpdatedTo} setUpdatedTo={(v) => { setFilterUpdatedTo(v); setPage(1); }}
+                                    activeCount={(filterReceivedFrom || filterReceivedTo ? 1 : 0) + (filterUpdatedFrom || filterUpdatedTo ? 1 : 0)}
+                                    clearDates={() => {
+                                        setFilterReceivedFrom('');
+                                        setFilterReceivedTo('');
+                                        setFilterUpdatedFrom('');
+                                        setFilterUpdatedTo('');
+                                        setPage(1);
+                                    }}
+                                />
+                            </div>
+                            {activeFilterCount > 0 && (
+                                <Button
+                                    variant="ghost"
+                                    onClick={clearFilters}
+                                    className="h-10 px-3 text-xs font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl shrink-0"
+                                >
+                                    Clear Filters
                                 </Button>
                             )}
-                        </div>
-                    </div>
-                </div>
+                        </>
+                    }
+                    viewToggle={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+                    endContent={
+                        canCreate && (
+                            <Button onClick={() => setShowCreate(true)} className="h-10 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-xs font-black uppercase rounded-xl shadow-sm whitespace-nowrap px-4 shrink-0 transition-all hover:-translate-y-[1px] active:scale-[0.98]">
+                                <Plus className="mr-1.5 h-4 w-4 shrink-0" /> New GRN
+                            </Button>
+                        )
+                    }
+                />
 
                 {/* Active Filter Chips */}
                 {activeFilterCount > 0 && (

@@ -17,6 +17,8 @@ import {
   resetPasswordSchema,
   sendEmailOtpSchema,
   sendMobileOtpSchema,
+  subUserMobileOtpSchema,
+  verifySubUserMobileOtpSchema,
   sendUnifiedOtpSchema,
   verifyEmailOtpSchema,
   verifyMobileOtpSchema,
@@ -48,6 +50,8 @@ authRoutes.post('/reset-password', forgotPasswordRateLimit, validate({ body: res
 authRoutes.post('/logout', optionalAuthenticate, authController.logout);
 authRoutes.get('/me', authenticate, authController.me);
 authRoutes.post('/change-password', authenticate, validate({ body: changePasswordSchema }), authController.changePassword);
+authRoutes.post('/sub-user/mobile/send-otp', authenticate, otpSendRateLimit, validate({ body: subUserMobileOtpSchema }), authController.sendSubUserMobileOtp);
+authRoutes.post('/sub-user/mobile/verify', authenticate, validate({ body: verifySubUserMobileOtpSchema }), authController.verifySubUserMobileOtp);
 authRoutes.post('/switch-role', authenticate, authController.switchRole);
 authRoutes.post('/activate-dual-role', authenticate, authController.activateDualRole);
 

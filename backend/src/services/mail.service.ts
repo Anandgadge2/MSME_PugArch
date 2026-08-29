@@ -353,3 +353,96 @@ export const sendAdminWelcomeEmail = async (params: SendAdminWelcomeEmailParams)
     return false;
   }
 };
+
+export interface SendTeamInvitationCredentialsParams {
+  email: string;
+  name: string;
+  temporaryPassword: string;
+  roleNames: string[];
+  inviterName: string;
+  workspaceName: string;
+  organizationId?: number | null;
+}
+
+const escapeHtml = (value: unknown) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
+/**
+ * Sends one-time credentials for a scoped team account. The temporary
+ * password is never persisted outside the user's password hash and this
+ * delivery attempt.
+ */
+export const sendTeamInvitationCredentialsEmail = async (
+  params: SendTeamInvitationCredentialsParams
+): Promise<boolean> => {
+  const {
+    email,
+    name,
+    temporaryPassword,
+    roleNames,
+    inviterName,
+    workspaceName,
+    organizationId
+  } = params;
+
+  try {
+    const rawPortalUrl = env.FRONTEND_URL || process.env.PRODUCTION_URL || process.env.PUBLIC_URL || process.env.APP_URL || process.env.PORTAL_URL || 'http://localhost:3000';
+    const portalUrl = rawPortalUrl.trim().replace(/\/+$/, '');
+    const loginUrl = `${portalUrl}/login?email=${encodeURIComponent(email)}`;
+    const tenantId = organizationId || 1;
+    const settings = db.companySetting
+      ? await db.companySetting.findUnique({
+          where: { companyId_key: { companyId: tenantId, key: 'portal-email-settings' } }
+        }).catch(() => null)
+      : null;
+    const mailSettings = settings?.value || {};
+    const fromEmail = mailSettings.fromEmail || env.SMTP_USER || 'no-reply@jsgsmile.gov.in';
+    const fromName = mailSettings.fromName || 'JSG SMILE Portal';
+    const transporter = await getTransporterForCompany(tenantId);
+    const safeRoles = roleNames.length ? roleNames.map(escapeHtml).join(', ') : 'Workspace user';
+
+    await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: email,
+      subject: `[JSG SMILE] You have been invited to ${workspaceName}`,
+      html: `
+        <div style="font-family:Inter,Arial,sans-serif;background:#f4f7fb;padding:28px;color:#172033;">
+          <div style="max-width:620px;margin:auto;background:#fff;border:1px solid #dbe3ef;border-radius:16px;overflow:hidden;box-shadow:0 16px 40px rgba(15,35,65,.08);">
+            <div style="height:5px;background:linear-gradient(90deg,#f59e0b 0 33%,#fff 33% 66%,#10b981 66%);"></div>
+            <div style="background:#0b2447;color:#fff;padding:28px 32px;">
+              <div style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#b9c9de;">JSG SMILE secure access</div>
+              <h1 style="margin:8px 0 0;font-size:24px;line-height:1.3;">Welcome to ${escapeHtml(workspaceName)}</h1>
+            </div>
+            <div style="padding:30px 32px;">
+              <p style="margin-top:0;font-size:16px;">Hello <strong>${escapeHtml(name)}</strong>,</p>
+              <p style="font-size:14px;line-height:1.7;color:#475569;">${escapeHtml(inviterName)} created a secure sub-login for you. Your access is limited to the roles and permissions assigned inside this workspace.</p>
+              <div style="margin:24px 0;border:1px solid #dbe3ef;border-radius:12px;background:#f8fafc;padding:20px;">
+                <div style="margin-bottom:12px;font-size:12px;font-weight:800;text-transform:uppercase;color:#64748b;">Login credentials</div>
+                <table style="width:100%;font-size:14px;border-collapse:collapse;">
+                  <tr><td style="padding:7px 0;color:#64748b;width:145px;">Email</td><td style="padding:7px 0;font-weight:700;">${escapeHtml(email)}</td></tr>
+                  <tr><td style="padding:7px 0;color:#64748b;">Temporary password</td><td style="padding:7px 0;font-family:monospace;font-size:16px;font-weight:800;color:#9a5b00;">${escapeHtml(temporaryPassword)}</td></tr>
+                  <tr><td style="padding:7px 0;color:#64748b;">Assigned role(s)</td><td style="padding:7px 0;font-weight:700;">${safeRoles}</td></tr>
+                </table>
+              </div>
+              <div style="text-align:center;margin:28px 0;">
+                <a href="${loginUrl}" style="display:inline-block;background:#12335f;color:#fff;padding:14px 28px;border-radius:9px;text-decoration:none;font-size:14px;font-weight:800;">Sign in and activate account</a>
+              </div>
+              <div style="border-radius:10px;background:#fff7e6;border:1px solid #f8d594;padding:15px;color:#7a4a00;font-size:13px;line-height:1.6;">
+                <strong>Required on first login:</strong> change this temporary password, then verify your mobile number using OTP. Dashboard access remains locked until both steps are complete.
+              </div>
+              <p style="margin:22px 0 0;font-size:12px;color:#64748b;">If you were not expecting this account, contact ${escapeHtml(inviterName)} and do not use these credentials.</p>
+            </div>
+          </div>
+        </div>
+      `
+    });
+    return true;
+  } catch (error: any) {
+    console.error(`[TeamInviteMail] Failed to send credentials to ${email}:`, error?.message || error);
+    return false;
+  }
+};
