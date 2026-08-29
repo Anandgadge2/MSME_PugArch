@@ -2702,6 +2702,9 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
 
   const ext = path.extname(rawKey).toLowerCase();
   const contentType = RAW_MIME_TYPES[ext] || 'application/octet-stream';
+  const cacheControl = rawKey.startsWith('categories/photos/') && req.query.v
+    ? 'public, max-age=31536000, s-maxage=31536000, immutable'
+    : 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400';
 
   // 1. Try authenticated GCS client
   try {
@@ -2712,7 +2715,7 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
       const [buffer] = await file.download();
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', buffer.length);
-      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+      res.setHeader('Cache-Control', cacheControl);
       res.setHeader('Access-Control-Allow-Origin', '*');
       return res.end(buffer);
     }
@@ -2728,7 +2731,7 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
       const headerContentType = response.headers.get('content-type') || contentType;
       res.setHeader('Content-Type', headerContentType);
       res.setHeader('Content-Length', buffer.length);
-      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+      res.setHeader('Cache-Control', cacheControl);
       res.setHeader('Access-Control-Allow-Origin', '*');
       return res.end(buffer);
     }
