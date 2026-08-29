@@ -55,16 +55,16 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
                 className="absolute inset-0 h-full w-full bg-slate-100 object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
             />
             
-            {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/55 via-[35%] to-white/5" />
+            {/* Lower side whitish shade overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/60 via-[12%] to-transparent" />
             
             {/* Category Name */}
             <div className="relative z-10 w-full p-3 sm:p-4 text-center">
                 <span className={cn(
-                    "block w-full text-xs sm:text-[13px] font-extrabold leading-tight line-clamp-2 transition-colors duration-200",
+                    "block w-full text-xs sm:text-[13px] font-black leading-tight line-clamp-2 transition-colors duration-200",
                     selected
                         ? "text-blue-700 font-black"
-                        : "text-slate-800 group-hover:text-blue-600"
+                        : "text-slate-900 group-hover:text-blue-600"
                 )}>
                     {category.name}
                 </span>
@@ -73,7 +73,7 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     );
 
     const containerClassName = cn(
-        'group relative flex flex-col bg-white rounded-2xl sm:rounded-3xl transition-all duration-300 cursor-pointer border border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-blue-300 w-full aspect-[4/5] sm:aspect-square md:aspect-[4/5] xl:aspect-[3/4]',
+        'group relative flex flex-col bg-white rounded-2xl sm:rounded-3xl transition-all duration-300 cursor-pointer border border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-blue-300 w-full aspect-[4/5] sm:aspect-square md:aspect-[4/5] xl:aspect-[4/5]',
         selected && 'shadow-xl ring-2 ring-blue-500 border-blue-400 scale-[1.02] z-10'
     );
 

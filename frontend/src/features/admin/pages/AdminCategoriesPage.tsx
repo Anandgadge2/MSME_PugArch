@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit2, Trash2, Search, RefreshCw, FolderPlus, CheckCircle2, AlertTriangle, Layers, Tag, ArrowUp, ArrowDown, ArrowUpDown, Upload, Image as ImageIcon, X, Package, Wrench, Boxes, RotateCcw, Clock, Calendar, Filter } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, RefreshCw, FolderPlus, CheckCircle2, AlertTriangle, Layers, Tag, ArrowUp, ArrowDown, ArrowUpDown, Upload, Image as ImageIcon, X, Package, Wrench, Boxes, RotateCcw, Clock, Calendar, Filter, Sparkles, Info, Eye, Check, AlertCircle, Maximize2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../../lib/api';
 import { Button } from '../../../components/ui/button';
@@ -20,6 +20,15 @@ export interface Category {
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
+}
+
+interface ImageAnalysis {
+  width: number;
+  height: number;
+  aspectRatioLabel: string;
+  isOptimalRatio: boolean;
+  fileSizeMb?: number;
+  fileName?: string;
 }
 
 type SortField = 'id' | 'name' | 'type' | 'slug' | 'isActive' | 'updatedAt';
@@ -49,6 +58,7 @@ export default function AdminCategoriesPage() {
   const [formIsActive, setFormIsActive] = useState<boolean>(true);
   const [imagePreview, setImagePreview] = useState<string>('');
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [imageAnalysis, setImageAnalysis] = useState<ImageAnalysis | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,6 +96,45 @@ export default function AdminCategoriesPage() {
     }
   };
 
+  const analyzeImageDimensions = (url: string, file?: File) => {
+    if (!url) {
+      setImageAnalysis(null);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      const ratio = w / h;
+      let label = 'Portrait 3:4 (Ideal for Category Cards)';
+      let isOptimalRatio = true;
+
+      if (ratio >= 0.65 && ratio <= 0.85) {
+        label = 'Portrait ~3:4 (Perfect Fit)';
+        isOptimalRatio = true;
+      } else if (ratio > 0.85 && ratio <= 1.15) {
+        label = 'Square 1:1 (Good)';
+        isOptimalRatio = true;
+      } else if (ratio > 1.15) {
+        label = 'Landscape (Subject will be centered)';
+        isOptimalRatio = false;
+      } else {
+        label = 'Tall Portrait (Sides will be cropped to fit)';
+        isOptimalRatio = false;
+      }
+
+      setImageAnalysis({
+        width: w,
+        height: h,
+        aspectRatioLabel: label,
+        isOptimalRatio,
+        fileSizeMb: file ? Number((file.size / (1024 * 1024)).toFixed(2)) : undefined,
+        fileName: file?.name
+      });
+    };
+    img.src = url;
+  };
+
   const openAddModal = () => {
     setEditingCategory(null);
     setFormName('');
@@ -94,6 +143,7 @@ export default function AdminCategoriesPage() {
     setFormImageUrl('');
     setFormIsActive(true);
     setImagePreview('');
+    setImageAnalysis(null);
     setPendingImageFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setIsAddModalOpen(true);
@@ -106,8 +156,14 @@ export default function AdminCategoriesPage() {
     setFormDescription(cat.description || '');
     setFormImageUrl(cat.imageUrl || '');
     setFormIsActive(cat.isActive !== false);
-    setImagePreview(cat.imageUrl || '');
+    const existingImg = cat.imageUrl || '';
+    setImagePreview(existingImg);
     setPendingImageFile(null);
+    if (existingImg) {
+      analyzeImageDimensions(existingImg);
+    } else {
+      setImageAnalysis(null);
+    }
     if (fileInputRef.current) fileInputRef.current.value = '';
     setIsAddModalOpen(true);
   };
@@ -127,8 +183,10 @@ export default function AdminCategoriesPage() {
       return;
     }
 
+    const previewUrl = URL.createObjectURL(file);
     setPendingImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+    setImagePreview(previewUrl);
+    analyzeImageDimensions(previewUrl, file);
   };
 
   const uploadCategoryImage = async (categoryId: number, file: File): Promise<string> => {
@@ -157,6 +215,7 @@ export default function AdminCategoriesPage() {
   const handleRemoveImage = () => {
     setImagePreview('');
     setFormImageUrl('');
+    setImageAnalysis(null);
     setPendingImageFile(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -804,55 +863,97 @@ export default function AdminCategoriesPage() {
 
       {/* Add / Edit Category Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">
-                {editingCategory ? 'Edit Category' : 'Add New Category'}
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-2xl sm:max-w-3xl w-full p-5 sm:p-7 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-5">
+              <div>
+                <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  {editingCategory ? 'Edit Category & Visual Asset' : 'Add New Category'}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Configure category taxonomy name, classification, and marketplace card visuals.
+                </p>
+              </div>
               <button
                 onClick={() => setIsAddModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 font-bold text-lg"
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 font-bold text-lg transition-colors"
               >
                 ×
               </button>
             </div>
 
-            <form onSubmit={handleSaveCategory} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
-                  Category Name *
-                </label>
-                <Input
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="e.g., Solar & Renewable Energy"
-                  required
-                  className="h-10 border-slate-300 text-xs"
-                />
+            <form onSubmit={handleSaveCategory} className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="form-category-name" className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
+                    Category Name *
+                  </label>
+                  <Input
+                    id="form-category-name"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="e.g., Solar & Renewable Energy"
+                    required
+                    className="h-10 border-slate-300 text-xs font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="form-category-type" className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
+                    Category Classification *
+                  </label>
+                  <select
+                    id="form-category-type"
+                    value={formType}
+                    onChange={(e) => setFormType(e.target.value as any)}
+                    className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-xs"
+                  >
+                    <option value="BOTH">Both (Product & Service)</option>
+                    <option value="PRODUCT">Product Only</option>
+                    <option value="SERVICE">Service Only</option>
+                  </select>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
-                  Category Type *
-                </label>
-                <select
-                  value={formType}
-                  onChange={(e) => setFormType(e.target.value as any)}
-                  className="w-full h-10 rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
-                >
-                  <option value="BOTH">Both (Product & Service)</option>
-                  <option value="PRODUCT">Product Only</option>
-                  <option value="SERVICE">Service Only</option>
-                </select>
-              </div>
+              {/* ── Category Photo Section & Guidelines ── */}
+              <div className="rounded-xl border border-slate-200/90 bg-slate-50/50 p-4 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-200/70 pb-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <ImageIcon className="h-4 w-4 text-indigo-600" />
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+                      Category Card Photo Configuration
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    Visible across buyer portal & marketplace categories
+                  </span>
+                </div>
 
-              {/* Category photo upload */}
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
-                  Category Photo
-                </label>
-                
+                {/* Configuration Guidelines Banner */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                    <span className="text-slate-400 font-bold block uppercase text-[9px] tracking-wider">Aspect Ratio</span>
+                    <span className="font-extrabold text-slate-800">3:4 or 4:5 Portrait</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">Square (1:1) also works</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                    <span className="text-slate-400 font-bold block uppercase text-[9px] tracking-wider">Optimal Size</span>
+                    <span className="font-extrabold text-slate-800">800 × 1000 px</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">Min: 400 × 500 px</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                    <span className="text-slate-400 font-bold block uppercase text-[9px] tracking-wider">Framing</span>
+                    <span className="font-extrabold text-slate-800">Center Subject</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">Avoid bottom-edge details</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                    <span className="text-slate-400 font-bold block uppercase text-[9px] tracking-wider">File Type</span>
+                    <span className="font-extrabold text-slate-800">PNG, JPG, WebP</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">Max file size 5MB</span>
+                  </div>
+                </div>
+
+                {/* Hidden File Input */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -861,59 +962,140 @@ export default function AdminCategoriesPage() {
                   className="hidden"
                 />
 
-                {imagePreview ? (
-                  <div className="flex items-center gap-3.5 p-3 rounded-lg border border-slate-200 bg-slate-50/70">
-                    <div className="h-14 w-14 rounded-lg border border-slate-200 bg-white flex items-center justify-center shadow-2xs shrink-0 overflow-hidden">
+                {/* Photo Upload & Previews Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start pt-1">
+                  {/* Left Column: Upload Controls & Specs (7 cols) */}
+                  <div className="md:col-span-7 space-y-3">
+                    {imagePreview ? (
+                      <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-3 shadow-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            Image Selected
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                            >
+                              Change Photo
+                            </button>
+                            <span className="text-slate-300">•</span>
+                            <button
+                              type="button"
+                              onClick={handleRemoveImage}
+                              className="text-xs font-bold text-red-600 hover:text-red-800 underline cursor-pointer"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Image Specs & Analysis */}
+                        {imageAnalysis && (
+                          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between text-slate-600">
+                              <span className="text-slate-500 font-medium">Dimensions:</span>
+                              <span className="font-mono font-bold text-slate-800">{imageAnalysis.width} × {imageAnalysis.height} px</span>
+                            </div>
+                            {imageAnalysis.fileSizeMb !== undefined && (
+                              <div className="flex items-center justify-between text-slate-600">
+                                <span className="text-slate-500 font-medium">File Size:</span>
+                                <span className="font-mono font-bold text-slate-800">{imageAnalysis.fileSizeMb} MB</span>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                              <span className="text-slate-500 font-medium">Fit Assessment:</span>
+                              <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded ${
+                                imageAnalysis.isOptimalRatio
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {imageAnalysis.aspectRatioLabel}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          💡 When saved, this photo will be uploaded to cloud storage and optimized for high-speed delivery.
+                        </p>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="border-2 border-dashed border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/20 rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 group bg-white shadow-2xs"
+                      >
+                        <div className="h-11 w-11 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Upload className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black text-slate-800">
+                            Click to upload a category photo
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            PNG, JPG, or WebP up to 5MB (Portrait 3:4 or 4:5 recommended)
+                          </p>
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full mt-1 border border-indigo-100">
+                          <Sparkles className="h-3 w-3" /> Browse From Computer
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column: Live Previews (5 cols) */}
+                  <div className="md:col-span-5 flex flex-col items-center justify-center bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1">
+                      <Eye className="h-3.5 w-3.5 text-indigo-600" /> Live Marketplace Card Preview
+                    </span>
+
+                    {/* Exact replica of marketplace category card */}
+                    <div className="relative w-36 sm:w-40 aspect-[3/4] rounded-2xl overflow-hidden border border-slate-200/90 shadow-md bg-slate-100 group">
                       <img
-                        src={imagePreview}
-                        alt="Category Preview"
-                        className="h-full w-full object-cover"
+                        src={imagePreview || (editingCategory ? getCategoryImageUrl(editingCategory as any) : buildCategoryFallbackSvg(formName || 'Category'))}
+                        alt="Marketplace Card Live Preview"
+                        className="absolute inset-0 h-full w-full object-cover object-center"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = buildCategoryFallbackSvg(formName || 'Category');
+                        }}
                       />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-bold text-slate-800">Image Ready</div>
-                      <div className="text-[11px] text-slate-500">Uploaded to GCP when the category is saved</div>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 underline"
-                        >
-                          Change Image
-                        </button>
-                        <span className="text-slate-300">•</span>
-                        <button
-                          type="button"
-                          onClick={handleRemoveImage}
-                          className="text-[11px] font-bold text-red-600 hover:text-red-800 underline"
-                        >
-                          Remove
-                        </button>
+                      
+                      {/* Lower side whitish shade overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-white via-white/80 via-[32%] to-transparent" />
+                      
+                      {/* Live Card Details */}
+                      <div className="relative z-10 h-full flex flex-col justify-between p-2.5 text-center">
+                        <div className="flex justify-end">
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-slate-900/80 text-white shadow-xs">
+                            {formType}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="block w-full text-xs font-black leading-tight line-clamp-2 text-slate-900">
+                            {formName.trim() || 'Category Name'}
+                          </span>
+                        </div>
                       </div>
                     </div>
+
+                    <span className="text-[10px] text-slate-400 mt-2 font-medium text-center">
+                      Exact view shown on buyer marketplace
+                    </span>
                   </div>
-                ) : (
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/20 rounded-lg p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-1.5"
-                  >
-                    <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
-                      <Upload className="h-4 w-4" />
-                    </div>
-                    <div className="text-xs font-bold text-slate-700">Click to upload a realistic category photo</div>
-                    <div className="text-[10px] text-slate-400 font-medium">PNG, JPG, or WebP (max 5MB); portrait or square works best</div>
-                  </div>
-                )}
+                </div>
               </div>
 
               {/* Active Status in Edit/Add Modal */}
-              <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50/70">
+              <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
                 <div>
                   <label htmlFor="form-is-active" className="text-xs font-bold uppercase text-slate-700 tracking-wide block">
-                    Active Status
+                    Active Status in Marketplace
                   </label>
                   <p className="text-[11px] text-slate-500">
-                    {formIsActive ? 'Visible to buyers on marketplace and taxonomy' : 'Hidden from active marketplace selections'}
+                    {formIsActive ? 'Visible to buyers on marketplace and categories taxonomy' : 'Hidden from active marketplace selections'}
                   </p>
                 </div>
                 <button
@@ -935,15 +1117,16 @@ export default function AdminCategoriesPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
+                <label htmlFor="form-category-desc" className="block text-xs font-bold uppercase text-slate-700 tracking-wide mb-1.5">
                   Description (Optional)
                 </label>
                 <textarea
+                  id="form-category-desc"
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
                   placeholder="Brief summary of items/services under this category..."
-                  rows={3}
-                  className="w-full rounded border border-slate-300 p-2.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  rows={2}
+                  className="w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
 
@@ -960,7 +1143,7 @@ export default function AdminCategoriesPage() {
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="h-10 px-6 bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-bold tracking-wide"
+                  className="h-10 px-6 bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-bold tracking-wide shadow-xs"
                 >
                   {isSubmitting ? 'Saving...' : editingCategory ? 'Update Category' : 'Create Category'}
                 </Button>
