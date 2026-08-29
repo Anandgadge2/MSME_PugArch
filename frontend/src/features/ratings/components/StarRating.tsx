@@ -64,7 +64,7 @@ export function StarRating({ value, onChange, size = 'md', readOnly, className, 
                                 'pointer-events-none transition-all duration-150',
                                 star <= display
                                     ? 'fill-amber-400 text-amber-400 drop-shadow-xs'
-                                    : 'fill-slate-100 text-slate-300'
+                                    : 'fill-transparent text-slate-300'
                             )}
                         />
                     </button>

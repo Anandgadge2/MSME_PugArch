@@ -61,6 +61,7 @@ export default function RepeatOrders() {
   const [deliveredDateFilter, setDeliveredDateFilter] = useState('All Dates');
   const [customDate, setCustomDate] = useState({ start: '', end: '' });
   const [sortBy, setSortBy] = useState('newest');
+  const [showFilters, setShowFilters] = useState(false);
   
   const [viewMode, setViewMode] = useResponsiveViewMode('repeat-orders:view-mode');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -407,7 +408,11 @@ export default function RepeatOrders() {
           <p className="text-xs font-semibold text-slate-500 mt-1">Re-order materials and items from completed previous orders quickly.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={refreshAll} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
+          <Button variant="outline" onClick={() => setShowFilters(!showFilters)} className={cn("h-10 rounded-lg text-xs font-black uppercase transition-colors shadow-sm", showFilters ? "bg-[#12335f] text-white border-[#12335f] hover:bg-[#0e2a4f]" : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200")}>
+            <Filter className={cn("mr-2 h-4 w-4", showFilters ? "text-white" : "text-[#12335f]")} />
+            {showFilters ? 'Hide Filters' : 'Filters'}
+          </Button>
+          <Button variant="outline" onClick={refreshAll} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm text-slate-700">
             <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} />
             Refresh
           </Button>
@@ -472,16 +477,22 @@ export default function RepeatOrders() {
       </div>
 
       {/* ── Search + Filter + View Toggle Toolbar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm flex flex-wrap items-center gap-[12px]">
-        
-        {/* Search */}
-        <div className="relative flex-[1_1_auto] min-w-[240px]">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <div 
+        className={cn(
+          "overflow-hidden transition-all duration-1000 ease-in-out",
+          showFilters ? "max-h-[1000px] opacity-100 mb-0" : "max-h-0 opacity-0 mb-[-16px] pointer-events-none"
+        )}
+      >
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-2.5 sm:p-4 shadow-sm flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:gap-[12px]">
+          
+          {/* Search */}
+          <div className="relative flex-[1_1_auto] min-w-0 sm:min-w-[240px] w-full">
+          <Search className="pointer-events-none absolute left-3 sm:left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             value={searchTerm}
             onChange={event => setSearchTerm(event.target.value)}
             placeholder="Search PO number, procurement, supplier..."
-            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-9 pr-3 sm:pl-10 sm:pr-4 !text-[13px] lg:!text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
           />
         </div>
 
@@ -490,7 +501,7 @@ export default function RepeatOrders() {
           <select
             value={supplierFilter}
             onChange={e => setSupplierFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
           >
             <option value="All Suppliers">Supplier: All</option>
             {uniqueSuppliers.map(s => (
@@ -504,7 +515,7 @@ export default function RepeatOrders() {
           <select
             value={procurementFilter}
             onChange={e => setProcurementFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
           >
             <option value="All Procurements">Procurement: All</option>
             {uniqueProcurements.map(p => (
@@ -518,7 +529,7 @@ export default function RepeatOrders() {
           <select
             value={amountFilter}
             onChange={e => setAmountFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
           >
             <option value="All Amounts">Amount: All</option>
             <option value="Below ₹10,000">Below ₹10,000</option>
@@ -533,7 +544,7 @@ export default function RepeatOrders() {
           <select
             value={qtyFilter}
             onChange={e => setQtyFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
           >
             <option value="All Quantities">Qty: All</option>
             <option value="1–10">1–10</option>
@@ -544,11 +555,11 @@ export default function RepeatOrders() {
         </div>
 
         {/* Delivered On Date */}
-        <div className="flex-[0_0_auto] w-full sm:w-[140px] flex items-center gap-[12px]">
+        <div className="flex-[0_0_auto] w-full sm:w-[140px]">
           <select
             value={deliveredDateFilter}
             onChange={e => setDeliveredDateFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
           >
             <option value="All Dates">Delivered: All</option>
             <option value="Today">Today</option>
@@ -559,23 +570,20 @@ export default function RepeatOrders() {
         </div>
         
         {deliveredDateFilter === 'Custom Date Range' && (
-          <div 
-            className="flex-[0_0_auto] grid items-center gap-1 w-full sm:w-auto h-10"
-            style={{ gridTemplateColumns: 'minmax(0, 1fr) 20px minmax(0, 1fr)' }}
-          >
+          <div className="flex-[0_0_auto] flex flex-col min-[380px]:flex-row items-stretch min-[380px]:items-center gap-1.5 sm:gap-1 w-full sm:w-auto h-auto sm:h-10">
             <input 
               type="date" 
               value={customDate.start} 
               onChange={e => setCustomDate({ ...customDate, start: e.target.value })} 
-              className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
+              className="h-10 w-full sm:w-[115px] min-w-0 box-border rounded-xl border border-slate-200 px-2 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none" 
               title="Start Date" 
             />
-            <span className="text-slate-400 font-bold text-center">-</span>
+            <span className="text-slate-400 font-bold shrink-0 hidden min-[380px]:block text-center">-</span>
             <input 
               type="date" 
               value={customDate.end} 
               onChange={e => setCustomDate({ ...customDate, end: e.target.value })} 
-              className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
+              className="h-10 w-full sm:w-[115px] min-w-0 box-border rounded-xl border border-slate-200 px-2 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none" 
               title="End Date" 
             />
           </div>
@@ -586,7 +594,7 @@ export default function RepeatOrders() {
           <select
             value={sortBy}
             onChange={e => setSortBy(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
           >
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
@@ -598,7 +606,7 @@ export default function RepeatOrders() {
         </div>
 
         {/* Right Actions */}
-        <div className="flex-[0_0_auto] flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+        <div className="flex-[0_0_auto] flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto sm:ml-auto">
           {(searchTerm || supplierFilter !== 'All Suppliers' || procurementFilter !== 'All Procurements' || amountFilter !== 'All Amounts' || qtyFilter !== 'All Quantities' || deliveredDateFilter !== 'All Dates' || sortBy !== 'newest') && (
             <Button 
               variant="ghost" 
@@ -613,13 +621,14 @@ export default function RepeatOrders() {
                 setSortBy('newest');
                 setActiveKpiFilter('all');
               }}
-              className="h-9 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 shrink-0"
+              className="h-8 sm:h-9 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 shrink-0"
             >
               Clear Filters
             </Button>
           )}
           <div className="shrink-0">
             <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          </div>
           </div>
         </div>
       </div>

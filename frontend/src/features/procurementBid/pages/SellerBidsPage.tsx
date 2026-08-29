@@ -621,7 +621,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                                 <Button 
                                   onClick={(e) => handleConvertToInvoice(e, item)}
                                   disabled={convertingInvoiceId === item.id}
-                                  className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-3 flex items-center shadow-sm"
+                                  className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-3 flex items-center gap-1.5 shadow-sm"
                                   title="Convert to Invoice"
                                 >
                                   {convertingInvoiceId === item.id ? (
@@ -629,6 +629,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                                   ) : (
                                     <FileText className="h-3 w-3" />
                                   )}
+                                  Invoice
                                 </Button>
                               )}
                               <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3">

@@ -484,14 +484,25 @@ function MetricCard({
   tone: Tone;
   subtext?: string;
 }) {
+  const styles = toneStyles[tone] || toneStyles.slate;
   return (
-    <KpiCard
-      label={label}
-      value={value as any}
-      icon={Icon}
-      tone={tone as any}
-      subtext={subtext || 'Procurement details'}
-    />
+    <article className={cn('flex flex-col justify-between rounded-xl border p-3.5 shadow-2xs h-full min-h-[115px]', styles.card)}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-black uppercase tracking-wider text-slate-500 line-clamp-1 flex-1">{label}</p>
+        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', styles.icon)}>
+          <Icon className="h-4.5 w-4.5" />
+        </span>
+      </div>
+      <div className="mt-1 min-w-0">
+        <div className="text-lg lg:text-xl font-black text-slate-950 leading-tight truncate" title={typeof value === 'string' ? value : undefined}>
+          {value}
+        </div>
+        <p className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 truncate">
+          <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" />
+          {subtext || 'Procurement details'}
+        </p>
+      </div>
+    </article>
   );
 }
 
@@ -1995,7 +2006,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-7xl space-y-4 px-4 py-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6 lg:px-8">
         {/* Navigation Breadcrumb & Back Button */}
         <div className="flex flex-wrap items-center gap-3">
           <Button
@@ -2049,9 +2060,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         )}
 
         {/* Header */}
-        <header className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 sm:py-3 shadow-2xs">
-          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0 space-y-1">
+        <header className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-2xs">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1 space-y-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 <StatusBadge status={statusLabel} />
                 {buyerOrgName !== 'N/A' && (
@@ -2068,23 +2079,21 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   </span>
                 )}
               </div>
-              <div>
-                <h1 className="text-base sm:text-lg md:text-xl font-black leading-tight tracking-tight text-slate-950">{resolvedSubject}</h1>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800 text-[10px]">{displayIdStr}</span>
-                  <span>•</span>
-                  <span>{formatPrimitiveValue(procurementMethod, 'procurementMethod')}</span>
-                  {category !== 'N/A' && (
-                    <>
-                      <span>•</span>
-                      <span>{formatPrimitiveValue(category, 'category')}</span>
-                    </>
-                  )}
-                </div>
+              <h1 className="text-[20px] md:text-[24px] lg:text-[28px] font-black leading-tight tracking-tight text-slate-950 break-words mt-1">{resolvedSubject}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800 text-[10px]">{displayIdStr}</span>
+                <span>•</span>
+                <span>{formatPrimitiveValue(procurementMethod, 'procurementMethod')}</span>
+                {category !== 'N/A' && (
+                  <>
+                    <span>•</span>
+                    <span>{formatPrimitiveValue(category, 'category')}</span>
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 mt-2 lg:mt-0">
               <Button
                 type="button"
                 variant="outline"
@@ -2155,7 +2164,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         {/* EMD Section commented out */}
 
         {/* Summary Metrics */}
-        <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <section className={cn('grid gap-3', summaryCards.length === 6 ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5')}>
           {summaryCards.map(card => (
             <MetricCard key={card.label} {...card} />
           ))}

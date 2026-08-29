@@ -356,13 +356,13 @@ export default function GrnListPage() {
                             value={search}
                             onChange={event => { setSearch(event.target.value); setPage(1); }}
                             placeholder="Search GRN, PO, seller, receiver, status..."
-                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 !text-[13px] lg:!text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
                         />
                     </div>
 
                     {/* Status */}
                     <div className="flex-[0_0_auto] w-full sm:w-[130px]">
-                        <select value={filter} onChange={e => { setFilter(e.target.value as any); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
+                        <select value={filter} onChange={e => { setFilter(e.target.value as any); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
                             <option value="ALL">Status: All</option>
                             <option value="DRAFT">Draft</option>
                             <option value="SUBMITTED">Submitted</option>
@@ -374,7 +374,7 @@ export default function GrnListPage() {
 
                     {/* PO */}
                     <div className="flex-[0_0_auto] w-full sm:w-[135px]">
-                        <select value={filterPo} onChange={e => { setFilterPo(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
+                        <select value={filterPo} onChange={e => { setFilterPo(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
                             <option value="ALL">PO: All</option>
                             {uniquePos.map(po => <option key={po} value={po}>{po.length > 20 ? po.substring(0, 20) + '...' : po}</option>)}
                         </select>
@@ -382,7 +382,7 @@ export default function GrnListPage() {
 
                     {/* Seller */}
                     <div className="flex-[0_0_auto] w-full sm:w-[135px]">
-                        <select value={filterSeller} onChange={e => { setFilterSeller(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
+                        <select value={filterSeller} onChange={e => { setFilterSeller(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
                             <option value="ALL">Seller: All</option>
                             {uniqueSellers.map(s => <option key={s} value={s}>{s.length > 20 ? s.substring(0, 20) + '...' : s}</option>)}
                         </select>
@@ -390,7 +390,7 @@ export default function GrnListPage() {
 
                     {/* Items */}
                     <div className="flex-[0_0_auto] w-full sm:w-[110px]">
-                        <select value={filterItems} onChange={e => { setFilterItems(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
+                        <select value={filterItems} onChange={e => { setFilterItems(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 !text-[14px] lg:!text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
                             <option value="ALL">Items: All</option>
                             <option value="1">1 line</option>
                             <option value="2">2 lines</option>

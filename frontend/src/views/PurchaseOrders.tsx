@@ -799,16 +799,16 @@ export default function PurchaseOrders() {
       {error && <InlineError message={error} onRetry={reload} />}
 
       {/* ── Search + Filter + View Toggle Toolbar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm flex flex-wrap items-center gap-[12px]">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-2.5 sm:p-4 shadow-sm flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:gap-[12px]">
         
         {/* Search */}
-        <div className="relative flex-[1_1_auto] min-w-[240px]">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <div className="relative flex-[1_1_auto] min-w-0 sm:min-w-[240px] w-full">
+          <Search className="pointer-events-none absolute left-3 sm:left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             value={searchTerm}
             onChange={event => setSearchTerm(event.target.value)}
             placeholder="Search PO, title, party..."
-            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-9 pr-3 sm:pl-10 sm:pr-4 text-sm sm:text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
           />
         </div>
 
@@ -817,7 +817,7 @@ export default function PurchaseOrders() {
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 text-sm sm:text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
           >
             <option value="All Statuses">Status: All</option>
             {uniqueStatuses.map(s => (
@@ -831,7 +831,7 @@ export default function PurchaseOrders() {
           <select
             value={partyFilter}
             onChange={e => setPartyFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 text-sm sm:text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
           >
             <option value="All Parties">Party: All</option>
             {uniqueParties.map(p => (
@@ -845,7 +845,7 @@ export default function PurchaseOrders() {
           <select
             value={valueFilter}
             onChange={e => setValueFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 text-sm sm:text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
           >
             <option value="All Values">Value: All</option>
             <option value="Below ₹10,000">Below ₹10,000</option>
@@ -856,11 +856,11 @@ export default function PurchaseOrders() {
         </div>
 
         {/* Expected */}
-        <div className="flex-[0_0_auto] w-full sm:w-[130px] flex items-center gap-[12px]">
+        <div className="flex-[0_0_auto] w-full sm:w-[130px]">
           <select
             value={expectedDateFilter}
             onChange={e => setExpectedDateFilter(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 text-sm sm:text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
           >
             <option value="All Dates">Expected: All</option>
             <option value="Upcoming">Upcoming</option>
@@ -870,25 +870,25 @@ export default function PurchaseOrders() {
         </div>
         
         {expectedDateFilter === 'Custom Date Range' && (
-          <div className="flex-[0_0_auto] flex items-center flex-nowrap whitespace-nowrap gap-1 w-full sm:w-auto h-10">
-            <input type="date" value={expectedDateCustom.start} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, start: e.target.value })} className="h-10 w-full sm:w-[115px] rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" title="Start Date" />
-            <span className="text-slate-400 font-bold shrink-0">-</span>
-            <input type="date" value={expectedDateCustom.end} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, end: e.target.value })} className="h-10 w-full sm:w-[115px] rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" title="End Date" />
+          <div className="flex-[0_0_auto] flex flex-col min-[380px]:flex-row items-stretch min-[380px]:items-center gap-1.5 sm:gap-1 w-full sm:w-auto">
+            <input type="date" value={expectedDateCustom.start} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, start: e.target.value })} className="h-10 w-full sm:w-[115px] min-w-0 box-border rounded-xl border border-slate-200 px-2 text-sm sm:text-xs font-bold text-slate-700 outline-none" title="Start Date" />
+            <span className="text-slate-400 font-bold shrink-0 hidden min-[380px]:block text-center">-</span>
+            <input type="date" value={expectedDateCustom.end} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, end: e.target.value })} className="h-10 w-full sm:w-[115px] min-w-0 box-border rounded-xl border border-slate-200 px-2 text-sm sm:text-xs font-bold text-slate-700 outline-none" title="End Date" />
           </div>
         )}
 
         {/* Updated Date */}
-        <div className="flex-[0_0_auto] flex items-center flex-nowrap whitespace-nowrap gap-1 bg-slate-50/50 border border-slate-200 rounded-xl px-2 h-10 w-full sm:w-auto">
+        <div className="flex-[0_0_auto] flex flex-col min-[380px]:flex-row items-stretch min-[380px]:items-center gap-1.5 sm:gap-1 bg-slate-50/50 border border-slate-200 rounded-xl p-1 sm:px-2 sm:h-10 w-full sm:w-auto">
           <span className="text-[10px] font-black uppercase text-slate-400 px-1 shrink-0 hidden lg:inline-block">Updated</span>
-          <input type="date" value={updatedDateFilter.start} onChange={e => setUpdatedDateFilter({ ...updatedDateFilter, start: e.target.value })} className="h-8 w-full sm:w-[105px] shrink-0 rounded-lg border-none bg-transparent px-1 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-slate-300" title="Updated Start" />
-          <span className="text-slate-300 font-black shrink-0">-</span>
-          <input type="date" value={updatedDateFilter.end} onChange={e => setUpdatedDateFilter({ ...updatedDateFilter, end: e.target.value })} className="h-8 w-full sm:w-[105px] shrink-0 rounded-lg border-none bg-transparent px-1 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-slate-300" title="Updated End" />
+          <input type="date" value={updatedDateFilter.start} onChange={e => setUpdatedDateFilter({ ...updatedDateFilter, start: e.target.value })} className="h-10 sm:h-8 w-full sm:w-[105px] min-w-0 box-border rounded-lg border-none bg-transparent px-1.5 sm:px-1 text-sm sm:text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-slate-300" title="Updated Start" />
+          <span className="text-slate-300 font-black shrink-0 hidden min-[380px]:block text-center">-</span>
+          <input type="date" value={updatedDateFilter.end} onChange={e => setUpdatedDateFilter({ ...updatedDateFilter, end: e.target.value })} className="h-10 sm:h-8 w-full sm:w-[105px] min-w-0 box-border rounded-lg border-none bg-transparent px-1.5 sm:px-1 text-sm sm:text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-slate-300" title="Updated End" />
         </div>
 
         {/* Right Actions */}
-        <div className="flex-[0_0_auto] flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+        <div className="flex-[0_0_auto] flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto sm:ml-auto">
           {activeFiltersCount > 0 && (
-            <Button variant="ghost" onClick={handleClearFilters} className="h-9 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 shrink-0">
+            <Button variant="ghost" onClick={handleClearFilters} className="h-8 sm:h-9 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 shrink-0">
               Clear Filters
             </Button>
           )}

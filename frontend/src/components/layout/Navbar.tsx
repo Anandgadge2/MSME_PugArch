@@ -753,7 +753,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         <nav
           ref={navRef}
           onScroll={handleScroll}
-          className={cn("flex-1 overflow-y-auto", isActuallyCollapsed ? "p-2 space-y-1" : "p-3 space-y-1")}
+          className={cn("sidebar-scroll-dark flex-1 overflow-y-auto", isActuallyCollapsed ? "p-2 space-y-1" : "p-3 space-y-1")}
         >
           <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", isActuallyCollapsed && "lg:hidden")}>Navigation</div>
           {filteredNav.map((item) => {

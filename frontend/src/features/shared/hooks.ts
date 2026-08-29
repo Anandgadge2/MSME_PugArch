@@ -190,7 +190,11 @@ export const usePaginatedFeatureQuery = <T,>(
   );
 
   const queryClient = useQueryClient();
-  const queryKey = useMemo(() => ['paginated-feature-query', requestEndpoint] as const, [requestEndpoint]);
+  const queryKey = useMemo(() => [
+    'paginated-feature-query',
+    endpoint,
+    { ...JSON.parse(paramsKey), page, pageSize }
+  ] as const, [endpoint, paramsKey, page, pageSize]);
 
   const getCachedData = useCallback(() => {
     if (paginatedQueryGlobalCache.has(requestEndpoint)) {
@@ -260,7 +264,7 @@ export const usePaginatedFeatureQuery = <T,>(
   useEffect(() => {
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only reset page on filter change
-  }, [endpoint, pageSize, paramsKey]);
+  }, [endpoint, paramsKey]);
 
   const setPageSize = useCallback((nextPageSize: number) => {
     setPageSizeState(nextPageSize);

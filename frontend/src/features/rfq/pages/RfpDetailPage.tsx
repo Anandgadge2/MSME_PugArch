@@ -694,14 +694,25 @@ function MetricCard({
   tone: Tone;
   subtext?: string;
 }) {
+  const styles = toneStyles[tone] || toneStyles.slate;
   return (
-    <KpiCard
-      label={label}
-      value={value as any}
-      icon={Icon}
-      tone={tone as any}
-      subtext={subtext || 'Procurement details'}
-    />
+    <article className={cn('flex flex-col justify-between rounded-xl border p-3.5 shadow-2xs h-full min-h-[115px]', styles.card)}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-black uppercase tracking-wider text-slate-500 line-clamp-1 flex-1">{label}</p>
+        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', styles.icon)}>
+          <Icon className="h-4.5 w-4.5" />
+        </span>
+      </div>
+      <div className="mt-1 min-w-0">
+        <div className="text-lg lg:text-xl font-black text-slate-950 leading-tight truncate" title={typeof value === 'string' ? value : undefined}>
+          {value}
+        </div>
+        <p className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 truncate">
+          <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" />
+          {subtext || 'Procurement details'}
+        </p>
+      </div>
+    </article>
   );
 }
 
@@ -2078,16 +2089,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     { label: 'Status', value: statusLabel, icon: ShieldCheck, tone: getStatusTone(statusLabel), subtext: 'Current lifecycle state' },
     {
       label: 'Submission Deadline',
-      value: (
-        <div className="space-y-1">
-          <div>{closingDate}</div>
-          {deadlineDate && (
-            <div>
-              <DeadlineCountdown targetDate={deadlineDate} />
-            </div>
-          )}
-        </div>
-      ),
+      value: closingDate || 'N/A',
       icon: Clock,
       tone: 'rose' as Tone,
       subtext: 'Bidding window closing'
@@ -2231,7 +2233,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-7xl space-y-4 px-4 py-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6 lg:px-8">
         {/* Navigation Breadcrumb & Back Button */}
         <div className="flex flex-wrap items-center gap-3">
           <Button
@@ -2279,36 +2281,34 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
           </div>
         )}
 
-        <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
+        <header className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 space-y-1 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <StatusBadge status={statusLabel} />
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-indigo-700">
-                  <Building2 className="h-3.5 w-3.5" />
+                <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-indigo-700">
+                  <Building2 className="h-3 w-3" />
                   {formatPrimitiveValue(orgName, 'organization')}
                 </span>
                 {deadlineDate && <DeadlineCountdown targetDate={deadlineDate} />}
                 {hasSubmittedProposal && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-700">
-                    <ShieldCheck className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                    <ShieldCheck className="h-3 w-3" />
                     Proposal Submitted
                   </span>
                 )}
               </div>
-              <div>
-                <h1 className="text-xl font-black leading-tight tracking-tight text-slate-950 md:text-3xl">{subject}</h1>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                  <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-800">{rfpNumber || 'RFP'}</span>
-                  <span>•</span>
-                  <span>{formatPrimitiveValue(procurementMethod, 'procurementMethod')}</span>
-                  <span>•</span>
-                  <span>{formatPrimitiveValue(category, 'category')}</span>
-                </div>
+              <h1 className="text-lg md:text-xl lg:text-2xl font-black leading-tight tracking-tight text-slate-950 break-words mt-1">{subject}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800 text-[10px]">{rfpNumber || 'RFP'}</span>
+                <span>•</span>
+                <span>{formatPrimitiveValue(procurementMethod, 'procurementMethod')}</span>
+                <span>•</span>
+                <span>{formatPrimitiveValue(category, 'category')}</span>
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 mt-2 lg:mt-0">
               <Button
                 type="button"
                 variant="outline"
@@ -2320,16 +2320,16 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
                 Download
               </Button>
               {currentUser?.role === 'seller' && (
-                <Button type="button" size="sm" onClick={handleSubmitProposal} className="bg-slate-950 text-white hover:bg-slate-800">
+                <Button type="button" size="sm" onClick={handleSubmitProposal} className="bg-slate-950 text-white hover:bg-slate-800 text-xs font-bold h-8">
                   {hasSubmittedProposal ? 'View Proposal' : 'Submit Proposal'}
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-4 w-4 ml-1" />
                 </Button>
               )}
             </div>
           </div>
         </header>
 
-        <section className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
+        <section className={cn('grid gap-3', summaryCards.length === 6 ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5')}>
           {summaryCards.map(card => (
             <MetricCard key={card.label} {...card} />
           ))}
