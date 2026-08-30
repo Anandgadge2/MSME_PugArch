@@ -580,8 +580,10 @@ export default function PurchaseOrders() {
       if (viewingOrder && viewingOrder.id === order.id) {
         setViewingOrder({ ...viewingOrder, ...updated, status: 'accepted' });
       }
-      toast.success(`Purchase Order ${order.poNumber || `PO-${order.id}`} ACCEPTED successfully!`);
+      toast.success(`Purchase Order ${order.poNumber || `PO-${order.id}`} ACCEPTED successfully! Redirecting to generate Invoice before Delivery Management...`);
       await refreshPurchaseOrders();
+      const amountVal = order.amount || order.totalValue || 0;
+      router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
     } catch (err: any) {
       toast.error(err?.message || 'Unable to accept purchase order');
     }
@@ -604,6 +606,13 @@ export default function PurchaseOrders() {
   };
 
   const handleOpenDelivery = (order: PurchaseOrderDto) => {
+    const hasInvoice = !!(order.invoices && order.invoices.length > 0);
+    if (!hasInvoice) {
+      toast.info(`Please generate the Tax Invoice for ${order.poNumber || `PO-${order.id}`} first before proceeding to Delivery Management.`);
+      const amountVal = order.amount || order.totalValue || 0;
+      router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+      return;
+    }
     if (order.poNumber) {
       router.push(`/seller/delivery-management?search=${encodeURIComponent(order.poNumber)}`);
     } else {

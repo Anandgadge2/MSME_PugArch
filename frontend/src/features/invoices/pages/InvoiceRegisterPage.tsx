@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { CheckCircle2, Clock, FileText, IndianRupee, RefreshCw, Search, Building2, CreditCard, Lock, ShieldCheck, Sparkles, Terminal, ArrowRight, AlertCircle, X, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown, Filter, LayoutGrid, List, Upload, Eye, Maximize2, Minimize2, MoreVertical } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
@@ -57,6 +58,7 @@ const statusOf = (invoice: InvoiceRow) => String(invoice.invoiceStatus || invoic
 const statuses = ['draft', 'submitted', 'under_review', 'approved', 'rejected', 'paid', 'cancelled'];
 
 export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer' | 'seller' | 'admin' }) {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -620,7 +622,14 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       await reload();
       await reloadPurchaseOrders();
       closeCreateInvoiceModal();
-      toast.success('Invoice created successfully.');
+      toast.success('Invoice created successfully! Transitioning to Delivery Management...');
+
+      const targetPoNumber = selectedPurchaseOrder?.poNumber;
+      if (targetPoNumber) {
+        router.push(`/seller/delivery-management?search=${encodeURIComponent(targetPoNumber)}`);
+      } else {
+        router.push('/seller/delivery-management');
+      }
     } catch (err: any) {
       setCreateInvoiceError(err.message || 'Invoice creation failed.');
     } finally {

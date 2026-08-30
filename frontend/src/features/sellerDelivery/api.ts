@@ -36,12 +36,16 @@ export interface DeliveryDto {
         amount: string | number;
         sellerId: number;
         buyerId: number;
+        deliveryAddress?: string;
+        items?: Array<{ id?: number; itemName?: string; quantity?: number; unitPrice?: number; totalAmount?: number }>;
         seller?: { id: number; name: string; email?: string };
         buyer?: { id: number; name: string; email?: string };
+        invoices?: Array<{ id: number; invoiceNumber?: string; amount?: number | string; status?: string; invoiceStatus?: string; createdAt?: string }>;
     };
     documents?: Array<{
         id: number;
         documentType: string;
+        fileAssetId?: number;
         description?: string | null;
         fileAsset?: { id: number; originalName: string; mimeType: string };
         createdAt?: string;
