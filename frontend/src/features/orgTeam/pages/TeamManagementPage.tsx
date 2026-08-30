@@ -748,7 +748,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 // ─── Invite Modal ─────────────────────────────────────────────────────────────
 
 function InviteModal({ roles, onClose, onSuccess }: { roles: OrgCustomRole[]; onClose: () => void; onSuccess: () => void }) {
+    const [name, setName] = useState('');
     const [email, setEmail] = useState('');
+    const [mobile, setMobile] = useState('');
     const [customRoleId, setCustomRoleId] = useState<number | ''>(roles.find(role => role.isActive)?.id || '');
     const [saving, setSaving] = useState(false);
 
@@ -761,10 +763,12 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: OrgCustomRole[]; on
         setSaving(true);
         try {
             await postApi('/api/org/invite', {
+                name: name.trim() || undefined,
                 email: email.trim().toLowerCase(),
+                mobile: mobile.trim() ? mobile.trim().replace(/\D/g, '').slice(-10) : undefined,
                 customRoleId: customRoleId === '' ? undefined : customRoleId
             });
-            toast.success(`Invitation sent to ${email}`);
+            toast.success(`Sub-user created and invitation credentials emailed to ${email}`);
             onSuccess();
         } catch (err: any) {
             toast.error(err?.message || 'Failed to send invitation');
@@ -778,16 +782,26 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: OrgCustomRole[]; on
             <div className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
                 <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
                     <div>
-                        <h3 className="text-sm font-black uppercase tracking-widest">Invite Team Member</h3>
-                        <p className="mt-0.5 text-[10px] text-white/70">Send an invitation email with a secure link</p>
+                        <h3 className="text-sm font-black uppercase tracking-widest">Create & Invite Sub-User</h3>
+                        <p className="mt-0.5 text-[10px] text-white/70">Provisions account and emails login credentials</p>
                     </div>
                     <button onClick={onClose} className="rounded-md p-1 text-white/80 hover:bg-white/10">
                         <X className="h-4 w-4" />
                     </button>
                 </div>
-                <form onSubmit={handleSubmit} className="p-5 space-y-4">
+                <form onSubmit={handleSubmit} className="p-5 space-y-3.5">
                     <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Email Address</label>
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Full Name</label>
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            placeholder="e.g. Rahul Sharma"
+                            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Email Address *</label>
                         <input
                             type="email"
                             value={email}
@@ -798,19 +812,30 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: OrgCustomRole[]; on
                         />
                     </div>
                     <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Dynamic Role</label>
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Mobile Number (Optional)</label>
+                        <input
+                            type="tel"
+                            value={mobile}
+                            onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                            placeholder="9876543210"
+                            maxLength={10}
+                            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 font-mono"
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Role / Permissions *</label>
                         <select value={customRoleId} onChange={e => setCustomRoleId(e.target.value === '' ? '' : Number(e.target.value))} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
                             <option value="">Select a dynamic role</option>
                             {roles.filter(role => role.isActive).map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
                         </select>
                         <p className="text-[10px] font-semibold text-slate-400">
-                            The invited user completes only personal verification and joins this organization automatically. Organization verification is not required again.
+                            The sub-user will receive their temporary password via email, set a new password, and verify their mobile OTP on first login.
                         </p>
                     </div>
                     <div className="flex justify-end gap-2 pt-2">
                         <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-                        <Button type="submit" disabled={saving} className="bg-[#12335f] text-white">
-                            {saving ? 'Sending...' : 'Send Invitation'}
+                        <Button type="submit" disabled={saving} className="bg-[#12335f] text-white font-bold">
+                            {saving ? 'Creating & Sending...' : 'Create & Send Credentials'}
                         </Button>
                     </div>
                 </form>

@@ -47,51 +47,9 @@ function initials(name: string) {
         .join('') || 'B';
 }
 
-const BUYER_LOGO_MAPPINGS: Record<string, string> = {
-    'thakur prasad': '/org-logos/thakur-prasad-sao.svg',
-    'tps': '/org-logos/thakur-prasad-sao.svg',
-    'jai hanuman': '/org-logos/jai-hanuman-udyog.svg',
-    'seven star': '/org-logos/seven-star-steels.svg',
-    'ln metallics': '/org-logos/ln-metallics.svg',
-    'l n metallics': '/org-logos/ln-metallics.svg',
-    'ultratech': '/org-logos/ultratech-cement-jharsuguda.svg',
-    'orissa metaliks': '/org-logos/orissa-metaliks.svg',
-    'smc power': '/org-logos/smc-power-generation.svg',
-    'trl krosaki': '/org-logos/trl-krosaki-refractories.svg',
-    'vedanta': '/org-logos/vedanta-jharsuguda.svg',
-    'jsw energy': '/org-logos/jsw-energy-utkal.svg',
-    'kainsara': '/org-logos/kainsara-infraprojects.svg',
-    'abhinav': '/org-logos/abhinav-distributors.svg',
-    'atom engineering': '/org-logos/atom-engineering-products.svg',
-    'divine trends': '/org-logos/divine-trends.svg',
-    'indian chain': '/org-logos/indian-chain-mill-stores.svg',
-    'jharsuguda broom': '/org-logos/jharsuguda-broom.svg',
-    'jharsuguda pipes': '/org-logos/jharsuguda-pipes-saniteries.svg',
-    'kalpana traders': '/org-logos/kalpana-traders-jharsuguda.svg',
-    'konark enterprises': '/org-logos/konark-enterprises.svg',
-    'krishna electricals': '/org-logos/krishna-electricals-industrial.svg',
-    'laxmi sales': '/org-logos/laxmi-sales-agency.svg',
-    'pavan enterprises': '/org-logos/pavan-enterprises-jsg.svg',
-    'rl industrial': '/org-logos/rl-industrial-corporation.svg',
-    'royal engineering': '/org-logos/royal-engineering.svg',
-    'siddhivinayak': '/org-logos/siddhivinayak-engineering.svg',
-    'skf stores': '/org-logos/skf-stores-spares.svg',
-    'swastik engicom': '/org-logos/swastik-engicom.svg',
-    'swastik enterprise': '/org-logos/swastik-enterprise.svg',
-    'trade industrial': '/org-logos/trade-industrial-syndicate.svg',
-    'utkal innovatives': '/org-logos/utkal-innovatives.svg',
-};
-
 function resolveBuyerLogo(buyer?: { organizationName?: string; logoUrl?: string | null } | null) {
     if (buyer?.logoUrl) {
-        const resolved = resolveMediaUrl(buyer.logoUrl);
-        if (resolved) return resolved;
-    }
-    const name = (buyer?.organizationName || '').toLowerCase();
-    for (const [key, path] of Object.entries(BUYER_LOGO_MAPPINGS)) {
-        if (name.includes(key)) {
-            return path;
-        }
+        return resolveMediaUrl(buyer.logoUrl);
     }
     return null;
 }

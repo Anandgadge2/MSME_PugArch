@@ -1,6 +1,5 @@
 import prisma from '../lib/prisma.js';
 import { legacyRoleToAccountType } from '../constants/dynamic-rbac.js';
-import { FALLBACK_ORG_ROLE_PERMISSIONS, type OrgPermissionKey } from '../constants/org-permissions.js';
 
 export type RbacScope = {
   scopeType?: 'PLATFORM' | 'DISTRICT' | 'ORGANIZATION' | 'GLOBAL' | 'COMPANY';
@@ -37,63 +36,6 @@ export const isMasterAdmin = (user?: { role?: string; accountType?: unknown; acc
   if (!user) return false;
   const account = getAccountTypeForUser(user);
   return user.role === 'master_admin' || account.accountType === 'MASTER_ADMIN' || account.accountTypeId === 0;
-};
-
-const legacyOrgPermissionMap: Partial<Record<OrgPermissionKey, string[]>> = {
-  CATALOG_VIEW: ['catalogue.product.view', 'catalogue.service.view'],
-  CATALOG_CREATE: ['catalogue.product.create', 'catalogue.service.create'],
-  CATALOG_EDIT: ['catalogue.product.update', 'catalogue.service.update'],
-  CATALOG_DELETE: ['catalogue.product.delete', 'catalogue.service.delete'],
-  MARKETPLACE_VIEW: ['marketplace.view'],
-  MARKETPLACE_COMPARE: ['marketplace.view'],
-  CART_ADD: ['cart.view', 'cart.add'],
-  CART_SUBMIT_FOR_APPROVAL: ['cart.submit_for_approval'],
-  REQUIREMENT_VIEW: ['requirement.view'],
-  REQUIREMENT_CREATE: ['requirement.create'],
-  REQUIREMENT_EDIT: ['requirement.create'],
-  REQUIREMENT_PUBLISH: ['requirement.publish'],
-  REQUIREMENT_RESPONSE_COMPARE: ['requirement.view'],
-  RFQ_CREATE: ['requirement.create'],
-  RFQ_MANAGE: ['requirement.view', 'requirement.publish'],
-  TENDER_VIEW: ['tender.view'],
-  TENDER_CREATE: ['tender.create', 'tender.update'],
-  TENDER_PUBLISH: ['tender.publish'],
-  BID_EVALUATE_TECHNICAL: ['bid.technical.evaluate'],
-  BID_EVALUATE_FINANCIAL: ['bid.financial.evaluate'],
-  AWARD_RECOMMEND: ['award.recommend'],
-  PURCHASE_ORDER_VIEW: ['purchase_order.view'],
-  PURCHASE_ORDER_APPROVE: ['purchase_order.approve'],
-  REVERSE_AUCTION_VIEW: ['reverse_auction.view'],
-  REVERSE_AUCTION_CREATE: ['reverse_auction.create'],
-  REVERSE_AUCTION_MANAGE: ['reverse_auction.update', 'reverse_auction.publish', 'reverse_auction.close'],
-  REVERSE_AUCTION_BID: ['reverse_auction.bid.submit'],
-  REVERSE_AUCTION_AWARD: ['reverse_auction.award'],
-  INVOICE_VIEW: ['invoice.view'],
-  INVOICE_APPROVE: ['invoice.approve'],
-  PAYMENT_VIEW: ['payment.view'],
-  PAYMENT_INITIATE: ['payment.initiate'],
-  PAYMENT_OFFLINE_PROOF_UPLOAD: ['payment.initiate'],
-  PAYMENT_VERIFY: ['payment.verify'],
-  ESCROW_VIEW: ['escrow.view'],
-  ESCROW_RELEASE: ['escrow.release'],
-  DELIVERY_VIEW: ['delivery.view'],
-  DELIVERY_UPDATE: ['delivery.update'],
-  GRN_VIEW: ['grn.view'],
-  GRN_CREATE: ['grn.create'],
-  GRN_APPROVE: ['grn.approve'],
-  INSPECTION_APPROVE: ['inspection.approve'],
-  DISPUTE_VIEW: ['dispute.view'],
-  DISPUTE_RAISE: ['dispute.manage'],
-  DISPUTE_RESPOND: ['dispute.manage'],
-  DISPUTE_RESOLVE_ORG_SIDE: ['dispute.manage'],
-  TEAM_VIEW: ['team.member.view', 'team.role.view'],
-  TEAM_INVITE: ['team.member.invite'],
-  TEAM_ROLE_MANAGE: ['team.role.manage', 'team.role.assign'],
-  TEAM_MEMBER_DISABLE: ['team.member.disable'],
-  ORG_SETTINGS_VIEW: ['organization.view'],
-  ORG_SETTINGS_EDIT: ['organization.update'],
-  REPORTS_VIEW: ['report.view'],
-  REPORTS_EXPORT: ['report.export']
 };
 
 export const getCurrentUserPermissions = async (userId: number, scope?: RbacScope) => {
@@ -136,28 +78,17 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, organizationId: true }
+    select: { role: true }
   });
 
   const defaults: string[] = [];
   if (user) {
-    let organizationMembership: any = null;
     if (normalized.scopeType === 'ORGANIZATION' && normalized.scopeId) {
-      organizationMembership = await prisma.orgMembership.findUnique({
+      const membership = await prisma.orgMembership.findUnique({
         where: { userId_organizationId: { userId, organizationId: Number(normalized.scopeId) } },
-        select: {
-          orgRole: true,
-          isActive: true,
-          invitedById: true,
-          customRole: {
-            select: { permissions: { where: { allowed: true }, select: { permissionKey: true } } }
-          }
-        }
+        select: { orgRole: true, isActive: true }
       }).catch(() => null);
-      const isPrimaryOrganizationAdmin = organizationMembership?.isActive
-        && organizationMembership.orgRole === 'ORG_ADMIN'
-        && !organizationMembership.invitedById;
-      if (isPrimaryOrganizationAdmin) {
+      if (membership?.isActive && membership.orgRole === 'ORG_ADMIN') {
         defaults.push(
           'team.member.view',
           'team.member.invite',
@@ -168,26 +99,10 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
           'organization.view',
           'organization.update'
         );
-      } else if (organizationMembership?.isActive && organizationMembership.orgRole !== 'ORG_ADMIN' && assigned.length === 0) {
-        const legacyKeys = organizationMembership.customRole?.permissions?.length
-          ? organizationMembership.customRole.permissions.map((row: any) => row.permissionKey as OrgPermissionKey)
-          : FALLBACK_ORG_ROLE_PERMISSIONS[organizationMembership.orgRole as keyof typeof FALLBACK_ORG_ROLE_PERMISSIONS] || [];
-        defaults.push(...legacyKeys.flatMap((key: OrgPermissionKey) => legacyOrgPermissionMap[key] || []));
       }
     }
 
-    const isLegacyOrganizationOwner = normalized.scopeType === 'ORGANIZATION'
-      && normalized.scopeId
-      && String(user.organizationId || '') === normalized.scopeId
-      && !organizationMembership;
-    const isPrimaryOrganizationAdmin = organizationMembership?.isActive
-      && organizationMembership.orgRole === 'ORG_ADMIN'
-      && !organizationMembership.invitedById;
-    const shouldApplyPrimaryDefaults = normalized.scopeType === 'ORGANIZATION'
-      ? Boolean(isPrimaryOrganizationAdmin || isLegacyOrganizationOwner)
-      : !user.organizationId;
-
-    if (shouldApplyPrimaryDefaults && (user.role === 'seller' || user.role === 'shg')) {
+    if (user.role === 'seller' || user.role === 'shg') {
       defaults.push(
         'dashboard.view',
         'catalogue.product.view',
@@ -213,7 +128,7 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
         'reverse_auction.view',
         'reverse_auction.bid.submit'
       );
-    } else if (shouldApplyPrimaryDefaults && user.role === 'buyer') {
+    } else if (user.role === 'buyer') {
       defaults.push(
         'dashboard.view',
         'marketplace.view',

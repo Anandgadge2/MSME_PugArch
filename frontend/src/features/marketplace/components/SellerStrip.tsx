@@ -118,7 +118,9 @@ export function SellerStrip({ sellers }: Props) {
                     </button>
 
                     {sellers.length === 0 ? (
-                        <SellerStripSkeleton />
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm font-medium text-slate-500 my-2">
+                            No verified seller organizations published yet.
+                        </div>
                     ) : (
                         <div
                             ref={scrollRef}

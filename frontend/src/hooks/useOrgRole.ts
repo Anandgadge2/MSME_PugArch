@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
 import { getApi } from '../features/shared/apiClient';
 
@@ -44,39 +43,47 @@ interface UseOrgRoleReturn {
 
 export function usePermissions() {
     const { user, token } = useAuth();
-    const cachedPermissions = useMemo(
-        () => Array.isArray(user?.permissions) ? user.permissions : [],
-        [user?.permissions]
-    );
-    const query = useQuery({
-        queryKey: ['auth', 'permissions', user?.id],
-        enabled: Boolean(token && user),
-        queryFn: async () => {
+    const [remotePermissions, setRemotePermissions] = useState<string[]>([]);
+    const [loading, setLoading] = useState(Boolean(token && user));
+
+    const load = useCallback(async () => {
+        if (!token || !user) {
+            setRemotePermissions([]);
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
+        try {
             const data = await getApi<PermissionPayload>('/api/auth/me/permissions', true);
-            return Array.isArray(data?.permissions) ? data.permissions : [];
-        },
-        initialData: cachedPermissions,
-        initialDataUpdatedAt: 0,
-        placeholderData: cachedPermissions,
-        staleTime: 60_000,
-        retry: 1
-    });
+            setRemotePermissions(Array.isArray(data?.permissions) ? data.permissions : []);
+        } catch {
+            setRemotePermissions(Array.isArray(user.permissions) ? user.permissions : []);
+        } finally {
+            setLoading(false);
+        }
+    }, [token, user]);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
 
     const permissions = useMemo(() => {
-        if (!user) return [];
-        return Array.from(new Set(Array.isArray(query.data) ? query.data : cachedPermissions));
-    }, [cachedPermissions, query.data, user]);
+        const cached = Array.isArray(user?.permissions) ? user.permissions : [];
+        const roleDefaults = user?.role === 'buyer'
+            ? ['dashboard.view', 'marketplace.view', 'cart.view', 'cart.add', 'cart.submit_for_approval', 'approval.view', 'approval.submit', 'purchase_order.view', 'purchase_order.create', 'checkout.initiate', 'checkout.approve', 'delivery.view', 'delivery.manage', 'payment.view', 'payment.initiate', 'invoice.view', 'grn.view', 'grn.create', 'grn.approve']
+            : user?.role === 'seller'
+            ? ['dashboard.view', 'marketplace.view', 'purchase_order.view', 'delivery.view', 'delivery.manage', 'payment.view', 'invoice.view', 'grn.view']
+            : user?.role === 'admin' || user?.role === 'master_admin'
+            ? ['*']
+            : [];
+        return Array.from(new Set([...roleDefaults, ...cached, ...remotePermissions]));
+    }, [remotePermissions, user?.permissions, user?.role]);
 
     const hasPermission = useCallback((permissionCode: string) => {
         return permissions.includes('*') || permissions.includes(permissionCode);
     }, [permissions]);
 
-    return {
-        permissions,
-        hasPermission,
-        loading: Boolean(token && user && query.isFetching && query.dataUpdatedAt === 0),
-        reload: () => { void query.refetch(); }
-    };
+    return { permissions, hasPermission, loading, reload: load };
 }
 
 export function usePermission(permissionCode: string) {

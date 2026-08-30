@@ -17,8 +17,9 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { OrgRole, Role } from '@prisma/client';
 import prisma from '../lib/prisma.js';
-import { authenticate, requireAccountType, requirePermission } from '../middleware/auth.js';
+import { authenticate, requireAccountType } from '../middleware/auth.js';
 import { generateAlphanumericUserId } from '../utils/userId.js';
+import { generateSecureTemporaryPassword } from '../utils/crypto.js';
 import { requireOrgRole } from '../middleware/requireOrgRole.js';
 import { shortCache } from '../middleware/httpCache.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -26,14 +27,14 @@ import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { ensureOrgMembership } from '../services/org-membership.service.js';
-import { getTransporter } from '../services/mail.service.js';
+import { getTransporter, sendSubUserInvitationEmail } from '../services/mail.service.js';
 import { env } from '../config/env.js';
 import { hashPassword, validatePasswordStrength } from '../services/password.service.js';
 import { issueCookieAuth } from '../services/auth-cookie.service.js';
 import { toSafeUser } from '../utils/routeHelpers.js';
 import type { AuthRequest } from '../middleware/authenticate.js';
 import { DEFAULT_ORG_ROLE_TEMPLATES, ORG_PERMISSION_CATALOG, type OrgPermissionKey } from '../constants/org-permissions.js';
-import { getDynamicPermissionForOrgKey, getOrgPermissionKeys, requireOrgPermission } from '../middleware/requireOrgPermission.js';
+import { getOrgPermissionKeys, requireOrgPermission } from '../middleware/requireOrgPermission.js';
 import { getOrSetCache } from '../services/cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
@@ -52,8 +53,6 @@ const asyncRoute = (
         } catch (err: any) {
             const status = err?.statusCode || 500;
             const message = status < 500 ? err.message : 'Unable to complete request';
-            // Log the actual error for diagnosis. Without this we lose Prisma /
-            // database errors entirely and the frontend just sees a 500.
             if (status >= 500) {
                 console.error('[org.routes] Unhandled error:', {
                     path: req.originalUrl,
@@ -111,7 +110,9 @@ const ORGANIZATION_TYPE_VALUES = [
 ] as const;
 
 const inviteSchema = z.object({
+    name: z.string().trim().min(2).max(120).optional(),
     email: z.string().email().toLowerCase().trim(),
+    mobile: z.string().trim().max(20).optional(),
     orgRole: z.enum(ORG_ROLE_VALUES as [string, ...string[]]).optional(),
     customRoleId: z.number().int().positive().optional(),
     message: z.string().max(1000).optional()
@@ -166,18 +167,6 @@ const assertValidPermissionKeys = (permissions: string[]) => {
     const valid = new Set(ORG_PERMISSION_CATALOG.map(item => item.key));
     const invalid = permissions.filter(permission => !valid.has(permission as OrgPermissionKey));
     if (invalid.length) throw new ApiError(400, `Invalid permission keys: ${invalid.join(', ')}`, 'INVALID_PERMISSION');
-};
-
-const assertAssignableOrgPermissionKeys = async (req: AuthRequest, requested: string[]) => {
-    const { membership, permissions } = await getOrgPermissionKeys(userId(req), orgId(req));
-    if (membership?.orgRole === 'ORG_ADMIN' && !membership.invitedById) return;
-    const unavailable = requested.filter(permissionKey => {
-        const dynamicPermission = getDynamicPermissionForOrgKey(permissionKey);
-        return !dynamicPermission || (!permissions.includes('*') && !permissions.includes(dynamicPermission));
-    });
-    if (unavailable.length) {
-        throw new ApiError(403, `You cannot assign permissions outside your own access: ${unavailable.join(', ')}`, 'PERMISSION_ESCALATION_DENIED');
-    }
 };
 
 const createOrgWithoutGstSchema = z.object({
@@ -303,7 +292,6 @@ router.post('/org/roles', authenticate, requireAccountType('buyer', 'seller'), r
     const template = body.cloneFrom ? DEFAULT_ORG_ROLE_TEMPLATES.find(item => item.roleKey === body.cloneFrom) : null;
     const permissions = body.permissions || template?.permissions || [];
     assertValidPermissionKeys(permissions);
-    await assertAssignableOrgPermissionKeys(req, permissions);
     const roleKey = normalizeRoleKey(body.roleKey || body.name);
     const role = await (prisma as any).orgCustomRole.create({
         data: {
@@ -338,10 +326,7 @@ router.patch('/org/roles/:id', authenticate, requireAccountType('buyer', 'seller
     const existing = await (prisma as any).orgCustomRole.findFirst({ where: { id, organizationId: orgId(req) } });
     if (!existing) throw new ApiError(404, 'Role not found', 'ROLE_NOT_FOUND');
     if (existing.isSystemRole && (body.name || body.isActive === false)) throw new ApiError(409, 'System role templates cannot be renamed or disabled.', 'SYSTEM_ROLE_LOCKED');
-    if (body.permissions) {
-        assertValidPermissionKeys(body.permissions);
-        await assertAssignableOrgPermissionKeys(req, body.permissions);
-    }
+    if (body.permissions) assertValidPermissionKeys(body.permissions);
     const role = await prisma.$transaction(async tx => {
         if (body.permissions) {
             await (tx as any).orgRolePermission.deleteMany({ where: { roleId: id } });
@@ -378,7 +363,6 @@ router.post('/org/roles/:id/permissions', authenticate, requireAccountType('buye
     const id = Number(req.params.id);
     const body = rolePermissionSchema.parse(req.body);
     assertValidPermissionKeys(body.permissions);
-    await assertAssignableOrgPermissionKeys(req, body.permissions);
     const role = await (prisma as any).orgCustomRole.findFirst({ where: { id, organizationId: orgId(req) } });
     if (!role) throw new ApiError(404, 'Role not found', 'ROLE_NOT_FOUND');
     const updated = await prisma.$transaction(async tx => {
@@ -396,7 +380,6 @@ router.post('/org/roles/:id/clone', authenticate, requireAccountType('buyer', 's
     const id = Number(req.params.id);
     const source = await (prisma as any).orgCustomRole.findFirst({ where: { id, organizationId: orgId(req) }, include: { permissions: true } });
     if (!source) throw new ApiError(404, 'Role not found', 'ROLE_NOT_FOUND');
-    await assertAssignableOrgPermissionKeys(req, source.permissions.filter((p: any) => p.allowed).map((p: any) => p.permissionKey));
     const name = String(req.body?.name || `${source.name} Copy`).trim();
     const role = await (prisma as any).orgCustomRole.create({
         data: {
@@ -415,7 +398,7 @@ router.post('/org/roles/:id/clone', authenticate, requireAccountType('buyer', 's
 
 // ─── GET /api/dashboard/summary — unified dashboard counts ───────────────────
 // Returns all counts the dashboard cards need in ONE call instead of 5.
-router.get('/dashboard/summary', authenticate, requirePermission('dashboard.view'), shortCache(60), asyncRoute(async (req, res) => {
+router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async (req, res) => {
     if (!req.user) return ok(res, null);
     if (req.user.role === 'admin' || req.user.role === 'master_admin') {
         const cacheKey = `cache:dashboard:admin-summary:${req.user.id}:${req.user.role}`;
@@ -856,6 +839,70 @@ router.post(
         const token = generateToken();
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
+        // Auto-generate secure temporary password
+        const tempPassword = generateSecureTemporaryPassword(12);
+        const hashedPassword = await hashPassword(tempPassword);
+
+        // Check if user already exists or create new sub-user
+        let targetUser = await prisma.user.findUnique({
+            where: { email: body.email.toLowerCase().trim() }
+        });
+
+        if (targetUser) {
+            targetUser = await prisma.user.update({
+                where: { id: targetUser.id },
+                data: {
+                    name: body.name || targetUser.name,
+                    mobile: body.mobile || targetUser.mobile,
+                    organizationId: orgId(req),
+                    password: hashedPassword,
+                    mustChangePassword: true,
+                    isSubUser: true,
+                    requiresMobileVerification: true,
+                    accountStatus: 'ACTIVE' as any
+                }
+            });
+        } else {
+            const newUserId = await generateAlphanumericUserId();
+            targetUser = await prisma.user.create({
+                data: {
+                    userId: newUserId,
+                    name: body.name || 'Sub User',
+                    email: body.email.toLowerCase().trim(),
+                    mobile: body.mobile || null,
+                    password: hashedPassword,
+                    role: req.user!.role as any,
+                    organizationId: orgId(req),
+                    accountTypeId: req.user!.accountTypeId || 3,
+                    accountStatus: 'ACTIVE' as any,
+                    registrationStatus: 'completed',
+                    onboardingStatus: 'approved_for_procurement',
+                    mustChangePassword: true,
+                    mobileVerified: false,
+                    isSubUser: true,
+                    requiresMobileVerification: true
+                }
+            });
+        }
+
+        // Create or update OrgMembership
+        await prisma.orgMembership.upsert({
+            where: { userId_organizationId: { userId: targetUser.id, organizationId: orgId(req) } },
+            update: {
+                isActive: true,
+                orgRole: fallbackRole,
+                customRoleId: customRole?.id || null
+            },
+            create: {
+                userId: targetUser.id,
+                organizationId: orgId(req),
+                orgRole: fallbackRole,
+                customRoleId: customRole?.id || null,
+                isActive: true,
+                invitedById: userId(req)
+            }
+        });
+
         const invitation = await prisma.orgInvitation.create({
             data: {
                 organizationId: orgId(req),
@@ -871,33 +918,16 @@ router.post(
             }
         });
 
-        // Send invite email
-        const inviteUrl = `${env.FRONTEND_URL || 'http://localhost:3000'}/invite/accept?token=${token}`;
         const roleName = customRole?.name || fallbackRole.replace(/_/g, ' ');
+        const loginUrl = `${env.FRONTEND_URL || 'http://localhost:3000'}/login`;
 
-        try {
-            await getTransporter().sendMail({
-                from: `"JsgSmile Portal" <${env.SMTP_USER}>`,
-                to: body.email,
-                subject: `You're invited to join ${org?.organizationName} on JsgSmile`,
-                html: `
-                  <div style="font-family:Arial,sans-serif;max-width:560px;margin:20px auto;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-                    <div style="background:#12335f;color:white;padding:18px;text-align:center;font-weight:700;">JsgSmile Procurement Portal</div>
-                    <div style="padding:28px;color:#1e293b;">
-                      <h2 style="margin:0 0 16px;">You've been invited!</h2>
-                      <p>You have been invited to join <strong>${org?.organizationName}</strong> as a <strong>${roleName}</strong>.</p>
-                      <p>Click the button below to accept the invitation. This link expires in 7 days.</p>
-                      <div style="text-align:center;margin:28px 0;">
-                        <a href="${inviteUrl}" style="background:#12335f;color:white;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:700;">Accept Invitation</a>
-                      </div>
-                      <p style="font-size:12px;color:#64748b;">If you did not expect this invitation, you can safely ignore this email.</p>
-                    </div>
-                  </div>
-                `
-            });
-        } catch {
-            // Email failure is non-fatal — invitation is still created
-        }
+        await sendSubUserInvitationEmail(body.email, {
+            name: body.name || targetUser.name,
+            organizationName: org?.organizationName || 'Your Organization',
+            roleName,
+            tempPassword,
+            loginUrl
+        });
 
         await auditLog({
             actorUserId: userId(req),

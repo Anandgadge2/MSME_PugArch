@@ -21,15 +21,6 @@ export const verifyMobileOtpSchema = z.object({
   otp: z.string().regex(/^\d{6}$/)
 });
 
-export const subUserMobileOtpSchema = z.object({
-  mobile: z.string().regex(/^(?:\+?91)?[6-9]\d{9}$/),
-  otp: z.string().regex(/^\d{6}$/).optional()
-});
-
-export const verifySubUserMobileOtpSchema = subUserMobileOtpSchema.extend({
-  otp: z.string().regex(/^\d{6}$/)
-});
-
 export const sendUnifiedOtpSchema = z.object({
   identifier: identifierSchema.optional(),
   email: z.string().email().max(254).optional(),
@@ -90,3 +81,18 @@ export const resetPasswordSchema = z.object({
 export const mobileExistsSchema = z.object({
   mobile: z.string().regex(/^[6-9]\d{9}$/)
 });
+
+export const subUserActivatePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128).optional(),
+  newPassword: z.string().min(8).max(128)
+});
+
+export const subUserSendMobileOtpSchema = z.object({
+  mobile: z.string().regex(/^(?:\+?91)?[6-9]\d{9}$/)
+});
+
+export const subUserVerifyMobileOtpSchema = z.object({
+  mobile: z.string().regex(/^(?:\+?91)?[6-9]\d{9}$/),
+  otp: z.string().regex(/^\d{6}$/)
+});
+

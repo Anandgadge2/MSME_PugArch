@@ -20,6 +20,7 @@ interface User {
   emailVerified?: boolean;
   mobileVerified?: boolean;
   mustChangePassword?: boolean;
+  isSubUser?: boolean;
   requiresMobileVerification?: boolean;
   twoFactorEnabled?: boolean;
   adminFeedback?: string;
@@ -115,6 +116,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       clearLocalSession();
       router.replace(target);
+      if (target === '/' && typeof window !== 'undefined' && window.location.pathname !== '/') {
+        window.history.replaceState(null, '', '/');
+      }
     }
   }, [clearLocalSession, router]);
 

@@ -1,204 +1,345 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Check, KeyRound, Loader2, LogOut, Phone, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { ShieldCheck, Lock, Smartphone, CheckCircle2, ArrowRight, KeyRound, AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { api } from '../../../lib/api';
-import { sanitizeIndianMobileInput, validateIndianMobile } from '../../../lib/validation';
 import { Button } from '../../../components/ui/button';
 
-const readError = async (response: Response, fallback: string) => {
-  const payload = await response.json().catch(() => ({}));
-  return payload?.message || fallback;
-};
+export const SubUserActivationGate: React.FC = () => {
+  const { user, refreshUser } = useAuth();
 
-const passwordChecks = (password: string) => [
-  { label: 'At least 12 characters', valid: password.length >= 12 },
-  { label: 'Uppercase and lowercase letters', valid: /[A-Z]/.test(password) && /[a-z]/.test(password) },
-  { label: 'At least one number', valid: /\d/.test(password) },
-  { label: 'At least one special character', valid: /[^A-Za-z0-9]/.test(password) }
-];
-
-export default function SubUserActivationGate() {
-  const { user, refreshUser, logout } = useAuth();
-  const [currentPassword, setCurrentPassword] = useState('');
+  const [currentStep, setCurrentStep] = useState<'password' | 'mobile'>('password');
+  
+  // Password State
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+
+  // Mobile OTP State
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+
+  const isSubUser = Boolean(user?.isSubUser);
+  const needsPasswordChange = Boolean(user?.mustChangePassword);
+  const needsMobileVerification = Boolean(!user?.mobileVerified);
 
   useEffect(() => {
-    setMobile(sanitizeIndianMobileInput(user?.mobile || ''));
-  }, [user?.mobile]);
+    if (user?.mobile) {
+      setMobile(user.mobile);
+    }
+    if (needsPasswordChange) {
+      setCurrentStep('password');
+    } else if (needsMobileVerification) {
+      setCurrentStep('mobile');
+    }
+  }, [user, needsPasswordChange, needsMobileVerification]);
 
-  const passwordRules = useMemo(() => passwordChecks(newPassword), [newPassword]);
-  const needsActivation = Boolean(user?.mustChangePassword || user?.requiresMobileVerification);
-  if (!user || !needsActivation) return null;
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [resendTimer]);
 
-  const passwordStep = Boolean(user.mustChangePassword);
-  const mobileStep = !passwordStep && Boolean(user.requiresMobileVerification);
+  if (!isSubUser || (!needsPasswordChange && !needsMobileVerification)) {
+    return null;
+  }
 
-  const changePassword = async () => {
-    if (!currentPassword) return toast.error('Enter the temporary password from your invitation email.');
-    if (!passwordRules.every(rule => rule.valid)) return toast.error('Your new password does not meet all security requirements.');
-    if (newPassword !== confirmPassword) return toast.error('New password and confirmation do not match.');
-    if (currentPassword === newPassword) return toast.error('Choose a password different from the temporary password.');
+  // Password validation helpers
+  const hasMinLength = newPassword.length >= 8;
+  const hasUppercase = /[A-Z]/.test(newPassword);
+  const hasLowercase = /[a-z]/.test(newPassword);
+  const hasNumber = /[0-9]/.test(newPassword);
+  const hasSpecial = /[^A-Za-z0-9]/.test(newPassword);
+  const isPasswordValid = hasMinLength && hasUppercase && hasLowercase && hasNumber && hasSpecial;
+  const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
 
-    setBusy(true);
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+
+    if (!isPasswordValid) {
+      setPasswordError('Password must meet all security requirements listed below.');
+      return;
+    }
+    if (!passwordsMatch) {
+      setPasswordError('Passwords do not match.');
+      return;
+    }
+
+    setPasswordLoading(true);
     try {
-      const response = await api.post('/api/auth/change-password', { currentPassword, newPassword });
-      if (!response.ok) throw new Error(await readError(response, 'Unable to change password.'));
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+      const res = await api.post('/api/auth/sub-user/activate/password', {
+        newPassword
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Unable to set new password');
+      }
+
+      toast.success('Password updated successfully!');
       await refreshUser({ skipCache: true });
-      toast.success('Password changed. Now verify your mobile number.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to change password.');
+      setCurrentStep('mobile');
+    } catch (err: any) {
+      setPasswordError(err.message || 'Failed to update password');
+      toast.error(err.message || 'Failed to update password');
     } finally {
-      setBusy(false);
+      setPasswordLoading(false);
     }
   };
 
-  const sendOtp = async () => {
-    const normalized = sanitizeIndianMobileInput(mobile);
-    const mobileError = validateIndianMobile(normalized, 'Mobile number');
-    if (mobileError) return toast.error(mobileError);
-    setBusy(true);
+  const handleSendMobileOtp = async () => {
+    const cleanMobile = mobile.trim().replace(/\D/g, '').slice(-10);
+    if (cleanMobile.length !== 10) {
+      toast.error('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    setOtpLoading(true);
     try {
-      const response = await api.post('/api/auth/sub-user/mobile/send-otp', { mobile: normalized });
-      if (!response.ok) throw new Error(await readError(response, 'Unable to send OTP.'));
-      const payload = await response.json().catch(() => ({}));
-      setMobile(normalized);
+      const res = await api.post('/api/auth/sub-user/activate/send-mobile-otp', {
+        mobile: cleanMobile
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Unable to send OTP');
+      }
+
+      toast.success(`OTP sent to +91 ${cleanMobile}`);
       setOtpSent(true);
-      toast.success(payload.message || 'OTP sent to your mobile number.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to send OTP.');
+      setResendTimer(60);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to send mobile OTP');
     } finally {
-      setBusy(false);
+      setOtpLoading(false);
     }
   };
 
-  const verifyOtp = async () => {
-    if (!/^\d{6}$/.test(otp)) return toast.error('Enter the 6-digit OTP.');
-    setBusy(true);
+  const handleVerifyMobileOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanMobile = mobile.trim().replace(/\D/g, '').slice(-10);
+    const cleanOtp = otp.trim();
+
+    if (cleanOtp.length !== 6) {
+      toast.error('Please enter the 6-digit OTP.');
+      return;
+    }
+
+    setVerifyLoading(true);
     try {
-      const response = await api.post('/api/auth/sub-user/mobile/verify', { mobile, otp });
-      if (!response.ok) throw new Error(await readError(response, 'Unable to verify OTP.'));
+      const res = await api.post('/api/auth/sub-user/activate/verify-mobile-otp', {
+        mobile: cleanMobile,
+        otp: cleanOtp
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'OTP verification failed');
+      }
+
+      toast.success('Mobile verified! Your account is now fully activated.');
       await refreshUser({ skipCache: true });
-      toast.success('Account activated. Your assigned workspace is ready.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to verify OTP.');
+    } catch (err: any) {
+      toast.error(err.message || 'Invalid OTP code.');
     } finally {
-      setBusy(false);
+      setVerifyLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="activation-title">
-      <div className="my-auto w-full max-w-3xl overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl">
-        <div className="grid md:grid-cols-[260px_1fr]">
-          <aside className="bg-[#0b2447] p-6 text-white md:p-7">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/20">
-              <ShieldCheck className="h-6 w-6" />
-            </div>
-            <p className="mt-6 text-xs font-black uppercase tracking-[0.18em] text-blue-200">Secure setup</p>
-            <h1 id="activation-title" className="mt-2 text-2xl font-black leading-tight">Activate your workspace access</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-300">Complete both security steps before opening the organization dashboard.</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+        {/* Top Header Banner */}
+        <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-6 text-white text-center">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/10 ring-8 ring-white/5 mb-3">
+            <ShieldCheck className="w-6 h-6 text-blue-300" />
+          </div>
+          <h2 className="text-xl font-black tracking-tight">Account Activation Required</h2>
+          <p className="text-xs text-blue-200 mt-1 max-w-sm mx-auto">
+            Welcome to <span className="font-semibold text-white">{user?.organization?.organizationName || 'your Organization'}</span>. Please complete these 2 steps to activate your sub-user dashboard access.
+          </p>
+        </div>
 
-            <div className="mt-8 space-y-3">
-              <div className={`flex items-center gap-3 rounded-xl border p-3 ${passwordStep ? 'border-blue-300 bg-white/10' : 'border-emerald-300/40 bg-emerald-400/10'}`}>
-                <span className={`flex h-8 w-8 items-center justify-center rounded-full ${passwordStep ? 'bg-white text-[#0b2447]' : 'bg-emerald-400 text-emerald-950'}`}>
-                  {passwordStep ? <KeyRound className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                </span>
-                <div><p className="text-sm font-bold">1. New password</p><p className="text-xs text-slate-300">Replace temporary access</p></div>
+        {/* Step Indicator */}
+        <div className="flex border-b border-slate-100 bg-slate-50 px-6 py-3">
+          <div className={`flex items-center gap-2 text-xs font-bold ${!needsPasswordChange ? 'text-emerald-600' : currentStep === 'password' ? 'text-blue-900' : 'text-slate-400'}`}>
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${!needsPasswordChange ? 'bg-emerald-100 text-emerald-700' : currentStep === 'password' ? 'bg-blue-900 text-white' : 'bg-slate-200 text-slate-600'}`}>
+              {!needsPasswordChange ? <CheckCircle2 className="w-3.5 h-3.5" /> : '1'}
+            </span>
+            <span>1. Set New Password</span>
+          </div>
+
+          <div className="mx-3 flex items-center text-slate-300">
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
+
+          <div className={`flex items-center gap-2 text-xs font-bold ${!needsMobileVerification ? 'text-emerald-600' : currentStep === 'mobile' ? 'text-blue-900' : 'text-slate-400'}`}>
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${!needsMobileVerification ? 'bg-emerald-100 text-emerald-700' : currentStep === 'mobile' ? 'bg-blue-900 text-white' : 'bg-slate-200 text-slate-600'}`}>
+              {!needsMobileVerification ? <CheckCircle2 className="w-3.5 h-3.5" /> : '2'}
+            </span>
+            <span>2. Verify Mobile OTP</span>
+          </div>
+        </div>
+
+        {/* Step Content */}
+        <div className="p-6">
+          {currentStep === 'password' && needsPasswordChange ? (
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800 flex items-start gap-2">
+                <KeyRound className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <span>You logged in using a temporary password. For security, please set your permanent password.</span>
               </div>
-              <div className={`flex items-center gap-3 rounded-xl border p-3 ${mobileStep ? 'border-blue-300 bg-white/10' : 'border-white/10'}`}>
-                <span className={`flex h-8 w-8 items-center justify-center rounded-full ${mobileStep ? 'bg-white text-[#0b2447]' : 'bg-white/10 text-slate-300'}`}>
-                  <Phone className="h-4 w-4" />
-                </span>
-                <div><p className="text-sm font-bold">2. Mobile OTP</p><p className="text-xs text-slate-300">Verify account ownership</p></div>
-              </div>
-            </div>
 
-            <button onClick={() => logout('/login')} className="mt-8 inline-flex items-center gap-2 text-xs font-bold text-slate-300 hover:text-white">
-              <LogOut className="h-4 w-4" /> Sign out
-            </button>
-          </aside>
-
-          <section className="p-6 md:p-8">
-            <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Signed in as</p>
-              <p className="mt-1 font-black text-slate-950">{user.name}</p>
-              <p className="text-sm text-slate-600">{user.email}</p>
-            </div>
-
-            {passwordStep && (
               <div>
-                <h2 className="text-xl font-black text-slate-950">Create your permanent password</h2>
-                <p className="mt-1 text-sm text-slate-600">Use the password from the invitation email once, then choose a private password.</p>
-                <div className="mt-6 space-y-4">
-                  <label className="block text-sm font-bold text-slate-700">Temporary password
-                    <input type="password" autoComplete="current-password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-slate-300 px-3 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-blue-100" />
-                  </label>
-                  <label className="block text-sm font-bold text-slate-700">New password
-                    <input type="password" autoComplete="new-password" value={newPassword} onChange={event => setNewPassword(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-slate-300 px-3 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-blue-100" />
-                  </label>
-                  <label className="block text-sm font-bold text-slate-700">Confirm new password
-                    <input type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-slate-300 px-3 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-blue-100" />
-                  </label>
-                </div>
-                <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                  {passwordRules.map(rule => (
-                    <div key={rule.label} className={`flex items-center gap-2 text-xs font-semibold ${rule.valid ? 'text-emerald-700' : 'text-slate-500'}`}>
-                      <span className={`flex h-4 w-4 items-center justify-center rounded-full ${rule.valid ? 'bg-emerald-100' : 'bg-slate-100'}`}><Check className="h-3 w-3" /></span>
-                      {rule.label}
-                    </div>
-                  ))}
-                </div>
-                <Button onClick={changePassword} disabled={busy} className="mt-7 h-11 w-full bg-[#12335f] font-bold text-white hover:bg-[#0b2447]">
-                  {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save password and continue
-                </Button>
-              </div>
-            )}
-
-            {mobileStep && (
-              <div>
-                <h2 className="text-xl font-black text-slate-950">Verify your mobile number</h2>
-                <p className="mt-1 text-sm text-slate-600">This number becomes the verified contact for your sub-login.</p>
-                <label className="mt-6 block text-sm font-bold text-slate-700">Mobile number
-                  <div className="mt-2 flex overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-blue-100">
-                    <span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-600">+91</span>
-                    <input inputMode="numeric" maxLength={10} disabled={otpSent} value={mobile} onChange={event => setMobile(sanitizeIndianMobileInput(event.target.value))} className="h-11 min-w-0 flex-1 px-3 outline-none disabled:bg-slate-50" placeholder="10-digit mobile number" />
-                  </div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  New Password
                 </label>
-                {!otpSent ? (
-                  <Button onClick={sendOtp} disabled={busy} className="mt-6 h-11 w-full bg-[#12335f] font-bold text-white hover:bg-[#0b2447]">
-                    {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Send verification OTP
-                  </Button>
-                ) : (
-                  <div className="mt-5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-bold text-slate-700">6-digit OTP</label>
-                      <button type="button" onClick={() => { setOtpSent(false); setOtp(''); }} className="text-xs font-bold text-blue-700 hover:underline">Change number</button>
-                    </div>
-                    <input inputMode="numeric" maxLength={6} value={otp} onChange={event => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-2 h-12 w-full rounded-lg border border-slate-300 px-4 text-center text-xl font-black tracking-[0.35em] outline-none focus:border-[#12335f] focus:ring-2 focus:ring-blue-100" placeholder="000000" />
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      <Button variant="outline" onClick={sendOtp} disabled={busy} className="h-11 font-bold">Resend OTP</Button>
-                      <Button onClick={verifyOtp} disabled={busy || otp.length !== 6} className="h-11 bg-[#12335f] font-bold text-white hover:bg-[#0b2447]">
-                        {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Verify & open dashboard
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="Enter new secure password"
+                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-800"
+                    required
+                  />
+                </div>
               </div>
-            )}
-          </section>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Confirm New Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter new password"
+                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-800"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Password Requirements Checklist */}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1">
+                <div className="font-bold text-slate-700 mb-1">Password Requirements:</div>
+                <div className={`flex items-center gap-1.5 ${hasMinLength ? 'text-emerald-700' : 'text-slate-500'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${hasMinLength ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                  At least 8 characters
+                </div>
+                <div className={`flex items-center gap-1.5 ${hasUppercase && hasLowercase ? 'text-emerald-700' : 'text-slate-500'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${hasUppercase && hasLowercase ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                  Uppercase and lowercase letters
+                </div>
+                <div className={`flex items-center gap-1.5 ${hasNumber ? 'text-emerald-700' : 'text-slate-500'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${hasNumber ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                  At least one number
+                </div>
+                <div className={`flex items-center gap-1.5 ${hasSpecial ? 'text-emerald-700' : 'text-slate-500'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${hasSpecial ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                  At least one special character (!@#$%^&*)
+                </div>
+              </div>
+
+              {passwordError && (
+                <div className="text-xs text-rose-600 font-semibold flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4" />
+                  {passwordError}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={passwordLoading || !isPasswordValid || !passwordsMatch}
+                className="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold py-2.5 rounded-lg flex items-center justify-center gap-2"
+              >
+                {passwordLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                Save Password & Continue &rarr;
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyMobileOtp} className="space-y-4">
+              <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 flex items-start gap-2">
+                <Smartphone className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>Verify your phone number with a 6-digit OTP to complete organization security verification.</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Mobile Number (10 Digits)
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">+91</span>
+                    <input
+                      type="tel"
+                      value={mobile}
+                      onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      placeholder="9876543210"
+                      maxLength={10}
+                      disabled={otpSent}
+                      className="w-full pl-12 pr-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-800 font-mono"
+                      required
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSendMobileOtp}
+                    disabled={otpLoading || mobile.length !== 10 || resendTimer > 0}
+                    className="shrink-0 text-xs font-bold border-slate-300 hover:bg-slate-100"
+                  >
+                    {otpLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+                    {resendTimer > 0 ? `Resend (${resendTimer}s)` : otpSent ? 'Resend OTP' : 'Send OTP'}
+                  </Button>
+                </div>
+              </div>
+
+              {otpSent && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Enter 6-Digit OTP
+                  </label>
+                  <input
+                    type="text"
+                    value={otp}
+                    onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Enter 6-digit OTP code"
+                    maxLength={6}
+                    className="w-full text-center text-xl font-bold tracking-widest py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-800 font-mono"
+                    required
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1 text-center">
+                    Enter the verification code sent to +91 {mobile}
+                  </p>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={verifyLoading || !otpSent || otp.length !== 6}
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-lg flex items-center justify-center gap-2"
+              >
+                {verifyLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                Verify Mobile & Access Dashboard &rarr;
+              </Button>
+            </form>
+          )}
         </div>
       </div>
     </div>
   );
-}
+};

@@ -16,18 +16,21 @@ import {
     getCategoryVisualMeta,
     getCategoryImageUrl,
     buildCategoryFallbackSvg,
+    preloadCriticalCategoryPhotos,
 } from '../utils/categoryImages';
 
 interface CategoryCardItemProps {
     category: MarketplaceCategory;
     selected: boolean;
+    priority?: boolean;
     onSelect?: (category: MarketplaceCategory) => void;
     onClick?: () => void;
 }
 
-function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCardItemProps) {
+function CategoryCardItem({ category, selected, priority = false, onSelect, onClick }: CategoryCardItemProps) {
     const [imgSrc, setImgSrc] = useState<string>(() => getCategoryImageUrl(category));
     const [imgError, setImgError] = useState(false);
+    const [isLoaded, setIsLoaded] = useState(false);
 
     React.useEffect(() => {
         setImgSrc(getCategoryImageUrl(category));
@@ -43,28 +46,36 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     };
 
     const cardInner = (
-        <div className="relative flex h-full w-full flex-col justify-end overflow-hidden rounded-2xl sm:rounded-3xl">
-            {/* Background Image */}
+        <div className="relative flex h-full w-full flex-col justify-end overflow-hidden rounded-2xl sm:rounded-3xl bg-slate-100">
+            {/* Background Image with eager high-priority loading for visible cards */}
             <img
                 src={imgSrc}
                 alt={category.name}
-                loading="lazy"
+                loading={priority ? 'eager' : 'lazy'}
+                fetchPriority={priority ? 'high' : 'auto'}
                 decoding="async"
                 referrerPolicy="no-referrer"
+                onLoad={() => setIsLoaded(true)}
                 onError={handleImageError}
-                className="absolute inset-0 h-full w-full bg-slate-100 object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
+                className={cn(
+                    "absolute inset-0 h-full w-full object-cover object-center transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105",
+                    isLoaded ? "opacity-100" : "opacity-90"
+                )}
             />
             
-            {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/55 via-[35%] to-white/5" />
+            {/* Ambient 3D Glass Light Sweep */}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out" />
+
+            {/* Lower side whitish shade overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/75 via-[4%] to-transparent transition-opacity duration-300" />
             
-            {/* Category Name */}
-            <div className="relative z-10 w-full p-3 sm:p-4 text-center">
+            {/* Category Name with subtle 3D lift */}
+            <div className="relative z-10 w-full p-3 sm:p-4 text-center transform transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5">
                 <span className={cn(
-                    "block w-full text-xs sm:text-[13px] font-extrabold leading-tight line-clamp-2 transition-colors duration-200",
+                    "block w-full text-xs sm:text-[13px] font-black leading-tight line-clamp-2 transition-colors duration-300",
                     selected
                         ? "text-blue-700 font-black"
-                        : "text-slate-800 group-hover:text-blue-600"
+                        : "text-slate-900 group-hover:text-blue-700"
                 )}>
                     {category.name}
                 </span>
@@ -73,7 +84,7 @@ function CategoryCardItem({ category, selected, onSelect, onClick }: CategoryCar
     );
 
     const containerClassName = cn(
-        'group relative flex flex-col bg-white rounded-2xl sm:rounded-3xl transition-all duration-300 cursor-pointer border border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-blue-300 w-full aspect-[4/5] sm:aspect-square md:aspect-[4/5] xl:aspect-[3/4]',
+        'group relative flex flex-col bg-white rounded-2xl sm:rounded-3xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] transform-gpu origin-center cursor-pointer border border-slate-200/80 shadow-sm hover:shadow-[0_28px_60px_-15px_rgba(15,23,42,0.35),0_12px_28px_-8px_rgba(37,99,235,0.25)] hover:-translate-y-2 hover:scale-[1.05] hover:border-blue-400 hover:ring-2 hover:ring-blue-400/30 hover:z-50 w-full aspect-[4/5] sm:aspect-square md:aspect-[4/5] xl:aspect-[4/5]',
         selected && 'shadow-xl ring-2 ring-blue-500 border-blue-400 scale-[1.02] z-10'
     );
 
@@ -128,6 +139,10 @@ export function CategoryCatalogueStrip({
     const sectionRef = useRef<HTMLElement>(null);
     const [isExpanded, setIsExpanded] = useState(false);
 
+    React.useEffect(() => {
+        preloadCriticalCategoryPhotos(initialCount);
+    }, [initialCount]);
+
     if (!categories.length) return null;
 
     const trackCategory = (category: MarketplaceCategory) => {
@@ -155,7 +170,7 @@ export function CategoryCatalogueStrip({
         <section
             ref={sectionRef}
             className={cn(
-                'relative overflow-hidden py-10 sm:py-14 border-y border-slate-200/70 bg-gradient-to-b from-blue-50/60 via-slate-50/80 to-blue-50/40',
+                'relative overflow-visible py-12 sm:py-16 border-y border-slate-200/70 bg-gradient-to-b from-blue-50/60 via-slate-50/80 to-blue-50/40',
                 className
             )}
             id="categories"
@@ -192,13 +207,14 @@ export function CategoryCatalogueStrip({
 
                 {/* Clean, Non-Scrolling Responsive Grid Layout */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3.5 sm:gap-4.5">
-                    {displayedCategories.map((category) => {
+                    {displayedCategories.map((category, index) => {
                         const selected = String(selectedCategoryId || '') === String(category.id);
                         return (
                             <CategoryCardItem
                                 key={category.id}
                                 category={category}
                                 selected={selected}
+                                priority={index < 14}
                                 onSelect={onSelect}
                                 onClick={() => trackCategory(category)}
                             />

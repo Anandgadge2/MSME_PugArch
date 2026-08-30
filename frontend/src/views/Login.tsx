@@ -35,16 +35,11 @@ export default function Login() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnUrl = searchParams.get('returnUrl');
-  const invitedEmail = searchParams.get('email');
 
   const generateCaptcha = useCallback(() => {
     setCaptchaValue(generateSecureCaptchaString());
     setUserCaptcha('');
   }, []);
-
-  useEffect(() => {
-    if (invitedEmail) setEmail(invitedEmail.trim().toLowerCase());
-  }, [invitedEmail]);
 
   useEffect(() => {
     if (user) {

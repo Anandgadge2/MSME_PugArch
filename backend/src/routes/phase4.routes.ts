@@ -7,6 +7,7 @@ import { z } from 'zod';
 import prisma from '../lib/prisma.js';
 import { permanentlyDeleteUser } from './master-admin.routes.js';
 import { env } from '../config/env.js';
+import { logger } from '../config/logger.js';
 import { getGCSBucket, getGCSBucketName } from '../config/gcs.js';
 import { getFileContent, getSignedUrl, uploadFile } from '../services/storage/storage.service.js';
 import { authenticate, optionalAuthenticate, authorize, authorizeAdmin, requireAccountType, requirePermission, type AuthRequest } from '../middleware/auth.js';
@@ -257,9 +258,11 @@ const defaultMarketplaceCategories = [
 const ensureMarketplaceCategories = async () => {
   const count = await db.category.count({ where: { isActive: true } });
   if (count === 0) {
-    await Promise.all(defaultMarketplaceCategories.map(category =>
-      db.category.upsert({
-        where: { slug: slugFor(category.name) },
+    await Promise.all(defaultMarketplaceCategories.map(category => {
+      const slug = slugFor(category.name);
+      const defaultPhotoUrl = `/category-photos/1787987232675/${slug}.webp`;
+      return db.category.upsert({
+        where: { slug },
         update: {
           name: category.name,
           type: category.type as any,
@@ -269,11 +272,12 @@ const ensureMarketplaceCategories = async () => {
         create: {
           ...category,
           type: category.type as any,
-          slug: slugFor(category.name),
+          slug,
+          imageUrl: defaultPhotoUrl,
           isActive: true
         }
-      })
-    ));
+      });
+    }));
     await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
   }
   const categories = await db.category.findMany({
@@ -2737,6 +2741,26 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
     }
   } catch {}
 
+  // 3. Try local disk storage fallback
+  try {
+    const candidatePaths = [
+      path.resolve(process.cwd(), 'uploads', rawKey),
+      path.resolve(process.cwd(), 'backend', 'uploads', rawKey),
+      path.resolve(process.cwd(), 'public', rawKey),
+      path.resolve(process.cwd(), 'frontend', 'public', rawKey),
+    ];
+    for (const localPath of candidatePaths) {
+      if (fs.existsSync(localPath)) {
+        const buffer = await fs.promises.readFile(localPath);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', buffer.length);
+        res.setHeader('Cache-Control', cacheControl);
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        return res.end(buffer);
+      }
+    }
+  } catch {}
+
   throw new ApiError(404, 'File not found in storage', 'FILE_NOT_FOUND');
 }));
 
@@ -4105,6 +4129,14 @@ router.post('/categories/custom', authenticate, asyncRoute(async (req, res) => {
   ok(res, category, 201);
 }));
 
+router.get('/admin/categories', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
+  await ensureMarketplaceCategories();
+  const categories = await db.category.findMany({
+    orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }]
+  });
+  ok(res, categories);
+}));
+
 router.post('/admin/categories', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const body = parse(z.object({
     name: z.string().trim().min(2).max(160),
@@ -4134,14 +4166,43 @@ router.put('/admin/categories/:id', authenticate, authorizeAdmin, asyncRoute(asy
   ok(res, category);
 }));
 
-router.delete('/admin/categories/:id', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+router.patch('/admin/categories/:id/status', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
-  const category = await db.category.update({ where: { id }, data: { isActive: false } }).catch(() => null);
+  const body = parse(z.object({
+    isActive: z.boolean()
+  }), req.body);
+
+  const category = await db.category.update({
+    where: { id },
+    data: { isActive: body.isActive }
+  });
+
   await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
   await deleteCache(redisKeys.cacheMarketplaceFeaturedCategories()).catch(() => undefined);
   await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
-  await auditWrite(req, 'category.deleted', 'category', id);
-  ok(res, category || { id, deleted: true });
+  await auditWrite(req, body.isActive ? 'category.activated' : 'category.deactivated', 'category', id);
+  ok(res, category);
+}));
+
+router.delete('/admin/categories/:id', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  
+  await db.$transaction(async (tx) => {
+    await tx.category.updateMany({ where: { parentId: id }, data: { parentId: null } });
+    await tx.product.updateMany({ where: { categoryId: id }, data: { categoryId: null } });
+    await tx.service.updateMany({ where: { categoryId: id }, data: { categoryId: null } });
+    await tx.buyerRequirement.updateMany({ where: { categoryId: id }, data: { categoryId: null } });
+    await tx.requirement.updateMany({ where: { categoryId: id }, data: { categoryId: null } });
+    await tx.tender.updateMany({ where: { categoryId: id }, data: { categoryId: null } });
+    await tx.marketplaceInteraction.deleteMany({ where: { categoryId: id } }).catch(() => null);
+    await tx.category.delete({ where: { id } });
+  });
+
+  await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
+  await deleteCache(redisKeys.cacheMarketplaceFeaturedCategories()).catch(() => undefined);
+  await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
+  await auditWrite(req, 'category.permanently_deleted', 'category', id);
+  ok(res, { id, deleted: true, success: true });
 }));
 
 // ── Admin Category Image Upload (GCS-backed) ──
@@ -4169,20 +4230,36 @@ router.post('/admin/categories/:id/image', authenticate, authorizeAdmin, categor
   const ext = file.mimetype === 'image/png' ? '.png' : file.mimetype === 'image/webp' ? '.webp' : '.jpg';
   const timestamp = Date.now();
   const gcsKey = `categories/photos/${category.slug}-${timestamp}${ext}`;
-  const bucket = getGCSBucket();
   const bucketName = getGCSBucketName();
 
-  await bucket.file(gcsKey).save(file.buffer, {
-    contentType: file.mimetype,
-    resumable: false,
-    metadata: {
-      contentType: file.mimetype,
-      cacheControl: 'public, max-age=31536000, immutable',
-      metadata: { categoryId: String(id), categorySlug: category.slug, uploadedBy: String(userId(req)) }
-    }
-  });
+  // 1. Always save to local uploads directory for local disk fallback
+  try {
+    const localDir = path.resolve(process.cwd(), 'uploads', 'categories', 'photos');
+    await fs.promises.mkdir(localDir, { recursive: true });
+    await fs.promises.writeFile(path.resolve(localDir, `${category.slug}-${timestamp}${ext}`), file.buffer);
+  } catch (err) {
+    logger.warn({ err }, '[Storage] Could not write local category photo copy');
+  }
 
-  const imageUrl = `https://storage.googleapis.com/${bucketName}/${gcsKey}?v=${timestamp}`;
+  let imageUrl = `/api/files/raw/${gcsKey}?v=${timestamp}`;
+
+  // 2. Upload to GCS if configured
+  try {
+    const bucket = getGCSBucket();
+    await bucket.file(gcsKey).save(file.buffer, {
+      contentType: file.mimetype,
+      resumable: false,
+      metadata: {
+        contentType: file.mimetype,
+        cacheControl: 'public, max-age=31536000, immutable',
+        metadata: { categoryId: String(id), categorySlug: category.slug, uploadedBy: String(userId(req)) }
+      }
+    });
+    imageUrl = `https://storage.googleapis.com/${bucketName}/${gcsKey}?v=${timestamp}`;
+  } catch (gcsErr: any) {
+    logger.warn({ err: gcsErr?.message || gcsErr }, '[GCS] Storage upload failed or credentials missing; using local storage fallback URL');
+  }
+
   const updated = await db.category.update({ where: { id }, data: { imageUrl } });
 
   await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);

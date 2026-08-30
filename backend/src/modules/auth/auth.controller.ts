@@ -361,116 +361,6 @@ export const authController = {
     }
   },
 
-  sendSubUserMobileOtp: async (req: AuthRequest, res: Response) => {
-    try {
-      const userId = Number(req.user?.id);
-      const mobile = toLocalIndianMobile(req.body.mobile);
-      if (!mobile) return res.status(400).json({ message: 'Valid Indian mobile number is required' });
-
-      const user = await (prisma as any).user.findUnique({
-        where: { id: userId },
-        select: { id: true, mustChangePassword: true, requiresMobileVerification: true }
-      });
-      if (!user) return res.status(404).json({ message: 'User not found' });
-      if (user.mustChangePassword) {
-        return res.status(409).json({ message: 'Change your temporary password before verifying mobile.', code: 'PASSWORD_CHANGE_REQUIRED' });
-      }
-      if (!user.requiresMobileVerification) {
-        return res.status(409).json({ message: 'Mobile activation is already complete.', code: 'MOBILE_ALREADY_VERIFIED' });
-      }
-
-      const duplicate = await prisma.user.findFirst({ where: { mobile, id: { not: userId } }, select: { id: true } });
-      if (duplicate) return res.status(409).json({ message: 'This mobile number is already linked to another account.' });
-
-      const otp = generateOtp();
-      const otpState = await storeOtp('sub_user_mobile_activation', mobile, otp, { userId, channel: 'sms' }, 'sms');
-      const delivery = await sendOtpByChannel('sms', mobile, otp, '[SECURE AUTH] Mobile activation code', 'sub_user_mobile_activation');
-      if (env.NODE_ENV === 'production' && !delivery.success) {
-        return res.status(503).json({ message: 'OTP could not be delivered. Please try again or contact your administrator.' });
-      }
-
-      await auditLog({
-        actorUserId: userId,
-        actorRole: req.user?.role,
-        action: 'auth.sub_user.mobile_otp_sent',
-        entityType: 'user',
-        entityId: userId,
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-        metadata: { mobileHash: sha256(mobile), smsSent: delivery.success, smsSkipped: delivery.skipped }
-      });
-      return res.json({
-        success: true,
-        sendsRemaining: otpState.sendsRemaining,
-        smsEnabled: smsService.isEnabled(),
-        message: delivery.success ? 'OTP sent to your mobile number.' : 'OTP generated for development verification.'
-      });
-    } catch (err: any) {
-      handleSecureRouteError(res, err, 'Unable to send mobile OTP right now.');
-    }
-  },
-
-  verifySubUserMobileOtp: async (req: AuthRequest, res: Response) => {
-    try {
-      const userId = Number(req.user?.id);
-      const mobile = toLocalIndianMobile(req.body.mobile);
-      const otp = String(req.body.otp || '').trim();
-      if (!mobile) return res.status(400).json({ message: 'Valid Indian mobile number is required' });
-
-      const user = await (prisma as any).user.findUnique({
-        where: { id: userId },
-        select: { id: true, email: true, role: true, mustChangePassword: true, requiresMobileVerification: true }
-      });
-      if (!user) return res.status(404).json({ message: 'User not found' });
-      if (user.mustChangePassword) {
-        return res.status(409).json({ message: 'Change your temporary password before verifying mobile.', code: 'PASSWORD_CHANGE_REQUIRED' });
-      }
-      if (!user.requiresMobileVerification) {
-        return res.status(409).json({ message: 'Mobile activation is already complete.', code: 'MOBILE_ALREADY_VERIFIED' });
-      }
-
-      const result = await verifyOtp('sub_user_mobile_activation', mobile, otp);
-      if (!result.ok || Number(result.metadata?.userId) !== userId) {
-        return res.status(400).json({ message: result.reason === 'expired' ? 'OTP expired. Request a new code.' : 'Invalid OTP' });
-      }
-      const duplicate = await prisma.user.findFirst({ where: { mobile, id: { not: userId } }, select: { id: true } });
-      if (duplicate) return res.status(409).json({ message: 'This mobile number is already linked to another account.' });
-
-      await consumeOtp('sub_user_mobile_activation', mobile);
-      const updatedUser = await (prisma as any).user.update({
-        where: { id: userId },
-        data: {
-          mobile,
-          mobileVerified: true,
-          requiresMobileVerification: false,
-          sessionVersion: { increment: 1 }
-        }
-      });
-      await (prisma as any).orgMembership.updateMany({
-        where: { userId, acceptedAt: null },
-        data: { acceptedAt: new Date() }
-      });
-      await (prisma as any).scopedInvitation.updateMany({
-        where: { email: user.email, status: { in: ['PENDING', 'SENT', 'SIGNED_IN'] } },
-        data: { status: 'ACCEPTED', acceptedAt: new Date() }
-      });
-      const tokens = await issueCookieAuth(req, res, updatedUser);
-      await auditLog({
-        actorUserId: userId,
-        actorRole: req.user?.role,
-        action: 'auth.sub_user.activated',
-        entityType: 'user',
-        entityId: userId,
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-        metadata: { mobileHash: sha256(mobile) }
-      });
-      return res.json({ ...tokens, success: true, user: toSafeUser(updatedUser), message: 'Account activation complete.' });
-    } catch (err: any) {
-      handleSecureRouteError(res, err, 'Unable to verify mobile OTP right now.');
-    }
-  },
-
   sendOtp: async (req: Request, res: Response) => {
     const channel = normalizeChannel(req.body.channel || (req.body.mobile ? 'sms' : 'email'));
     if (channel === 'sms' && !req.body.mobile) req.body.mobile = req.body.identifier;
@@ -1112,12 +1002,6 @@ export const authController = {
         where: { id: user.id },
         data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }
       });
-      if ((updatedUser as any).mustChangePassword || (updatedUser as any).requiresMobileVerification) {
-        await (prisma as any).scopedInvitation.updateMany({
-          where: { email: updatedUser.email, status: { in: ['PENDING', 'SENT'] } },
-          data: { status: 'SIGNED_IN' }
-        });
-      }
       const tokens = await issueCookieAuth(req, res, updatedUser);
       await auditLog({
         actorUserId: user.id,
@@ -1653,7 +1537,7 @@ export const authController = {
       }
       const previousPasswordHash = user.password;
       const hashedPassword = await hashPassword(newPassword);
-      const updatedUser = await (prisma as any).user.update({
+      await prisma.user.update({
         where: { id: userId },
         data: {
           password: hashedPassword,
@@ -1664,7 +1548,6 @@ export const authController = {
         }
       });
       await rememberPreviousPassword(userId, previousPasswordHash);
-      const tokens = await issueCookieAuth(req, res, updatedUser);
 
       await auditLog({
         actorUserId: userId,
@@ -1675,14 +1558,157 @@ export const authController = {
         ipAddress: req.ip,
         userAgent: req.headers['user-agent']
       });
-      res.json({
-        ...tokens,
-        message: 'Password updated successfully',
-        user: toSafeUser(updatedUser),
-        activation: {
-          mustChangePassword: false,
-          requiresMobileVerification: Boolean(updatedUser.requiresMobileVerification)
+      res.json({ message: 'Password updated successfully' });
+    } catch (err: any) {
+      handleSecureRouteError(res, err);
+    }
+  },
+
+  subUserActivatePassword: async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = Number(req.user?.id);
+      const { currentPassword, newPassword } = req.body;
+      if (!newPassword) {
+        return res.status(400).json({ message: 'New password is required' });
+      }
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) return res.status(404).json({ message: 'User not found' });
+
+      if (currentPassword) {
+        const isMatch = await verifyPassword(currentPassword, user.password);
+        if (!isMatch) return res.status(400).json({ message: 'Current temporary password incorrect' });
+      }
+
+      const passwordValidation = validatePasswordStrength(String(newPassword || ''));
+      if (!passwordValidation.ok) {
+        return res.status(400).json({
+          message: 'Password does not meet security requirements',
+          errors: passwordValidation.errors
+        });
+      }
+
+      try {
+        await assertPasswordNotReused(userId, String(newPassword), user.password);
+      } catch (reuseErr: any) {
+        if (reuseErr?.message === 'PASSWORD_REUSED') {
+          return res.status(400).json({ message: 'Choose a password you have not used recently' });
         }
+        throw reuseErr;
+      }
+
+      const previousPasswordHash = user.password;
+      const hashedPassword = await hashPassword(newPassword);
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          password: hashedPassword,
+          mustChangePassword: false,
+          passwordResetVersion: { increment: 1 },
+          sessionVersion: { increment: 1 },
+          lastPasswordChangeAt: new Date()
+        }
+      });
+      await rememberPreviousPassword(userId, previousPasswordHash);
+
+      await auditLog({
+        actorUserId: userId,
+        actorRole: req.user?.role,
+        action: 'auth.sub_user.password_activated',
+        entityType: 'user',
+        entityId: userId,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+
+      const safeUser = await buildSafeAuthPayload(userId);
+      res.json({
+        success: true,
+        message: 'Password set successfully',
+        user: toSafeUser(safeUser || updatedUser)
+      });
+    } catch (err: any) {
+      handleSecureRouteError(res, err);
+    }
+  },
+
+  subUserSendMobileOtp: async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = Number(req.user?.id);
+      const mobile = toLocalIndianMobile(req.body.mobile);
+      if (!mobile) return res.status(400).json({ message: 'Valid 10-digit Indian mobile number is required' });
+
+      // Check if mobile is already used by another user
+      const existingUser = await prisma.user.findFirst({
+        where: { mobile, id: { not: userId } }
+      });
+      if (existingUser) {
+        return res.status(400).json({ message: 'This mobile number is already in use by another account.' });
+      }
+
+      const otp = generateOtp();
+      const otpState = await storeOtp('sub_user_mobile_verify', mobile, otp);
+      if (env.NODE_ENV !== 'production') {
+        logger.info({ mobile, otp }, `[SUB-USER MOBILE OTP] Mobile: ${mobile} | OTP: ${otp}`);
+        console.log(`\n\x1b[33m--- [SUB-USER MOBILE OTP] Mobile: ${mobile} | OTP: ${otp} ---\x1b[0m\n`);
+      }
+
+      await smsService.sendOtpSms(mobile, otp, 'registration_otp');
+      await auditLog({
+        actorUserId: userId,
+        action: 'auth.sub_user.mobile_otp_sent',
+        entityType: 'user',
+        entityId: userId,
+        ipAddress: req.ip,
+        metadata: { mobileHash: sha256(mobile) }
+      });
+
+      res.json({ success: true, message: 'OTP sent to mobile number', sendsRemaining: otpState.sendsRemaining });
+    } catch (err: any) {
+      handleSecureRouteError(res, err, 'Unable to send OTP right now.');
+    }
+  },
+
+  subUserVerifyMobileOtp: async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = Number(req.user?.id);
+      const mobile = toLocalIndianMobile(req.body.mobile);
+      const otp = String(req.body.otp || '').trim();
+      if (!mobile || !otp) return res.status(400).json({ message: 'Mobile and 6-digit OTP are required' });
+
+      const result = await verifyOtp('sub_user_mobile_verify', mobile, otp);
+      if (!result.ok && result.reason === 'expired') {
+        return res.status(400).json({ message: 'OTP expired. Please request a new code.' });
+      }
+      if (!result.ok) {
+        const remaining = result.attemptsRemaining ?? 0;
+        return res.status(400).json({ message: `Invalid OTP. ${remaining} attempts remaining.`, attemptsRemaining: remaining });
+      }
+
+      await consumeOtp('sub_user_mobile_verify', mobile);
+
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          mobile,
+          mobileVerified: true,
+          requiresMobileVerification: false
+        }
+      });
+
+      await auditLog({
+        actorUserId: userId,
+        action: 'auth.sub_user.mobile_verified',
+        entityType: 'user',
+        entityId: userId,
+        ipAddress: req.ip,
+        metadata: { mobileHash: sha256(mobile) }
+      });
+
+      const safeUser = await buildSafeAuthPayload(userId);
+      res.json({
+        success: true,
+        message: 'Mobile number verified successfully',
+        user: toSafeUser(safeUser || updatedUser)
       });
     } catch (err: any) {
       handleSecureRouteError(res, err);

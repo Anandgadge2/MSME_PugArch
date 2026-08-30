@@ -354,95 +354,115 @@ export const sendAdminWelcomeEmail = async (params: SendAdminWelcomeEmailParams)
   }
 };
 
-export interface SendTeamInvitationCredentialsParams {
-  email: string;
-  name: string;
-  temporaryPassword: string;
-  roleNames: string[];
-  inviterName: string;
-  workspaceName: string;
-  organizationId?: number | null;
-}
-
-const escapeHtml = (value: unknown) => String(value ?? '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#039;');
-
 /**
- * Sends one-time credentials for a scoped team account. The temporary
- * password is never persisted outside the user's password hash and this
- * delivery attempt.
+ * Send invitation email to a sub-user with direct login link and auto-generated temporary password.
  */
-export const sendTeamInvitationCredentialsEmail = async (
-  params: SendTeamInvitationCredentialsParams
+export const sendSubUserInvitationEmail = async (
+  email: string,
+  data: {
+    name: string;
+    organizationName: string;
+    roleName: string;
+    tempPassword: string;
+    loginUrl: string;
+  }
 ): Promise<boolean> => {
-  const {
-    email,
-    name,
-    temporaryPassword,
-    roleNames,
-    inviterName,
-    workspaceName,
-    organizationId
-  } = params;
+  const { name, organizationName, roleName, tempPassword, loginUrl } = data;
+  const fromName = 'JsgSmile Portal Admin';
+  const fromEmail = env.SMTP_USER || 'no-reply@jsgsmile.odisha.gov.in';
+  const subject = `Login Credentials — Sub-User Account for ${organizationName} on JsgSmile Portal`;
+
+  console.log(`\n========================================`);
+  console.log(`[SUB-USER INVITE GENERATED]`);
+  console.log(`To: ${email} (${name})`);
+  console.log(`Organization: ${organizationName}`);
+  console.log(`Role: ${roleName}`);
+  console.log(`Temporary Password: ${tempPassword}`);
+  console.log(`Login URL: ${loginUrl}`);
+  console.log(`========================================\n`);
 
   try {
-    const rawPortalUrl = env.FRONTEND_URL || process.env.PRODUCTION_URL || process.env.PUBLIC_URL || process.env.APP_URL || process.env.PORTAL_URL || 'http://localhost:3000';
-    const portalUrl = rawPortalUrl.trim().replace(/\/+$/, '');
-    const loginUrl = `${portalUrl}/login?email=${encodeURIComponent(email)}`;
-    const tenantId = organizationId || 1;
-    const settings = db.companySetting
-      ? await db.companySetting.findUnique({
-          where: { companyId_key: { companyId: tenantId, key: 'portal-email-settings' } }
-        }).catch(() => null)
-      : null;
-    const mailSettings = settings?.value || {};
-    const fromEmail = mailSettings.fromEmail || env.SMTP_USER || 'no-reply@jsgsmile.gov.in';
-    const fromName = mailSettings.fromName || 'JSG SMILE Portal';
-    const transporter = await getTransporterForCompany(tenantId);
-    const safeRoles = roleNames.length ? roleNames.map(escapeHtml).join(', ') : 'Workspace user';
+    const html = `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 20px auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff; box-shadow: 0 4px 16px rgba(0,0,0,0.05);">
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #12335f 0%, #1e4b8a 100%); color: #ffffff; padding: 28px 24px; text-align: center;">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0.5px;">JSG SMILE Procurement Portal</h1>
+          <p style="margin: 6px 0 0; font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px;">Organization Sub-User Access</p>
+        </div>
 
+        <!-- Body -->
+        <div style="padding: 32px 28px; color: #1e293b;">
+          <h2 style="margin: 0 0 16px; font-size: 18px; color: #0f172a;">Hello ${name || 'User'},</h2>
+          <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px;">
+            A sub-user account has been created for you under <strong>${organizationName}</strong> with the role of <strong>${roleName}</strong> on the official MSME Procurement Gateway.
+          </p>
+
+          <!-- Credential Card -->
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin: 24px 0;">
+            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #12335f; margin-bottom: 12px;">Your Login Credentials</div>
+            <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600; width: 140px;">Portal Login URL:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;"><a href="${loginUrl}" style="color: #12335f; text-decoration: underline;">${loginUrl}</a></td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Email ID:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-family: monospace; font-size: 14px; font-weight: 700;">${email}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Assigned Role:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;">${roleName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Temporary Pass:</td>
+                <td style="padding: 6px 0;">
+                  <span style="color: #d97706; font-family: monospace; font-size: 16px; font-weight: 800; background-color: #fef3c7; padding: 4px 10px; border-radius: 6px; border: 1px dashed #f59e0b; display: inline-block;">
+                    ${tempPassword}
+                  </span>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Step by Step instructions -->
+          <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 16px 20px; margin: 20px 0; font-size: 13px; color: #1e40af;">
+            <strong style="display: block; margin-bottom: 6px;">Next Steps for First-Time Login:</strong>
+            <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
+              <li>Click the login button below and enter your temporary password.</li>
+              <li>You will be prompted to set your new permanent password.</li>
+              <li>Verify your mobile number via a one-time password (OTP).</li>
+              <li>Start accessing your organization's procurement dashboard!</li>
+            </ol>
+          </div>
+
+          <!-- Action Button -->
+          <div style="text-align: center; margin: 28px 0;">
+            <a href="${loginUrl}" style="background-color: #12335f; color: #ffffff; padding: 14px 36px; border-radius: 8px; font-size: 14px; font-weight: 700; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(18,51,95,0.25);">
+              Login & Activate Account &rarr;
+            </a>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="background-color: #f1f5f9; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5;">
+          <div>Government of Odisha &bull; District Administration Jharsuguda</div>
+          <div>Official MSME Linkage Gateway &bull; Confidential Sub-User Access</div>
+        </div>
+      </div>
+    `;
+
+    const transporter = getTransporter();
     await transporter.sendMail({
       from: `"${fromName}" <${fromEmail}>`,
       to: email,
-      subject: `[JSG SMILE] You have been invited to ${workspaceName}`,
-      html: `
-        <div style="font-family:Inter,Arial,sans-serif;background:#f4f7fb;padding:28px;color:#172033;">
-          <div style="max-width:620px;margin:auto;background:#fff;border:1px solid #dbe3ef;border-radius:16px;overflow:hidden;box-shadow:0 16px 40px rgba(15,35,65,.08);">
-            <div style="height:5px;background:linear-gradient(90deg,#f59e0b 0 33%,#fff 33% 66%,#10b981 66%);"></div>
-            <div style="background:#0b2447;color:#fff;padding:28px 32px;">
-              <div style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#b9c9de;">JSG SMILE secure access</div>
-              <h1 style="margin:8px 0 0;font-size:24px;line-height:1.3;">Welcome to ${escapeHtml(workspaceName)}</h1>
-            </div>
-            <div style="padding:30px 32px;">
-              <p style="margin-top:0;font-size:16px;">Hello <strong>${escapeHtml(name)}</strong>,</p>
-              <p style="font-size:14px;line-height:1.7;color:#475569;">${escapeHtml(inviterName)} created a secure sub-login for you. Your access is limited to the roles and permissions assigned inside this workspace.</p>
-              <div style="margin:24px 0;border:1px solid #dbe3ef;border-radius:12px;background:#f8fafc;padding:20px;">
-                <div style="margin-bottom:12px;font-size:12px;font-weight:800;text-transform:uppercase;color:#64748b;">Login credentials</div>
-                <table style="width:100%;font-size:14px;border-collapse:collapse;">
-                  <tr><td style="padding:7px 0;color:#64748b;width:145px;">Email</td><td style="padding:7px 0;font-weight:700;">${escapeHtml(email)}</td></tr>
-                  <tr><td style="padding:7px 0;color:#64748b;">Temporary password</td><td style="padding:7px 0;font-family:monospace;font-size:16px;font-weight:800;color:#9a5b00;">${escapeHtml(temporaryPassword)}</td></tr>
-                  <tr><td style="padding:7px 0;color:#64748b;">Assigned role(s)</td><td style="padding:7px 0;font-weight:700;">${safeRoles}</td></tr>
-                </table>
-              </div>
-              <div style="text-align:center;margin:28px 0;">
-                <a href="${loginUrl}" style="display:inline-block;background:#12335f;color:#fff;padding:14px 28px;border-radius:9px;text-decoration:none;font-size:14px;font-weight:800;">Sign in and activate account</a>
-              </div>
-              <div style="border-radius:10px;background:#fff7e6;border:1px solid #f8d594;padding:15px;color:#7a4a00;font-size:13px;line-height:1.6;">
-                <strong>Required on first login:</strong> change this temporary password, then verify your mobile number using OTP. Dashboard access remains locked until both steps are complete.
-              </div>
-              <p style="margin:22px 0 0;font-size:12px;color:#64748b;">If you were not expecting this account, contact ${escapeHtml(inviterName)} and do not use these credentials.</p>
-            </div>
-          </div>
-        </div>
-      `
+      subject,
+      html
     });
+
+    console.log(`[SubUserMail] Invitation email sent to ${email}`);
     return true;
   } catch (error: any) {
-    console.error(`[TeamInviteMail] Failed to send credentials to ${email}:`, error?.message || error);
+    console.error(`[SubUserMail] Failed to send email to ${email}:`, error?.message || error);
     return false;
   }
 };
