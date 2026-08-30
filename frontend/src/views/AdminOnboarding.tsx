@@ -1198,13 +1198,13 @@ export default function AdminOnboarding() {
     }
 
     return (
-      <TableHead className={cn("px-6 py-4", className)}>
+      <th className={cn("p-3 text-[10px] font-black uppercase tracking-wider text-[#12335f]", className)}>
         <button
           type="button"
           onClick={() => toggleAdminSort(sortKey)}
           className={cn(
-            "inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-[#12335f] transition-colors",
-            isActive && "text-[#12335f]"
+            "inline-flex items-center gap-1.5 hover:text-[#0b2445] transition-colors",
+            isActive ? "text-[#12335f]" : "text-slate-500"
           )}
         >
           {label}
@@ -1218,7 +1218,7 @@ export default function AdminOnboarding() {
             <ArrowUpDown className="h-3 w-3 opacity-40" />
           )}
         </button>
-      </TableHead>
+      </th>
     );
   };
 
@@ -1269,7 +1269,7 @@ export default function AdminOnboarding() {
     <div className="relative min-h-[calc(100vh-100px)]">
       <div
         className={cn(
-          "space-y-6 pb-20 transition-all duration-300",
+          "space-y-4 pb-12 transition-all duration-300",
           selectedItem && "blur-sm pointer-events-none",
         )}
       >
@@ -1296,9 +1296,9 @@ export default function AdminOnboarding() {
         </div>
 
         <div className="grid grid-cols-1 gap-4">
-          <div className="min-w-0 space-y-6">
+          <div className="min-w-0 space-y-4">
             {/* Stats Section */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
               {[
                 {
                   label: "Pending Approval",
@@ -1306,7 +1306,7 @@ export default function AdminOnboarding() {
                   sub: "Needs scrutiny action",
                   icon: Clock,
                   target: "pending",
-                  tone: "amber",
+                  tone: "amber" as const,
                 },
                 {
                   label: "Active Sellers",
@@ -1314,7 +1314,7 @@ export default function AdminOnboarding() {
                   sub: "Approved supplier base",
                   icon: ShoppingBag,
                   target: "sellers",
-                  tone: "indigo",
+                  tone: "indigo" as const,
                 },
                 {
                   label: "Active Buyers",
@@ -1322,7 +1322,7 @@ export default function AdminOnboarding() {
                   sub: "Approved procurement users",
                   icon: Building2,
                   target: "buyers",
-                  tone: "blue",
+                  tone: "blue" as const,
                 },
                 {
                   label: "Total Network",
@@ -1330,45 +1330,24 @@ export default function AdminOnboarding() {
                   sub: `${averageProgress}% average verification`,
                   icon: Users,
                   target: "network",
-                  tone: "slate",
+                  tone: "slate" as const,
                 },
               ].map((stat) => (
-                <button
+                <KpiCard
                   key={stat.label}
-                  type="button"
+                  label={stat.label}
+                  value={isLoading || isAdminStatsLoading ? <Skeleton className="h-7 w-16 rounded-md" /> : stat.value}
+                  subtext={stat.sub}
+                  icon={stat.icon}
+                  tone={stat.tone}
                   onClick={() => handleKpiClick(stat.target)}
-                  className="text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#12335f] focus:ring-offset-2 rounded-2xl"
-                  aria-label={`Filter by ${stat.label}`}
-                >
-                  <Card className="border border-slate-100 shadow-sm rounded-2xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 hover:border-[#12335f]/40 transition-all">
-                    <CardContent className="p-4 sm:p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                            {stat.label}
-                          </p>
-                          <div className="text-2xl font-black tracking-tighter text-slate-900 flex items-center min-h-[32px]">
-                            {isLoading || isAdminStatsLoading ? (
-                              <Skeleton className="h-7 w-16 rounded-md" />
-                            ) : (
-                              stat.value
-                            )}
-                          </div>
-                          <div className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                            {isLoading || isAdminStatsLoading ? (
-                              <Skeleton className="h-3 w-24 rounded" />
-                            ) : (
-                              stat.sub
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-[#12335f]">
-                          <stat.icon className="h-5 w-5" />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </button>
+                  active={
+                    (stat.target === "pending" && statusFilter === "pending" && adminView === "scrutiny") ||
+                    (stat.target === "sellers" && activeTab === "sellers" && statusFilter === "approved") ||
+                    (stat.target === "buyers" && activeTab === "buyers" && statusFilter === "approved") ||
+                    (stat.target === "network" && adminView === "reports")
+                  }
+                />
               ))}
             </div>
 
@@ -1404,7 +1383,7 @@ export default function AdminOnboarding() {
               </div>
             )}
 
-            <Card className="border-none shadow-xl shadow-slate-200/50 rounded-2xl overflow-hidden">
+            <Card className="border-none shadow-sm border border-slate-200/80 rounded-2xl overflow-hidden">
               <CardHeader className="bg-white p-0 border-b border-slate-100">
                 <Tabs
                   tabs={[
@@ -1414,11 +1393,11 @@ export default function AdminOnboarding() {
                   ]}
                   activeTab={activeTab}
                   onChange={setActiveTab}
-                  className="px-6 pt-4 space-x-8"
+                  className="px-4 pt-3 space-x-6"
                 />
               </CardHeader>
               <CardContent className="p-0">
-                <div className="p-4 md:p-6 space-y-4 bg-slate-50/50">
+                <div className="flex flex-col gap-3 border-b border-slate-100 bg-white p-3 sm:p-4">
                   <div className="flex items-center gap-2 text-[#12335f]">
                     <Filter className="h-4 w-4" />
                     <p className="text-[10px] font-black uppercase tracking-widest">
@@ -1554,57 +1533,57 @@ export default function AdminOnboarding() {
                   <>
                     {/* Responsive Table (List view) */}
                     <div className={cn(
-                      "overflow-x-auto no-scrollbar w-full max-w-full",
+                      "overflow-x-auto w-full max-w-full bg-white",
                       viewMode === "list" ? "block" : "hidden"
                     )}>
-                      <Table className="min-w-[850px]">
-                        <TableHeader className="bg-slate-50/80 border-y border-slate-100">
-                          <TableRow className="hover:bg-transparent">
-                            <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-6 py-4">
+                      <table data-ux-wrapped="true" className="w-full text-left border-collapse min-w-[900px]">
+                        <thead className="bg-[#f8f9fa] border-b border-[#dadce0]">
+                          <tr>
+                            <th className="p-3 text-[10px] font-black uppercase tracking-wider text-[#12335f] text-center w-12">
                               Sr. No.
-                            </TableHead>
+                            </th>
                             {renderSortTableHead("Full Name", "name")}
                             {renderSortTableHead("Entity Name", "entity")}
                             {renderSortTableHead("Submitted At", "submitted")}
                             {renderSortTableHead("Progress", "progress")}
                             {renderSortTableHead("Status", "status")}
-                            <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-6 py-4 text-right">
+                            <th className="p-3 text-[10px] font-black uppercase tracking-wider text-[#12335f] text-right">
                               Action
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#f1f3f5]">
                           {pagedCurrentData.map((item, index) => (
-                            <TableRow
+                            <tr
                               key={item._id}
                               onMouseEnter={() => prefetchDetail(item)}
-                              className="group hover:bg-slate-50/50 transition-colors border-b border-slate-50"
+                              className="hover:bg-[#fcfcfd] transition-colors"
                             >
-                              <TableCell className="px-6 py-8">
+                              <td className="p-3 text-center">
                                 <div className="font-mono text-xs font-black text-slate-400">
                                   {String((currentPage - 1) * pageSize + index + 1).padStart(2, "0")}
                                 </div>
-                              </TableCell>
-                              <TableCell className="px-6 py-8">
+                              </td>
+                              <td className="p-3">
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     void openItemForReview(item);
                                   }}
-                                  className="block text-left group/name cursor-pointer"
+                                  className="block text-left group/name cursor-pointer w-full min-w-0"
                                   title="Click to view full personal details"
                                 >
-                                  <div className="font-bold text-slate-800 text-xs tracking-tight group-hover/name:text-[#12335f] group-hover/name:underline decoration-[#f9a825] underline-offset-2 transition-colors flex items-center gap-1.5">
-                                    <span className="text-wrap-anywhere">{item.name}</span>
+                                  <div className="font-bold text-slate-800 text-xs tracking-tight group-hover/name:text-[#12335f] group-hover/name:underline decoration-[#f9a825] underline-offset-2 transition-colors flex items-center gap-1.5 text-wrap-anywhere">
+                                    <span>{item.name}</span>
                                     <Eye className="h-3 w-3 opacity-0 group-hover/name:opacity-100 text-[#12335f] transition-opacity shrink-0" />
                                   </div>
-                                  <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                  <div className="mt-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">
                                     {getRoleLabel(item)}
                                   </div>
                                 </button>
-                              </TableCell>
-                              <TableCell className="px-6 py-8">
+                              </td>
+                              <td className="p-3">
                                 {getEntityName(item) ? (
                                   <div className="font-bold text-slate-600 text-xs underline decoration-indigo-200 underline-offset-4 break-words">
                                     {getEntityName(item)}
@@ -1615,32 +1594,32 @@ export default function AdminOnboarding() {
                                   </div>
                                 )}
                                 {getEntityLocation(item) && (
-                                  <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                  <div className="mt-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">
                                     {getEntityLocation(item)}
                                   </div>
                                 )}
-                              </TableCell>
-                              <TableCell className="px-6 py-8">
-                                <div className="text-xs font-bold text-slate-500 font-mono">
+                              </td>
+                              <td className="p-3">
+                                <div className="text-[11px] font-bold text-slate-500 font-mono">
                                   {formatDateTime(item.createdAt)}
                                 </div>
-                              </TableCell>
-                              <TableCell className="px-6 py-8">
-                                <div className="min-w-28 space-y-2">
-                                  <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-500">
+                              </td>
+                              <td className="p-3">
+                                <div className="min-w-28 space-y-1.5">
+                                  <div className="flex items-center justify-between text-[9px] font-black uppercase text-slate-500">
                                     <span>Verified</span>
                                     <span>{getProgress(item)}%</span>
                                   </div>
-                                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                                     <div
                                       className="h-full rounded-full bg-[#12335f]"
                                       style={{ width: `${getProgress(item)}%` }}
                                     />
                                   </div>
                                 </div>
-                              </TableCell>
-                              <TableCell className="px-6 py-8">
-                                <div className="space-y-2">
+                              </td>
+                              <td className="p-3">
+                                <div className="space-y-1.5">
                                   {getStatusBadge(item.onboardingStatus)}
                                   <div className="flex space-x-0.5">
                                     {getSections(item).map((section) => (
@@ -1648,7 +1627,7 @@ export default function AdminOnboarding() {
                                         key={section}
                                         className={
                                           cn(
-                                            "h-1.5 w-3 rounded-full",
+                                            "h-1 w-2.5 rounded-full",
                                             item.sectionStatus?.[section] ===
                                               "approved"
                                               ? "bg-green-500"
@@ -1664,22 +1643,22 @@ export default function AdminOnboarding() {
                                     ))}
                                   </div>
                                 </div>
-                              </TableCell>
-                              <TableCell className="px-6 py-8 text-right">
+                              </td>
+                              <td className="p-3 text-right">
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     void openItemForReview(item);
                                   }}
-                                  className="text-[10px] font-black text-indigo-600 uppercase hover:underline hover:text-indigo-800 transition-all decoration-2 underline-offset-4"
+                                  className="text-[10px] font-black text-indigo-600 uppercase hover:underline hover:text-indigo-800 transition-all decoration-2 underline-offset-4 inline-flex items-center"
                                 >
-                                  Review
+                                  Review <span className="ml-1 text-base leading-none">→</span>
                                 </button>
-                              </TableCell>
-                            </TableRow>
+                              </td>
+                            </tr>
                           ))}
-                        </TableBody>
-                      </Table>
+                        </tbody>
+                      </table>
                     </div>
 
                     {/* Desktop Grid view (alternative to table) */}
