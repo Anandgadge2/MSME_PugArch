@@ -41,18 +41,43 @@ export const auditWorkflowSoon = (actor: WorkflowActor, action: string, entityTy
   });
 };
 
-export const notifyWorkflow = async (userId: number, title: string, message: string, type: string, redirectUrl = '/dashboard') => {
+export const notifyWorkflow = async (
+  userId: number,
+  title: string,
+  message: string,
+  type: string,
+  redirectUrl = '/dashboard',
+  attachments?: Array<{
+    filename: string;
+    content?: Buffer | string;
+    path?: string;
+    contentType?: string;
+  }>
+) => {
   await notificationService.notifyWithEmail(userId, {
     title,
     message,
     type,
     priority: 'medium',
-    redirectUrl
+    redirectUrl,
+    attachments
   });
 };
 
-export const notifyWorkflowSoon = (userId: number, title: string, message: string, type: string, redirectUrl = '/dashboard') => {
-  void notifyWorkflow(userId, title, message, type, redirectUrl).catch(error => {
+export const notifyWorkflowSoon = (
+  userId: number,
+  title: string,
+  message: string,
+  type: string,
+  redirectUrl = '/dashboard',
+  attachments?: Array<{
+    filename: string;
+    content?: Buffer | string;
+    path?: string;
+    contentType?: string;
+  }>
+) => {
+  void notifyWorkflow(userId, title, message, type, redirectUrl, attachments).catch(error => {
     console.warn('[WorkflowNotify] Background notification failed', error instanceof Error ? error.message : error);
   });
 };

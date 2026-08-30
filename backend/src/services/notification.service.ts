@@ -20,6 +20,12 @@ interface EmailOpts {
   html: string;
   templateSlug?: string;
   variables?: Record<string, string>;
+  attachments?: Array<{
+    filename: string;
+    content?: Buffer | string;
+    path?: string;
+    contentType?: string;
+  }>;
 }
 
 interface SmsOpts {
@@ -278,7 +284,8 @@ export const notificationService = {
         from: `"${fromName}" <${fromEmail}>`,
         to: user.email,
         subject: finalSubject,
-        html: finalHtml
+        html: finalHtml,
+        attachments: opts.attachments
       });
 
       // Log delivery
@@ -310,7 +317,19 @@ export const notificationService = {
     }
   },
 
-  async notifyWithEmail(userId: number, opts: NotifyOpts & { emailSubject?: string; emailHtml?: string }) {
+  async notifyWithEmail(
+    userId: number,
+    opts: NotifyOpts & {
+      emailSubject?: string;
+      emailHtml?: string;
+      attachments?: Array<{
+        filename: string;
+        content?: Buffer | string;
+        path?: string;
+        contentType?: string;
+      }>;
+    }
+  ) {
     void (async () => {
       await this.notifyNow(userId, opts);
       await this.sendEmail(userId, {
@@ -321,7 +340,8 @@ export const notificationService = {
           title: opts.title,
           message: opts.message,
           actionUrl: opts.redirectUrl || ''
-        }
+        },
+        attachments: opts.attachments
       });
       await this.sendSmsNotificationForUser(userId, {
         message: `${opts.title}: ${opts.message}`,

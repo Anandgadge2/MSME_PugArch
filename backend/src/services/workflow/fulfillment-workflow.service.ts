@@ -1,5 +1,6 @@
 import { ApiError } from '../../utils/ApiError.js';
 import { auditWorkflow, db, notifyWorkflowSoon, numberSeries, roundMoney, type WorkflowActor } from './workflow-common.js';
+import { getOrGenerateInvoicePdfBuffer } from '../invoice-pdf.service.js';
 import {
   escrowStatusEnumFor,
   invoiceStatusEnumFor,
@@ -205,18 +206,70 @@ export const fulfillmentWorkflow = {
     });
     await auditWorkflow(actor, 'workflow.invoice.created', 'invoice', invoice.id, { purchaseOrderId: po.id });
 
-    // Send notifications
+    // Fetch full invoice details for PDF & notification
+    const fullInvoice = await db.invoice.findUnique({
+      where: { id: invoice.id },
+      include: {
+        items: true,
+        purchaseOrder: {
+          include: {
+            items: true,
+            buyer: { select: { id: true, name: true, email: true } },
+            seller: { select: { id: true, name: true, email: true } }
+          }
+        },
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            sellerProfile: true,
+            organization: { include: { profile: true } }
+          }
+        },
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            buyerProfile: true,
+            organization: { include: { profile: true } }
+          }
+        }
+      }
+    });
+
     const formattedAmount = `₹${Number(invoice.amount).toLocaleString('en-IN')}`;
     const poNum = po.poNumber || `PO-${po.id}`;
+
+    let pdfAttachment: { filename: string; content: Buffer; contentType: string } | undefined = undefined;
+
+    try {
+      const pdfRes = await getOrGenerateInvoicePdfBuffer(fullInvoice || invoice);
+      if (pdfRes?.buffer && pdfRes.buffer.length > 0) {
+        pdfAttachment = {
+          filename: pdfRes.filename || `Invoice_${invoice.invoiceNumber}.pdf`,
+          content: pdfRes.buffer,
+          contentType: 'application/pdf'
+        };
+      }
+    } catch (pdfErr) {
+      console.error('[InvoicePDF] Failed to generate/fetch invoice PDF for email attachment:', pdfErr);
+    }
+
+    const emailNote = pdfAttachment ? ' (Tax Invoice PDF is attached to this email.)' : '';
 
     // 1. Notify Seller
     if (po.sellerId) {
       notifyWorkflowSoon(
         po.sellerId,
         `Invoice Created: ${invoice.invoiceNumber}`,
-        `Your invoice ${invoice.invoiceNumber} for Purchase Order ${poNum} (Amount: ${formattedAmount}) has been generated successfully.`,
+        `Your invoice ${invoice.invoiceNumber} for Purchase Order ${poNum} (Amount: ${formattedAmount}) has been generated successfully.${emailNote}`,
         'invoice_created',
-        '/seller/invoices'
+        '/seller/invoices',
+        pdfAttachment ? [pdfAttachment] : undefined
       );
     }
 
@@ -225,9 +278,10 @@ export const fulfillmentWorkflow = {
       notifyWorkflowSoon(
         po.buyerId,
         `New Invoice Submitted: ${invoice.invoiceNumber}`,
-        `Seller submitted invoice ${invoice.invoiceNumber} for Purchase Order ${poNum} (Amount: ${formattedAmount}). Please review and approve.`,
+        `Seller submitted invoice ${invoice.invoiceNumber} for Purchase Order ${poNum} (Amount: ${formattedAmount}). Please review and approve.${emailNote}`,
         'invoice_submitted',
-        '/buyer/invoices'
+        '/buyer/invoices',
+        pdfAttachment ? [pdfAttachment] : undefined
       );
     }
 
