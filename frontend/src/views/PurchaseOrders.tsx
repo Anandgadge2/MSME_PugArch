@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical } from 'lucide-react';
+import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
 
 const moneyPdf = (val: any, currency = 'INR') => {
@@ -111,6 +111,7 @@ const OrderActionsMenu = ({
   exportInvoicePdf,
   setConfirming
 }: any) => {
+  const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<any>({ visibility: 'hidden', position: 'fixed', top: 0, left: 0, zIndex: 99999 });
 
@@ -189,18 +190,34 @@ const OrderActionsMenu = ({
         </>
       )}
 
-      {(isAccepted || isDelivered) && (
-        <button
-          type="button"
-          onClick={() => {
-            onClose();
-            handleOpenDelivery(order);
-          }}
-          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
-        >
-          <Truck className="h-3.5 w-3.5 text-blue-600" />
-          <span>Delivery</span>
-        </button>
+      {isSeller && (isAccepted || isDelivered) && (
+        <>
+          {String(order.status || '').toLowerCase() === 'accepted' && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                const amountVal = order.amount || order.totalValue || 0;
+                router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+            >
+              <FileText className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Create Invoice</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              handleOpenDelivery(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+          >
+            <Truck className="h-3.5 w-3.5 text-blue-600" />
+            <span>Delivery</span>
+          </button>
+        </>
       )}
 
       <button
@@ -1075,75 +1092,172 @@ export default function PurchaseOrders() {
       )}
 
       {viewingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between border-b border-slate-200 bg-slate-50 px-5 py-4 shrink-0">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Purchase Order Details</p>
-                <h2 className="mt-1 text-lg font-black text-slate-900">{viewingOrder.poNumber}</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-4 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+            
+            {/* Top Gradient Header */}
+            <div className="relative overflow-hidden bg-gradient-to-r from-[#07172e] via-[#12335f] to-[#1e4b8a] text-white px-6 py-5 shrink-0">
+              {/* Background Glow Overlay */}
+              <div className="absolute -top-12 -right-12 h-40 w-40 rounded-full bg-blue-400/10 blur-2xl pointer-events-none" />
+              <div className="absolute -bottom-12 -left-12 h-40 w-40 rounded-full bg-indigo-400/10 blur-2xl pointer-events-none" />
+              
+              <div className="relative flex items-center justify-between gap-4">
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-0.5 text-[10px] font-black uppercase tracking-widest text-blue-200 border border-white/15 backdrop-blur-sm">
+                      <FileText className="h-3 w-3 text-blue-300" /> Purchase Order Details
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-xl sm:text-2xl font-black font-mono tracking-tight text-white drop-shadow-sm">
+                      {viewingOrder.poNumber}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (viewingOrder.poNumber) {
+                          navigator.clipboard.writeText(viewingOrder.poNumber);
+                          toast.success('PO Number copied to clipboard');
+                        }
+                      }}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all border border-white/10"
+                      title="Copy PO Number"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Side: Total Amount & Close */}
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="hidden sm:flex flex-col items-end rounded-2xl bg-white/10 px-4 py-2 border border-white/15 backdrop-blur-md">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-blue-200">Grand Total Value</span>
+                    <span className="text-lg font-black text-white font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                  </div>
+                  <button
+                    onClick={() => setViewingOrder(null)}
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/90 hover:bg-white/20 hover:text-white transition-all border border-white/15 shadow-sm"
+                    aria-label="Close PO Details"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
-              <button onClick={() => setViewingOrder(null)} className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-white transition-colors">
-                <X className="h-4 w-4" />
-              </button>
             </div>
 
-            <div className="overflow-y-auto p-5 space-y-6 flex-1">
-              <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
-                <p className="text-[10px] font-black uppercase text-slate-400">Order Title</p>
-                <p className="text-base font-black text-slate-900 mt-0.5">{viewingOrder.title}</p>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  <span className="rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-[#12335f]">
+            {/* Modal Body */}
+            <div className="overflow-y-auto p-5 sm:p-6 space-y-6 flex-1 bg-slate-50/50">
+              
+              {/* Order Title & Badges Card */}
+              <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-1">Order Title & Reference</span>
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 leading-snug">{viewingOrder.title}</h3>
+                  </div>
+                  <div className="sm:hidden text-right shrink-0">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Total</span>
+                    <span className="text-sm font-black text-[#12335f] font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-emerald-800 shadow-2xs">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                     {readableStatus(viewingOrder.status)}
                   </span>
+
                   {viewingOrder.paymentTerms && (
-                    <span className="rounded-lg border border-teal-200 bg-teal-50/50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-teal-700">
+                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-teal-800 shadow-2xs">
+                      <CreditCard className="h-3.5 w-3.5 text-teal-600" />
                       Payment: {readableStatus(viewingOrder.paymentTerms)}
                     </span>
                   )}
+
                   {viewingOrder.deliveryType && (
-                    <span className="rounded-lg border border-purple-200 bg-purple-50/50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-purple-700">
+                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-purple-800 shadow-2xs">
+                      <Truck className="h-3.5 w-3.5 text-purple-600" />
                       Delivery: {readableStatus(viewingOrder.deliveryType)}
                     </span>
                   )}
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-3">
-                  <h4 className="text-[11px] font-black uppercase tracking-widest text-[#12335f] border-b border-slate-100 pb-1">Fulfillment Parties</h4>
-                  <div className="space-y-2">
-                    <div>
-                      <p className="text-[9px] font-black uppercase text-slate-400">Buyer (Requester)</p>
-                      <p className="text-xs font-bold text-slate-800">{viewingOrder.buyer?.name || 'MSME Portal Buyer'}</p>
-                      {viewingOrder.buyer?.email && <p className="text-[10px] font-semibold text-slate-500">{maskEmail(viewingOrder.buyer.email)}</p>}
+              {/* Fulfillment Parties & Settings Grid */}
+              <div className="grid gap-4 md:grid-cols-2">
+                
+                {/* Fulfillment Parties Card */}
+                <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
+                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                    <User className="h-4 w-4 text-[#12335f]" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Fulfillment Parties</h4>
+                  </div>
+
+                  <div className="space-y-3.5">
+                    {/* Buyer Info */}
+                    <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 font-bold text-xs">
+                        BY
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Buyer (Requester)</span>
+                        <p className="text-xs font-black text-slate-900 truncate">{viewingOrder.buyer?.name || 'MSME Portal Buyer'}</p>
+                        {viewingOrder.buyer?.email && (
+                          <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">{maskEmail(viewingOrder.buyer.email)}</p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[9px] font-black uppercase text-slate-400">Seller (Provider)</p>
-                      <p className="text-xs font-bold text-slate-800">{viewingOrder.seller?.name || maskEmail(viewingOrder.seller?.email) || 'MSME Portal Seller'}</p>
-                      {viewingOrder.seller?.email && <p className="text-[10px] font-semibold text-slate-500">{maskEmail(viewingOrder.seller.email)}</p>}
+
+                    {/* Seller Info */}
+                    <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs">
+                        SL
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Seller (Provider)</span>
+                        <p className="text-xs font-black text-slate-900 truncate">{viewingOrder.seller?.name || maskEmail(viewingOrder.seller?.email) || 'MSME Portal Seller'}</p>
+                        {viewingOrder.seller?.email && (
+                          <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">{maskEmail(viewingOrder.seller.email)}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <h4 className="text-[11px] font-black uppercase tracking-widest text-[#12335f] border-b border-slate-100 pb-1">Fulfillment Settings</h4>
-                  <div className="space-y-2">
-                    <div>
-                      <p className="text-[9px] font-black uppercase text-slate-400">Expected Delivery Date</p>
-                      <p className="text-xs font-black text-slate-800">{formatDate(viewingOrder.expectedDelivery)}</p>
-                    </div>
-                    {viewingOrder.deliveryAddress && (
+                {/* Fulfillment Settings Card */}
+                <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
+                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                    <Calendar className="h-4 w-4 text-[#12335f]" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Fulfillment & Schedule</h4>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-2.5 rounded-xl bg-indigo-50/50 p-3 border border-indigo-100">
+                      <Clock className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-[9px] font-black uppercase text-slate-400">Delivery Address</p>
-                        <p title={viewingOrder.deliveryAddress} className="text-xs font-bold text-slate-600 line-clamp-2">{viewingOrder.deliveryAddress}</p>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-indigo-700 block">Expected Delivery Date</span>
+                        <p className="text-xs font-black text-slate-900">{formatDate(viewingOrder.expectedDelivery)}</p>
+                      </div>
+                    </div>
+
+                    {viewingOrder.deliveryAddress && (
+                      <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                        <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Delivery Address</span>
+                          <p title={viewingOrder.deliveryAddress} className="text-xs font-semibold text-slate-700 leading-relaxed line-clamp-2">
+                            {viewingOrder.deliveryAddress}
+                          </p>
+                        </div>
                       </div>
                     )}
+
                     {viewingOrder.deliveryTrackings && viewingOrder.deliveryTrackings.length > 0 && (
-                      <div>
-                        <p className="text-[9px] font-black uppercase text-slate-400">Delivery Status / Tracking</p>
-                        <div className="mt-1 flex flex-col gap-1.5">
+                      <div className="pt-1">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Delivery Trackings</span>
+                        <div className="flex flex-wrap gap-2">
                           {viewingOrder.deliveryTrackings.map((dt: any) => (
-                            <div key={dt.id} className="flex items-center gap-2">
+                            <div key={dt.id} className="inline-flex items-center gap-2 rounded-lg bg-slate-100 border border-slate-200 px-2.5 py-1">
                               <EntityIdLink
                                 label={dt.trackingNumber || `DLV-${dt.id}`}
                                 id={dt.id}
@@ -1153,7 +1267,7 @@ export default function PurchaseOrders() {
                                   router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || `DLV-${dt.id}`)}`);
                                 }}
                               />
-                              <span className="text-[10px] font-bold text-slate-500 uppercase">({readableStatus(dt.status || 'pending')})</span>
+                              <span className="text-[10px] font-bold text-slate-600 uppercase">({readableStatus(dt.status || 'pending')})</span>
                             </div>
                           ))}
                         </div>
@@ -1161,84 +1275,128 @@ export default function PurchaseOrders() {
                     )}
                   </div>
                 </div>
+
               </div>
 
+              {/* Shipment Tracking Highlight Card */}
               {activeDelivery && (
-                <div className="rounded-lg border border-blue-100 bg-blue-50/30 p-3.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Truck className="h-4 w-4 text-[#12335f]" />
-                      <span className="text-xs font-black text-[#12335f]">Shipment Tracking</span>
+                <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/80 via-indigo-50/40 to-slate-50 p-5 space-y-3.5 shadow-sm">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#12335f] text-white shadow-sm">
+                        <Truck className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-[#12335f] uppercase tracking-wider">Shipment Tracking Active</h4>
+                        <p className="text-[10px] font-semibold text-slate-500">Live dispatch and tracking status</p>
+                      </div>
                     </div>
-                    <span className="text-[9px] font-black uppercase bg-[#12335f]/10 text-[#12335f] px-2 py-0.5 rounded border border-[#12335f]/20">
+                    <span className="rounded-full bg-[#12335f] text-white px-3 py-1 text-[10px] font-black uppercase tracking-wider shadow-2xs">
                       {readableStatus(activeDelivery.status || 'pending')}
                     </span>
                   </div>
-                  <div className="text-[11px] font-semibold text-slate-600 space-y-0.5">
-                    {activeDelivery.carrierName && <p>Carrier: <span className="font-bold text-slate-800">{activeDelivery.carrierName}</span></p>}
-                    {activeDelivery.trackingNumber && <p>Tracking No: <span className="font-bold text-slate-800">{activeDelivery.trackingNumber}</span></p>}
-                    {activeDelivery.expectedDelivery && <p>Expected Delivery: <span className="font-bold text-slate-800">{formatDate(activeDelivery.expectedDelivery)}</span></p>}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white/80 rounded-xl p-3 border border-blue-100/80 text-xs">
+                    {activeDelivery.carrierName && (
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Carrier Partner</span>
+                        <p className="font-black text-slate-800 truncate">{activeDelivery.carrierName}</p>
+                      </div>
+                    )}
+                    {activeDelivery.trackingNumber && (
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Tracking Number</span>
+                        <p className="font-mono font-bold text-slate-900 truncate">{activeDelivery.trackingNumber}</p>
+                      </div>
+                    )}
+                    {activeDelivery.expectedDelivery && (
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Expected Arrival</span>
+                        <p className="font-bold text-slate-800">{formatDate(activeDelivery.expectedDelivery)}</p>
+                      </div>
+                    )}
                   </div>
+
                   <Button 
                     size="sm"
-                    className="w-full bg-[#12335f] text-white hover:bg-[#0b2445] text-[10px] font-black uppercase tracking-wider h-8 mt-1"
+                    className="w-full bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-black uppercase tracking-wider h-10 rounded-xl shadow-sm transition-all"
                     onClick={() => {
                       setViewingOrder(null);
                       router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
                     }}
                   >
-                    Track Shipment Details
+                    <Truck className="mr-2 h-4 w-4" /> Track Shipment Details
                   </Button>
                 </div>
               )}
 
-              <div className="space-y-3">
-                <h4 className="text-[11px] font-black uppercase tracking-widest text-[#12335f] border-b border-slate-100 pb-1">Workflow Tracking & Timestamps</h4>
-                <div className="relative border-l border-slate-200 pl-5 ml-2.5 space-y-4 py-1">
+              {/* Workflow Timeline Section */}
+              <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-[#12335f]" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Workflow Tracking & Timestamps</h4>
+                  </div>
+                  <span className="text-[10px] font-semibold text-slate-400">Order Lifecycle Audit</span>
+                </div>
+
+                <div className="relative border-l-2 border-slate-200 pl-6 ml-3 space-y-5 py-1">
+                  {/* Step 1: PO Generated */}
                   <div className="relative">
-                    <span className="absolute -left-[26px] top-1 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50" />
+                    <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
+                      <CheckCircle2 className="h-3 w-3" />
+                    </span>
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                      <span className="text-xs font-black text-slate-900">Purchase Order Generated</span>
-                      <span className="text-[10px] font-mono font-bold text-slate-500">{formatTimestamp(viewingOrder.createdAt)}</span>
+                      <span className="text-xs font-extrabold text-slate-900">Purchase Order Generated</span>
+                      <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{formatTimestamp(viewingOrder.createdAt)}</span>
                     </div>
-                    <p className="text-[10px] font-semibold text-slate-500 mt-0.5">PO record successfully created from procurement bidding workflow.</p>
+                    <p className="text-[11px] font-semibold text-slate-500 mt-1">PO record successfully created from procurement bidding workflow.</p>
                   </div>
 
+                  {/* Step 2: PO Acknowledged */}
                   {(() => {
                     const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
                     return viewingStatusLower !== 'generated' && viewingStatusLower !== 'order_placed' && viewingStatusLower !== 'cancelled' && (
                       <div className="relative">
-                        <span className="absolute -left-[26px] top-1 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50" />
+                        <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
+                          <CheckCircle2 className="h-3 w-3" />
+                        </span>
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                          <span className="text-xs font-black text-slate-900">PO Acknowledged by Seller</span>
-                          <span className="text-[10px] font-mono font-bold text-slate-500">
-                            {viewingOrder.acceptedAt ? formatTimestamp(viewingOrder.acceptedAt) : 'Pending timestamp'}
+                          <span className="text-xs font-extrabold text-slate-900">PO Acknowledged by Seller</span>
+                          <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                            {viewingOrder.acceptedAt ? formatTimestamp(viewingOrder.acceptedAt) : 'Acknowledged'}
                           </span>
                         </div>
-                        <p className="text-[10px] font-semibold text-slate-500 mt-0.5">Seller acknowledged and committed to fulfilling this order.</p>
+                        <p className="text-[11px] font-semibold text-slate-500 mt-1">Seller acknowledged and committed to fulfilling this order.</p>
                       </div>
                     );
                   })()}
 
+                  {/* Step 3: Delivered */}
                   {viewingOrder.status === 'delivered' && (
                     <div className="relative">
-                      <span className="absolute -left-[26px] top-1 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50" />
+                      <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
+                        <CheckCircle2 className="h-3 w-3" />
+                      </span>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                        <span className="text-xs font-black text-slate-900">Delivered & Completed</span>
-                        <span className="text-[10px] font-mono font-bold text-slate-500">Completed</span>
+                        <span className="text-xs font-extrabold text-slate-900">Delivered & Completed</span>
+                        <span className="text-[10px] font-mono font-bold text-slate-500 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md">Completed</span>
                       </div>
-                      <p className="text-[10px] font-semibold text-slate-500 mt-0.5">Consignment has been safely delivered and confirmed by buyer.</p>
+                      <p className="text-[11px] font-semibold text-slate-500 mt-1">Consignment has been safely delivered and confirmed by buyer.</p>
                     </div>
                   )}
 
+                  {/* Step 4: Cancelled */}
                   {viewingOrder.status === 'cancelled' && (
                     <div className="relative">
-                      <span className="absolute -left-[26px] top-1 flex h-3 w-3 items-center justify-center rounded-full bg-red-500 ring-4 ring-red-50" />
+                      <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 ring-4 ring-rose-50 text-white shadow-2xs">
+                        <XCircle className="h-3 w-3" />
+                      </span>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                        <span className="text-xs font-black text-red-700">Order Cancelled</span>
-                        <span className="text-[10px] font-mono font-bold text-red-500">Cancelled</span>
+                        <span className="text-xs font-extrabold text-rose-700">Order Cancelled</span>
+                        <span className="text-[10px] font-mono font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-md">Cancelled</span>
                       </div>
-                      <p className="text-[10px] font-semibold text-red-500 mt-0.5">Fulfillment terminated by one of the parties.</p>
+                      <p className="text-[11px] font-semibold text-rose-500 mt-1">Fulfillment terminated by one of the parties.</p>
                     </div>
                   )}
                 </div>
@@ -1260,11 +1418,16 @@ export default function PurchaseOrders() {
                 if (!hasTerms && !hasDocs) return null;
 
                 return (
-                  <div className="space-y-3">
-                    <h4 className="text-[11px] font-black uppercase tracking-widest text-[#12335f] border-b border-slate-100 pb-1">Procurement Terms & Documents</h4>
+                  <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-[#12335f]" />
+                        <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Procurement Terms & Documents</h4>
+                      </div>
+                    </div>
                     <div className="grid gap-4 sm:grid-cols-2 text-xs">
                       {hasTerms && (
-                        <div className="space-y-2">
+                        <div className="space-y-2.5">
                           {terms.deliveryTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Delivery Terms</p><p className="font-semibold text-slate-700">{terms.deliveryTerms}</p></div>}
                           {terms.paymentTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Payment Terms</p><p className="font-semibold text-slate-700">{terms.paymentTerms}</p></div>}
                           {terms.warrantyTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Warranty Terms</p><p className="font-semibold text-slate-700">{terms.warrantyTerms}</p></div>}
@@ -1276,12 +1439,12 @@ export default function PurchaseOrders() {
                       {hasDocs && (
                         <div className="space-y-2">
                           <p className="text-[9px] font-black uppercase text-slate-400">Uploaded Procurement Documents</p>
-                          <div className="space-y-1.5">
+                          <div className="space-y-2">
                             {docs.map((doc, dIdx) => (
-                              <div key={dIdx} className="flex items-center gap-2 rounded-md bg-slate-50 border border-slate-100 px-3 py-2">
-                                <FileText className="h-4 w-4 shrink-0 text-slate-400" />
+                              <div key={dIdx} className="flex items-center gap-3 rounded-xl bg-slate-50 border border-slate-200/80 p-3 hover:border-slate-300 transition-all">
+                                <FileText className="h-5 w-5 shrink-0 text-[#12335f]" />
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{doc.documentType}</p>
+                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{doc.documentType}</p>
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -1299,7 +1462,7 @@ export default function PurchaseOrders() {
                                     {doc.fileName}
                                   </button>
                                 </div>
-                                <span className="text-[10px] font-bold text-slate-400 shrink-0">({(doc.fileSize / 1024).toFixed(0)} KB)</span>
+                                <span className="text-[10px] font-bold text-slate-400 shrink-0 font-mono">({(doc.fileSize / 1024).toFixed(0)} KB)</span>
                               </div>
                             ))}
                           </div>
@@ -1310,112 +1473,151 @@ export default function PurchaseOrders() {
                 );
               })()}
 
-              <div className="space-y-2">
-                <h4 className="text-[11px] font-black uppercase tracking-widest text-[#12335f] border-b border-slate-100 pb-1">Line Items</h4>
-                <div className="overflow-hidden rounded-lg border border-slate-100 bg-slate-50/50">
+              {/* Line Items Table Section */}
+              <div className="rounded-2xl bg-white border border-slate-200/80 shadow-sm overflow-hidden space-y-0">
+                <div className="flex items-center justify-between bg-slate-50/80 px-5 py-3.5 border-b border-slate-200/80">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-[#12335f]" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Line Items</h4>
+                  </div>
+                  <span className="rounded-full bg-slate-200/70 px-2.5 py-0.5 text-[10px] font-black text-slate-700">
+                    {(viewingOrder.items?.length || 1)} Item(s)
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-100 text-[9px] font-black uppercase tracking-wider text-slate-500">
+                    <thead className="bg-slate-100/70 text-[9px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200/80">
                       <tr>
-                        <th className="w-16 p-2.5">Sr. No</th>
-                        <th className="p-2.5">Item Name</th>
-                        <th className="p-2.5 w-16 text-center">Qty</th>
-                        <th className="p-2.5 text-right w-28">Unit Price</th>
-                        <th className="p-2.5 text-right w-28">Total</th>
+                        <th className="w-16 px-4 py-3">Sr. No</th>
+                        <th className="px-4 py-3">Item Description</th>
+                        <th className="px-4 py-3 w-20 text-center">Qty</th>
+                        <th className="px-4 py-3 text-right w-32">Unit Price</th>
+                        <th className="px-4 py-3 text-right w-36">Total Amount</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {(viewingOrder.items?.length ? viewingOrder.items : [{ itemName: viewingOrder.title, quantity: 1, unitPrice: viewingOrder.amount || viewingOrder.totalValue, totalAmount: viewingOrder.amount || viewingOrder.totalValue }]).map((item, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/80">
-                          <td className="p-2.5 text-xs font-black text-slate-500">{String(idx + 1).padStart(2, '0')}</td>
-                          <td className="p-2.5 font-bold text-slate-800">{item.itemName || viewingOrder.title}</td>
-                          <td className="p-2.5 text-center font-bold text-slate-600">{Number(item.quantity || 1)}</td>
-                          <td className="p-2.5 text-right font-semibold text-slate-600">{formatCurrency(item.unitPrice)}</td>
-                          <td className="p-2.5 text-right font-black text-slate-900">{formatCurrency(item.totalAmount || (Number(item.quantity || 1) * Number(item.unitPrice || 0)))}</td>
+                        <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
+                          <td className="px-4 py-3.5 text-xs font-black text-slate-400 font-mono">{String(idx + 1).padStart(2, '0')}</td>
+                          <td className="px-4 py-3.5">
+                            <p className="font-black text-slate-900 text-xs">{item.itemName || viewingOrder.title}</p>
+                            {(item as any).description && <p className="text-[10px] font-semibold text-slate-500 mt-0.5">{(item as any).description}</p>}
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <span className="inline-block rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-800 font-mono">
+                              {Number(item.quantity || 1)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-right font-semibold text-slate-600 font-mono">{formatCurrency(item.unitPrice)}</td>
+                          <td className="px-4 py-3.5 text-right font-black text-slate-900 font-mono">{formatCurrency(item.totalAmount || (Number(item.quantity || 1) * Number(item.unitPrice || 0)))}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </div>
 
-              <div className="flex justify-end pt-2">
-                <div className="bg-[#12335f]/5 border border-[#12335f]/10 rounded-xl px-5 py-3 text-right">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-[#12335f] block">Grand Total Value</span>
-                  <span className="text-xl font-black text-[#12335f] mt-0.5 block">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                <div className="flex justify-end p-4 bg-slate-50/60 border-t border-slate-200/80">
+                  <div className="bg-[#12335f] text-white rounded-2xl px-6 py-3 text-right shadow-md">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-blue-200 block">Grand Total Amount</span>
+                    <span className="text-xl font-black text-white font-mono mt-0.5 block">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                  </div>
                 </div>
               </div>
+
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3 shrink-0">
-              {(() => {
-                const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
-                const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed';
-                const isAcceptedModal = viewingStatusLower === 'accepted' || viewingStatusLower === 'in_fulfillment';
-                return (
-                  <>
-                    {isSeller && isIssuedModal && (
-                      <>
+            {/* Modal Sticky Action Footer */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-4 shrink-0 shadow-lg">
+              <div className="flex flex-wrap items-center gap-2">
+                {(() => {
+                  const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
+                  const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed';
+                  const isAcceptedModal = viewingStatusLower === 'accepted' || viewingStatusLower === 'in_fulfillment';
+                  return (
+                    <>
+                      {isSeller && isIssuedModal && (
+                        <>
+                          <Button
+                            onClick={() => {
+                              setViewingOrder(null);
+                              handleAcceptOrder(viewingOrder);
+                            }}
+                            className="h-10 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-4"
+                          >
+                            <CheckCircle2 className="mr-1.5 h-4 w-4" /> Accept PO
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setViewingOrder(null);
+                              handleRejectOrder(viewingOrder);
+                            }}
+                            className="h-10 border-rose-200 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-xl px-4"
+                          >
+                            <XCircle className="mr-1.5 h-4 w-4" /> Reject PO
+                          </Button>
+                        </>
+                      )}
+                      {isSeller && (isAcceptedModal || viewingStatusLower === 'delivered') && (
+                        <>
+                          {viewingStatusLower === 'accepted' && (
+                            <Button
+                              onClick={() => {
+                                setViewingOrder(null);
+                                const amountVal = viewingOrder.amount || viewingOrder.totalValue || 0;
+                                router.push(`/seller/invoices?convertPoId=${viewingOrder.id}&amount=${amountVal}`);
+                              }}
+                              className="h-10 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-4"
+                            >
+                              <FileText className="mr-1.5 h-4 w-4" /> Create Invoice
+                            </Button>
+                          )}
+                          <Button
+                            onClick={() => {
+                              setViewingOrder(null);
+                              handleOpenDelivery(viewingOrder);
+                            }}
+                            className="h-10 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-4"
+                          >
+                            <Truck className="mr-1.5 h-4 w-4" /> Delivery / Manage Dispatch
+                          </Button>
+                        </>
+                      )}
+                      {isBuyer && !['cancelled', 'delivered'].includes(viewingStatusLower) && (
                         <Button
-                          onClick={() => {
-                            setViewingOrder(null);
-                            handleAcceptOrder(viewingOrder);
-                          }}
-                          className="h-10 bg-emerald-600 text-xs font-black uppercase text-white hover:bg-emerald-700 shadow-sm"
+                          onClick={() => setConfirming({ action: 'cancel', order: viewingOrder })}
+                          className="h-10 border-rose-200 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-xl px-4"
                         >
-                          <CheckCircle2 className="mr-1.5 h-4 w-4" /> Accept PO
+                          <XCircle className="mr-1.5 h-4 w-4" /> Cancel PO
                         </Button>
+                      )}
+                      {isBuyer && viewingStatusLower === 'delivered' && (
                         <Button
-                          variant="outline"
-                          onClick={() => {
-                            setViewingOrder(null);
-                            handleRejectOrder(viewingOrder);
-                          }}
-                          className="h-10 border-rose-200 text-xs font-black uppercase text-rose-600 hover:bg-rose-50"
+                          onClick={() => handleOpenRepeatModal(viewingOrder)}
+                          className="h-10 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-4"
                         >
-                          <XCircle className="mr-1.5 h-4 w-4" /> Reject PO
+                          <RefreshCw className="mr-1.5 h-4 w-4" /> Repeat Order
                         </Button>
-                      </>
-                    )}
-                    {isSeller && (isAcceptedModal || viewingStatusLower === 'delivered') && (
-                      <Button
-                        onClick={() => {
-                          setViewingOrder(null);
-                          handleOpenDelivery(viewingOrder);
-                        }}
-                        className="h-10 bg-[#12335f] text-xs font-black uppercase text-white hover:bg-[#0b2445] shadow-sm"
-                      >
-                        <Truck className="mr-1.5 h-4 w-4" /> Delivery / Manage Dispatch
-                      </Button>
-                    )}
-                    {isBuyer && !['cancelled', 'delivered'].includes(viewingStatusLower) && (
-                      <Button
-                        onClick={() => setConfirming({ action: 'cancel', order: viewingOrder })}
-                        className="h-10 border-rose-200 text-xs font-black uppercase text-rose-600 hover:bg-rose-50"
-                      >
-                        <XCircle className="mr-1.5 h-4 w-4" /> Cancel PO
-                      </Button>
-                    )}
-                    {isBuyer && viewingStatusLower === 'delivered' && (
-                      <Button
-                        onClick={() => handleOpenRepeatModal(viewingOrder)}
-                        className="h-10 bg-[#12335f] text-xs font-black uppercase text-white hover:bg-[#0b2445] shadow-sm"
-                      >
-                        <RefreshCw className="mr-1.5 h-4 w-4" /> Repeat Order
-                      </Button>
-                    )}
-                  </>
-                );
-              })()}
-              <Button variant="outline" onClick={() => exportInvoicePdf(viewingOrder, 'print')} className="h-10 text-xs font-black uppercase">
-                <Printer className="mr-1.5 h-4 w-4" /> Print PO
-              </Button>
-              <Button variant="outline" onClick={() => exportInvoicePdf(viewingOrder, 'download')} className="h-10 text-xs font-black uppercase">
-                <Download className="mr-1.5 h-4 w-4" /> Download PDF
-              </Button>
-              <Button onClick={() => setViewingOrder(null)} className="h-10 bg-slate-800 text-xs font-black uppercase text-white hover:bg-slate-900">
-                Close
-              </Button>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => exportInvoicePdf(viewingOrder, 'print')} className="h-10 text-xs font-black uppercase tracking-wider rounded-xl border-slate-300 hover:bg-slate-50 px-4">
+                  <Printer className="mr-1.5 h-4 w-4 text-slate-600" /> Print PO
+                </Button>
+                <Button variant="outline" onClick={() => exportInvoicePdf(viewingOrder, 'download')} className="h-10 text-xs font-black uppercase tracking-wider rounded-xl border-slate-300 hover:bg-slate-50 px-4">
+                  <Download className="mr-1.5 h-4 w-4 text-slate-600" /> Download PDF
+                </Button>
+                <Button onClick={() => setViewingOrder(null)} className="h-10 bg-slate-900 text-xs font-black uppercase tracking-wider text-white hover:bg-slate-800 rounded-xl px-5 shadow-sm">
+                  Close
+                </Button>
+              </div>
             </div>
+
           </div>
         </div>
       )}

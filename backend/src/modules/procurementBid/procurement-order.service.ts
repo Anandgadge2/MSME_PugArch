@@ -9,6 +9,7 @@ import { initiatePayment } from '../payments/payment.service.js';
 import { auditLog } from '../audit/audit.service.js';
 import { getProcurementModeSettings } from '../procurementMode/procurement-mode.service.js';
 import { logger } from '../../config/logger.js';
+import { getOrGeneratePurchaseOrderPdfBuffer } from '../../services/invoice-pdf.service.js';
 
 const db = prisma as any;
 
@@ -278,19 +279,34 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
 
   await procurementOrderAudit(req, 'PO_GENERATED', 'PurchaseOrder', result.id, { purchaseOrderId: result.id, awardId: award.id, bidId: bid.id });
 
-  // Send in-app & email notification to the seller when quotation is accepted and PO is generated
+  // Send in-app & email notification to the seller with attached Purchase Order PDF when quotation is accepted
   const sellerUserId = Number(participation.sellerId);
   const poNumberStr = result.poNumber || 'PO-PB';
   const bidTitleStr = bid.title || bid.itemName || `Bid #${bid.id}`;
   const totalAmountStr = result.amount ? `₹${Number(result.amount).toLocaleString('en-IN')}` : '';
 
+  let pdfAttachment: { filename: string; content: Buffer; contentType: string } | undefined = undefined;
+  try {
+    const pdfRes = await getOrGeneratePurchaseOrderPdfBuffer(result);
+    if (pdfRes?.buffer && pdfRes.buffer.length > 0) {
+      pdfAttachment = {
+        filename: pdfRes.filename || `PurchaseOrder_${poNumberStr}.pdf`,
+        content: pdfRes.buffer,
+        contentType: 'application/pdf'
+      };
+    }
+  } catch (pdfErr) {
+    logger.warn({ pdfErr, poId: result.id }, '[CREATE_PO] Failed to generate PO PDF for email attachment');
+  }
+
   await notificationService.notifyWithEmail(sellerUserId, {
     title: 'Quotation Accepted & Purchase Order Generated',
-    message: `Your quotation for "${bidTitleStr}" has been accepted by the buyer! Purchase Order #${poNumberStr} has been generated. Click to view order details.`,
+    message: `Your quotation for "${bidTitleStr}" has been accepted by the buyer! Purchase Order #${poNumberStr} has been generated. Official Purchase Order PDF is attached to this email.`,
     type: 'QUOTATION_ACCEPTED',
     priority: 'high',
     redirectUrl: `/orders/procurement/${result.id}`,
     emailSubject: `Quotation Accepted & Purchase Order #${poNumberStr} Generated - MSME Portal`,
+    attachments: pdfAttachment ? [pdfAttachment] : undefined,
     emailHtml: `
       <div style="padding: 18px 20px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; margin-bottom: 20px;">
         <p style="margin: 0 0 6px; color: #047857; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">Quotation Status Update</p>
@@ -317,7 +333,7 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
       </table>
 
       <p style="margin: 0 0 20px; color: #475569; font-size: 14px; line-height: 1.6;">
-        Please log into your MSME Seller account to view the Purchase Order, update delivery schedule, and issue invoice.
+        The official Purchase Order PDF (<code>${pdfAttachment?.filename || `PurchaseOrder_${poNumberStr}.pdf`}</code>) is attached to this email. Please log into your MSME Seller account to view the order, update delivery schedule, and issue invoice.
       </p>
     `
   }).catch(err => logger.warn({ err, sellerUserId }, '[CREATE_PO] Error sending email notification to seller'));

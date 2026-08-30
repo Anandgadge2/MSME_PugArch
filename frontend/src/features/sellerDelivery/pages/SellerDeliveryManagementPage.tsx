@@ -11,7 +11,7 @@
  */
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, CheckCircle2, ChevronDown, Clock, Download, Eye, FileText, Grid3x3, List, MoreVertical, Package, Paperclip, Printer, RefreshCw, Search, Send, ShieldCheck, Sparkles, Stamp, Truck, Upload, UploadCloud, X, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, Clock, Download, ExternalLink, Eye, FileText, Grid3x3, List, MoreVertical, Package, Paperclip, Printer, RefreshCw, Search, Send, ShieldCheck, Sparkles, Stamp, Truck, Upload, UploadCloud, X, XCircle } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
@@ -1067,6 +1067,7 @@ const generateTaxInvoiceForDelivery = async (delivery: DeliveryDto) => {
 };
 
 function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
+    const router = useRouter();
     const [trackingNumber, setTrackingNumber] = useState(delivery.trackingNumber || '');
     const [carrierName, setCarrierName] = useState(delivery.carrierName || '');
     const [eta, setEta] = useState((delivery.expectedDelivery || '').slice(0, 10));
@@ -1564,13 +1565,20 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                 </div>
 
                 <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
+                    <div 
+                        onClick={() => {
+                            const invNo = invData.invoiceNumber || fetchedInvoice?.invoiceNumber || (delivery.purchaseOrder?.poNumber ? `INV-${delivery.purchaseOrder.poNumber}` : `INV-${delivery.purchaseOrderId || delivery.id}`);
+                            router.push(`/payments/invoices?search=${encodeURIComponent(invNo)}&viewInvoiceNo=${encodeURIComponent(invNo)}`);
+                        }}
+                        className="flex items-start justify-between gap-3 cursor-pointer hover:bg-blue-100/50 p-1.5 rounded-lg transition-colors"
+                        title="Click to view full Tax Invoice"
+                    >
                         <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-800 font-bold">
                                 <FileText className="h-5 w-5" />
                             </div>
                             <div>
-                                <p className="text-xs font-black text-blue-950">
+                                <p className="text-xs font-black text-blue-950 hover:underline">
                                     {invData.invoiceNumber}
                                 </p>
                                 <p className="text-[10px] font-semibold text-blue-800 mt-0.5">
@@ -1587,7 +1595,10 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                     <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-blue-200/60">
                         <Button
                             type="button"
-                            onClick={() => setIsViewInvoiceModalOpen(true)}
+                            onClick={() => {
+                                const invNo = invData.invoiceNumber || fetchedInvoice?.invoiceNumber || (delivery.purchaseOrder?.poNumber ? `INV-${delivery.purchaseOrder.poNumber}` : `INV-${delivery.purchaseOrderId || delivery.id}`);
+                                router.push(`/payments/invoices?search=${encodeURIComponent(invNo)}&viewInvoiceNo=${encodeURIComponent(invNo)}`);
+                            }}
                             className="h-9 px-4 bg-[#12335f] hover:bg-[#0b1f3a] text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1.5 cursor-pointer"
                         >
                             <Eye className="h-3.5 w-3.5" /> View Tax Invoice
@@ -1628,14 +1639,27 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                                 <h2 className="text-xl font-black text-slate-950">{invData.invoiceNumber}</h2>
                                 <p className="text-xs text-slate-500">Created on {invData.dateStr}</p>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsViewInvoiceModalOpen(false)}
-                                className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 transition"
-                                aria-label="Close invoice viewer"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsViewInvoiceModalOpen(false);
+                                        const invNo = invData.invoiceNumber;
+                                        router.push(`/payments/invoices?search=${encodeURIComponent(invNo)}&viewInvoiceNo=${encodeURIComponent(invNo)}`);
+                                    }}
+                                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#12335f] hover:bg-slate-100 transition flex items-center gap-1"
+                                >
+                                    <ExternalLink className="h-3.5 w-3.5" /> Full Page View
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsViewInvoiceModalOpen(false)}
+                                    className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 transition"
+                                    aria-label="Close invoice viewer"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Scrollable Content */}

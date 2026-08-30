@@ -20,6 +20,7 @@ import { createComplianceFlag } from '../modules/compliance/compliance.service.j
 import { paymentRateLimit, verificationRateLimit } from '../middleware/rateLimit.js';
 import { getOrSetCache, deleteCache, invalidateByPattern } from '../services/cache.service.js';
 import { notificationService } from '../services/notification.service.js';
+import { notifySellerNewPurchaseOrder } from '../services/invoice-pdf.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { ApiError } from '../utils/ApiError.js';
 import { handleSecureRouteError } from '../utils/routeHelpers.js';
@@ -4700,13 +4701,7 @@ async function handleCatalogPurchaseApprovalCompletion(req: any, id: number) {
     });
 
     try {
-      await notificationService.notify(sellerId, {
-        title: 'New Purchase Order (Catalogue Purchase)',
-        message: "You have received a new Purchase Order (" + poNum + ") from " + (reqRecord.buyer?.name || 'a buyer') + ".",
-        type: 'purchase_order_created',
-        priority: 'high',
-        redirectUrl: '/seller/orders'
-      });
+      await notifySellerNewPurchaseOrder(po.id);
     } catch (err) {
       // non-fatal
     }
@@ -4978,6 +4973,7 @@ router.post('/procurement/rate-contracts/:id/call-off-orders', authenticate, aut
     include: { items: true }
   });
   await auditWrite(req, 'rate_contract.calloff_order_created', 'purchaseOrder', po.id, { contractId: contract.id });
+  notifySellerNewPurchaseOrder(po.id).catch(() => undefined);
   ok(res, po, 201);
 }, 'Unable to create rate contract call-off order'));
 
@@ -7156,6 +7152,7 @@ router.post('/purchase-orders/:id/repeat', authenticate, authorize('buyer'), pay
   });
 
   await auditWrite(req, 'purchase_order.generated', 'purchaseOrder', newPo.id);
+  notifySellerNewPurchaseOrder(newPo.id).catch(() => undefined);
   ok(res, newPo, 201);
 }));
 
@@ -7417,6 +7414,7 @@ router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(
           }
         }
       });
+      notifySellerNewPurchaseOrder(po.id).catch(() => undefined);
     }
 
     targetPoId = po.id;

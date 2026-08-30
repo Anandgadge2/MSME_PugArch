@@ -5,6 +5,7 @@ import { createApprovalChain } from '../../services/approval-chain.service.js';
 import { numberSeries } from '../../services/workflow/workflow-common.js';
 import { getProcurementModeSettings } from '../procurementMode/procurement-mode.service.js';
 import { notificationService } from '../../services/notification.service.js';
+import { notifySellerNewPurchaseOrder } from '../../services/invoice-pdf.service.js';
 import { broadMethodForCanonical, normalizeCanonicalMethod } from '../../utils/procurement-methods.js';
 
 const generatePoNumber = () => numberSeries('PO');
@@ -422,13 +423,7 @@ export const finalizeDirectPurchaseFromCheckout = async (
       createdDirectPurchases.push(directPurchase.id);
 
       try {
-        await notificationService.notify(sellerId, {
-          title: 'New Order — Seller Acceptance Pending',
-          message: `Purchase Order ${poNum} requires your acceptance.`,
-          type: 'purchase_order_created',
-          priority: 'high',
-          redirectUrl: '/seller/orders',
-        });
+        await notifySellerNewPurchaseOrder(po.id);
       } catch {
         // non-fatal
       }

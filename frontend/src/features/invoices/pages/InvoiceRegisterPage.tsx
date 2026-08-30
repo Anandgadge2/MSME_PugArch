@@ -271,6 +271,14 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       const params = new URLSearchParams(window.location.search);
       const convertPoId = params.get('convertPoId');
       const amount = params.get('amount');
+      const searchParam = params.get('search');
+      const viewInvoiceNo = params.get('viewInvoiceNo') || params.get('invoiceNumber');
+
+      if (searchParam && !searchTerm) {
+        setSearchTerm(searchParam);
+        setDebouncedSearch(searchParam);
+      }
+
       if (convertPoId && purchaseOrders && purchaseOrders.length > 0) {
         const poId = Number(convertPoId);
         setSelectedPurchaseOrderId(poId);
@@ -286,8 +294,25 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         const cleanUrl = window.location.pathname;
         window.history.replaceState({}, '', cleanUrl);
       }
+
+      if (viewInvoiceNo && pagedInvoices && pagedInvoices.length > 0) {
+        const cleanNo = viewInvoiceNo.trim().toLowerCase();
+        const found = pagedInvoices.find(inv => 
+          inv.invoiceNumber?.toLowerCase() === cleanNo ||
+          inv.invoiceNumber?.toLowerCase().includes(cleanNo) ||
+          inv.purchaseOrder?.poNumber?.toLowerCase() === cleanNo ||
+          inv.purchaseOrder?.poNumber?.toLowerCase().includes(cleanNo) ||
+          String(inv.id) === cleanNo ||
+          String(inv.purchaseOrderId) === cleanNo
+        ) || pagedInvoices[0];
+
+        if (found && (!selectedInvoice || selectedInvoice.id !== found.id)) {
+          setSelectedInvoice(found);
+          setInvoiceModalMode('view');
+        }
+      }
     }
-  }, [purchaseOrders]);
+  }, [purchaseOrders, pagedInvoices]);
 
   const safePurchaseOrders = useMemo(
     () => (Array.isArray(purchaseOrders) ? purchaseOrders : (purchaseOrders as any)?.purchaseOrders || (purchaseOrders as any)?.items || (purchaseOrders as any)?.records || []),

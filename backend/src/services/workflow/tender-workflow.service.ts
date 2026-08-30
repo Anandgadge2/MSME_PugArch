@@ -54,6 +54,8 @@ const assertTenderCanBeAwarded = (status: unknown) => {
   }
 };
 
+import { notifySellerNewPurchaseOrder } from '../invoice-pdf.service.js';
+
 export const tenderWorkflow = {
   async createTender(actor: WorkflowActor, input: Record<string, unknown>) {
     if (actor.role !== 'buyer' && actor.role !== 'admin') throw new ApiError(403, 'Buyer access required', 'BUYER_REQUIRED');
@@ -274,7 +276,7 @@ export const tenderWorkflow = {
       timeout: 15000
     });
     if (!result.reused) {
-      notifyWorkflowSoon(result.purchaseOrder.sellerId, 'Tender awarded', `You were awarded ${result.purchaseOrder.title}.`, 'tender_awarded');
+      notifySellerNewPurchaseOrder(result.purchaseOrder.id).catch(() => undefined);
       const losingBids = await db.bid.findMany({ where: { tenderId: result.tender.id, id: { not: bidId }, status: { not: 'withdrawn' } } });
       for (const lb of losingBids) {
         notifyWorkflowSoon(lb.sellerId, 'Tender not awarded', `Your bid for "${result.purchaseOrder.title}" was not selected.`, 'tender_not_awarded');
