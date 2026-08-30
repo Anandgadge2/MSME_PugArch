@@ -10,7 +10,6 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
 import { ListSkeleton } from '../../../components/ui/skeleton';
-import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { formatDate } from '../../shared/format';
@@ -72,71 +71,73 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
   const responseCoverage = summary?.count ? Math.round((writtenReviewCount / summary.count) * 100) : 0;
 
   return (
-    <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
-      {/* ── Transparent Header ── */}
-      <div>
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">
-          {mode === 'supplier' ? 'Supplier Performance' : 'Buyer Performance'}
-        </p>
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-950">Ratings</h1>
-            <p className="mt-1 max-w-2xl text-sm font-semibold text-slate-500">
-              Performance feedback across quality, delivery, communication, and completed procurement records.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+    <div className="mx-auto max-w-[1560px] space-y-4 px-4 pb-8 pt-4">
+      {/* ── Compact Header ── */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">
+            SUPPLIER PERFORMANCE
+          </p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-black tracking-tight text-slate-900">Ratings</h1>
             {summary && summary.count > 0 && <RatingPill average={summary.average} count={summary.count} />}
-            <Button
-              variant="outline"
-              onClick={() => query.refetch()}
-              className="h-10 rounded-lg text-xs font-black uppercase shadow-sm"
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${query.isFetching ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
           </div>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-500 max-w-xl leading-tight">
+            Performance feedback across quality, delivery, communication, and completed procurement records.
+          </p>
+        </div>
+        <div className="flex shrink-0">
+          <Button
+            variant="outline"
+            onClick={() => query.refetch()}
+            className="h-8 px-3 rounded-md text-[10px] font-black uppercase shadow-xs bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+          >
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${query.isFetching ? 'animate-spin' : ''}`} /> Refresh
+          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Average Rating"
-          value={summary?.average ? `${summary.average.toFixed(1)} ★` : '0.0 ★'}
-          subtext="Overall performance aggregate"
-          icon={Star}
-          tone="amber"
-          loading={query.isLoading && !query.data}
-        />
-        <KpiCard
-          label="Total Ratings"
-          value={summary?.count ?? 0}
-          subtext="Total reviews received"
-          icon={ThumbsUp}
-          tone="blue"
-          loading={query.isLoading && !query.data}
-        />
-        <KpiCard
-          label="Written Reviews"
-          value={writtenReviewCount}
-          subtext="Detailed stakeholder feedback"
-          icon={MessageSquareText}
-          tone="green"
-          loading={query.isLoading && !query.data}
-        />
-        <KpiCard
-          label="High Score (4+)"
-          value={highScoreCount}
-          subtext="4-star and 5-star ratings"
-          icon={TrendingUp}
-          tone="indigo"
-          loading={query.isLoading && !query.data}
-        />
-      </div>
+      {/* ── KPI Grid ── */}
+      <div className="flex flex-col gap-3">
+        {/* Primary Row */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <DashboardKpi
+            label="Average Rating"
+            value={summary?.average ? `${summary.average.toFixed(1)} / 5` : '0.0 / 5'}
+            icon={Star}
+            tone="amber"
+            highlight={true}
+            loading={query.isLoading && !query.data}
+          />
+          <DashboardKpi
+            label="Total Ratings"
+            value={summary?.count ?? 0}
+            icon={ThumbsUp}
+            tone="blue"
+            loading={query.isLoading && !query.data}
+          />
+          <DashboardKpi
+            label="Written Reviews"
+            value={writtenReviewCount}
+            icon={MessageSquareText}
+            tone="teal"
+            loading={query.isLoading && !query.data}
+          />
+          <DashboardKpi
+            label="High Score (4+)"
+            value={highScoreCount}
+            icon={TrendingUp}
+            tone="green"
+            loading={query.isLoading && !query.data}
+          />
+        </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <InsightTile label="Review Coverage" value={`${responseCoverage}%`} hint="Written feedback compared with total ratings" />
-        <InsightTile label="Low Score Alerts" value={lowScoreCount} hint="Ratings at 1 or 2 stars" />
-        <InsightTile label="Current Dataset" value={mode === 'supplier' ? 'Supplier' : 'Buyer'} hint="Only this rating endpoint is queried" />
+        {/* Secondary Row */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <DashboardKpi label="Review Coverage" value={`${responseCoverage}%`} icon={BarChart3} tone="blue" />
+          <DashboardKpi label="Low Score Alerts" value={lowScoreCount} icon={BarChart3} tone={lowScoreCount > 0 ? 'red' : 'slate'} />
+          <DashboardKpi label="Current Dataset" value={mode === 'supplier' ? 'Supplier' : 'Buyer'} icon={BarChart3} tone="slate" />
+        </div>
       </div>
 
       {query.error && (
@@ -146,63 +147,54 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
         />
       )}
 
+      {/* ── Rating Distribution ── */}
       {summary && summary.count > 0 && (
-        <Card>
-          <CardContent className="p-4">
-            <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-[#12335f]">
-              Rating Distribution
-            </p>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="mb-3">
+            <h3 className="text-[11px] font-black uppercase tracking-widest text-[#12335f]">Rating Distribution</h3>
+            <p className="text-[10px] font-semibold text-slate-500">How ratings are distributed across your supplier feedback</p>
+          </div>
+          <div className="max-w-md">
             <RatingDistribution summary={summary} />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      {/* ── Filter Bar (border-y) ── */}
-      {/* ── Search + Filter Toolbar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
-        <ResponsiveFilterBar
-          activeFilterCount={(searchTerm ? 1 : 0) + (scoreFilter ? 1 : 0)}
-          searchInput={
-            <div className="relative w-full">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={searchTerm}
-                onChange={event => setSearchTerm(event.target.value)}
-                placeholder="Search supplier, buyer, PO, review..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-              />
-            </div>
-          }
-          filters={
-            <>
-              <div className="w-full sm:w-auto sm:min-w-[140px]">
-                <select
-                  value={scoreFilter}
-                  onChange={event => setScoreFilter(event.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-                >
-                  <option value="">All scores</option>
-                  <option value="5">5 star</option>
-                  <option value="4">4 star and above</option>
-                  <option value="3">3 star and above</option>
-                </select>
-              </div>
-
-              {(searchTerm || scoreFilter) && (
-                <Button
-                  variant="outline"
-                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
-                  onClick={() => {
-                    setSearchTerm('');
-                    setScoreFilter('');
-                  }}
-                >
-                  Reset
-                </Button>
-              )}
-            </>
-          }
-        />
+      {/* ── Compact Toolbar ── */}
+      <div className="flex flex-col sm:flex-row items-center gap-2">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <input
+            value={searchTerm}
+            onChange={event => setSearchTerm(event.target.value)}
+            placeholder="Search supplier, buyer, PO, review..."
+            className="h-9 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/20 shadow-xs"
+          />
+        </div>
+        <div className="w-full sm:w-auto">
+          <select
+            value={scoreFilter}
+            onChange={event => setScoreFilter(event.target.value)}
+            className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-0 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] transition-colors shadow-xs cursor-pointer"
+          >
+            <option value="">All scores</option>
+            <option value="5">5 star</option>
+            <option value="4">4 star and above</option>
+            <option value="3">3 star and above</option>
+          </select>
+        </div>
+        {(searchTerm || scoreFilter) && (
+          <Button
+            variant="ghost"
+            className="h-9 rounded-md px-3 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+            onClick={() => {
+              setSearchTerm('');
+              setScoreFilter('');
+            }}
+          >
+            Reset
+          </Button>
+        )}
       </div>
 
       {query.isLoading && !query.data ? (
@@ -215,56 +207,50 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
             : 'Ratings appear after completed purchase orders are reviewed.'}
         />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="grid gap-3 p-4 lg:grid-cols-2">
+        <div className="flex flex-col space-y-3">
+          <div className="grid gap-3 lg:grid-cols-2">
             {filtered.map(item => (
-              <Card key={item.id}>
-                <CardContent className="space-y-4 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-sm font-black text-slate-950">
-                        {mode === 'supplier'
-                          ? (item as any).seller?.name || `Seller #${item.sellerId || '-'}`
-                          : (item as any).buyer?.name || `Buyer #${item.buyerId || '-'}`}
-                      </p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">
-                        {item.purchaseOrderId ? `PO #${item.purchaseOrderId}` : 'Direct rating'} ·{' '}
-                        {formatDate(item.createdAt)}
-                      </p>
-                    </div>
-                    <StarRating value={item.rating} readOnly />
+              <div key={item.id} className="rounded-xl border border-slate-200/80 bg-white shadow-xs p-4 flex flex-col gap-3 transition-shadow hover:shadow-sm">
+                {/* Header */}
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="text-sm font-black text-[#12335f] truncate max-w-[200px] sm:max-w-xs">
+                      {mode === 'supplier'
+                        ? (item as any).seller?.name || `Seller #${item.sellerId || '-'}`
+                        : (item as any).buyer?.name || `Buyer #${item.buyerId || '-'}`}
+                    </h4>
+                    <p className="mt-0.5 text-[10px] font-bold tracking-wide text-slate-500 uppercase">
+                      {item.purchaseOrderId ? `PO #${item.purchaseOrderId}` : 'Direct rating'} · {formatDate(item.createdAt)}
+                    </p>
                   </div>
-
-                  <p className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">
-                    {item.review || 'No written review provided.'}
-                  </p>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    {mode === 'supplier' ? (
-                      <>
-                        <Score label="Quality" value={(item as SupplierRatingDto).qualityScore} />
-                        <Score label="Delivery" value={(item as SupplierRatingDto).deliveryScore} />
-                        <Score
-                          label="Communication"
-                          value={(item as SupplierRatingDto).communicationScore}
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <Score
-                          label="Payment"
-                          value={(item as BuyerRatingDto).paymentTimelinessScore}
-                        />
-                        <Score
-                          label="Communication"
-                          value={(item as BuyerRatingDto).communicationScore}
-                        />
-                        <div />
-                      </>
-                    )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <StarRating value={item.rating} size="sm" readOnly />
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+
+                {/* Review Body */}
+                <div className="relative rounded-lg bg-slate-50/80 p-3 border-l-2 border-slate-200 text-xs font-medium text-slate-700 min-h-[48px] flex items-center">
+                  <span className="italic text-slate-600">
+                    {item.review ? `"${item.review}"` : 'No written review provided.'}
+                  </span>
+                </div>
+
+                {/* Sub-Ratings */}
+                <div className="flex flex-wrap items-center gap-2 mt-auto pt-1">
+                  {mode === 'supplier' ? (
+                    <>
+                      <CompactScore label="QUALITY" value={(item as SupplierRatingDto).qualityScore} tone="blue" />
+                      <CompactScore label="DELIVERY" value={(item as SupplierRatingDto).deliveryScore} tone="purple" />
+                      <CompactScore label="COMM." value={(item as SupplierRatingDto).communicationScore} tone="teal" />
+                    </>
+                  ) : (
+                    <>
+                      <CompactScore label="PAYMENT" value={(item as BuyerRatingDto).paymentTimelinessScore} tone="green" />
+                      <CompactScore label="COMM." value={(item as BuyerRatingDto).communicationScore} tone="teal" />
+                    </>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
           <Pagination
@@ -281,23 +267,52 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
   );
 }
 
-function InsightTile({ label, value, hint }: { label: string; value: string | number; hint: string }) {
+function DashboardKpi({ label, value, icon: Icon, tone, highlight = false, loading = false }: any) {
+  const toneMap: Record<string, { bg: string, text: string, iconBg: string }> = {
+    amber: { bg: 'border-amber-200 bg-amber-50', text: 'text-amber-700', iconBg: 'bg-amber-100 text-amber-600' },
+    blue: { bg: 'border-blue-200 bg-blue-50/50', text: 'text-blue-700', iconBg: 'bg-blue-100 text-blue-600' },
+    teal: { bg: 'border-teal-200 bg-teal-50/50', text: 'text-teal-700', iconBg: 'bg-teal-100 text-teal-600' },
+    green: { bg: 'border-emerald-200 bg-emerald-50/50', text: 'text-emerald-700', iconBg: 'bg-emerald-100 text-emerald-600' },
+    red: { bg: 'border-rose-200 bg-rose-50/50', text: 'text-rose-700', iconBg: 'bg-rose-100 text-rose-600' },
+    slate: { bg: 'border-slate-200 bg-slate-50/50', text: 'text-slate-600', iconBg: 'bg-slate-100 text-slate-500' },
+  };
+
+  const t = toneMap[tone] || toneMap.slate;
+
   return (
-    <KpiCard
-      label={label}
-      value={value}
-      subtext={hint}
-      tone="slate"
-      icon={BarChart3}
-    />
+    <div className={`rounded-xl border ${highlight ? t.bg : 'bg-white border-slate-200/80'} p-3 shadow-xs flex items-center gap-3`}>
+      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${t.iconBg}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-[9.5px] font-black uppercase tracking-widest text-slate-500">
+          {label}
+        </p>
+        <p className={`mt-0.5 truncate text-sm font-black ${highlight ? t.text : 'text-slate-900'} ${loading ? 'animate-pulse text-slate-300' : ''}`}>
+          {loading ? '...' : value}
+        </p>
+      </div>
+    </div>
   );
 }
 
-function Score({ label, value }: { label: string; value?: number | null }) {
+function CompactScore({ label, value, tone }: { label: string; value?: number | null; tone: 'blue' | 'purple' | 'teal' | 'green' }) {
+  const isWarning = value !== null && value !== undefined && value <= 2;
+  
+  const toneStyles = {
+    blue: 'bg-blue-50 text-blue-700 border-blue-100',
+    purple: 'bg-purple-50 text-purple-700 border-purple-100',
+    teal: 'bg-teal-50 text-teal-700 border-teal-100',
+    green: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  };
+
+  const alertStyle = 'bg-rose-50 text-rose-700 border-rose-100';
+  const displayStyle = isWarning ? alertStyle : toneStyles[tone];
+
   return (
-    <div className="rounded-lg border border-slate-200 p-3">
-      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-black text-slate-950">{value ? `${value}/5` : '-'}</p>
+    <div className={`flex items-center gap-1.5 rounded-md border px-2 py-1 ${displayStyle}`}>
+      <span className="text-[9px] font-extrabold uppercase tracking-widest opacity-80">{label}</span>
+      <span className="text-[11px] font-black">{value ? `${value}/5` : '-'}</span>
     </div>
   );
 }

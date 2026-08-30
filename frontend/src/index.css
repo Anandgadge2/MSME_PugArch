@@ -353,6 +353,65 @@ textarea::-moz-placeholder {
   scrollbar-color: #cbd5e1 #f8fafc;
 }
 
+/* ─── Sidebar Scrollbar Override ─── */
+/* Clean, subtle, premium scrollbar for sidebars */
+.sidebar-scroll::-webkit-scrollbar,
+.sidebar-scroll-dark::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+  background-color: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track,
+.sidebar-scroll-dark::-webkit-scrollbar-track {
+  background-color: transparent;
+  border-radius: 9999px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track-piece,
+.sidebar-scroll-dark::-webkit-scrollbar-track-piece {
+  background-color: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-corner,
+.sidebar-scroll-dark::-webkit-scrollbar-corner {
+  background-color: transparent;
+}
+
+/* Light background sidebars (white/gray) */
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(18, 51, 95, 0.15); /* Subtle navy */
+  border-radius: 9999px;
+  border: none;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(18, 51, 95, 0.35); /* Stronger navy on hover */
+}
+
+/* Dark background sidebars (deep navy) */
+.sidebar-scroll-dark::-webkit-scrollbar-thumb {
+  background-color: rgba(203, 213, 225, 0.2); /* Subtle translucent slate */
+  border-radius: 9999px;
+  border: none;
+}
+
+.sidebar-scroll-dark::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(203, 213, 225, 0.35); /* More visible on hover */
+}
+
+/* Firefox sidebar fallback */
+@supports (scrollbar-width: thin) {
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(18, 51, 95, 0.15) transparent;
+  }
+  .sidebar-scroll-dark {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(203, 213, 225, 0.2) transparent;
+  }
+}
+
 
 
 /* Skeleton shimmer animation - used by components/ui/skeleton.tsx */

@@ -101,7 +101,7 @@ export const GeMSellerSidebar: React.FC<GeMSellerSidebarProps> = ({
       )}
 
       <div className={cn(
-        "w-72 flex-shrink-0 bg-white border border-gray-200/80 rounded-2xl shadow-sm overflow-y-auto transition-transform duration-300 md:translate-x-0 fixed md:sticky md:top-0 self-start md:h-[calc(100vh-4rem)] left-0 top-0 z-[70] md:z-10",
+        "sidebar-scroll w-72 flex-shrink-0 bg-white border border-gray-200/80 rounded-2xl shadow-sm overflow-y-auto transition-transform duration-300 md:translate-x-0 fixed md:sticky md:top-0 self-start md:h-[calc(100vh-4rem)] left-0 top-0 z-[70] md:z-10",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">

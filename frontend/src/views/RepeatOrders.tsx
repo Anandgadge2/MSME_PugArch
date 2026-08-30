@@ -61,6 +61,7 @@ export default function RepeatOrders() {
   const [deliveredDateFilter, setDeliveredDateFilter] = useState('All Dates');
   const [customDate, setCustomDate] = useState({ start: '', end: '' });
   const [sortBy, setSortBy] = useState('newest');
+  const [showFilters, setShowFilters] = useState(false);
   
   const [viewMode, setViewMode] = useResponsiveViewMode('repeat-orders:view-mode');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -407,7 +408,11 @@ export default function RepeatOrders() {
           <p className="text-xs font-semibold text-slate-500 mt-1">Re-order materials and items from completed previous orders quickly.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={refreshAll} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
+          <Button variant="outline" onClick={() => setShowFilters(!showFilters)} className={cn("h-10 rounded-lg text-xs font-black uppercase transition-colors shadow-sm", showFilters ? "bg-[#12335f] text-white border-[#12335f] hover:bg-[#0e2a4f]" : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200")}>
+            <Filter className={cn("mr-2 h-4 w-4", showFilters ? "text-white" : "text-[#12335f]")} />
+            {showFilters ? 'Hide Filters' : 'Filters'}
+          </Button>
+          <Button variant="outline" onClick={refreshAll} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm text-slate-700">
             <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} />
             Refresh
           </Button>

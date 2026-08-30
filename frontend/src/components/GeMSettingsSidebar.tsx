@@ -48,7 +48,7 @@ export const GeMSettingsSidebar: React.FC<GeMSettingsSidebarProps> = ({ currentS
       </div>
 
       {/* Desktop Vertical Sidebar (hidden below lg) */}
-      <div className="hidden lg:block w-72 flex-shrink-0 bg-white border-r border-gray-200 min-h-screen shadow-sm overflow-y-auto py-6">
+      <div className="sidebar-scroll hidden lg:block w-72 flex-shrink-0 bg-white border-r border-gray-200 min-h-screen shadow-sm overflow-y-auto py-6">
         <div className="px-6 mb-4">
           <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Account Settings</h3>
         </div>
