@@ -20,7 +20,7 @@ import { createComplianceFlag } from '../modules/compliance/compliance.service.j
 import { paymentRateLimit, verificationRateLimit } from '../middleware/rateLimit.js';
 import { getOrSetCache, deleteCache, invalidateByPattern } from '../services/cache.service.js';
 import { notificationService } from '../services/notification.service.js';
-import { notifySellerNewPurchaseOrder } from '../services/invoice-pdf.service.js';
+import { notifySellerNewPurchaseOrder, generatePaymentReceiptPdfBuffer, notifyPaymentReceiptEmail } from '../services/invoice-pdf.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { ApiError } from '../utils/ApiError.js';
 import { handleSecureRouteError } from '../utils/routeHelpers.js';
@@ -7543,6 +7543,59 @@ router.get('/payments/:id', authenticate, asyncRoute(async (req, res) => {
   const payment = await db.paymentTransaction.findUnique({ where: { id }, include: { escrowAccount: true, ledgerEntries: true } });
   if (!payment || (!isAdmin(req) && payment.payerId !== userId(req) && payment.payeeId !== userId(req))) throw new ApiError(404, 'Payment not found', 'PAYMENT_NOT_FOUND');
   ok(res, payment);
+}));
+
+router.get('/payments/:id/pdf', authenticate, asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const payment = await db.paymentTransaction.findUnique({
+    where: { id },
+    include: {
+      invoice: { include: { purchaseOrder: true } },
+      purchaseOrder: true,
+      payer: { select: { name: true, email: true, organization: { select: { organizationName: true } } } },
+      payee: { select: { name: true, email: true, organization: { select: { organizationName: true } } } },
+      escrowAccount: true
+    }
+  });
+
+  if (!payment || (!isAdmin(req) && payment.payerId !== userId(req) && payment.payeeId !== userId(req))) {
+    throw new ApiError(404, 'Payment not found', 'PAYMENT_NOT_FOUND');
+  }
+
+  const refId = payment.referenceId || `PAY-2026-${String(payment.id).padStart(6, '0')}`;
+  const invNo = payment.invoice?.invoiceNumber || (payment.purchaseOrder?.poNumber ? `INV-${payment.purchaseOrder.poNumber}` : `INV-${payment.invoiceId || payment.id}`);
+  const poNum = payment.purchaseOrder?.poNumber || (payment.invoice?.purchaseOrder?.poNumber) || `PO-${payment.purchaseOrderId || payment.id}`;
+
+  const pdfBuffer = await generatePaymentReceiptPdfBuffer({
+    id: payment.id,
+    referenceId: refId,
+    createdAt: payment.createdAt,
+    paidAt: payment.completedAt || payment.updatedAt,
+    amount: payment.amount,
+    currency: payment.currency || 'INR',
+    gateway: payment.gateway || 'bank_transfer',
+    method: payment.method || 'card',
+    status: payment.status || 'success',
+    invoiceNumber: invNo,
+    poNumber: poNum,
+    payerName: payment.payer?.organization?.organizationName || payment.payer?.name || 'Buyer',
+    payerEmail: payment.payer?.email || '',
+    payeeName: payment.payee?.organization?.organizationName || payment.payee?.name || 'Seller',
+    payeeEmail: payment.payee?.email || '',
+    taxableAmount: payment.invoice?.taxableAmount || payment.amount,
+    cgstAmount: payment.invoice?.cgstAmount || 0,
+    sgstAmount: payment.invoice?.sgstAmount || 0,
+    igstAmount: payment.invoice?.igstAmount || 0,
+    tdsAmount: payment.invoice?.tdsAmount || 0,
+    escrowStatus: payment.escrowAccount?.status || 'held',
+    escrowBalance: payment.escrowAccount?.amount || payment.amount,
+    escrowVaultName: 'ESCROW ACCOUNT VAULT-B'
+  });
+
+  const filename = `PaymentReceipt_${refId}.pdf`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  res.send(pdfBuffer);
 }));
 
 router.post('/payments/:id/reconcile', authenticate, authorizeAdmin, paymentRateLimit, asyncRoute(async (req, res) => {

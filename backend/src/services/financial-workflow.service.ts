@@ -4,6 +4,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { randomToken } from '../utils/crypto.js';
 import { maskSensitive } from '../utils/maskSensitive.js';
 import { quotedBidTotal } from '../utils/bidPricing.js';
+import { notifyPaymentReceiptEmail } from './invoice-pdf.service.js';
 
 type Actor = {
   id: number;
@@ -361,6 +362,7 @@ export const markPaymentSuccess = async (paymentId: number, actor: Actor, provid
     reused: result.reused,
     providerPaymentId: providerPaymentId ? 'provided' : 'not_provided'
   });
+  void notifyPaymentReceiptEmail(result.payment.id).catch(() => undefined);
 
   return result;
 };

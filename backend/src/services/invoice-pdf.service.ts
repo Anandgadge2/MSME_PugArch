@@ -517,3 +517,315 @@ export async function notifySellerNewPurchaseOrder(purchaseOrderId: number) {
     logger.warn({ err, purchaseOrderId }, 'Failed to notify seller of new purchase order with PDF');
   }
 }
+
+export interface PaymentReceiptPdfInput {
+  id?: number;
+  referenceId: string;
+  createdAt?: Date | string;
+  paidAt?: Date | string;
+  completedAt?: Date | string;
+  amount?: number | string;
+  currency?: string;
+  gateway?: string;
+  method?: string;
+  status?: string;
+  invoiceNumber?: string;
+  poNumber?: string;
+  payerName?: string;
+  payerEmail?: string;
+  payeeName?: string;
+  payeeEmail?: string;
+  taxableAmount?: number | string;
+  cgstAmount?: number | string;
+  sgstAmount?: number | string;
+  igstAmount?: number | string;
+  tdsAmount?: number | string;
+  netAmountPaid?: number | string;
+  escrowStatus?: string;
+  escrowBalance?: number | string;
+  escrowVaultName?: string;
+}
+
+/**
+ * Generates an official, high-precision Payment Receipt PDF Buffer matching the exact portal UI screenshot.
+ */
+export async function generatePaymentReceiptPdfBuffer(input: PaymentReceiptPdfInput): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ size: 'A4', margin: 36 });
+      const buffers: Buffer[] = [];
+
+      doc.on('data', (chunk: Buffer) => buffers.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', (err: Error) => reject(err));
+
+      const pageMargin = 36;
+      const contentWidth = 595.28 - (pageMargin * 2);
+
+      // Top Navy Accent Bar
+      doc.rect(pageMargin, pageMargin, contentWidth, 4).fill('#12335f');
+
+      let currentY = pageMargin + 14;
+
+      // Header: Portal Name & Status Badge
+      doc.fillColor('#64748b').fontSize(7.5).font('Helvetica-Bold').text('GOVERNMENT MSME PORTAL', pageMargin, currentY);
+      
+      const badgeText = (input.status || 'SUCCESS').toUpperCase();
+      doc.roundedRect(pageMargin + contentWidth - 75, currentY, 75, 16, 8).fill('#dcfce7');
+      doc.fillColor('#15803d').fontSize(8).font('Helvetica-Bold').text(badgeText, pageMargin + contentWidth - 75, currentY + 4, { width: 75, align: 'center' });
+
+      currentY += 12;
+
+      doc.fillColor('#0f172a').fontSize(20).font('Helvetica-Bold').text('Official Payment Receipt', pageMargin, currentY);
+      
+      const dateStr = input.paidAt || input.completedAt || input.createdAt
+        ? new Date(input.paidAt || input.completedAt || input.createdAt!).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      
+      doc.fillColor('#475569').fontSize(8).font('Helvetica-Bold').text(`DATE: ${dateStr.toUpperCase()}`, pageMargin + contentWidth - 170, currentY + 6, { width: 90, align: 'right' });
+
+      currentY += 26;
+
+      const refId = input.referenceId || `PAY-2026-${String(input.id || '001').padStart(6, '0')}`;
+      doc.fillColor('#64748b').fontSize(8).font('Helvetica').text(`System generated receipt for payment reference `, pageMargin, currentY, { continued: true });
+      doc.font('Helvetica-Bold').fillColor('#0f172a').text(refId);
+
+      currentY += 20;
+
+      // 3 Top Cards (Receipt Reference, Invoice Number, Purchase Order)
+      const colW = (contentWidth - 16) / 3;
+
+      // Card 1: Receipt Reference
+      doc.roundedRect(pageMargin, currentY, colW, 44, 6).fillAndStroke('#f8fafc', '#cbd5e1');
+      doc.fillColor('#64748b').fontSize(7).font('Helvetica-Bold').text('RECEIPT REFERENCE', pageMargin + 10, currentY + 8);
+      doc.fillColor('#0f172a').fontSize(9).font('Helvetica-Bold').text(refId, pageMargin + 10, currentY + 22, { width: colW - 20 });
+
+      // Card 2: Invoice Number
+      const card2X = pageMargin + colW + 8;
+      doc.roundedRect(card2X, currentY, colW, 44, 6).fillAndStroke('#f8fafc', '#cbd5e1');
+      doc.fillColor('#64748b').fontSize(7).font('Helvetica-Bold').text('INVOICE NUMBER', card2X + 10, currentY + 8);
+      doc.fillColor('#0f172a').fontSize(9).font('Helvetica-Bold').text(input.invoiceNumber || 'N/A', card2X + 10, currentY + 22, { width: colW - 20 });
+
+      // Card 3: Purchase Order
+      const card3X = card2X + colW + 8;
+      doc.roundedRect(card3X, currentY, colW, 44, 6).fillAndStroke('#f8fafc', '#cbd5e1');
+      doc.fillColor('#64748b').fontSize(7).font('Helvetica-Bold').text('PURCHASE ORDER', card3X + 10, currentY + 8);
+      doc.fillColor('#0f172a').fontSize(9).font('Helvetica-Bold').text(input.poNumber || 'N/A', card3X + 10, currentY + 22, { width: colW - 20 });
+
+      currentY += 56;
+
+      // Payer / Buyer & Payee / Seller Block (2 columns)
+      const halfW = (contentWidth - 12) / 2;
+
+      // Left: Payer / Buyer
+      doc.roundedRect(pageMargin, currentY, halfW, 58, 6).fillAndStroke('#f8fafc', '#cbd5e1');
+      doc.fillColor('#64748b').fontSize(7.5).font('Helvetica-Bold').text('PAYER / BUYER', pageMargin + 12, currentY + 10);
+      doc.fillColor('#0f172a').fontSize(10).font('Helvetica-Bold').text(input.payerName || 'Snehal Kolhe', pageMargin + 12, currentY + 24, { width: halfW - 24 });
+      doc.fillColor('#64748b').fontSize(8).font('Helvetica').text(input.payerEmail || 'buyer@msme-portal.in', pageMargin + 12, currentY + 38, { width: halfW - 24 });
+
+      // Right: Payee / Seller
+      const rightX = pageMargin + halfW + 12;
+      doc.roundedRect(rightX, currentY, halfW, 58, 6).fillAndStroke('#f8fafc', '#cbd5e1');
+      doc.fillColor('#64748b').fontSize(7.5).font('Helvetica-Bold').text('PAYEE / SELLER', rightX + 12, currentY + 10);
+      doc.fillColor('#0f172a').fontSize(10).font('Helvetica-Bold').text(input.payeeName || 'Sandhya Kolhe', rightX + 12, currentY + 24, { width: halfW - 24 });
+      doc.fillColor('#64748b').fontSize(8).font('Helvetica').text(input.payeeEmail || 'seller@msme-portal.in', rightX + 12, currentY + 38, { width: halfW - 24 });
+
+      currentY += 72;
+
+      // Total Settlement Amount Box (Blue Banner)
+      const totalAmountNum = Number(input.amount || input.netAmountPaid || 0);
+      const formattedTotal = formatInr(totalAmountNum);
+      const methodStr = input.method ? `Gateway: ${input.gateway || 'bank_transfer'} | Method: ${input.method}` : 'Gateway: bank transfer | Method: card';
+
+      doc.roundedRect(pageMargin, currentY, contentWidth, 68, 8).fill('#f0f9ff').stroke('#bae6fd');
+      doc.fillColor('#0369a1').fontSize(8).font('Helvetica-Bold').text('TOTAL SETTLEMENT AMOUNT', pageMargin, currentY + 14, { width: contentWidth, align: 'center' });
+      doc.fillColor('#0c4a6e').fontSize(22).font('Helvetica-Bold').text(formattedTotal, pageMargin, currentY + 28, { width: contentWidth, align: 'center' });
+      doc.fillColor('#0284c7').fontSize(8).font('Helvetica').text(methodStr, pageMargin, currentY + 52, { width: contentWidth, align: 'center' });
+
+      currentY += 82;
+
+      // Tax and Deduction Summary Header
+      doc.fillColor('#475569').fontSize(8).font('Helvetica-Bold').text('TAX AND DEDUCTION SUMMARY', pageMargin, currentY);
+
+      currentY += 14;
+
+      // Table Headers
+      doc.rect(pageMargin, currentY, contentWidth, 20).fill('#f1f5f9');
+      doc.fillColor('#334155').fontSize(7.5).font('Helvetica-Bold').text('DESCRIPTION', pageMargin + 10, currentY + 6);
+      doc.fillColor('#334155').fontSize(7.5).font('Helvetica-Bold').text('AMOUNT (INR)', pageMargin + contentWidth - 120, currentY + 6, { width: 110, align: 'right' });
+
+      currentY += 20;
+
+      const taxableNum = Number(input.taxableAmount || totalAmountNum);
+      const cgstNum = Number(input.cgstAmount || 0);
+      const sgstNum = Number(input.sgstAmount || 0);
+      const igstNum = Number(input.igstAmount || 0);
+      const tdsNum = Number(input.tdsAmount || 0);
+
+      const tableRows = [
+        { label: 'Taxable Amount', amount: taxableNum },
+        { label: 'CGST', amount: cgstNum },
+        { label: 'SGST', amount: sgstNum },
+        { label: 'IGST', amount: igstNum },
+        { label: 'TDS Deducted', amount: -tdsNum, isNegative: true },
+      ];
+
+      tableRows.forEach((row, idx) => {
+        const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        doc.rect(pageMargin, currentY, contentWidth, 18).fill(bg);
+        doc.fillColor('#334155').fontSize(8).font('Helvetica').text(row.label, pageMargin + 10, currentY + 5);
+        const amtStr = row.isNegative && row.amount < 0 ? `-${formatInr(Math.abs(row.amount))}` : formatInr(row.amount);
+        doc.fillColor('#334155').fontSize(8).font('Helvetica').text(amtStr, pageMargin + contentWidth - 120, currentY + 5, { width: 110, align: 'right' });
+        currentY += 18;
+      });
+
+      // Net Amount Paid Row (Bold Highlight)
+      doc.rect(pageMargin, currentY, contentWidth, 22).fill('#e2e8f0');
+      doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text('Net Amount Paid', pageMargin + 10, currentY + 6);
+      doc.fillColor('#0f172a').fontSize(9).font('Helvetica-Bold').text(formattedTotal, pageMargin + contentWidth - 120, currentY + 6, { width: 110, align: 'right' });
+
+      currentY += 30;
+
+      // Escrow Custody Status Box
+      doc.roundedRect(pageMargin, currentY, contentWidth, 42, 6).fillAndStroke('#f0fdf4', '#bbf7d0');
+      doc.fillColor('#166534').fontSize(7.5).font('Helvetica-Bold').text(input.escrowVaultName || 'ESCROW ACCOUNT VAULT-B', pageMargin + 12, currentY + 10);
+      doc.fillColor('#15803d').fontSize(8.5).font('Helvetica').text(`Custody Balance: `, pageMargin + 12, currentY + 24, { continued: true });
+      doc.font('Helvetica-Bold').text(formattedTotal);
+
+      // Held Badge inside escrow card
+      const escrowBadgeText = (input.escrowStatus || 'HELD').toUpperCase();
+      doc.roundedRect(pageMargin + contentWidth - 60, currentY + 12, 50, 18, 4).fill('#dcfce7');
+      doc.fillColor('#15803d').fontSize(8).font('Helvetica-Bold').text(escrowBadgeText, pageMargin + contentWidth - 60, currentY + 16, { width: 50, align: 'center' });
+
+      currentY += 54;
+
+      // Footer declaration
+      doc.fillColor('#94a3b8').fontSize(7.5).font('Helvetica').text(
+        'This is an official computer-generated payment receipt from the Government MSME Portal finance module.',
+        pageMargin,
+        currentY,
+        { width: contentWidth, align: 'center' }
+      );
+
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
+ * Sends a notification email with attached Payment Receipt PDF to both Payer (Buyer) and Payee (Seller) when a payment is completed.
+ */
+export async function notifyPaymentReceiptEmail(paymentId: number) {
+  try {
+    const payment = await db.paymentTransaction.findUnique({
+      where: { id: paymentId },
+      include: {
+        invoice: {
+          include: {
+            purchaseOrder: true,
+            items: true
+          }
+        },
+        purchaseOrder: {
+          include: {
+            items: true
+          }
+        },
+        payer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            buyerProfile: true,
+            organization: { include: { profile: true } }
+          }
+        },
+        payee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            sellerProfile: true,
+            organization: { include: { profile: true } }
+          }
+        },
+        escrowAccount: true
+      }
+    });
+
+    if (!payment) return;
+
+    const refId = payment.referenceId || `PAY-2026-${String(payment.id).padStart(6, '0')}`;
+    const invNo = payment.invoice?.invoiceNumber || (payment.purchaseOrder?.poNumber ? `INV-${payment.purchaseOrder.poNumber}` : `INV-${payment.invoiceId || payment.id}`);
+    const poNum = payment.purchaseOrder?.poNumber || (payment.invoice?.purchaseOrder?.poNumber) || `PO-${payment.purchaseOrderId || payment.id}`;
+
+    const payerName = payment.payer?.organization?.organizationName || payment.payer?.name || 'Buyer';
+    const payeeName = payment.payee?.organization?.organizationName || payment.payee?.name || 'Seller';
+
+    const pdfBuffer = await generatePaymentReceiptPdfBuffer({
+      id: payment.id,
+      referenceId: refId,
+      createdAt: payment.createdAt,
+      paidAt: payment.completedAt || payment.updatedAt,
+      amount: payment.amount,
+      currency: payment.currency || 'INR',
+      gateway: payment.gateway || 'bank_transfer',
+      method: payment.method || 'card',
+      status: payment.status || 'success',
+      invoiceNumber: invNo,
+      poNumber: poNum,
+      payerName,
+      payerEmail: payment.payer?.email || '',
+      payeeName,
+      payeeEmail: payment.payee?.email || '',
+      taxableAmount: payment.invoice?.taxableAmount || payment.amount,
+      cgstAmount: payment.invoice?.cgstAmount || 0,
+      sgstAmount: payment.invoice?.sgstAmount || 0,
+      igstAmount: payment.invoice?.igstAmount || 0,
+      tdsAmount: payment.invoice?.tdsAmount || 0,
+      escrowStatus: payment.escrowAccount?.status || 'held',
+      escrowBalance: payment.escrowAccount?.amount || payment.amount,
+      escrowVaultName: 'ESCROW ACCOUNT VAULT-B'
+    });
+
+    const pdfAttachment = {
+      filename: `PaymentReceipt_${refId}.pdf`,
+      content: pdfBuffer,
+      contentType: 'application/pdf'
+    };
+
+    const formattedAmount = `₹${Number(payment.amount || 0).toLocaleString('en-IN')}`;
+
+    // 1. Notify Payer (Buyer) with attached Payment Receipt PDF
+    if (payment.payerId) {
+      notifyWorkflowSoon(
+        payment.payerId,
+        `Payment Confirmation & Receipt: ${refId}`,
+        `Your payment of ${formattedAmount} for Invoice ${invNo} (PO ${poNum}) has been successfully processed and confirmed. Official payment receipt PDF is attached to this email.`,
+        'payment_successful',
+        '/payments/invoices',
+        [pdfAttachment]
+      );
+    }
+
+    // 2. Notify Payee (Seller) with attached Payment Receipt PDF
+    if (payment.payeeId) {
+      notifyWorkflowSoon(
+        payment.payeeId,
+        `Payment Received & Escrow Funded: ${refId}`,
+        `Payment of ${formattedAmount} for Invoice ${invNo} (PO ${poNum}) from ${payerName} has been confirmed and placed in escrow custody. Official payment receipt PDF is attached to this email.`,
+        'escrow_funded',
+        '/payments/invoices',
+        [pdfAttachment]
+      );
+    }
+
+    logger.info({ paymentId: payment.id, refId, filename: pdfAttachment.filename }, 'Payment Receipt PDF generated and sent via email notification');
+  } catch (err) {
+    logger.error({ err, paymentId }, 'Failed to generate and email Payment Receipt PDF');
+  }
+}

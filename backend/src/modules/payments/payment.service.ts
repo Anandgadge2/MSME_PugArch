@@ -12,6 +12,7 @@ import { bankTransferProvider } from './bank-transfer.provider.js';
 import { bandhanProvider } from './bandhan.provider.js';
 import type { PaymentGateway, PaymentProvider } from './payment.provider.js';
 import { paymentStatusEnumFor } from '../../services/workflow/status-transition.service.js';
+import { notifyPaymentReceiptEmail } from '../../services/invoice-pdf.service.js';
 
 type Actor = {
   id: number;
@@ -371,6 +372,7 @@ export const markPaymentConfirmedFromGateway = async (
   });
   await notifySafe(result.payment.payerId, 'Payment confirmed', `Payment ${result.payment.referenceId} is confirmed and held in escrow.`, 'payment_successful');
   await notifySafe(result.payment.payeeId, 'Escrow funded', `Escrow has been funded for payment ${result.payment.referenceId}.`, 'escrow_funded');
+  void notifyPaymentReceiptEmail(result.payment.id).catch(() => undefined);
 
   return result;
 }, { ttlMs: 15_000 });
