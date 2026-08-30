@@ -37,6 +37,7 @@ import { EmdCard, EmdInfo, isEmdApplicable } from '../components/EmdCard';
 import { EmdPaymentModal } from '../components/EmdPaymentModal';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { getDocumentPreviewMode, type DocumentPreview } from '../../../lib/files';
+import { parseQuoteRequestItems, cleanItemName } from '../utils/quoteItemParser';
 
 const formatBytes = (bytes?: number): string => {
   if (!bytes || bytes <= 0) return '';
@@ -362,10 +363,7 @@ export default function SubmitQuotationPage() {
           const conv = await getApi<any>(`/api/conversations/${conversationId}`);
           if (conv) {
             const rawSubject = String(conv.subject || '');
-            const cleanedTitle = rawSubject
-              .replace(/^Quote Request #?\d*:?\s*/i, '')
-              .replace(/^Quote request:?\s*/i, '')
-              .trim() || 'Requested Product';
+            const cleanedTitle = cleanItemName(rawSubject) || 'Requested Product';
 
             const buyerOrgName = conv.buyer?.buyerProfile?.organizationName ||
               conv.buyer?.company?.name ||
@@ -375,6 +373,8 @@ export default function SubmitQuotationPage() {
 
             const firstMsg = conv.messages?.find((m: any) => m.senderId !== Number(user?.id))?.content || conv.messages?.[0]?.content || '';
             const existingQuote = conv.quoteRequest?.quoteResponses?.find((r: any) => r.sellerId === Number(user?.id)) || conv.quoteRequest?.quoteResponses?.[0];
+
+            const parsedItems = parseQuoteRequestItems(conv.subject, firstMsg || conv.quoteRequest?.message);
 
             return {
               requirement: {
@@ -388,7 +388,7 @@ export default function SubmitQuotationPage() {
                 description: firstMsg,
                 estimatedValue: conv.quoteRequest?.estimatedValue || undefined,
                 buyerOrganization: { organizationName: buyerOrgName },
-                items: [{
+                items: parsedItems.length > 0 ? parsedItems : [{
                   itemName: cleanedTitle,
                   quantity: 1,
                   unitOfMeasure: 'Nos',
@@ -489,6 +489,7 @@ export default function SubmitQuotationPage() {
           const myResponse = Array.isArray(quoteData.quoteResponses)
             ? (quoteData.quoteResponses.find((r: any) => r.sellerId === Number(user?.id)) || quoteData.quoteResponses[0])
             : null;
+          const parsedItems = parseQuoteRequestItems(quoteData.subject, quoteData.message);
           quoteRequestResult = {
             requirement: {
               id: quoteData.id,
@@ -498,8 +499,8 @@ export default function SubmitQuotationPage() {
               description: quoteData.message,
               estimatedValue: quoteData.estimatedValue,
               buyerOrganization: quoteData.buyer?.buyerProfile?.organizationName ? { organizationName: quoteData.buyer.buyerProfile.organizationName } : { organizationName: quoteData.buyer?.name || 'Buyer' },
-              items: [{
-                itemName: String(quoteData.subject || '').replace(/^Quote Request #?\d*:?\s*/i, '').trim() || 'Requested Product/Service',
+              items: parsedItems.length > 0 ? parsedItems : [{
+                itemName: cleanItemName(quoteData.subject) || 'Requested Product/Service',
                 quantity: 1,
                 unitOfMeasure: 'Nos',
                 description: quoteData.message || ''
@@ -884,8 +885,8 @@ export default function SubmitQuotationPage() {
         let finalName = '';
         for (const cand of candidateNames) {
           if (cand && typeof cand === 'string' && cand.trim() !== '') {
-            const trimmed = cand.trim();
-            if (!isGenericName(trimmed) && !trimmed.includes('Sourcing Method:')) {
+            const trimmed = cleanItemName(cand.trim());
+            if (trimmed && !isGenericName(trimmed) && !trimmed.includes('Sourcing Method:')) {
               finalName = trimmed;
               break;
             }
@@ -912,8 +913,8 @@ export default function SubmitQuotationPage() {
 
           for (const titleCand of buyerTitles) {
             if (titleCand && typeof titleCand === 'string' && titleCand.trim() !== '') {
-              const trimmedTitle = titleCand.trim();
-              if (!isGenericName(trimmedTitle) && !trimmedTitle.includes('Sourcing Method:')) {
+              const trimmedTitle = cleanItemName(titleCand.trim());
+              if (trimmedTitle && !isGenericName(trimmedTitle) && !trimmedTitle.includes('Sourcing Method:')) {
                 finalName = rawItems.length > 1 ? `${trimmedTitle} (Item #${idx + 1})` : trimmedTitle;
                 break;
               }
@@ -1150,14 +1151,24 @@ export default function SubmitQuotationPage() {
       });
     const lines = lineQuotes
       .filter(line => line.unitPrice !== '' && Number.isFinite(Number(line.unitPrice)))
-      .map(line => ({
-        itemName: line.itemName,
-        quantity: Number(line.quantity) || null,
-        unitPrice: Number(line.unitPrice),
-        gstPercent: line.gstPercent !== '' && Number.isFinite(Number(line.gstPercent)) ? Number(line.gstPercent) : null,
-        makeBrand: line.makeBrand.trim() || null,
-        remarks: line.remarks.trim() || null
-      }));
+      .map(line => {
+        const qty = Number(line.quantity) || 1;
+        const unitPrice = Number(line.unitPrice);
+        const gstPercent = line.gstPercent !== '' && Number.isFinite(Number(line.gstPercent)) ? Number(line.gstPercent) : 0;
+        const lineTotal = unitPrice * qty * (1 + gstPercent / 100);
+        return {
+          itemName: line.itemName,
+          quantity: qty,
+          unitOfMeasure: line.unitOfMeasure || 'Nos',
+          unitPrice,
+          unitRate: unitPrice,
+          gstPercent,
+          makeBrand: line.makeBrand.trim() || null,
+          remarks: line.remarks.trim() || null,
+          lineTotal: Math.round(lineTotal * 100) / 100,
+          totalAmount: Math.round(lineTotal * 100) / 100,
+        };
+      });
     if (!docs.length && !lines.length) return undefined;
     return { documents: docs, lineItems: lines };
   }

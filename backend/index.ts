@@ -5973,11 +5973,14 @@ app.post('/api/conversations/:id/quotation', authenticate, authorize('seller', '
     });
 
     const responseNumber = quoteResponse?.responseNumber || `QR-${Date.now().toString(36).toUpperCase()}`;
+    const rawResponseData = req.body?.responseData || (Array.isArray(req.body?.lineItems) ? { lineItems: req.body.lineItems } : undefined);
     const ack = {
       acknowledgementId: `ACK-${responseNumber}`,
       responseId: responseNumber,
       timestamp: new Date().toISOString(),
-      message: 'Quotation submitted successfully.'
+      message: 'Quotation submitted successfully.',
+      responseData: rawResponseData,
+      lineItems: rawResponseData?.lineItems || undefined
     };
 
     if (quoteResponse) {

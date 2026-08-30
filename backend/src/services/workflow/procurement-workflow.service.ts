@@ -181,11 +181,14 @@ export const procurementWorkflow = {
     const isDraft = input.status === 'DRAFT';
     const response = await db.$transaction(async (tx: any) => {
       const responseNumber = numberSeries('QR');
+      const rawResponseData = (input as any).responseData || (Array.isArray((input as any).lineItems) ? { lineItems: (input as any).lineItems } : undefined);
       const ack = isDraft ? null : {
         acknowledgementId: `ACK-QR-${responseNumber}-${Date.now()}`,
         responseId: responseNumber,
         timestamp: new Date().toISOString(),
-        message: 'Quotation submitted successfully.'
+        message: 'Quotation submitted successfully.',
+        responseData: rawResponseData,
+        lineItems: rawResponseData?.lineItems || undefined
       };
       const created = await tx.quoteResponse.create({
         data: {

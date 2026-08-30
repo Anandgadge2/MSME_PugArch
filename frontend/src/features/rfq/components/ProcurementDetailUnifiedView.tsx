@@ -2732,7 +2732,15 @@ export function SellerQuotationReviewModal({
   const submittedAt = participation.submittedAt || participation.createdAt || participation.updatedAt;
   const statusStr = String(participation.submissionStatus || participation.status || 'Submitted').toUpperCase();
 
-  const lineItems: any[] = Array.isArray(participation.lineItems) ? participation.lineItems : (Array.isArray(participation.responseData?.lineItems) ? participation.responseData.lineItems : []);
+  const lineItems: any[] = Array.isArray(participation.lineItems)
+    ? participation.lineItems
+    : (Array.isArray(participation.responseData?.lineItems)
+      ? participation.responseData.lineItems
+      : (Array.isArray(participation.acknowledgement?.responseData?.lineItems)
+        ? participation.acknowledgement.responseData.lineItems
+        : (Array.isArray(participation.acknowledgement?.lineItems)
+          ? participation.acknowledgement.lineItems
+          : [])));
   const docs: any[] = Array.isArray(participation.documents) ? participation.documents : (Array.isArray(participation.responseData?.documents) ? participation.responseData.documents : []);
   const message = participation.offeredItemDescription || participation.message || participation.responseData?.message || '';
 
@@ -2740,6 +2748,7 @@ export function SellerQuotationReviewModal({
     try {
       toast.info(`Generating Quotation PDF for ${sellerOrg}…`);
       const engine = new PdfEngine('p');
+      const hasLineItems = lineItems.length > 0;
       const doc = engine.generate({
         documentTitle: 'SUPPLIER QUOTATION RESPONSE',
         documentNumber: `QUOTE-${targetId}`,
@@ -2768,15 +2777,35 @@ export function SellerQuotationReviewModal({
           'Payment Terms': paymentTerms,
           'Offered Quantity': String(offeredQty),
         },
-        tableHeaders: ['#', 'Offered Item Description', 'Offered Qty', 'Quoted Value'],
-        tableData: [
-          [
-            '1',
-            message || 'Procurement item quotation',
-            String(offeredQty),
-            quotedAmount > 0 ? `₹${quotedAmount.toLocaleString('en-IN')}` : 'Sealed Rate',
-          ]
-        ],
+        tableHeaders: hasLineItems
+          ? ['#', 'Item Description', 'Make / Brand', 'Qty', 'Unit Price', 'GST %', 'Line Total']
+          : ['#', 'Offered Item Description', 'Offered Qty', 'Quoted Value'],
+        tableData: hasLineItems
+          ? lineItems.map((item: any, idx: number) => {
+            const uPrice = Number(item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0);
+            const q = Number(item.quantity ?? item.qty ?? 1);
+            const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
+            const tot = item.lineTotal != null || item.totalAmount != null
+              ? Number(item.lineTotal ?? item.totalAmount)
+              : uPrice * q * (1 + gst / 100);
+            return [
+              String(idx + 1),
+              item.itemName || item.name || item.description || `Item #${idx + 1}`,
+              item.makeBrand || item.brand || '—',
+              `${q} ${item.unitOfMeasure || item.unit || 'Nos'}`,
+              `₹${uPrice.toLocaleString('en-IN')}`,
+              `${gst}%`,
+              `₹${tot.toLocaleString('en-IN')}`
+            ];
+          })
+          : [
+            [
+              '1',
+              message || 'Procurement item quotation',
+              String(offeredQty),
+              quotedAmount > 0 ? `₹${quotedAmount.toLocaleString('en-IN')}` : 'Sealed Rate',
+            ]
+          ],
         financials: {
           grandTotal: quotedAmount,
         },
@@ -2894,27 +2923,56 @@ export function SellerQuotationReviewModal({
                 <Package className="h-4 w-4 text-slate-500" /> Quoted Line Items Breakdown
               </h4>
               <div className="overflow-hidden rounded-xl border border-slate-200">
-                <table className="w-full text-left text-xs">
+                <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
                     <tr>
                       <th className="px-3 py-2">Line Item</th>
-                      <th className="px-3 py-2">Qty</th>
-                      <th className="px-3 py-2">Unit Rate</th>
-                      <th className="px-3 py-2 text-right">Total Price</th>
+                      <th className="px-3 py-2">Make / Brand</th>
+                      <th className="px-3 py-2 text-right">Qty</th>
+                      <th className="px-3 py-2 text-right">Unit Rate (₹)</th>
+                      <th className="px-3 py-2 text-right">GST %</th>
+                      <th className="px-3 py-2 text-right">Line Total (₹)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {lineItems.map((item: any, idx: number) => (
-                      <tr key={idx}>
-                        <td className="px-3 py-2.5 text-slate-900 font-bold">{item.itemName || item.name || item.description || `Item #${idx + 1}`}</td>
-                        <td className="px-3 py-2.5">{item.quantity || item.qty || 1}</td>
-                        <td className="px-3 py-2.5">₹{Number(item.unitRate || item.rate || item.price || 0).toLocaleString('en-IN')}</td>
-                        <td className="px-3 py-2.5 text-right font-black text-slate-900">
-                          ₹{Number(item.totalAmount || (item.quantity * item.unitRate) || item.price || 0).toLocaleString('en-IN')}
-                        </td>
-                      </tr>
-                    ))}
+                    {lineItems.map((item: any, idx: number) => {
+                      const uPrice = Number(item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0);
+                      const q = Number(item.quantity ?? item.qty ?? 1);
+                      const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
+                      const tot = item.lineTotal != null || item.totalAmount != null
+                        ? Number(item.lineTotal ?? item.totalAmount)
+                        : uPrice * q * (1 + gst / 100);
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/50 transition">
+                          <td className="px-3 py-2.5 text-slate-900 font-bold">
+                            {item.itemName || item.name || item.description || `Item #${idx + 1}`}
+                            {item.remarks && <p className="text-[10px] font-normal text-slate-400 mt-0.5">{item.remarks}</p>}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-600">{item.makeBrand || item.brand || '—'}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
+                            <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200">
+                              {q} <span className="text-[9px] font-semibold text-slate-500 uppercase">{item.unitOfMeasure || item.unit || 'Nos'}</span>
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-right tabular-nums font-bold">₹{uPrice.toLocaleString('en-IN')}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{gst}%</td>
+                          <td className="px-3 py-2.5 text-right font-black text-indigo-700 tabular-nums">
+                            ₹{tot.toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
+                  <tfoot className="bg-slate-50 border-t border-slate-200">
+                    <tr>
+                      <td colSpan={5} className="px-3 py-2 text-right text-xs font-bold text-slate-600 uppercase tracking-wider">
+                        Total Quoted Value (incl. GST)
+                      </td>
+                      <td className="px-3 py-2 text-right text-sm font-black text-emerald-700 tabular-nums">
+                        {quotedAmount > 0 ? `₹${quotedAmount.toLocaleString('en-IN')}` : '—'}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
