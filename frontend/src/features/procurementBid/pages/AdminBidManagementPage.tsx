@@ -421,7 +421,7 @@ export default function AdminBidManagementPage() {
       <main className="mx-auto w-full max-w-7xl px-4 py-5">
         <ProcurementHero
           title="Admin Bid Management"
-          // subtitle="Control approval, participant review, technical evaluation, financial ranking, and final award approval for JsgSmile procurement bids."
+          subtitle="Control approval, participant review, technical evaluation, financial ranking, and final award approval for JsgSmile procurement bids."
           action={<button onClick={() => exportReport()} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#0b2447] px-4 text-xs font-black text-white"><Download className="h-4 w-4" /> Export report</button>}
         />
 
