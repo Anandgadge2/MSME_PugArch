@@ -1,6 +1,7 @@
 import { ApiError } from '../../utils/ApiError.js';
 import { auditWorkflow, auditWorkflowSoon, db, notifyWorkflow, notifyWorkflowSoon, numberSeries, roundMoney, type WorkflowActor } from './workflow-common.js';
 import { statusTransitions, poStatusEnumFor } from './status-transition.service.js';
+import { notifyPurchaseOrderCreated } from '../invoice-pdf.service.js';
 
 type RequirementInput = {
   title: string;
@@ -328,6 +329,7 @@ export const procurementWorkflow = {
       'quote_request_closed',
       '/quotations'
     );
+    notifyPurchaseOrderCreated(result.purchaseOrder.id).catch(() => undefined);
     await auditWorkflow(actor, 'workflow.rfq.accepted_po_generated', 'purchaseOrder', result.purchaseOrder.id, { quoteResponseId });
     return result;
   },
@@ -372,6 +374,7 @@ export const procurementWorkflow = {
       'direct_purchase_po_generated',
       '/seller/orders'
     );
+    notifyPurchaseOrderCreated(result.purchaseOrder.id).catch(() => undefined);
     await auditWorkflow(actor, 'workflow.direct_purchase.po_generated', 'purchaseOrder', result.purchaseOrder.id, { directPurchaseId });
     return result;
   }

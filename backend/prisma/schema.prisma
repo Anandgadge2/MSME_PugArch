@@ -2421,6 +2421,8 @@ model DeliveryDpExtension {
   @@index([deliveryTrackingId])
   @@index([purchaseOrderId])
   @@index([status])
+  @@index([requestedById])
+  @@index([respondedById])
 }
 
 model DeliveryTrackingEvent {

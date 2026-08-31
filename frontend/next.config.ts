@@ -74,11 +74,10 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
-    const backendUrl = getBackendUrl();
-    if (process.env.VERCEL_URL && backendUrl) {
-      console.log(`[next.config] Rewrites: /proxy/:path* → ${backendUrl}/:path*`);
-      // beforeFiles ensures the rewrite runs BEFORE Vercel tries to match
-      // filesystem pages, preventing false 404s on the /proxy prefix.
+    const backendUrl = getBackendUrl() || (process.env.NODE_ENV === 'development' ? 'http://localhost:5000' : '');
+    if (backendUrl) {
+      // beforeFiles ensures the rewrite runs BEFORE Next tries to match
+      // filesystem pages, preventing false 404s/500s on the /proxy prefix.
       return {
         beforeFiles: [
           {

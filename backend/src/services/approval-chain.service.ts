@@ -26,6 +26,7 @@ import { ApprovalStage, ApprovalDecision, OrgRole, Prisma } from '@prisma/client
 import { auditLog } from '../modules/audit/audit.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { getFinanceSkipThreshold } from '../modules/procurementMode/procurement-mode.service.js';
+import { notifyPurchaseOrderCreated } from './invoice-pdf.service.js';
 
 export type ApprovalEntityType = 'tender' | 'purchase_order' | 'cart' | 'direct_purchase';
 
@@ -501,6 +502,7 @@ export const handleCartApprovalCompletion = async (cartId: number, initiatorUser
     }
 
     // 3. Create POs in a transaction
+    const createdPoIds: number[] = [];
     await prisma.$transaction(async (tx) => {
         for (const [sellerIdStr, items] of Object.entries(itemsBySeller)) {
             const sellerId = Number(sellerIdStr);
@@ -543,6 +545,8 @@ export const handleCartApprovalCompletion = async (cartId: number, initiatorUser
                 }
             });
 
+            createdPoIds.push(po.id);
+
             // Create DeliveryWorkflow for this PO
             await tx.deliveryWorkflow.create({
                 data: {
@@ -550,19 +554,6 @@ export const handleCartApprovalCompletion = async (cartId: number, initiatorUser
                     status: 'created'
                 }
             });
-
-            // Notify seller
-            try {
-                await notificationService.notify(sellerId, {
-                    title: 'New Purchase Order',
-                    message: `You have received a new Purchase Order (${poNum}) from ${cart.createdBy?.name || 'a buyer'}.`,
-                    type: 'purchase_order_created',
-                    priority: 'high',
-                    redirectUrl: '/seller/orders'
-                });
-            } catch (err) {
-                // non-fatal
-            }
         }
 
         // Update cart status to CONVERTED_TO_ORDER
@@ -574,6 +565,13 @@ export const handleCartApprovalCompletion = async (cartId: number, initiatorUser
             }
         });
     });
+
+    // Notify both Buyer and Seller with attached official PO PDF
+    for (const poId of createdPoIds) {
+        notifyPurchaseOrderCreated(poId).catch(err => {
+            console.warn('[ApprovalChain] Failed to notify purchase order created:', err);
+        });
+    }
 
     await auditLog({
         actorUserId: initiatorUserId,

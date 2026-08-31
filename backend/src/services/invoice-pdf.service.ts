@@ -268,18 +268,67 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
 
       const buyer = po.buyer || {};
       const seller = po.seller || {};
+      const meta = (typeof po.metadata === 'object' && po.metadata !== null ? po.metadata : {}) as Record<string, any>;
+      const deliveryDetails = (meta.deliveryDetails || {}) as Record<string, any>;
+      const billingDetails = (meta.billingDetails || {}) as Record<string, any>;
 
-      const buyerName = buyer.organization?.organizationName || buyer.buyerProfile?.organizationName || buyer.name || 'MSME Portal Buyer';
-      const buyerAddress = po.deliveryAddress || buyer.buyerProfile?.registeredAddress || buyer.organization?.profile?.registeredAddress || 'V247+H95, Marwari Para, Jharsuguda, Odisha - 768201';
-      const buyerGstin = buyer.organization?.gstin || buyer.buyerProfile?.gst || '27AALCS2063D1ZG';
-      const buyerPan = buyer.organization?.panNumber || buyer.buyerProfile?.pan || 'PFGPK6340B';
-      const buyerPhone = buyer.mobile || buyer.buyerProfile?.mobile || '8010762086';
+      const buyerName =
+        billingDetails.companyName ||
+        buyer.organization?.organizationName ||
+        buyer.buyerProfile?.organizationName ||
+        buyer.buyerProfile?.companyName ||
+        buyer.name ||
+        'MSME Portal Buyer';
+
+      const buyerAddress =
+        po.deliveryAddress ||
+        billingDetails.billingAddress ||
+        deliveryDetails.address ||
+        buyer.buyerProfile?.registeredAddress ||
+        buyer.organization?.profile?.registeredAddress ||
+        'V247+H95, Marwari Para, Jharsuguda, Odisha - 768201';
+
+      const buyerGstin =
+        billingDetails.gstin ||
+        buyer.organization?.gstin ||
+        buyer.buyerProfile?.gst ||
+        '27AALCS2063D1ZG';
+
+      const buyerPan =
+        buyer.organization?.panNumber ||
+        buyer.buyerProfile?.pan ||
+        'PFGPK6340B';
+
+      const buyerPhone =
+        deliveryDetails.mobileNumber ||
+        buyer.mobile ||
+        buyer.buyerProfile?.mobile ||
+        '8010762086';
+
       const buyerEmail = buyer.email || 'buyer@msme-portal.in';
 
-      const sellerName = seller.organization?.organizationName || seller.sellerProfile?.businessName || seller.name || 'MSME Enterprise Supplier';
-      const sellerAddress = seller.sellerProfile?.registeredAddress || seller.organization?.profile?.registeredAddress || 'Ganesh Complex, Jharsuguda, Odisha - 345678';
-      const sellerGstin = seller.organization?.gstin || seller.sellerProfile?.gst || '27BMOPP7706E2Z1';
-      const sellerPhone = seller.mobile || seller.sellerProfile?.mobile || '9326546128';
+      const sellerName =
+        seller.organization?.organizationName ||
+        seller.sellerProfile?.businessName ||
+        seller.sellerProfile?.companyName ||
+        seller.name ||
+        'MSME Enterprise Supplier';
+
+      const sellerAddress =
+        seller.sellerProfile?.registeredAddress ||
+        seller.organization?.profile?.registeredAddress ||
+        'Ganesh Complex, Jharsuguda, Odisha - 345678';
+
+      const sellerGstin =
+        seller.organization?.gstin ||
+        seller.sellerProfile?.gst ||
+        '27BMOPP7706E2Z1';
+
+      const sellerPhone =
+        seller.mobile ||
+        seller.sellerProfile?.mobile ||
+        '9326546128';
+
       const sellerEmail = seller.email || 'seller@msme-portal.in';
 
       const poNum = po.poNumber || `PO-${po.id || '2026-001'}`;
@@ -451,9 +500,10 @@ export async function getOrGeneratePurchaseOrderPdfBuffer(po: any): Promise<{ bu
 }
 
 /**
- * Sends a notification email to the seller with the attached Purchase Order PDF when a buyer creates/issues a PO.
+ * Sends notification emails with the attached Purchase Order PDF to BOTH the seller and the buyer
+ * whenever a Purchase Order is created/generated (from cart checkout, procurement checkout, RFQ award, etc.).
  */
-export async function notifySellerNewPurchaseOrder(purchaseOrderId: number) {
+export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
   try {
     const po = await db.purchaseOrder.findUnique({
       where: { id: purchaseOrderId },
@@ -482,10 +532,32 @@ export async function notifySellerNewPurchaseOrder(purchaseOrderId: number) {
       }
     });
 
-    if (!po || !po.sellerId) return;
+    if (!po) {
+      logger.warn({ purchaseOrderId }, 'Purchase order not found for notification');
+      return;
+    }
 
     const formattedAmount = `₹${Number(po.amount || po.totalValue || 0).toLocaleString('en-IN')}`;
     const poNum = po.poNumber || `PO-${po.id}`;
+    const deliveryDateStr = po.expectedDelivery
+      ? new Date(po.expectedDelivery).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      : 'As per schedule';
+
+    const meta = (typeof po.metadata === 'object' && po.metadata !== null ? po.metadata : {}) as Record<string, any>;
+    const billingDetails = (meta.billingDetails || {}) as Record<string, any>;
+
+    const buyerDisplayName =
+      billingDetails.companyName ||
+      po.buyer?.organization?.organizationName ||
+      po.buyer?.buyerProfile?.organizationName ||
+      po.buyer?.name ||
+      'Buyer';
+
+    const sellerDisplayName =
+      po.seller?.organization?.organizationName ||
+      po.seller?.sellerProfile?.businessName ||
+      po.seller?.name ||
+      'Supplier';
 
     let pdfAttachment: { filename: string; content: Buffer; contentType: string } | undefined = undefined;
 
@@ -497,25 +569,157 @@ export async function notifySellerNewPurchaseOrder(purchaseOrderId: number) {
           content: pdfRes.buffer,
           contentType: 'application/pdf'
         };
-        logger.info({ poId: po.id, sellerId: po.sellerId, filename: pdfAttachment.filename }, 'Purchase Order PDF attached for seller notification email');
+        logger.info({ poId: po.id, sellerId: po.sellerId, buyerId: po.buyerId, filename: pdfAttachment.filename }, 'Purchase Order PDF attached for buyer and seller notification emails');
       }
     } catch (pdfErr) {
-      logger.error({ error: pdfErr, poId: po.id }, 'Failed to generate/fetch Purchase Order PDF for seller notification');
+      logger.error({ error: pdfErr, poId: po.id }, 'Failed to generate/fetch Purchase Order PDF for notification');
     }
 
     const emailNote = pdfAttachment ? ' (Official Purchase Order PDF is attached to this email.)' : '';
 
-    notifyWorkflowSoon(
-      po.sellerId,
-      `New Purchase Order Received: ${poNum}`,
-      `A new Purchase Order ${poNum} (${po.title}) for amount ${formattedAmount} has been issued to your organization by ${po.buyer?.name || 'Buyer'}.${emailNote}`,
-      'po_generated',
-      '/seller/purchase-orders',
-      pdfAttachment ? [pdfAttachment] : undefined
-    );
+    const escapeHtml = (value: unknown) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    // 1. Notify Seller
+    if (po.sellerId) {
+      const sellerEmailHtml = `
+        <div style="margin-bottom: 20px; padding: 18px 20px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
+          <p style="margin: 0 0 4px; color: #16a34a; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">New Order Received</p>
+          <h2 style="margin: 0; color: #14532d; font-size: 18px; font-weight: 700;">Purchase Order ${escapeHtml(poNum)} Generated</h2>
+        </div>
+
+        <p style="margin: 0 0 16px; color: #334155; font-size: 14px; line-height: 1.6;">
+          A new Purchase Order has been generated and issued to your organization by <strong>${escapeHtml(buyerDisplayName)}</strong>.
+        </p>
+
+        <table role="presentation" style="width: 100%; margin: 0 0 20px; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; font-size: 13px;">
+          <tr style="background: #f8fafc;">
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600; width: 38%;">PO Number</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-weight: 700;">${escapeHtml(poNum)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Order Title</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${escapeHtml(po.title || 'Purchase Order')}</td>
+          </tr>
+          <tr style="background: #f8fafc;">
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Total Order Value</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #16a34a; font-weight: 700; font-size: 14px;">${escapeHtml(formattedAmount)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Expected Delivery Date</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${escapeHtml(deliveryDateStr)}</td>
+          </tr>
+          <tr style="background: #f8fafc;">
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Payment Terms</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${escapeHtml(String(po.paymentTerms || 'PAY ON INVOICE').toUpperCase())}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 14px; color: #64748b; font-weight: 600;">Delivery Address</td>
+            <td style="padding: 10px 14px; color: #0f172a;">${escapeHtml(po.deliveryAddress || 'As per purchase order')}</td>
+          </tr>
+        </table>
+
+        <p style="margin: 0 0 16px; color: #475569; font-size: 13px; line-height: 1.6;">
+          📄 The official Purchase Order PDF (<strong>${escapeHtml(pdfAttachment?.filename || `PurchaseOrder_${poNum}.pdf`)}</strong>) is attached to this email for your reference and fulfillment records.
+        </p>
+
+        <p style="margin: 0; color: #475569; font-size: 13px; line-height: 1.6;">
+          Please log into your MSME portal dashboard to accept the order, coordinate dispatch, and generate the corresponding invoice once goods/services are delivered.
+        </p>
+      `;
+
+      notifyWorkflowSoon(
+        po.sellerId,
+        `New Purchase Order Received: ${poNum}`,
+        `A new Purchase Order ${poNum} (${po.title}) for amount ${formattedAmount} has been issued to your organization by ${buyerDisplayName}.${emailNote}`,
+        'po_generated',
+        '/seller/orders',
+        pdfAttachment ? [pdfAttachment] : undefined,
+        {
+          emailSubject: `[PO Received] New Purchase Order #${poNum} from ${buyerDisplayName} - MSME Portal`,
+          emailHtml: sellerEmailHtml
+        }
+      );
+    }
+
+    // 2. Notify Buyer
+    if (po.buyerId) {
+      const buyerEmailHtml = `
+        <div style="margin-bottom: 20px; padding: 18px 20px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">
+          <p style="margin: 0 0 4px; color: #2563eb; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">Order Confirmation</p>
+          <h2 style="margin: 0; color: #1e3a8a; font-size: 18px; font-weight: 700;">Purchase Order ${escapeHtml(poNum)} Generated Successfully</h2>
+        </div>
+
+        <p style="margin: 0 0 16px; color: #334155; font-size: 14px; line-height: 1.6;">
+          Your Purchase Order has been generated and formally issued to supplier <strong>${escapeHtml(sellerDisplayName)}</strong>.
+        </p>
+
+        <table role="presentation" style="width: 100%; margin: 0 0 20px; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; font-size: 13px;">
+          <tr style="background: #f8fafc;">
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600; width: 38%;">PO Number</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-weight: 700;">${escapeHtml(poNum)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Supplier / Vendor</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${escapeHtml(sellerDisplayName)}</td>
+          </tr>
+          <tr style="background: #f8fafc;">
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Order Title</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${escapeHtml(po.title || 'Purchase Order')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Total Order Value</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #2563eb; font-weight: 700; font-size: 14px;">${escapeHtml(formattedAmount)}</td>
+          </tr>
+          <tr style="background: #f8fafc;">
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Expected Delivery Date</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${escapeHtml(deliveryDateStr)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 14px; color: #64748b; font-weight: 600;">Delivery Address</td>
+            <td style="padding: 10px 14px; color: #0f172a;">${escapeHtml(po.deliveryAddress || 'As per purchase order')}</td>
+          </tr>
+        </table>
+
+        <p style="margin: 0 0 16px; color: #475569; font-size: 13px; line-height: 1.6;">
+          📄 The official Purchase Order PDF (<strong>${escapeHtml(pdfAttachment?.filename || `PurchaseOrder_${poNum}.pdf`)}</strong>) is attached to this email for your compliance and accounting records.
+        </p>
+
+        <p style="margin: 0; color: #475569; font-size: 13px; line-height: 1.6;">
+          You can track the fulfillment, dispatch updates, inspection, and payment milestones anytime from your orders dashboard.
+        </p>
+      `;
+
+      notifyWorkflowSoon(
+        po.buyerId,
+        `Purchase Order Generated: ${poNum}`,
+        `Your Purchase Order ${poNum} (${po.title}) for amount ${formattedAmount} has been generated successfully and issued to ${sellerDisplayName}.${emailNote}`,
+        'po_generated',
+        '/buyer/orders',
+        pdfAttachment ? [pdfAttachment] : undefined,
+        {
+          emailSubject: `[PO Issued] Purchase Order #${poNum} Generated - MSME Portal`,
+          emailHtml: buyerEmailHtml
+        }
+      );
+    }
+
+    logger.info({ poId: po.id, poNum, buyerId: po.buyerId, sellerId: po.sellerId }, 'Purchase Order generated notifications and emails dispatched');
   } catch (err) {
-    logger.warn({ err, purchaseOrderId }, 'Failed to notify seller of new purchase order with PDF');
+    logger.warn({ err, purchaseOrderId }, 'Failed to notify parties of new purchase order with PDF');
   }
+}
+
+/**
+ * Backward-compatible alias for notifyPurchaseOrderCreated.
+ */
+export async function notifySellerNewPurchaseOrder(purchaseOrderId: number) {
+  return notifyPurchaseOrderCreated(purchaseOrderId);
 }
 
 export interface PaymentReceiptPdfInput {

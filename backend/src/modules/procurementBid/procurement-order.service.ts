@@ -338,6 +338,52 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
     `
   }).catch(err => logger.warn({ err, sellerUserId }, '[CREATE_PO] Error sending email notification to seller'));
 
+  const buyerUserId = Number(finalBuyerId);
+  const sellerOrgName = participation.seller?.organization?.organizationName || participation.seller?.name || 'Seller';
+
+  await notificationService.notifyWithEmail(buyerUserId, {
+    title: `Purchase Order Generated: #${poNumberStr}`,
+    message: `Your purchase order for "${bidTitleStr}" has been generated and issued to supplier ${sellerOrgName}. Official Purchase Order PDF is attached to this email.`,
+    type: 'PO_GENERATED',
+    priority: 'high',
+    redirectUrl: `/buyer/orders`,
+    emailSubject: `[PO Confirmation] Purchase Order #${poNumberStr} Generated - MSME Portal`,
+    attachments: pdfAttachment ? [pdfAttachment] : undefined,
+    emailHtml: `
+      <div style="padding: 18px 20px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; margin-bottom: 20px;">
+        <p style="margin: 0 0 6px; color: #2563eb; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">Order Confirmation</p>
+        <h2 style="margin: 0; color: #1e3a8a; font-size: 20px; line-height: 1.3;">Purchase Order #${escapeHtml(poNumberStr)} Issued</h2>
+      </div>
+
+      <p style="margin: 0 0 16px; color: #334155; font-size: 15px; line-height: 1.6;">
+        Your Purchase Order for <strong>${escapeHtml(bidTitleStr)}</strong> has been generated and issued to supplier <strong>${escapeHtml(sellerOrgName)}</strong>.
+      </p>
+
+      <table role="presentation" style="width: 100%; margin: 0 0 22px; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+        <tr style="background: #f8fafc;">
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 700; width: 40%;">Purchase Order No.</td>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 14px; font-weight: 800;">${escapeHtml(poNumberStr)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 700;">Supplier / Vendor</td>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 13px; font-weight: 700;">${escapeHtml(sellerOrgName)}</td>
+        </tr>
+        <tr style="background: #f8fafc;">
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 700;">Awarded Total Amount</td>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #2563eb; font-size: 14px; font-weight: 800;">${escapeHtml(totalAmountStr)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 16px; color: #64748b; font-size: 12px; font-weight: 700;">Delivery Location</td>
+          <td style="padding: 12px 16px; color: #0f172a; font-size: 13px; font-weight: 700;">${escapeHtml(result.deliveryAddress || 'India')}</td>
+        </tr>
+      </table>
+
+      <p style="margin: 0 0 20px; color: #475569; font-size: 14px; line-height: 1.6;">
+        The official Purchase Order PDF (<code>${pdfAttachment?.filename || `PurchaseOrder_${poNumberStr}.pdf`}</code>) is attached to this email. You can track delivery progress and milestone updates in your buyer dashboard.
+      </p>
+    `
+  }).catch(err => logger.warn({ err, buyerUserId }, '[CREATE_PO] Error sending email notification to buyer'));
+
   return { purchaseOrder: result, reused: false };
 };
 

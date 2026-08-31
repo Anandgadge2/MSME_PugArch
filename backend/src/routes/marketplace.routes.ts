@@ -10,6 +10,7 @@ import { verifyAccessToken } from '../services/token.service.js';
 import { longCache, shortCache } from '../middleware/httpCache.js';
 import { sha256 } from '../utils/crypto.js';
 import { formatRequirementNumber } from '../utils/refIdUtils.js';
+import { notifyPurchaseOrderCreated } from '../services/invoice-pdf.service.js';
 
 const db = prisma as any;
 const router = Router();
@@ -3081,6 +3082,7 @@ router.post('/buyer/requirements/:id/responses/:responseId/accept', authenticate
             return apiResponse.error(res, 404, 'Response not found', 'RESPONSE_NOT_FOUND');
         }
 
+        let createdPoId: number | undefined;
         await db.$transaction(async (tx: any) => {
             // Update the accepted response
             await tx.requirementResponse.update({
@@ -3181,7 +3183,15 @@ router.post('/buyer/requirements/:id/responses/:responseId/accept', authenticate
                     redirectUrl: `/buyer/orders`
                 }
             });
+
+            createdPoId = purchaseOrder.id;
         }, { timeout: 30000, maxWait: 10000 });
+
+        if (createdPoId) {
+            notifyPurchaseOrderCreated(createdPoId).catch(err => {
+                console.warn('[Marketplace] Failed to dispatch purchase order notification with PDF:', err);
+            });
+        }
 
         return ok(res, { success: true, message: 'Response accepted and PO generated successfully.' });
     } catch (error: any) {

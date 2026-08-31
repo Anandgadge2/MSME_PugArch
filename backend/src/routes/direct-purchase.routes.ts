@@ -9,6 +9,8 @@ import { createApprovalChain } from '../services/approval-chain.service.js';
 import { numberSeries } from '../services/workflow/workflow-common.js';
 import { featureFlags } from '../config/feature-flags.js';
 import { normalizeCanonicalMethod } from '../utils/procurement-methods.js';
+import { notifyPurchaseOrderCreated } from '../services/invoice-pdf.service.js';
+import { logger } from '../config/logger.js';
 
 const router = Router();
 
@@ -588,6 +590,13 @@ router.post(
                 }
             });
         }, { timeout: 30000 });
+
+        // Dispatch email notifications with official Purchase Order PDF attached to both Seller and Buyer
+        for (const order of createdOrders) {
+            notifyPurchaseOrderCreated(order.poId).catch(err => {
+                logger.warn({ err, poId: order.poId }, 'Failed to dispatch purchase order notifications and PDF');
+            });
+        }
 
         return ok(res, { orders: createdOrders }, 201);
     })
