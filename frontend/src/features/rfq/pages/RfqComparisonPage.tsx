@@ -7,7 +7,7 @@ import { api, unwrapApiData } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 import {
     ArrowLeft, Award, Info, CheckCircle2, AlertTriangle, Star,
-    X, Printer, Users, Eye, Download, Shield, MessageSquare, Truck, Clock, FileText, CheckCircle
+    X, Printer, Users, Eye, Download, Shield, MessageSquare, Truck, Clock, FileText, CheckCircle, Package
 } from 'lucide-react';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { Badge } from '../../../components/ui/card';
@@ -318,6 +318,15 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
                 const isSubmitted = String(r.status || '').toUpperCase() === 'SUBMITTED';
                 const isAccepted = String(r.status || '').toUpperCase() === 'ACCEPTED';
                 const isRejected = String(r.status || '').toUpperCase() === 'REJECTED';
+                const rawLineItems: any[] = Array.isArray(r.lineItems)
+                    ? r.lineItems
+                    : Array.isArray(r.responseData?.lineItems)
+                    ? r.responseData.lineItems
+                    : Array.isArray(r.acknowledgement?.responseData?.lineItems)
+                    ? r.acknowledgement.responseData.lineItems
+                    : Array.isArray(r.acknowledgement?.lineItems)
+                    ? r.acknowledgement.lineItems
+                    : [];
 
                 return (
                     <div className="rounded-2xl border border-indigo-100 bg-white p-6 shadow-sm space-y-6">
@@ -435,6 +444,79 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
                                 )}
                             </div>
                         </div>
+
+                        {/* Item-Wise Quotation Breakdown (if multi-item or priced line items available) */}
+                        {rawLineItems.length > 0 && (
+                            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs space-y-0">
+                                <div className="bg-slate-50/80 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                                        <Package className="h-4 w-4 text-indigo-600" /> Item-Wise Quotation Breakdown
+                                    </h4>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                        {rawLineItems.length} Item{rawLineItems.length !== 1 ? 's' : ''} Quoted
+                                    </span>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-xs border-collapse">
+                                        <thead className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-4 py-2.5">Item Description</th>
+                                                <th className="px-4 py-2.5">Make / Brand</th>
+                                                <th className="px-4 py-2.5 text-right">Qty / Unit</th>
+                                                <th className="px-4 py-2.5 text-right">Unit Price (₹)</th>
+                                                <th className="px-4 py-2.5 text-right">GST %</th>
+                                                <th className="px-4 py-2.5 text-right">Line Total (₹)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                                            {rawLineItems.map((item: any, idx: number) => {
+                                                const unitP = Number(item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0);
+                                                const q = Number(item.quantity ?? item.qty ?? 1);
+                                                const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
+                                                const lineTot = item.lineTotal != null || item.totalAmount != null
+                                                    ? Number(item.lineTotal ?? item.totalAmount)
+                                                    : unitP * q * (1 + gst / 100);
+                                                return (
+                                                    <tr key={idx} className="hover:bg-slate-50/50 transition">
+                                                        <td className="px-4 py-3 font-bold text-slate-900">
+                                                            {item.itemName || item.name || item.description || `Item #${idx + 1}`}
+                                                            {item.remarks && <p className="text-[10px] font-normal text-slate-400 mt-0.5">{item.remarks}</p>}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-slate-600">
+                                                            {item.makeBrand || item.brand || '—'}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
+                                                            <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200">
+                                                                {q} <span className="text-[9px] font-semibold text-slate-500 uppercase">{item.unitOfMeasure || item.unit || 'Nos'}</span>
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-bold text-slate-800 tabular-nums">
+                                                            {money(unitP)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                                                            {gst}%
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-black text-indigo-700 tabular-nums">
+                                                            {money(lineTot)}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                        <tfoot className="bg-slate-50/80 border-t border-slate-200">
+                                            <tr>
+                                                <td colSpan={5} className="px-4 py-2.5 text-right text-xs font-bold text-slate-600 uppercase tracking-wider">
+                                                    Total Quotation Amount (incl. GST)
+                                                </td>
+                                                <td className="px-4 py-2.5 text-right text-sm font-black text-emerald-700 tabular-nums">
+                                                    {money(r.totalAmount)}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Seller Notes & Breakup */}
                         {(r.notes || breakup) && (
