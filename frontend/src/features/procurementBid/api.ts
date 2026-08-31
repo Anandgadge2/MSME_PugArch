@@ -490,14 +490,16 @@ export const procurementBidApi = {
   async getBuyerBids(_params: Record<string, string | number> = {}, skipCache = false) {
     const res = await api.fetch('/api/buyer/procurement-bids', { method: 'GET', headers: authHeaders(), skipCache });
     const data = await readApiBody(res);
-    return (data || []).map(normalizeBid);
+    const list = Array.isArray(data) ? data : (data?.bids || data?.items || data?.records || data?.data || []);
+    return list.map(normalizeBid);
   },
   async getAdminBids(params: Record<string, string | number> = {}) {
     const qs = buildQueryString(params);
     const res = await api.fetch(`/api/admin/procurement-bids${qs ? `?${qs}` : ''}`, { method: 'GET', headers: authHeaders(), skipCache: true });
     const body = await readJsonResponse(res);
     const data = unwrapApiData(body);
-    return (data || []).map(normalizeBid);
+    const list = Array.isArray(data) ? data : (data?.bids || data?.items || data?.records || data?.data || []);
+    return list.map(normalizeBid);
   },
   async getAdminProcurementIntake(params: Record<string, string | number> = {}) {
     const qs = buildQueryString(params);

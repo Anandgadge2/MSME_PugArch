@@ -129,6 +129,7 @@ export default function AdminBidManagementPage() {
   const [recommendationReason, setRecommendationReason] = useState('');
   const [technicalDraft, setTechnicalDraft] = useState<EvaluationDraft>({});
   const [updatingIntakeId, setUpdatingIntakeId] = useState<number | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -420,7 +421,7 @@ export default function AdminBidManagementPage() {
       <main className="mx-auto w-full max-w-7xl px-4 py-5">
         <ProcurementHero
           title="Admin Bid Management"
-          subtitle="Control approval, participant review, technical evaluation, financial ranking, and final award approval for JsgSmile procurement bids."
+          // subtitle="Control approval, participant review, technical evaluation, financial ranking, and final award approval for JsgSmile procurement bids."
           action={<button onClick={() => exportReport()} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#0b2447] px-4 text-xs font-black text-white"><Download className="h-4 w-4" /> Export report</button>}
         />
 
@@ -523,103 +524,116 @@ export default function AdminBidManagementPage() {
               </section>
             )}
 
-            <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-black text-[#0b2447]">Bid Control Register</h2>
-                  <p className="text-xs text-slate-500">Live admin records only. No demo procurement bids are shown here.</p>
-                </div>
-                <span className="inline-flex items-center gap-2 text-xs font-black text-slate-600"><Filter className="h-4 w-4" /> {filteredBids.length} visible</span>
-              </div>
-
-              <div className="grid gap-3 border-b border-slate-100 pb-4 md:grid-cols-4">
-                <label className="md:col-span-2">
-                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Search</span>
-                  <div className="mt-1 flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3">
-                    <Search className="h-4 w-4 text-slate-400" />
-                    <input value={filters.search} onChange={event => setFilters({ ...filters, search: event.target.value })} className="w-full bg-transparent text-xs font-bold outline-none" placeholder="Bid number, title, buyer" />
+            <section className="mt-5 rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 p-5">
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-lg font-black text-slate-900">Bid Control Register</h2>
+                      <span className="inline-flex h-6 items-center rounded-full bg-slate-100 px-2.5 text-[10px] font-black tracking-wide text-slate-600">
+                        {filteredBids.length} visible
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs font-medium text-slate-500">Live admin records only. No demo procurement bids are shown here.</p>
                   </div>
-                </label>
-                {[
-                  ['status', 'Bid status', options.statuses],
-                  ['approvalStatus', 'Approval status', options.approvals.map(readable)],
-                  ['category', 'Category', options.categories],
-                  ['buyerType', 'Buyer type', options.buyerTypes],
-                  ['procurementType', 'Procurement type', options.procurementTypes],
-                ].map(([key, label, values]) => (
-                  <label key={key as string}>
-                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label as string}</span>
-                    <select
-                      value={(filters as any)[key as string]}
-                      onChange={event => setFilters({ ...filters, [key as string]: event.target.value })}
-                      className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700"
-                    >
-                      <option value="">All</option>
-                      {(values as string[]).map(value => <option key={value} value={key === 'approvalStatus' ? options.approvals.find(raw => readable(raw) === value) || value : value}>{value}</option>)}
-                    </select>
-                  </label>
-                ))}
-                <label>
-                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Start date from</span>
-                  <input type="date" value={filters.dateFrom} onChange={event => setFilters({ ...filters, dateFrom: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-200 px-3 text-xs font-bold" />
-                </label>
-                <label>
-                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">End date to</span>
-                  <input type="date" value={filters.dateTo} onChange={event => setFilters({ ...filters, dateTo: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-200 px-3 text-xs font-bold" />
-                </label>
-                <label>
-                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Location</span>
-                  <input value={filters.location} onChange={event => setFilters({ ...filters, location: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-200 px-3 text-xs font-bold outline-none" placeholder="District/state" />
-                </label>
-                <div className="flex items-end">
-                  <button onClick={() => setFilters(initialFilters)} className="h-10 w-full rounded-md border border-slate-200 text-xs font-black text-slate-700">Reset filters</button>
+                  <button onClick={() => setShowFilters(!showFilters)} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition-colors hover:bg-slate-50">
+                    <Filter className="h-3.5 w-3.5" /> {showFilters ? 'Hide filters' : 'Filters'}
+                  </button>
                 </div>
+
+                {showFilters && (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+                    <label className="md:col-span-2 xl:col-span-2">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Search</span>
+                      <div className="mt-1.5 flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3 transition-colors focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500">
+                        <Search className="h-4 w-4 text-slate-400" />
+                        <input value={filters.search} onChange={event => setFilters({ ...filters, search: event.target.value })} className="w-full bg-transparent text-xs font-bold text-slate-800 placeholder:text-slate-400 outline-none" placeholder="Bid number, title, buyer" />
+                      </div>
+                    </label>
+                    {[
+                      ['status', 'Bid status', options.statuses],
+                      ['approvalStatus', 'Approval status', options.approvals.map(readable)],
+                      ['category', 'Category', options.categories],
+                      ['buyerType', 'Buyer type', options.buyerTypes],
+                      ['procurementType', 'Procurement type', options.procurementTypes],
+                    ].map(([key, label, values]) => (
+                      <label key={key as string}>
+                        <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label as string}</span>
+                        <select
+                          value={(filters as any)[key as string]}
+                          onChange={event => setFilters({ ...filters, [key as string]: event.target.value })}
+                          className="mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                        >
+                          <option value="">All</option>
+                          {(values as string[]).map(value => <option key={value} value={key === 'approvalStatus' ? options.approvals.find(raw => readable(raw) === value) || value : value}>{value}</option>)}
+                        </select>
+                      </label>
+                    ))}
+                    <label>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Start date</span>
+                      <input type="date" value={filters.dateFrom} onChange={event => setFilters({ ...filters, dateFrom: event.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                    </label>
+                    <label>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">End date</span>
+                      <input type="date" value={filters.dateTo} onChange={event => setFilters({ ...filters, dateTo: event.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                    </label>
+                    <label>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Location</span>
+                      <input value={filters.location} onChange={event => setFilters({ ...filters, location: event.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-200 px-3 text-xs font-bold text-slate-800 placeholder:text-slate-400 outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" placeholder="District/state" />
+                    </label>
+                    <div className="flex items-end">
+                      <button onClick={() => setFilters(initialFilters)} className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 text-xs font-black text-slate-700 transition-colors hover:bg-slate-100">Reset filters</button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {loading ? (
-                <div className="mt-4"><ProcurementLoadingState message="Loading admin bid register..." /></div>
+                <div className="py-12"><ProcurementLoadingState message="Loading admin bid register..." /></div>
               ) : error ? (
-                <div className="mt-4"><ProcurementErrorState message={error} onRetry={load} /></div>
+                <div className="py-12"><ProcurementErrorState message={error} onRetry={load} /></div>
               ) : !filteredBids.length ? (
-                <div className="mt-4"><ProcurementEmptyState title="No admin bids match these filters." message="Change filters or wait for buyers to submit bids for approval." /></div>
+                <div className="py-12"><ProcurementEmptyState title="No admin bids match these filters." message="Change filters or wait for buyers to submit bids for approval." /></div>
               ) : (
-                <div className="mt-4 space-y-4">
-                  <div className="table-shell">
-                    <div className="table-shell-scroller">
-                      <table className="min-w-[1320px] w-full text-xs">
-                        <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-                          <tr>{['Bid number', 'Title', 'Buyer organization', 'Buyer type', 'Category', 'Procurement type', 'Bid status', 'Approval', 'Start', 'End', 'Participants', 'Lifecycle', 'Actions'].map(head => <th key={head} className="px-4 py-3 font-black">{head}</th>)}</tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {pagedBids.map(bid => (
-                            <tr key={bid.id} className="bg-white align-top hover:bg-slate-50">
-                              <td className="px-4 py-3 font-black text-[#0b2447]">{bid.id}</td>
-                              <td className="px-4 py-3 font-bold text-slate-800">{bid.title}</td>
-                              <td className="px-4 py-3">{bid.buyerName}</td>
-                              <td className="px-4 py-3">{bid.buyerType}</td>
-                              <td className="px-4 py-3">{bid.category}</td>
-                              <td className="px-4 py-3">{bid.procurementType || bid.bidType}</td>
-                              <td className="px-4 py-3"><StatusBadge label={bid.status} /></td>
-                              <td className="px-4 py-3"><StatusBadge label={readable(bid.approvalStatus)} /></td>
-                              <td className="px-4 py-3">{formatDate(bid.startDate)}</td>
-                              <td className="px-4 py-3">{formatDate(bid.endDate)}</td>
-                              <td className="px-4 py-3 font-black">{bid.participantsCount || bid.results.length}</td>
-                              <td className="px-4 py-3"><StatusBadge label={bid.currentStage} /></td>
-                              <td className="px-4 py-3">
-                                <div className="flex flex-wrap gap-2">
-                                  <button onClick={() => refreshSelectedBid(bid)} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-3 text-[10px] font-black text-slate-700"><Eye className="h-3.5 w-3.5" /> Review</button>
-                                  <button onClick={() => approve(bid.id)} className="inline-flex h-8 items-center gap-1 rounded-md bg-emerald-600 px-3 text-[10px] font-black text-white"><ShieldCheck className="h-3.5 w-3.5" /> Approve</button>
-                                  <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="inline-flex h-8 items-center gap-1 rounded-md bg-red-600 px-3 text-[10px] font-black text-white"><XCircle className="h-3.5 w-3.5" /> Reject</button>
-                                  <Link href={`/bids/${bid.id}`} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-3 text-[10px] font-black text-slate-700">Details</Link>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                <div className="flex flex-col">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[1400px] w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
+                        <tr>{['Bid number', 'Title', 'Buyer', 'Category', 'Type', 'Status', 'Approval', 'Start', 'End', 'Participants', 'Lifecycle', 'Actions'].map(head => <th key={head} className="whitespace-nowrap px-4 py-3 font-black">{head}</th>)}</tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {pagedBids.map(bid => (
+                          <tr key={bid.id} className="bg-white hover:bg-slate-50">
+                            <td className="whitespace-nowrap px-4 py-3.5 font-black text-[#0b2447]">{bid.id}</td>
+                            <td className="px-4 py-3.5">
+                              <p className="font-bold text-slate-900 line-clamp-2" title={bid.title}>{bid.title}</p>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <p className="font-semibold text-slate-700">{bid.buyerName}</p>
+                              <p className="mt-0.5 text-[10px] font-medium text-slate-400">{bid.buyerType}</p>
+                            </td>
+                            <td className="px-4 py-3.5 font-medium text-slate-600">{bid.category}</td>
+                            <td className="whitespace-nowrap px-4 py-3.5 font-medium text-slate-600">{bid.procurementType || bid.bidType}</td>
+                            <td className="whitespace-nowrap px-4 py-3.5"><StatusBadge label={bid.status} /></td>
+                            <td className="whitespace-nowrap px-4 py-3.5"><StatusBadge label={readable(bid.approvalStatus)} /></td>
+                            <td className="whitespace-nowrap px-4 py-3.5 font-medium text-slate-600">{formatDate(bid.startDate)}</td>
+                            <td className="whitespace-nowrap px-4 py-3.5 font-medium text-slate-600">{formatDate(bid.endDate)}</td>
+                            <td className="whitespace-nowrap px-4 py-3.5 font-black text-slate-700">{bid.participantsCount || bid.results.length}</td>
+                            <td className="whitespace-nowrap px-4 py-3.5"><StatusBadge label={bid.currentStage} /></td>
+                            <td className="whitespace-nowrap px-4 py-3.5">
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => refreshSelectedBid(bid)} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 px-2 text-[10px] font-black text-slate-700 transition-colors hover:bg-slate-50"><Eye className="h-3 w-3" /> Review</button>
+                                <button onClick={() => approve(bid.id)} className="inline-flex h-7 items-center gap-1 rounded bg-emerald-600 px-2 text-[10px] font-black text-white transition-colors hover:bg-emerald-700"><ShieldCheck className="h-3 w-3" /> Approve</button>
+                                <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="inline-flex h-7 items-center gap-1 rounded bg-red-600 px-2 text-[10px] font-black text-white transition-colors hover:bg-red-700"><XCircle className="h-3 w-3" /> Reject</button>
+                                <Link href={`/bids/${bid.id}`} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 px-2 text-[10px] font-black text-slate-700 transition-colors hover:bg-slate-50">Details</Link>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="border-t border-slate-100 bg-slate-50/50 p-3">
                     <Pagination
                       page={bidsPage}
                       pageSize={bidsPageSize}

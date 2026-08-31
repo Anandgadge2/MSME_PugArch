@@ -1605,44 +1605,105 @@ export default function AdminOnboarding() {
                                 </div>
                               </td>
                               <td className="p-3">
-                                <div className="min-w-28 space-y-1.5">
-                                  <div className="flex items-center justify-between text-[9px] font-black uppercase text-slate-500">
+                                <div className="min-w-[100px] max-w-[140px] flex flex-col gap-1.5">
+                                  <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-500">
                                     <span>Verified</span>
-                                    <span>{getProgress(item)}%</span>
+                                    <span className={cn(getProgress(item) === 100 ? "text-emerald-600" : "text-[#12335f]")}>
+                                      {getProgress(item)}%
+                                    </span>
                                   </div>
-                                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                                     <div
-                                      className="h-full rounded-full bg-[#12335f]"
+                                      className={cn("h-full transition-all duration-500 rounded-full", getProgress(item) === 100 ? "bg-emerald-500" : "bg-[#12335f]")}
                                       style={{ width: `${getProgress(item)}%` }}
                                     />
                                   </div>
                                 </div>
                               </td>
                               <td className="p-3">
-                                <div className="space-y-1.5">
-                                  {getStatusBadge(item.onboardingStatus)}
-                                  <div className="flex space-x-0.5">
-                                    {getSections(item).map((section) => (
-                                      <div
-                                        key={section}
-                                        className={
-                                          cn(
-                                            "h-1 w-2.5 rounded-full",
-                                            item.sectionStatus?.[section] ===
-                                              "approved"
-                                              ? "bg-green-500"
-                                              : item.sectionStatus?.[
-                                                section
-                                              ] === "rejected"
-                                                ? "bg-red-500"
-                                                : "bg-slate-200",
-                                          ) || ""
-                                        }
-                                        title={`${section}: ${item.sectionStatus?.[section] || "pending"}`}
-                                      />
-                                    ))}
-                                  </div>
-                                </div>
+                                {(() => {
+                                  const status = item.onboardingStatus || "pending";
+                                  let dotColor = "bg-slate-400";
+                                  let title = "Pending";
+                                  let subtext = "Awaiting review";
+                                  
+                                  switch (status) {
+                                    case "approved_for_procurement":
+                                      dotColor = "bg-emerald-500";
+                                      title = "Approved for Procurement";
+                                      subtext = "Procurement approval";
+                                      break;
+                                    case "rejected":
+                                      dotColor = "bg-red-500";
+                                      title = "Rejected";
+                                      subtext = "Application denied";
+                                      break;
+                                    case "resubmission_required":
+                                      dotColor = "bg-amber-500";
+                                      title = "Resubmission Required";
+                                      subtext = "Correction needed";
+                                      break;
+                                    case "under_compliance_review":
+                                      dotColor = "bg-blue-500";
+                                      title = "Compliance Review";
+                                      subtext = "In verification queue";
+                                      break;
+                                    case "manual_review_required":
+                                      dotColor = "bg-orange-500";
+                                      title = "Manual Review";
+                                      subtext = "Action required";
+                                      break;
+                                    case "verified":
+                                      dotColor = "bg-indigo-500";
+                                      title = "Verified";
+                                      subtext = "Checks passed";
+                                      break;
+                                    case "pending_validation":
+                                      dotColor = "bg-slate-500";
+                                      title = "Pending Validation";
+                                      subtext = "System check";
+                                      break;
+                                    default:
+                                      dotColor = "bg-slate-400";
+                                      title = status.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+                                      subtext = "Pending status";
+                                  }
+
+                                  return (
+                                    <div className="min-w-[160px] flex flex-col gap-2 p-2 rounded-lg border border-slate-100 bg-slate-50/50">
+                                      <div className="flex items-start gap-2">
+                                        <div className={cn("mt-1 h-2 w-2 rounded-full shrink-0 shadow-sm", dotColor)} />
+                                        <div className="min-w-0">
+                                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-700 truncate" title={title}>
+                                            {title}
+                                          </div>
+                                          <div className="text-[9px] font-bold text-slate-400 truncate mt-0.5" title={subtext}>
+                                            {subtext}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-0.5 px-0.5">
+                                        {getSections(item).map((section: string) => {
+                                          const secStatus = item.sectionStatus?.[section] || "pending";
+                                          const isApproved = secStatus === "approved";
+                                          const isRejected = secStatus === "rejected";
+                                          return (
+                                            <div 
+                                              key={section}
+                                              title={`${section.toUpperCase()}: ${secStatus.toUpperCase()}`}
+                                              className={cn(
+                                                "h-1 flex-1 rounded-sm transition-colors",
+                                                isApproved ? "bg-emerald-500" : 
+                                                isRejected ? "bg-red-500" : 
+                                                "bg-slate-200"
+                                              )}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td className="p-3 text-right">
                                 <button
