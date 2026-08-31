@@ -100,18 +100,18 @@ export function ProcurementHero({ title, subtitle, action, theme, variant = 'lig
 
   if (variant === 'light') {
     return (
-      <div className="relative overflow-hidden rounded-[24px] bg-white p-6 shadow-xs border border-slate-200/90 animate-in fade-in slide-in-from-top-3 duration-500">
+      <div className="relative overflow-hidden rounded-[24px] bg-white px-6 py-4 shadow-xs border border-slate-200/90 animate-in fade-in slide-in-from-top-3 duration-500">
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-500" />
-        <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div className="relative grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
           <div>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-800 select-none">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
               {t.label}
             </span>
-            <h1 className="mt-3 text-2xl font-black leading-tight tracking-tight sm:text-3xl text-slate-900">
+            <h1 className="mt-1.5 text-lg font-black leading-tight tracking-tight sm:text-xl text-slate-900">
               {title}
             </h1>
-            <p className="mt-2 max-w-3xl text-xs font-semibold leading-relaxed text-slate-500">
+            <p className="mt-1 max-w-3xl text-xs font-semibold leading-relaxed text-slate-500">
               {subtitle}
             </p>
           </div>
@@ -125,23 +125,23 @@ export function ProcurementHero({ title, subtitle, action, theme, variant = 'lig
 
   return (
     <div
-      className="relative overflow-hidden rounded-[24px] p-6 text-white shadow-lg border border-white/10 animate-in fade-in slide-in-from-top-3 duration-500"
+      className="relative overflow-hidden rounded-[24px] px-6 py-4 text-white shadow-lg border border-white/10 animate-in fade-in slide-in-from-top-3 duration-500"
       style={{ background: `linear-gradient(135deg, ${t.gradientFrom} 0%, ${t.gradientVia} 50%, ${t.gradientTo} 100%)` }}
     >
       {/* Soft decorative background blur circles */}
       <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/5 blur-3xl pointer-events-none" />
       <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-white/3 blur-3xl pointer-events-none" />
 
-      <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-center">
+      <div className="relative grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
         <div>
           <span className={`inline-flex items-center gap-1.5 rounded-full ${t.accent} px-3 py-1 text-[9px] font-black uppercase tracking-wider ${t.accentText} select-none`}>
             <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
             {t.label}
           </span>
-          <h1 className="mt-3 text-2xl font-black leading-tight tracking-tight sm:text-3xl text-white">
+          <h1 className="mt-1.5 text-lg font-black leading-tight tracking-tight sm:text-xl text-white">
             {title}
           </h1>
-          <p className="mt-2 max-w-3xl text-xs font-semibold leading-relaxed text-white/70">
+          <p className="mt-1 max-w-3xl text-xs font-semibold leading-relaxed text-white/70">
             {subtitle}
           </p>
         </div>
