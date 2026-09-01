@@ -414,11 +414,6 @@ export default function OrganizationManagement() {
         </div>
         <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="bg-[#c5a556]/20 border border-[#c5a556] text-[#c5a556] text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full">
-                Administration Portal
-              </span>
-            </div>
             <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">Organization & Feature Management</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2 self-start md:self-end">

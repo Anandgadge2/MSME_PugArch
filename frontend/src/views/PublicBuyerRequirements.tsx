@@ -217,9 +217,6 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-100/60 to-blue-50/20 text-slate-900 pb-24 relative selection:bg-blue-500 selection:text-white">
-      {/* 3-Color Flag Accent Strip */}
-      <div className="brand-tricolor-strip w-full fixed top-0 left-0 z-50 h-1.5 bg-gradient-to-r from-orange-500 via-amber-300 to-emerald-600 shadow-sm" />
-
       {/* Top Floating Navigation Bar */}
       <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/70 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-xs">
         <Button

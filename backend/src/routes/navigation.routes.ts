@@ -27,7 +27,8 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
         openTendersCount,
         invitationsCount,
         auctionsCount,
-        rateContractsCount
+        rateContractsCount,
+        bidsCount
       ] = await Promise.all([
         db.notification.count({
           where: { userId: user.id, isRead: false }
@@ -140,7 +141,16 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
               AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: now } }] }]
             }
           }).catch(() => 0) : Promise.resolve(0)
-        ]).then(([b, r]) => b + r).catch(() => 0)
+        ]).then(([b, r]) => b + r).catch(() => 0),
+
+        isSeller ? Promise.all([
+          db.procurementBidParticipation.count({
+            where: { vendorId: user.id }
+          }).catch(() => 0),
+          db.requirementResponse.count({
+            where: { sellerId: user.id }
+          }).catch(() => 0)
+        ]).then(([b, r]) => b + r).catch(() => 0) : Promise.resolve(0)
       ]);
 
       return {
@@ -150,7 +160,8 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
         openTendersCount,
         invitationsCount,
         auctionsCount,
-        rateContractsCount
+        rateContractsCount,
+        bidsCount
       };
     }, 30);
 

@@ -300,9 +300,6 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
             </div>
 
             <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
-                    {rawResponses.length === 1 ? 'Formal Quotation Review' : 'Quotation Comparison'}
-                </p>
                 <h1 className="text-xl font-black tracking-tight text-slate-950">
                     {rawResponses.length === 1 ? 'Review Formal Quotation' : `Compare Quotations — RFQ-${String(qr.id).padStart(5, '0')}`}
                 </h1>

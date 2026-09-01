@@ -283,9 +283,6 @@ export function MarketplaceFooter() {
                     </div>
                 </div>
             </div>
-
-            {/* Official Tricolor Strip at bottom */}
-            <div className="brand-tricolor-strip w-full h-1" />
         </footer>
     );
 }

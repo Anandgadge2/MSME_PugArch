@@ -205,8 +205,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       {/* Transparent Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
-          {/* <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">{admin ? 'Admin Finance' : 'Finance'}</span> */}
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Payment History</h1>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">Payment History</h1>
           <p className="text-xs font-semibold text-slate-500 mt-1">
             Payment status, escrow linkage, tax/TDS summary, and immutable ledger entries.
           </p>

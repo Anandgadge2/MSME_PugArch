@@ -147,14 +147,8 @@ export default function NotificationPrefsPage() {
 
     return (
         <div className="mx-auto w-full max-w-7xl space-y-6 pb-28">
-            <div className="brand-tricolor-strip rounded-full" />
-
             <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
                 <div className="max-w-3xl">
-                    <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[#12335f]/10 bg-[#12335f]/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-[#12335f]">
-                        <Settings2 className="h-3.5 w-3.5" />
-                        Account controls
-                    </div>
                     <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">Notification Preferences</h1>
                     <p className="mt-2 max-w-2xl text-sm font-semibold leading-relaxed text-slate-500">
                         Configure which channels and event classes are active for procurement, compliance, and account alerts.

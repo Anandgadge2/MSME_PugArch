@@ -84,7 +84,6 @@ export default function MonthlyRankingsAdminPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 pb-2 md:flex-row md:items-end md:justify-between border-b border-slate-200">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Banner Eligibility</p>
           <h1 className="text-xl font-extrabold text-slate-950">Monthly Rankings</h1>
           <p className="mt-0.5 text-xs font-semibold text-slate-500">
             Compute monthly buyer and seller rankings, then grant homepage banner eligibility.

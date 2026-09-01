@@ -115,7 +115,6 @@ export default function FraudAlertsPage() {
         <div className="space-y-4">
             <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Admin · Risk</p>
                     <h1 className="text-2xl font-black tracking-tight text-slate-950">Fraud Alerts</h1>
                     <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">
                         Triage signals raised by the portal&apos;s fraud detection rules. Assign yourself, review evidence, and confirm or dismiss with a justification.

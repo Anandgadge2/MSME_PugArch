@@ -104,7 +104,6 @@ export default function DirectPurchasePage({ listOnly = false }: { listOnly?: bo
         <div className="space-y-4">
             <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Procurement · Direct Purchase</p>
                     <h1 className="text-2xl font-black tracking-tight text-slate-950">Direct Purchases</h1>
                     <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">
                         Track direct purchase orders created from Marketplace cart checkout. New requests must be created from Marketplace → Cart → Procurement Checkout.

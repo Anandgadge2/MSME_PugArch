@@ -28,7 +28,6 @@ export default function PaymentsReportPage() {
         <div className="space-y-4">
             <div className="flex items-end justify-between border-b border-slate-200 pb-4">
                 <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Admin · MIS</p>
                     <h1 className="text-2xl font-black text-slate-950">Payments Report</h1>
                     <p className="mt-1 text-xs font-semibold text-slate-500">
                         Settlement, escrow custody, milestone, and invoice volume.

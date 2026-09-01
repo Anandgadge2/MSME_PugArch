@@ -253,13 +253,7 @@ export default function AdminBannerManagementPage() {
       {/* Top Header */}
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          {/* <div className="flex items-center gap-2">
-            <span className="inline-flex h-6 items-center rounded-full bg-blue-50 px-2.5 text-[10px] font-black uppercase tracking-widest text-[#12335f] ring-1 ring-blue-700/10">
-              Admin Portal
-            </span>
-            <span className="text-xs font-semibold text-slate-400">• Cloud Storage Live</span>
-          </div> */}
-          <h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl">Banner Management</h1>
+          <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">Banner Management</h1>
           <p className="mt-1 text-xs font-semibold text-slate-500">
             Control, edit, and publish hero carousel banners hosted on Google Cloud Storage.
           </p>

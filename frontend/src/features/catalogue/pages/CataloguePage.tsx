@@ -737,10 +737,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-emerald-300/20 blur-3xl" />
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between relative z-10">
           <div>
-            {/* <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-100">
-              <Store className="h-3.5 w-3.5" /> {title}
-            </div> */}
-            <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">Marketplace Catalogue</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">Marketplace Catalogue</h1>
             <p className="mt-0.5 max-w-3xl text-xs font-semibold leading-relaxed text-blue-100/90">{subtitle}</p>
           </div>
           

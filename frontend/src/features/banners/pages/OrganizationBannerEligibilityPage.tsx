@@ -5,14 +5,8 @@ export default function OrganizationBannerEligibilityPage() {
   return (
     <div className="mx-auto max-w-[86rem] space-y-5">
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/92 shadow-sm">
-        <div className="brand-tricolor-strip rounded-none" />
         <div className="p-4 sm:p-5 lg:p-6">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-[#12335f]">
-            <Sparkles className="h-3 w-3 text-[#12335f]" />
-            Marketing Hub
-          </span>
-          
-          <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+          <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
             Banner Eligibility
           </h1>
           

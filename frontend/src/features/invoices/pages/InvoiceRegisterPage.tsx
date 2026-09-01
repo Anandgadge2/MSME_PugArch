@@ -756,13 +756,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       {/* Transparent Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
-          {/* <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">
-            {role === 'seller' ? 'Seller Finance' : role === 'admin' ? 'Admin Finance' : 'Buyer Finance'}
-          </span> */}
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Invoices</h1>
-          {/* <p className="text-xs font-semibold text-slate-500 mt-1">
-            Invoice register with PO linkage, GST/TDS values, due dates, and payment workflows.
-          </p> */}
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">Invoices</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button

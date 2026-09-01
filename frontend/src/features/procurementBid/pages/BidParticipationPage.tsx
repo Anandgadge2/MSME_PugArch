@@ -809,11 +809,7 @@ export default function BidParticipationPage() {
             {/* Header Area */}
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  <ShieldCheck className="h-3.5 w-3.5" style={{ color: theme.primary }} />
-                  Request for Proposal
-                </span>
-                <h1 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Seller Bid Participation</h1>
+                <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Seller Bid Participation</h1>
                 <p className="mt-1 max-w-3xl truncate text-xs font-semibold text-slate-500 sm:text-sm" title={`${bid.id} - ${bid.title}`}>
                   <span className="font-mono text-slate-700">{bid.id}</span>
                   <span className="mx-2 text-slate-300">/</span>

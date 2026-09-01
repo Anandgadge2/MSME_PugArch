@@ -303,15 +303,9 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
       {/* Transparent Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
-          {/* <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">
-            {scope === 'admin' ? 'Admin Delivery Console' : 'Buyer Logistics & Fulfillment'}
-          </span> */}
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">
             {title || (scope === 'buyer' || scope === 'all' ? 'Delivery Management & Tracking' : 'Delivery Tracking')}
           </h1>
-          {/* <p className="text-xs font-semibold text-slate-500 mt-1">
-            {subtitle || 'Track live consignments, confirm receipt of goods, inspect line items, and manage GRNs.'}
-          </p> */}
         </div>
         {activeTab === 'tracking' && (
           <div className="flex items-center gap-2">

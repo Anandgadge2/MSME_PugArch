@@ -202,9 +202,6 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-1 sm:mb-2">
-                <span className="rounded-md bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-[#12335f] ring-1 ring-slate-200/60">
-                  Delivery Tracking
-                </span>
                 <DeliveryStatusBadge status={delivery.status} />
               </div>
               <h1 className="text-2xl font-black tracking-tight text-slate-950 break-words sm:text-3xl">

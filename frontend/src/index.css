@@ -441,17 +441,8 @@ textarea::-moz-placeholder {
 
 
 /* ─── Brand utilities ──────────────────────────────────────────────────────
-   Tricolor accent strip — drop-in 2px bar above any page header that
-   wants the government-portal vibe. */
 .brand-tricolor-strip {
-  height: 2px;
-  background: linear-gradient(90deg,
-      #ff9933 0%,
-      #ff9933 33%,
-      #ffffff 33%,
-      #ffffff 66%,
-      #138808 66%,
-      #138808 100%);
+  display: none !important;
 }
 
 /* Navy gradient panel — matches the modal headers used across the portal. */

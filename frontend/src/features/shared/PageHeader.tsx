@@ -20,14 +20,11 @@ interface Props {
     title: string;
     description?: string;
     actions?: React.ReactNode;
-    /** Show the saffron/white/green strip on top. Default true. */
-    tricolor?: boolean;
 }
 
-export function PageHeader({ title, description, actions, tricolor = true }: Props) {
+export function PageHeader({ title, description, actions }: Props) {
     return (
         <div>
-            {tricolor && <div className="brand-tricolor-strip mb-2 sm:mb-3 rounded-full" />}
             <div className="page-header">
                 <div className="min-w-0">
                     <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-black tracking-tight text-slate-950 text-wrap-anywhere">{title}</h1>
