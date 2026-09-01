@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { COOKIE_SESSION_TOKEN, clearAuthCookie, clearStoredToken, getCookieValue, getStoredToken, setStoredToken } from '../lib/auth';
 import { clearGuestCart } from '../features/marketplace/hooks/useGuestCart';
 import { isShgUser } from '../lib/shg';
+import { clearPermissionsCache } from './useOrgRole';
 
 interface User {
   id: string;
@@ -77,7 +78,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return getStoredToken() || (getCookieValue('csrfToken') ? COOKIE_SESSION_TOKEN : null);
+  });
   const [loading, setLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -89,6 +93,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(JSON.parse(storedUser));
         setLoading(false);
       }
+      const storedToken = getStoredToken() || (getCookieValue('csrfToken') ? COOKIE_SESSION_TOKEN : null);
+      if (storedToken) {
+        setToken(storedToken);
+      }
     } catch {
       // ignore
     }
@@ -97,6 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const clearLocalSession = useCallback(() => {
     clearStoredToken();
     localStorage.removeItem('msme_user_cache');
+    clearPermissionsCache();
     clearAuthCookie();
     setToken(null);
     setUser(null);
