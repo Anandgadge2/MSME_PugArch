@@ -113,35 +113,50 @@ const OrderActionsMenu = ({
 }: any) => {
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<any>({ visibility: 'hidden', position: 'fixed', top: 0, left: 0, zIndex: 99999 });
 
-  useEffect(() => {
+  const calculateStyle = (): React.CSSProperties | null => {
+    if (typeof document === 'undefined') return null;
     const btn = document.getElementById(buttonId);
-    const menu = menuRef.current;
-    if (!btn || !menu) return;
+    if (!btn) return null;
 
     const btnRect = btn.getBoundingClientRect();
-    const menuRect = menu.getBoundingClientRect();
+    const menuWidth = 176; // w-44 = 11rem = 176px
+    const spaceBelow = window.innerHeight - btnRect.bottom;
+    const shouldOpenUp = spaceBelow < 220;
 
-    let top = btnRect.bottom + 6;
-    let left = btnRect.right - menuRect.width;
+    let left = btnRect.right - menuWidth;
+    if (left < 6) left = 6;
+    if (left + menuWidth > window.innerWidth - 6) left = window.innerWidth - menuWidth - 6;
 
-    if (top + menuRect.height > window.innerHeight) {
-      top = btnRect.top - menuRect.height - 6;
-    }
-    if (top < 0) top = 6;
-    if (left < 0) left = 6;
-
-    setStyle({
-      position: 'fixed',
-      top: `${top}px`,
+    return {
+      position: 'fixed' as const,
+      top: shouldOpenUp ? undefined : `${btnRect.bottom + 6}px`,
+      bottom: shouldOpenUp ? `${window.innerHeight - btnRect.top + 6}px` : undefined,
       left: `${left}px`,
       zIndex: 99999,
-      visibility: 'visible'
-    });
+      transformOrigin: shouldOpenUp ? 'bottom right' : 'top right'
+    };
+  };
+
+  const [style, setStyle] = useState<React.CSSProperties | null>(calculateStyle);
+
+  useEffect(() => {
+    const updatePosition = () => {
+      const newStyle = calculateStyle();
+      if (newStyle) setStyle(newStyle);
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
   }, [buttonId]);
 
-  if (typeof document === 'undefined') return null;
+  if (typeof document === 'undefined' || !style) return null;
 
   return createPortal(
     <div 

@@ -426,7 +426,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount + rateContractsCount;
 
       return {
-        '/seller/opportunities': allCount,
         '/seller/opportunities/rfqs': rfqsCount,
         '/seller/opportunities/rfps': rfpsCount,
         '/seller/opportunities/open-tenders': openTendersCount,
