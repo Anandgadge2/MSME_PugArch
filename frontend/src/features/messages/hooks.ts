@@ -5,13 +5,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     archiveConversation,
     createConversation,
+    deleteMessage,
     fetchConversation,
     fetchConversations,
     fetchUnreadMessageCount,
     markConversationRead,
     muteConversation,
     searchMessageUsers,
-    sendMessage
+    sendMessage,
+    type ConversationDto
 } from './api';
 
 const KEY = ['conversations'] as const;
@@ -23,17 +25,30 @@ const invalidate = (qc: ReturnType<typeof useQueryClient>) => {
 export const useConversations = () =>
     useQuery({
         queryKey: [...KEY, 'list'] as const,
-        queryFn: fetchConversations
+        queryFn: fetchConversations,
+        staleTime: 10_000,
+        gcTime: 5 * 60 * 1000
     });
 
-export const useConversation = (id: number | undefined) =>
-    useQuery({
+export const useConversation = (id: number | undefined) => {
+    const qc = useQueryClient();
+    return useQuery({
         queryKey: [...KEY, 'detail', id || 0] as const,
         queryFn: () => fetchConversation(id as number),
         enabled: !!id && id > 0,
-        staleTime: 5_000,
-        refetchInterval: 15_000
+        initialData: () => {
+            if (!id) return undefined;
+            const list = qc.getQueryData<ConversationDto[]>([...KEY, 'list']);
+            return list?.find(c => c.id === id);
+        },
+        initialDataUpdatedAt: () => {
+            return qc.getQueryState([...KEY, 'list'])?.dataUpdatedAt;
+        },
+        staleTime: 10_000,
+        gcTime: 5 * 60 * 1000,
+        refetchInterval: 20_000
     });
+};
 
 export const useCreateConversation = () => {
     const qc = useQueryClient();
@@ -45,6 +60,17 @@ export const useSendMessage = () => {
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof sendMessage>[1] }) => sendMessage(id, data),
         onSuccess: () => { void invalidate(qc); }
+    });
+};
+
+export const useDeleteMessage = () => {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ conversationId, messageId }: { conversationId: number; messageId: number }) =>
+            deleteMessage(conversationId, messageId),
+        onSuccess: (_data, vars) => {
+            void invalidate(qc);
+        }
     });
 };
 

@@ -448,9 +448,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   };
   const [isPageMounted, setIsPageMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
-  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
-  const visualCollapsed = isSidebarCollapsed && !isSidebarHovered;
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const isFetchingQueries = useIsFetching();
   const [safetyTimeoutPassed, setSafetyTimeoutPassed] = useState(false);
@@ -667,9 +665,9 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
       }
     }
 
-    if (pathname === '/seller/rfq') return <RfqDetailPage />;
-    if (pathname === '/seller/rfp') return <RfpDetailPage />;
-    if (pathname === '/seller/rate-contract') return <RateContractDetailPage />;
+    if (pathname === '/seller/rfq' || pathname === '/shg/rfq') return <RfqDetailPage />;
+    if (pathname === '/seller/rfp' || pathname === '/shg/rfp') return <RfpDetailPage />;
+    if (pathname === '/seller/rate-contract' || pathname === '/shg/rate-contract') return <RateContractDetailPage />;
     {
       const reverseAuctionDetailMatch = pathname.match(/^\/reverse-auctions\/(\d+)$/);
       if (reverseAuctionDetailMatch) {
@@ -960,13 +958,12 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
             onClose={() => setIsSidebarOpen(false)}
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={toggleSidebarCollapse}
-            onHoverChange={setIsSidebarHovered}
           />
         )}
 
         <div className={cn(
           "flex-1 flex flex-col min-w-0 h-full min-h-0 overflow-hidden transition-all duration-300",
-          showDashboardLayout && (visualCollapsed ? "lg:pl-20" : "lg:pl-64")
+          showDashboardLayout && (isSidebarCollapsed ? "lg:pl-20" : "lg:pl-64")
         )}>
           {showDashboardLayout ? (
             <Header

@@ -45,17 +45,23 @@ export type StorageProvider = {
   getSignedUrl(key: string, options: { resourceType: StorageResourceType; expiresInSeconds: number; mimeType?: string }): Promise<string>;
 };
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const allowedByExtension: Record<string, string[]> = {
   '.pdf': ['application/pdf'],
   '.jpg': ['image/jpeg'],
   '.jpeg': ['image/jpeg'],
   '.png': ['image/png'],
+  '.webp': ['image/webp'],
   '.doc': ['application/msword'],
   '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
   '.xls': ['application/vnd.ms-excel'],
   '.xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
-  '.csv': ['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain']
+  '.csv': ['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain'],
+  '.webm': ['audio/webm', 'video/webm'],
+  '.ogg': ['audio/ogg', 'application/ogg'],
+  '.mp3': ['audio/mpeg', 'audio/mp3'],
+  '.wav': ['audio/wav', 'audio/wave', 'audio/x-wav'],
+  '.m4a': ['audio/x-m4a', 'audio/m4a', 'audio/mp4', 'audio/aac']
 };
 
 const blockedExtensions = new Set([
@@ -70,11 +76,17 @@ const extensionForMime = (mimeType: string) => {
   if (mimeType === 'application/pdf') return '.pdf';
   if (mimeType === 'image/jpeg') return '.jpg';
   if (mimeType === 'image/png') return '.png';
+  if (mimeType === 'image/webp') return '.webp';
   if (mimeType === 'application/msword') return '.doc';
   if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return '.docx';
   if (mimeType === 'application/vnd.ms-excel') return '.xls';
   if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return '.xlsx';
   if (['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain'].includes(mimeType)) return '.csv';
+  if (['audio/webm', 'video/webm'].includes(mimeType)) return '.webm';
+  if (['audio/ogg', 'application/ogg'].includes(mimeType)) return '.ogg';
+  if (['audio/mpeg', 'audio/mp3'].includes(mimeType)) return '.mp3';
+  if (['audio/wav', 'audio/wave', 'audio/x-wav'].includes(mimeType)) return '.wav';
+  if (['audio/x-m4a', 'audio/m4a', 'audio/mp4', 'audio/aac'].includes(mimeType)) return '.m4a';
   return '.bin';
 };
 
@@ -82,6 +94,12 @@ const detectMagicMime = (buffer: Buffer, declaredMime?: string): string | null =
   if (buffer.subarray(0, 4).equals(Buffer.from([0x25, 0x50, 0x44, 0x46]))) return 'application/pdf';
   if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return 'image/jpeg';
   if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x52, 0x49, 0x46, 0x46])) && buffer.subarray(8, 12).equals(Buffer.from([0x57, 0x45, 0x42, 0x50]))) return 'image/webp';
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x52, 0x49, 0x46, 0x46])) && buffer.subarray(8, 12).equals(Buffer.from([0x57, 0x41, 0x56, 0x45]))) return 'audio/wav';
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) return 'audio/webm';
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x4f, 0x67, 0x67, 0x53]))) return 'audio/ogg';
+  if (buffer.subarray(0, 3).equals(Buffer.from([0x49, 0x44, 0x33])) || (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0)) return 'audio/mpeg';
+  if (buffer.subarray(4, 8).equals(Buffer.from([0x66, 0x74, 0x79, 0x70]))) return 'audio/x-m4a';
   if (buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
     const archiveIndex = buffer.toString('latin1');
     if (archiveIndex.includes('[Content_Types].xml') || archiveIndex.includes('word/')) {
@@ -97,6 +115,9 @@ const detectMagicMime = (buffer: Buffer, declaredMime?: string): string | null =
   }
   const sample = buffer.subarray(0, Math.min(buffer.length, 512)).toString('utf8');
   if (/^[\u0009\u000a\u000d\u0020-\u007e]+$/.test(sample) && sample.includes(',')) return 'text/csv';
+  if (declaredMime && ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-m4a'].includes(declaredMime)) {
+    return declaredMime;
+  }
   return null;
 };
 

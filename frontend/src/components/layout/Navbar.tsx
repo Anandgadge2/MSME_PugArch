@@ -386,7 +386,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     const query = searchParams.toString();
     return query ? `${pathname}?${query}` : pathname;
   }, [pathname, searchParams]);
-  const [isHovered, setIsHovered] = useState(false);
   const [openGroups, setOpenGroups] = useState<SidebarGroupState>({});
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
@@ -451,46 +450,17 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     }
   }, []);
 
-  const handleHover = useCallback((value: boolean) => {
-    setIsHovered(value);
-    onHoverChange?.(value);
-  }, [onHoverChange]);
-
+  // Close mobile drawer when pressing Escape key
   useEffect(() => {
-    if (sidebarRef.current) {
-      const isCurrentlyHovered = sidebarRef.current.matches(':hover');
-      if (isCurrentlyHovered) {
-        handleHover(true);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isHovered) return;
-
-    const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (!sidebarRef.current) return;
-
-      const rect = sidebarRef.current.getBoundingClientRect();
-      const isInside = (
-        e.clientX >= rect.left &&
-        e.clientX <= rect.right &&
-        e.clientY >= rect.top &&
-        e.clientY <= rect.bottom
-      );
-
-      if (!isInside) {
-        handleHover(false);
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
       }
     };
-
-    document.addEventListener('mousemove', handleGlobalMouseMove);
-    return () => {
-      document.removeEventListener('mousemove', handleGlobalMouseMove);
-    };
-  }, [isHovered]);
-
-  const isActuallyCollapsed = isCollapsed && !isHovered;
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const handleLogout = useCallback(() => {
     logout('/');
@@ -726,25 +696,24 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
 
       <aside
         ref={sidebarRef}
-        onMouseEnter={() => handleHover(true)}
+        aria-label="Main Navigation"
         className={cn(
-          "w-64 gov-sidebar-surface text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out lg:translate-x-0 border-r border-white/5 shadow-xl shadow-slate-900/10",
-          isActuallyCollapsed ? "lg:w-20" : "w-64",
-          !isActuallyCollapsed && "lg:w-64",
+          "gov-sidebar-surface text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-[width,transform] duration-300 ease-in-out lg:translate-x-0 border-r border-white/5 shadow-xl shadow-slate-900/10",
+          isCollapsed ? "w-64 lg:w-20" : "w-64",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}>
         {/* Tricolor strip — official portal cue */}
         <div className="brand-tricolor-strip" />
-        <div className={cn("h-14 px-3 border-b border-white/10 flex items-center", isActuallyCollapsed ? "justify-center" : "justify-between")}>
+        <div className={cn("h-14 px-3 border-b border-white/10 flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
           <div
-            className={cn("flex items-center gap-3 min-w-0 select-none", isActuallyCollapsed && "lg:justify-center")}
+            className={cn("flex items-center gap-3 min-w-0 select-none", isCollapsed && "lg:justify-center")}
             title="MSME Portal"
           >
             <div className="w-11 h-11 bg-white rounded-md flex items-center justify-center overflow-hidden shadow-sm border border-white/20 shrink-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logoo.png" alt="SMiLE MSME Logo" className="h-full w-full object-contain" />
             </div>
-            <div className={cn("flex flex-col leading-tight min-w-0", isActuallyCollapsed && "lg:hidden")}>
+            <div className={cn("flex flex-col leading-tight min-w-0", isCollapsed && "lg:hidden")}>
               <span className="font-bold tracking-tight text-base truncate text-white">MSME Portal</span>
               <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#c8a45c] truncate">Govt. of India</span>
             </div>
@@ -758,9 +727,9 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         <nav
           ref={navRef}
           onScroll={handleScroll}
-          className={cn("sidebar-scroll-dark flex-1 overflow-y-auto", isActuallyCollapsed ? "p-2 space-y-1" : "p-3 space-y-1")}
+          className={cn("sidebar-scroll-dark flex-1 overflow-y-auto", isCollapsed ? "p-2 space-y-1" : "p-3 space-y-1")}
         >
-          <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", isActuallyCollapsed && "lg:hidden")}>Navigation</div>
+          <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", isCollapsed && "lg:hidden")}>Navigation</div>
           {filteredNav.map((item) => {
             const isGroupActive = Boolean(item.children?.some(child => isSidebarRouteActive(child.path, pathname, currentPathWithQuery)));
             return (
@@ -769,8 +738,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
                 item={item}
                 pathname={pathname}
                 currentPathWithQuery={currentPathWithQuery}
-                isCollapsed={isActuallyCollapsed}
-                isOpen={!isActuallyCollapsed && Boolean(openGroups[item.label] ?? isGroupActive)}
+                isCollapsed={isCollapsed}
+                isOpen={!isCollapsed && Boolean(openGroups[item.label] ?? isGroupActive)}
                 onToggle={() => handleToggleGroup(item.label, isGroupActive)}
                 onClose={onClose}
                 counts={counts}
@@ -779,7 +748,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           })}
         </nav>
 
-        <div className={cn("border-t border-white/10 bg-black/20", isActuallyCollapsed ? "p-2" : "p-3")}>
+        <div className={cn("border-t border-white/10 bg-black/20", isCollapsed ? "p-2" : "p-3")}>
           <Link
             href={pathname === '/profile' ? '/dashboard' : '/profile'}
             scroll={false}
@@ -788,14 +757,14 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             onFocus={() => preloadRoute('/profile')}
             className={cn(
               "flex items-center gap-3 px-2 mb-3 py-1.5 rounded-md hover:bg-white/10 transition-all duration-200",
-              isActuallyCollapsed && "lg:justify-center lg:px-0",
+              isCollapsed && "lg:justify-center lg:px-0",
               pathname === '/profile' && "bg-white/10 ring-1 ring-[#c8a45c]/40"
             )}
           >
             <div className="w-8 h-8 rounded-full bg-[#c8a45c] flex items-center justify-center text-xs font-bold text-[#07172e] shadow-inner">
               {user.name.charAt(0)}
             </div>
-            <div className={cn("flex flex-col min-w-0", isActuallyCollapsed && "lg:hidden")}>
+            <div className={cn("flex flex-col min-w-0", isCollapsed && "lg:hidden")}>
               <span className="text-sm font-medium truncate text-white">{user.name}</span>
               <span className="text-[10px] text-white/60 uppercase tracking-wide font-bold">{accountLabel} Account</span>
             </div>
@@ -805,10 +774,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             size="sm"
             onClick={handleLogout}
             title="Logout"
-            className={cn("w-full bg-transparent border-white/20 text-white hover:bg-white hover:text-[#0b2447] py-2", isActuallyCollapsed && "lg:px-0")}
+            className={cn("w-full bg-transparent border-white/20 text-white hover:bg-white hover:text-[#0b2447] py-2", isCollapsed && "lg:px-0")}
           >
-            <LogOut className={cn("h-4 w-4", !isActuallyCollapsed && "mr-2")} />
-            <span className={cn(isActuallyCollapsed && "lg:hidden")}>Logout</span>
+            <LogOut className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+            <span className={cn(isCollapsed && "lg:hidden")}>Logout</span>
           </Button>
         </div>
       </aside>
