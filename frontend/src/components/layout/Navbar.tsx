@@ -387,8 +387,15 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     return query ? `${pathname}?${query}` : pathname;
   }, [pathname, searchParams]);
   const [openGroups, setOpenGroups] = useState<SidebarGroupState>({});
+  const [isHovered, setIsHovered] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    onHoverChange?.(isHovered);
+  }, [isHovered, onHoverChange]);
+
+  const effectivelyCollapsed = isCollapsed && !isHovered;
 
   const { data: countsData } = useQuery({
     queryKey: ['navigation-counts'],
@@ -697,23 +704,25 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       <aside
         ref={sidebarRef}
         aria-label="Main Navigation"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         className={cn(
           "gov-sidebar-surface text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-[width,transform] duration-300 ease-in-out lg:translate-x-0 border-r border-white/5 shadow-xl shadow-slate-900/10",
-          isCollapsed ? "w-64 lg:w-20" : "w-64",
+          effectivelyCollapsed ? "w-64 lg:w-20" : "w-64",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}>
         {/* Tricolor strip — official portal cue */}
         <div className="brand-tricolor-strip" />
-        <div className={cn("h-14 px-3 border-b border-white/10 flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
+        <div className={cn("h-14 px-3 border-b border-white/10 flex items-center", effectivelyCollapsed ? "justify-center" : "justify-between")}>
           <div
-            className={cn("flex items-center gap-3 min-w-0 select-none", isCollapsed && "lg:justify-center")}
+            className={cn("flex items-center gap-3 min-w-0 select-none", effectivelyCollapsed && "lg:justify-center")}
             title="MSME Portal"
           >
             <div className="w-11 h-11 bg-white rounded-md flex items-center justify-center overflow-hidden shadow-sm border border-white/20 shrink-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logoo.png" alt="SMiLE MSME Logo" className="h-full w-full object-contain" />
             </div>
-            <div className={cn("flex flex-col leading-tight min-w-0", isCollapsed && "lg:hidden")}>
+            <div className={cn("flex flex-col leading-tight min-w-0", effectivelyCollapsed && "lg:hidden")}>
               <span className="font-bold tracking-tight text-base truncate text-white">MSME Portal</span>
               <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#c8a45c] truncate">Govt. of India</span>
             </div>
@@ -727,9 +736,9 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         <nav
           ref={navRef}
           onScroll={handleScroll}
-          className={cn("sidebar-scroll-dark flex-1 overflow-y-auto", isCollapsed ? "p-2 space-y-1" : "p-3 space-y-1")}
+          className={cn("sidebar-scroll-dark flex-1 overflow-y-auto", effectivelyCollapsed ? "p-2 space-y-1" : "p-3 space-y-1")}
         >
-          <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", isCollapsed && "lg:hidden")}>Navigation</div>
+          <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", effectivelyCollapsed && "lg:hidden")}>Navigation</div>
           {filteredNav.map((item) => {
             const isGroupActive = Boolean(item.children?.some(child => isSidebarRouteActive(child.path, pathname, currentPathWithQuery)));
             return (
@@ -738,8 +747,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
                 item={item}
                 pathname={pathname}
                 currentPathWithQuery={currentPathWithQuery}
-                isCollapsed={isCollapsed}
-                isOpen={!isCollapsed && Boolean(openGroups[item.label] ?? isGroupActive)}
+                isCollapsed={effectivelyCollapsed}
+                isOpen={!effectivelyCollapsed && Boolean(openGroups[item.label] ?? isGroupActive)}
                 onToggle={() => handleToggleGroup(item.label, isGroupActive)}
                 onClose={onClose}
                 counts={counts}
@@ -748,7 +757,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           })}
         </nav>
 
-        <div className={cn("border-t border-white/10 bg-black/20", isCollapsed ? "p-2" : "p-3")}>
+        <div className={cn("border-t border-white/10 bg-black/20", effectivelyCollapsed ? "p-2" : "p-3")}>
           <Link
             href={pathname === '/profile' ? '/dashboard' : '/profile'}
             scroll={false}
@@ -757,14 +766,14 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             onFocus={() => preloadRoute('/profile')}
             className={cn(
               "flex items-center gap-3 px-2 mb-3 py-1.5 rounded-md hover:bg-white/10 transition-all duration-200",
-              isCollapsed && "lg:justify-center lg:px-0",
+              effectivelyCollapsed && "lg:justify-center lg:px-0",
               pathname === '/profile' && "bg-white/10 ring-1 ring-[#c8a45c]/40"
             )}
           >
             <div className="w-8 h-8 rounded-full bg-[#c8a45c] flex items-center justify-center text-xs font-bold text-[#07172e] shadow-inner">
               {user.name.charAt(0)}
             </div>
-            <div className={cn("flex flex-col min-w-0", isCollapsed && "lg:hidden")}>
+            <div className={cn("flex flex-col min-w-0", effectivelyCollapsed && "lg:hidden")}>
               <span className="text-sm font-medium truncate text-white">{user.name}</span>
               <span className="text-[10px] text-white/60 uppercase tracking-wide font-bold">{accountLabel} Account</span>
             </div>
@@ -774,10 +783,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             size="sm"
             onClick={handleLogout}
             title="Logout"
-            className={cn("w-full bg-transparent border-white/20 text-white hover:bg-white hover:text-[#0b2447] py-2", isCollapsed && "lg:px-0")}
+            className={cn("w-full bg-transparent border-white/20 text-white hover:bg-white hover:text-[#0b2447] py-2", effectivelyCollapsed && "lg:px-0")}
           >
-            <LogOut className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-            <span className={cn(isCollapsed && "lg:hidden")}>Logout</span>
+            <LogOut className={cn("h-4 w-4", !effectivelyCollapsed && "mr-2")} />
+            <span className={cn(effectivelyCollapsed && "lg:hidden")}>Logout</span>
           </Button>
         </div>
       </aside>
