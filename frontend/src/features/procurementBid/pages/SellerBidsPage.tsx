@@ -17,8 +17,15 @@ import {
   Filter,
   IndianRupee,
   AlertTriangle,
+  AlertCircle,
   XCircle,
-  FileEdit
+  FileEdit,
+  TrendingUp,
+  Target,
+  Award,
+  Scale,
+  Receipt,
+  ClipboardList
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -95,6 +102,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
   const [convertingInvoiceId, setConvertingInvoiceId] = useState<string | null>(null);
 
   // Filters
+  const [kpiFilter, setKpiFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState('newest');
@@ -184,25 +192,21 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     switch (subRouteType) {
       case 'submitted':
         return {
-          eyebrow: 'Bids Participation',
           title: 'My Submitted Bids',
           desc: 'Monitor status, clarifications, and evaluation stages of all bids you have submitted.'
         };
       case 'draft':
         return {
-          eyebrow: 'In-Progress Bids',
           title: 'Draft Bids',
           desc: 'Resume and complete your unfinished bid participations before the closing dates.'
         };
       case 'awarded':
         return {
-          eyebrow: 'Contracts & Awards',
           title: 'Awarded Contracts',
           desc: 'Review procurement opportunities and tenders awarded to your organization.'
         };
       default:
         return {
-          eyebrow: 'My Workspace',
           title: 'All Bid Participations',
           desc: 'Overview of all your drafted, submitted, and awarded bid activities.'
         };
@@ -216,9 +220,14 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     const drafts = all.filter(isDraft);
     const awarded = all.filter(isAwarded);
 
-    const underTech = submitted.filter(p => p.bid?.lifecycleStage === 'TECHNICAL_EVALUATION').length;
-    const underFin = submitted.filter(p => p.bid?.lifecycleStage === 'FINANCIAL_EVALUATION').length;
+    const activeSubmitted = submitted.filter(p => !isAwarded(p));
+    const activeQuotedValue = activeSubmitted.reduce((sum, p) => sum + (Number(p.quotedAmount) || Number(p.bid?.estimatedValue) || 0), 0);
+    const totalPipelineValue = all.reduce((sum, p) => sum + (Number(p.quotedAmount) || Number(p.bid?.estimatedValue) || 0), 0);
+
+    const underTech = submitted.filter(p => p.bid?.lifecycleStage === 'TECHNICAL_EVALUATION' || p.bid?.status === 'TECHNICAL_EVALUATION').length;
+    const underFin = submitted.filter(p => p.bid?.lifecycleStage === 'FINANCIAL_EVALUATION' || p.bid?.status === 'FINANCIAL_EVALUATION').length;
     const totalAwardedValue = awarded.reduce((sum, p) => sum + (Number(p.quotedAmount) || Number(p.bid?.estimatedValue) || 0), 0);
+    const draftsTotalValue = drafts.reduce((sum, p) => sum + (Number(p.bid?.estimatedValue) || 0), 0);
 
     const draftsDueSoon = drafts.filter(p => {
       if (!p.bid?.endDate) return false;
@@ -226,15 +235,50 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       return diff >= 0 && diff <= 7;
     }).length;
 
+    const draftsReady = drafts.filter(p => {
+      const s = statusOf(p);
+      return s === 'TECHNICAL_DOCUMENTS_UPLOADED' || s === 'FINANCIAL_QUOTE_UPLOADED';
+    }).length;
+
+    const earlyDrafts = drafts.filter(p => {
+      const s = statusOf(p);
+      return s !== 'TECHNICAL_DOCUMENTS_UPLOADED' && s !== 'FINANCIAL_QUOTE_UPLOADED';
+    }).length;
+
+    const pendingInvoiceCount = awarded.filter(p => !p.invoiceId && !p.hasInvoice).length;
+    const invoicedCount = awarded.filter(p => Boolean(p.invoiceId || p.hasInvoice)).length;
+
+    // Win rate calculations based on decided bids
+    const decidedBids = all.filter(p =>
+      isAwarded(p) ||
+      ['REJECTED', 'DISQUALIFIED', 'LOST', 'WITHDRAWN', 'CLOSED'].includes(statusOf(p)) ||
+      p.bid?.status === 'AWARDED' ||
+      p.bid?.status === 'CLOSED'
+    );
+    const decidedCount = decidedBids.length;
+    const winRate = decidedCount > 0
+      ? `${((awarded.length / decidedCount) * 100).toFixed(1)}%`
+      : (awarded.length > 0 ? '100%' : '0.0%');
+
     return {
       totalAll: all.length,
       totalSubmitted: submitted.length,
+      activeSubmittedCount: activeSubmitted.length,
+      activeQuotedValue,
+      totalPipelineValue,
       totalDrafts: drafts.length,
       totalAwarded: awarded.length,
       underTech,
       underFin,
       totalAwardedValue,
-      draftsDueSoon
+      draftsTotalValue,
+      draftsDueSoon,
+      draftsReady,
+      earlyDrafts,
+      pendingInvoiceCount,
+      invoicedCount,
+      winRate,
+      decidedCount
     };
   }, [participations]);
 
@@ -249,6 +293,50 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       list = list.filter(isDraft);
     } else if (subRouteType === 'awarded') {
       list = list.filter(isAwarded);
+    }
+
+    // Apply KPI filter
+    if (kpiFilter !== 'all') {
+      if (kpiFilter === 'submitted') {
+        list = list.filter(isSubmitted);
+      } else if (kpiFilter === 'active_pipeline') {
+        list = list.filter(p => isSubmitted(p) && !isAwarded(p));
+      } else if (kpiFilter === 'technical_financial') {
+        list = list.filter(p =>
+          p.bid?.lifecycleStage === 'TECHNICAL_EVALUATION' ||
+          p.bid?.lifecycleStage === 'FINANCIAL_EVALUATION' ||
+          p.bid?.status === 'TECHNICAL_EVALUATION' ||
+          p.bid?.status === 'FINANCIAL_EVALUATION'
+        );
+      } else if (kpiFilter === 'technical') {
+        list = list.filter(p => p.bid?.lifecycleStage === 'TECHNICAL_EVALUATION' || p.bid?.status === 'TECHNICAL_EVALUATION');
+      } else if (kpiFilter === 'financial') {
+        list = list.filter(p => p.bid?.lifecycleStage === 'FINANCIAL_EVALUATION' || p.bid?.status === 'FINANCIAL_EVALUATION');
+      } else if (kpiFilter === 'awarded') {
+        list = list.filter(isAwarded);
+      } else if (kpiFilter === 'draft') {
+        list = list.filter(isDraft);
+      } else if (kpiFilter === 'dueSoon') {
+        list = list.filter(p => {
+          if (!p.bid?.endDate) return false;
+          const diff = (new Date(p.bid.endDate).getTime() - Date.now()) / 86400000;
+          return diff >= 0 && diff <= 7;
+        });
+      } else if (kpiFilter === 'ready') {
+        list = list.filter(p => {
+          const s = statusOf(p);
+          return s === 'TECHNICAL_DOCUMENTS_UPLOADED' || s === 'FINANCIAL_QUOTE_UPLOADED';
+        });
+      } else if (kpiFilter === 'early') {
+        list = list.filter(p => {
+          const s = statusOf(p);
+          return isDraft(p) && s !== 'TECHNICAL_DOCUMENTS_UPLOADED' && s !== 'FINANCIAL_QUOTE_UPLOADED';
+        });
+      } else if (kpiFilter === 'pendingInvoice') {
+        list = list.filter(p => isAwarded(p) && !p.invoiceId && !p.hasInvoice);
+      } else if (kpiFilter === 'invoiced') {
+        list = list.filter(p => isAwarded(p) && Boolean(p.invoiceId || p.hasInvoice));
+      }
     }
 
     // Filter by search query
@@ -298,7 +386,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     });
 
     return list;
-  }, [participations, subRouteType, debouncedSearch, sortBy]);
+  }, [participations, subRouteType, kpiFilter, debouncedSearch, sortBy]);
 
   const { page, pageSize, pageItems: pagedItems, total, setPage, setPageSize } = usePagination(filteredItems, 10);
 
@@ -407,8 +495,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       {/* Transparent Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
-          <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">{headerContent.eyebrow}</span>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">{headerContent.title}</h1>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">{headerContent.title}</h1>
           <p className="text-xs font-semibold text-slate-500 mt-1">{headerContent.desc}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -421,37 +508,211 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       {/* Dynamic KPI Metrics based on tab */}
       {subRouteType === 'submitted' && (
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard label="Submitted Bids" value={kpiData.totalSubmitted} subtext="Responses delivered" icon={CheckCircle2} active={true} tone="green" />
-          <KpiCard label="Under Technical Eval" value={kpiData.underTech} subtext="Technical audit stage" icon={Clock} active={false} tone="purple" />
-          <KpiCard label="Under Financial Eval" value={kpiData.underFin} subtext="Commercial comparison" icon={Gavel} active={false} tone="amber" />
-          <KpiCard label="Awarded Bids" value={kpiData.totalAwarded} subtext="Contracts secured" icon={Trophy} active={false} tone="indigo" />
+          <KpiCard
+            label="Active Quoted Pipeline"
+            value={formatCurrency(kpiData.activeQuotedValue)}
+            subtext={`${kpiData.activeSubmittedCount} bids currently under review`}
+            icon={IndianRupee}
+            active={kpiFilter === 'active_pipeline'}
+            tone="blue"
+            onClick={() => { setKpiFilter(kpiFilter === 'active_pipeline' ? 'all' : 'active_pipeline'); setPage(1); }}
+          />
+          <KpiCard
+            label="Bid Win Rate"
+            value={kpiData.winRate}
+            subtext={`${kpiData.totalAwarded} won of ${kpiData.decidedCount || kpiData.totalSubmitted} evaluated`}
+            icon={Trophy}
+            active={kpiFilter === 'awarded'}
+            tone="green"
+            onClick={() => { setKpiFilter(kpiFilter === 'awarded' ? 'all' : 'awarded'); setPage(1); }}
+          />
+          <KpiCard
+            label="Under Evaluation"
+            value={kpiData.underTech + kpiData.underFin}
+            subtext={`${kpiData.underTech} Technical • ${kpiData.underFin} Financial`}
+            icon={Scale}
+            active={kpiFilter === 'technical_financial'}
+            tone="purple"
+            onClick={() => { setKpiFilter(kpiFilter === 'technical_financial' ? 'all' : 'technical_financial'); setPage(1); }}
+          />
+          <KpiCard
+            label="Submitted Bids"
+            value={kpiData.totalSubmitted}
+            subtext="Responses delivered to buyers"
+            icon={FileText}
+            active={kpiFilter === 'submitted'}
+            tone="indigo"
+            onClick={() => { setKpiFilter(kpiFilter === 'submitted' ? 'all' : 'submitted'); setPage(1); }}
+          />
         </div>
       )}
 
       {subRouteType === 'draft' && (
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <KpiCard label="Total Draft Bids" value={kpiData.totalDrafts} subtext="Unsubmitted responses" icon={FileEdit} active={true} tone="amber" />
-          <KpiCard label="Closing in 7 Days" value={kpiData.draftsDueSoon} subtext="Expiring soon" icon={Clock} active={false} tone="red" />
-          <KpiCard label="All Drafts Value" value={formatCurrency(filteredItems.reduce((s, p) => s + (p.bid?.estimatedValue || 0), 0))} subtext="Potential pipeline" icon={IndianRupee} active={false} tone="blue" />
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            label="Draft Pipeline Exposure"
+            value={formatCurrency(kpiData.draftsTotalValue)}
+            subtext={`Across ${kpiData.totalDrafts} in-progress opportunities`}
+            icon={IndianRupee}
+            active={kpiFilter === 'draft'}
+            tone="blue"
+            onClick={() => { setKpiFilter(kpiFilter === 'draft' ? 'all' : 'draft'); setPage(1); }}
+          />
+          <KpiCard
+            label="Closing in ≤7 Days"
+            value={kpiData.draftsDueSoon}
+            subtext="Imminent submission deadline"
+            icon={Clock}
+            active={kpiFilter === 'dueSoon'}
+            tone="red"
+            onClick={() => { setKpiFilter(kpiFilter === 'dueSoon' ? 'all' : 'dueSoon'); setPage(1); }}
+          />
+          <KpiCard
+            label="Docs / Quote Staged"
+            value={kpiData.draftsReady}
+            subtext="Tech & commercial docs uploaded"
+            icon={CheckCircle2}
+            active={kpiFilter === 'ready'}
+            tone="green"
+            onClick={() => { setKpiFilter(kpiFilter === 'ready' ? 'all' : 'ready'); setPage(1); }}
+          />
+          <KpiCard
+            label="Early Setup Stage"
+            value={kpiData.earlyDrafts}
+            subtext="Forms awaiting initial uploads"
+            icon={FileEdit}
+            active={kpiFilter === 'early'}
+            tone="amber"
+            onClick={() => { setKpiFilter(kpiFilter === 'early' ? 'all' : 'early'); setPage(1); }}
+          />
         </div>
       )}
 
       {subRouteType === 'awarded' && (
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <KpiCard label="Awarded Contracts" value={kpiData.totalAwarded} subtext="Finalized agreements" icon={Trophy} active={true} tone="indigo" />
-          <KpiCard label="Total Awarded Value" value={formatCurrency(kpiData.totalAwardedValue)} subtext="Cumulative win value" icon={IndianRupee} active={false} tone="green" />
-          <KpiCard label="Active Bid Value" value={formatCurrency(filteredItems.reduce((s, p) => s + (p.quotedAmount || 0), 0))} subtext="In-progress awards" icon={CheckCircle2} active={false} tone="blue" />
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            label="Total Won Order Book"
+            value={formatCurrency(kpiData.totalAwardedValue)}
+            subtext="Cumulative volume won"
+            icon={IndianRupee}
+            active={kpiFilter === 'all'}
+            tone="green"
+            onClick={() => { setKpiFilter('all'); setPage(1); }}
+          />
+          <KpiCard
+            label="Awarded Contracts"
+            value={kpiData.totalAwarded}
+            subtext="Finalized binding agreements"
+            icon={Trophy}
+            active={kpiFilter === 'awarded'}
+            tone="indigo"
+            onClick={() => { setKpiFilter(kpiFilter === 'awarded' ? 'all' : 'awarded'); setPage(1); }}
+          />
+          <KpiCard
+            label="Pending Invoicing"
+            value={kpiData.pendingInvoiceCount}
+            subtext="Ready for invoice generation"
+            icon={Receipt}
+            active={kpiFilter === 'pendingInvoice'}
+            tone="amber"
+            onClick={() => { setKpiFilter(kpiFilter === 'pendingInvoice' ? 'all' : 'pendingInvoice'); setPage(1); }}
+          />
+          <KpiCard
+            label="Billing Initiated"
+            value={kpiData.invoicedCount}
+            subtext="Invoices submitted for payment"
+            icon={CheckCircle2}
+            active={kpiFilter === 'invoiced'}
+            tone="blue"
+            onClick={() => { setKpiFilter(kpiFilter === 'invoiced' ? 'all' : 'invoiced'); setPage(1); }}
+          />
         </div>
       )}
 
       {subRouteType === 'all' && (
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard label="All Bids" value={kpiData.totalAll} subtext="Total participations" icon={FileText} active={true} tone="blue" />
-          <KpiCard label="Submitted" value={kpiData.totalSubmitted} subtext="Active in evaluation" icon={CheckCircle2} active={false} tone="green" />
-          <KpiCard label="Drafts" value={kpiData.totalDrafts} subtext="In-progress forms" icon={FileEdit} active={false} tone="amber" />
-          <KpiCard label="Awarded" value={kpiData.totalAwarded} subtext="Won contracts" icon={Trophy} active={false} tone="indigo" />
+          <KpiCard
+            label="Total Quoted Exposure"
+            value={formatCurrency(kpiData.totalPipelineValue)}
+            subtext="Active + secured contract pipeline"
+            icon={IndianRupee}
+            active={kpiFilter === 'all'}
+            tone="blue"
+            onClick={() => { setKpiFilter('all'); setPage(1); }}
+          />
+          <KpiCard
+            label="Bid Win Rate"
+            value={kpiData.winRate}
+            subtext={`${kpiData.totalAwarded} won of ${kpiData.decidedCount || kpiData.totalAll} evaluated`}
+            icon={Trophy}
+            active={kpiFilter === 'awarded'}
+            tone="green"
+            onClick={() => { setKpiFilter(kpiFilter === 'awarded' ? 'all' : 'awarded'); setPage(1); }}
+          />
+          <KpiCard
+            label="In Active Evaluation"
+            value={kpiData.underTech + kpiData.underFin}
+            subtext={`${kpiData.underTech} Technical • ${kpiData.underFin} Financial`}
+            icon={Scale}
+            active={kpiFilter === 'technical_financial'}
+            tone="purple"
+            onClick={() => { setKpiFilter(kpiFilter === 'technical_financial' ? 'all' : 'technical_financial'); setPage(1); }}
+          />
+          <KpiCard
+            label="Urgent Drafts (≤7d)"
+            value={kpiData.draftsDueSoon}
+            subtext={`${kpiData.totalDrafts} total in-progress forms`}
+            icon={Clock}
+            active={kpiFilter === 'dueSoon'}
+            tone="amber"
+            onClick={() => { setKpiFilter(kpiFilter === 'dueSoon' ? 'all' : 'dueSoon'); setPage(1); }}
+          />
         </div>
       )}
+
+      {/* ── Bid Category Navigation Pills ── */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mt-1 scrollbar-none" role="tablist" aria-label="Bid Categories">
+        {[
+          { label: 'All Bids', key: 'all', href: '/seller/bids', count: kpiData.totalAll, icon: ClipboardList },
+          { label: 'Submitted Bids', key: 'submitted', href: '/seller/bids/submitted', count: kpiData.totalSubmitted, icon: CheckCircle2 },
+          { label: 'Draft Bids', key: 'draft', href: '/seller/bids/draft', count: kpiData.totalDrafts, icon: FileEdit },
+          { label: 'Awarded Contracts', key: 'awarded', href: '/seller/bids/awarded', count: kpiData.totalAwarded, icon: Trophy },
+        ].map(tab => {
+          const isActive = subRouteType === tab.key;
+          const Icon = tab.icon;
+
+          return (
+            <button
+              key={tab.label}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => {
+                router.push(tab.href);
+              }}
+              className={cn(
+                "inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap border cursor-pointer",
+                isActive
+                  ? "bg-[#12335f] text-white border-[#12335f] shadow-sm shadow-[#12335f]/20 ring-2 ring-[#12335f]/15"
+                  : "bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50 hover:border-slate-300 shadow-2xs"
+              )}
+            >
+              <Icon className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-[#c8a45c]" : "text-slate-400")} />
+              <span>{tab.label}</span>
+              <span
+                className={cn(
+                  "px-1.5 py-0.5 rounded-full text-[10px] font-black min-w-[18px] text-center transition-colors",
+                  isActive
+                    ? "bg-white/20 text-white"
+                    : tab.count > 0 ? "bg-slate-100 text-slate-700" : "bg-slate-50 text-slate-400"
+                )}
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
       {error && (
         <div className="flex items-center gap-2.5 sm:gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700">
@@ -464,33 +725,52 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       {/* ── Search + Filter + View Toggle Toolbar ── */}
       <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
         <ResponsiveFilterBar
-          activeFilterCount={sortBy !== 'newest' ? 1 : 0}
+          activeFilterCount={(sortBy !== 'newest' ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0) + (searchTerm ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
                 placeholder="Search by title, buyer, bid number..."
                 className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
             </div>
           }
           filters={
-            <div className="w-full sm:w-auto sm:min-w-[150px]">
-              <select
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-              >
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="value_high">Value: High to Low</option>
-                <option value="value_low">Value: Low to High</option>
-                <option value="title_asc">Title A-Z</option>
-              </select>
-            </div>
+            <>
+              <div className="w-full sm:w-auto sm:min-w-[150px]">
+                <select
+                  value={sortBy}
+                  onChange={e => { setSortBy(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                >
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="value_high">Value: High to Low</option>
+                  <option value="value_low">Value: Low to High</option>
+                  <option value="title_asc">Title A-Z</option>
+                </select>
+              </div>
+
+              {(searchTerm || sortBy !== 'newest' || kpiFilter !== 'all') && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSortBy('newest');
+                    setKpiFilter('all');
+                    setPage(1);
+                  }}
+                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px] cursor-pointer"
+                  aria-label="Reset all filters"
+                >
+                  Reset
+                </Button>
+              )}
+            </>
           }
           endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
         />

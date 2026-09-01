@@ -211,15 +211,6 @@ function KpiCardBase({
     return null;
   };
 
-  // Extract plain string for tooltips (handles ReactNode values gracefully)
-  const labelTooltip = label;
-  const valueTooltip: string | undefined = React.useMemo(() => {
-    if (typeof formattedValue === 'string') return formattedValue;
-    if (typeof formattedValue === 'number') return String(formattedValue);
-    // For ReactNode values (e.g. Submission Deadline with countdown), use title attr fallback
-    return undefined;
-  }, [formattedValue]);
-
   return (
     <Element
       type={interactive ? 'button' : undefined}
@@ -227,7 +218,7 @@ function KpiCardBase({
       aria-pressed={interactive ? Boolean(isCardActive) : undefined}
       aria-label={interactive ? ariaLabel || `Filter by ${label}` : undefined}
       className={cn(
-        'group relative w-full text-left rounded-xl border bg-gradient-to-br px-2.5 py-2 sm:px-3 sm:py-2.5 shadow-2xs backdrop-blur-sm transition-all duration-300 hover:z-[100]',
+        'group relative w-full text-left rounded-xl border bg-gradient-to-br px-2.5 py-2 sm:px-3 sm:py-2.5 shadow-2xs backdrop-blur-sm transition-all duration-300',
         interactive && 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#12335f]/30',
         isCardActive
           ? 'border-[#12335f] shadow-md ring-2 ring-[#12335f]/20 bg-white'
@@ -241,19 +232,9 @@ function KpiCardBase({
         <div className="min-w-0 flex-1">
           {/* Label row */}
           <div className="flex items-center gap-1">
-            {/* Label with CSS tooltip */}
-            <div className="group/kpi-label relative min-w-0 flex-1">
-              <p className="text-[8.5px] sm:text-[9.5px] font-bold uppercase tracking-wide text-slate-500 leading-tight truncate">
-                {label}
-              </p>
-              {/* Tooltip — only visible on hover, positioned below */}
-              <span
-                className="pointer-events-none absolute top-full left-0 z-50 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/kpi-label:opacity-100"
-                aria-hidden="true"
-              >
-                {labelTooltip}
-              </span>
-            </div>
+            <p className="text-[8.5px] sm:text-[9.5px] font-bold uppercase tracking-wide text-slate-500 leading-tight truncate">
+              {label}
+            </p>
             {badge && (
               <span className={cn('shrink-0 text-[7.5px] sm:text-[8px] font-black uppercase px-1 sm:px-1.5 py-0.5 rounded', badgeColor || 'bg-blue-100 text-blue-800')}>
                 {badge}
@@ -261,8 +242,8 @@ function KpiCardBase({
             )}
           </div>
 
-          {/* Value with CSS tooltip */}
-          <div className="group/kpi-value relative mt-0.5">
+          {/* Value */}
+          <div className="mt-0.5">
             <div
               className={cn(
                 'truncate text-xs sm:text-sm lg:text-base font-extrabold tracking-tight leading-snug',
@@ -271,15 +252,6 @@ function KpiCardBase({
             >
               {formattedValue}
             </div>
-            {/* Tooltip for value */}
-            {valueTooltip && (
-              <span
-                className="pointer-events-none absolute top-full left-0 z-50 mt-1 max-w-[240px] whitespace-normal rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/kpi-value:opacity-100"
-                aria-hidden="true"
-              >
-                {valueTooltip}
-              </span>
-            )}
           </div>
         </div>
 
@@ -297,18 +269,10 @@ function KpiCardBase({
 
       <div className="mt-1.5 flex items-center gap-1 border-t border-slate-200/60 pt-1">
         <span className="h-1 w-1 shrink-0 rounded-full bg-slate-400 animate-pulse" />
-        <div className="group/kpi-sub relative min-w-0 flex-1">
+        <div className="min-w-0 flex-1">
           <div className="text-[9px] sm:text-[10px] font-medium text-slate-500 truncate">
             {displaySubtext}
           </div>
-          {typeof displaySubtext === 'string' && (
-            <span
-              className="pointer-events-none absolute bottom-full left-0 z-50 mb-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/kpi-sub:opacity-100"
-              aria-hidden="true"
-            >
-              {displaySubtext}
-            </span>
-          )}
         </div>
       </div>
     </Element>

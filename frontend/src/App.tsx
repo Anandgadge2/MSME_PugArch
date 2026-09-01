@@ -796,6 +796,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if ((pathname === '/seller/settings' || pathname === '/shg/settings') && roleOk(user.role, ['seller', 'shg'])) return <SellerSettings />;
 
     // Seller & SHG Bids (explicit route-to-prop mapping)
+    if ((pathname === '/seller/bids' || pathname === '/shg/bids') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="all" /></PermissionRouteGuard>;
     if ((pathname === '/seller/bids/submitted' || pathname === '/shg/bids/submitted') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="submitted" /></PermissionRouteGuard>;
     if ((pathname === '/seller/bids/draft' || pathname === '/shg/bids/draft') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="draft" /></PermissionRouteGuard>;
     if ((pathname === '/seller/bids/awarded' || pathname === '/shg/bids/awarded') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="awarded" /></PermissionRouteGuard>;
@@ -842,7 +843,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     
     if (pathname === '/buyer/orders' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
     if (pathname === '/buyer/repeat-orders' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="purchase_order.view"><RepeatOrders /></PermissionRouteGuard>;
-    if (pathname === '/buyer/inspection' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="inspection.approve"><GenericFeaturePage title="Inspection" eyebrow="Quality Control" description="Inspection reports connected to purchase orders." endpoint="/api/purchase-orders" /></PermissionRouteGuard>;
+    if (pathname === '/buyer/inspection' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="inspection.approve"><GenericFeaturePage title="Inspection" description="Inspection reports connected to purchase orders." endpoint="/api/purchase-orders" /></PermissionRouteGuard>;
     if (pathname === '/buyer/invoices' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="invoice.view"><InvoiceRegisterPage role="buyer" /></PermissionRouteGuard>;
     if (pathname === '/buyer/payments' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="payment.view"><PaymentHistoryPage /></PermissionRouteGuard>;
     if (pathname === '/buyer/escrow' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="escrow.view"><EscrowPage /></PermissionRouteGuard>;
@@ -885,10 +886,10 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/admin/categories' && roleOk(user.role, ['admin'])) return <AdminCategoriesPage />;
     if (pathname === '/admin/fraud-alerts' && roleOk(user.role, ['admin'])) return <FraudAlertsPage />;
     if (pathname === '/admin/disputes' && roleOk(user.role, ['admin'])) return <DisputesPage />;
-    if (pathname === '/admin/grievances' && roleOk(user.role, ['admin'])) return <GenericFeaturePage title="Grievances" eyebrow="Admin" description="Grievance records and statuses." endpoint="/api/grievances" />;
+    if (pathname === '/admin/grievances' && roleOk(user.role, ['admin'])) return <GenericFeaturePage title="Grievances" description="Grievance records and statuses." endpoint="/api/grievances" />;
     if (pathname === '/admin/payments' && roleOk(user.role, ['admin'])) return <PaymentHistoryPage admin />;
     if (pathname === '/admin/compliance-rules' && roleOk(user.role, ['admin'])) return <ComplianceRulesPage />;
-    if (pathname === '/admin/security-monitoring' && roleOk(user.role, ['admin'])) return <GenericFeaturePage title="Security Monitoring" eyebrow="Security" description="Audit and fraud signals for platform operations." endpoint="/api/admin/fraud-alerts" />;
+    if (pathname === '/admin/security-monitoring' && roleOk(user.role, ['admin'])) return <GenericFeaturePage title="Security Monitoring" description="Audit and fraud signals for platform operations." endpoint="/api/admin/fraud-alerts" />;
     if (['/admin/governance', '/admin/procurement', '/admin/compliance'].includes(pathname) && roleOk(user.role, ['admin'])) return <Redirect to="/admin/onboarding" />;
     if (pathname === '/admin/reports' && roleOk(user.role, ['admin'])) return <MISReports />;
     if (pathname === '/admin/banners' && roleOk(user.role, ['admin'])) return <AdminBannerManagementPage />;

@@ -171,7 +171,6 @@ export default function DirectPurchasePage({ listOnly = false }: { listOnly?: bo
             </div>
 
             <PageToolbar
-                eyebrow="Filters"
                 search={q}
                 onSearchChange={setQ}
                 searchPlaceholder="Search by purchase number, seller"

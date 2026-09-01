@@ -166,7 +166,6 @@ export default function FraudAlertsPage() {
             </div>
 
             <PageToolbar
-                eyebrow="Filters"
                 search={q}
                 onSearchChange={value => { setQ(value); setPage(1); }}
                 searchPlaceholder="Search user, organization, entity"

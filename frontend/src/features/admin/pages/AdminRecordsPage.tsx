@@ -25,33 +25,29 @@ type RecordMap = Record<string, any>;
 const config = {
   users: {
     title: 'Users',
-    eyebrow: 'Admin Registry',
     description: 'Account status, registration status, role, onboarding state, sessions, and compliance signals.',
     endpoint: '/api/admin/users',
     icon: Users
   },
   audit: {
     title: 'Audit Logs',
-    eyebrow: 'Administrative Trail',
     description: 'Write actions, actors, affected entities, and immutable event payloads.',
     endpoint: '/api/admin/audit-logs',
     icon: Eye
   },
   fraud: {
     title: 'Fraud Alerts',
-    eyebrow: 'Risk Monitoring',
     description: 'Risk alerts, severity, review state, linked user, and entity references.',
     endpoint: '/api/admin/fraud-alerts',
     icon: AlertTriangle
   },
   rules: {
     title: 'Compliance Rules',
-    eyebrow: 'Policy Controls',
     description: 'Active compliance rules, severity, violation samples, and control coverage.',
     endpoint: '/api/admin/compliance-rules',
     icon: ShieldCheck
   }
-} satisfies Record<AdminKind, { title: string; eyebrow: string; description: string; endpoint: string; icon: any }>;
+} satisfies Record<AdminKind, { title: string; description: string; endpoint: string; icon: any }>;
 
 const readRecords = (data: any): RecordMap[] => Array.isArray(data) ? data : data?.records || data?.data?.records || [];
 const totalOf = (data: any, fallback: number) => Number(data?.total ?? data?.data?.total ?? fallback);
@@ -328,7 +324,6 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          {/* <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{cfg.eyebrow}</p> */}
           <h1 className="text-2xl font-black tracking-tight text-slate-950">{cfg.title}</h1>
           <p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500">{cfg.description}</p>
         </div>

@@ -378,6 +378,7 @@ import { usePermissions } from '../../hooks/useOrgRole';
 
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onHoverChange }: SidebarProps) {
   const { user, logout } = useAuth();
+  const isShgAccount = isShgUser(user);
   const { hasPermission: checkUserPermission } = usePermissions();
   const router = useRouter();
   const pathname = usePathname();
@@ -415,16 +416,23 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount + rateContractsCount;
 
       return {
-        '/seller/opportunities': allCount,
+      
         '/seller/opportunities/rfqs': rfqsCount,
         '/seller/opportunities/rfps': rfpsCount,
         '/seller/opportunities/open-tenders': openTendersCount,
         '/seller/opportunities/invitations': invitationsCount,
         '/seller/opportunities/auctions': auctionsCount,
-        '/seller/opportunities/rate-contracts': rateContractsCount
+        '/seller/opportunities/rate-contracts': rateContractsCount,
+        '/shg/opportunities': allCount,
+        '/shg/opportunities/rfqs': rfqsCount,
+        '/shg/opportunities/rfps': rfpsCount,
+        '/shg/opportunities/open-tenders': openTendersCount,
+        '/shg/opportunities/invitations': invitationsCount,
+        '/shg/opportunities/auctions': auctionsCount,
+        '/shg/opportunities/rate-contracts': rateContractsCount
       };
     },
-    enabled: user?.role === 'seller',
+    enabled: user?.role === 'seller' || user?.role === 'shg' || isShgAccount,
     staleTime: 30000,
     refetchInterval: 15000,
   });
@@ -473,7 +481,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const handleLogout = useCallback(() => {
     logout('/');
   }, [logout]);
-  const isShgAccount = isShgUser(user);
   const accountLabel = isShgAccount ? 'SHG' : user?.role || 'user';
 
   const navItems: SidebarItem[] = useMemo(() => [
@@ -559,20 +566,13 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Disputes', path: '/buyer/disputes', icon: AlertTriangle, roles: ['buyer'], permission: 'dispute.view' },
 
     // Seller Opportunities
-    { label: 'Opportunities', icon: Globe, roles: ['seller'], children: [
-      { label: 'All Opportunities', path: '/seller/opportunities', icon: Globe, roles: ['seller'], permission: 'marketplace.view' },
-      { label: 'RFQs', path: '/seller/opportunities/rfqs', icon: FileText, roles: ['seller'], permission: 'requirement.view' },
-      { label: 'RFPs', path: '/seller/opportunities/rfps', icon: Layers, roles: ['seller'], permission: 'requirement.view' },
-      { label: 'Open Tenders', path: '/seller/opportunities/open-tenders', icon: ClipboardList, roles: ['seller'], permission: 'tender.view' },
-      { label: 'Limited Tenders', path: '/seller/opportunities/invitations', icon: Users, roles: ['seller'], permission: 'tender.view' },
-      { label: 'Reverse Auctions', path: '/seller/opportunities/auctions', icon: Gavel, roles: ['seller'], permission: 'reverse_auction.view' },
-      { label: 'Rate Contracts', path: '/seller/opportunities/rate-contracts', icon: RotateCcw, roles: ['seller'], permission: 'requirement.view' }
-    ] },
+    { label: 'Opportunities', path: '/seller/opportunities', icon: Globe, roles: ['seller', 'shg'], permission: 'marketplace.view' },
     // Seller My Bids
-    { label: 'My Bids', icon: ClipboardList, roles: ['seller'], children: [
-      { label: 'Submitted Bids', path: '/seller/bids/submitted', icon: CheckCircle2, roles: ['seller'], permission: 'bid.submit' },
-      { label: 'Draft Bids', path: '/seller/bids/draft', icon: FileText, roles: ['seller'], permission: 'bid.submit' },
-      { label: 'Awarded Contracts', path: '/seller/bids/awarded', icon: Trophy, roles: ['seller'], permission: 'bid.submit' }
+    { label: 'My Bids', icon: ClipboardList, roles: ['seller', 'shg'], children: [
+      { label: 'All Bids', path: '/seller/bids', icon: ClipboardList, roles: ['seller', 'shg'], permission: 'bid.submit' },
+      { label: 'Submitted Bids', path: '/seller/bids/submitted', icon: CheckCircle2, roles: ['seller', 'shg'], permission: 'bid.submit' },
+      { label: 'Draft Bids', path: '/seller/bids/draft', icon: FileText, roles: ['seller', 'shg'], permission: 'bid.submit' },
+      { label: 'Awarded Contracts', path: '/seller/bids/awarded', icon: Trophy, roles: ['seller', 'shg'], permission: 'bid.submit' }
     ] },
     // Seller Orders
     { label: 'Orders', icon: Truck, roles: ['seller'], children: [
@@ -739,7 +739,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           onScroll={handleScroll}
           className={cn("sidebar-scroll-dark flex-1 overflow-y-auto", effectivelyCollapsed ? "p-2 space-y-1" : "p-3 space-y-1")}
         >
-          <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", effectivelyCollapsed && "lg:hidden")}>Navigation</div>
+          {/* <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", effectivelyCollapsed && "lg:hidden")}>Navigation</div> */}
           {filteredNav.map((item) => {
             const isGroupActive = Boolean(item.children?.some(child => isSidebarRouteActive(child.path, pathname, currentPathWithQuery)));
             return (

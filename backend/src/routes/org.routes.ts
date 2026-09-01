@@ -463,7 +463,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
             if (orgRole === 'ORG_ADMIN') stages.push('PROCUREMENT_HEAD');
 
             const isBuyer = req.user!.role === 'buyer';
-            const isSeller = req.user!.role === 'seller';
+            const isSeller = req.user!.role === 'seller' || req.user!.role === 'shg';
             const buyerRecordWhere = orgId
                 ? { OR: [{ buyerId: userIdNum }, { buyer: { organizationId: orgId } }] }
                 : { buyerId: userIdNum };

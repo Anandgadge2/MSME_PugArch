@@ -240,7 +240,6 @@ export default function ComplianceRulesPage() {
             </div>
 
             <PageToolbar
-                eyebrow="Filters"
                 search={q}
                 onSearchChange={setQ}
                 searchPlaceholder="Search by code, title, description"

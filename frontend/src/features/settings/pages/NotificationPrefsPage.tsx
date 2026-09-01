@@ -201,7 +201,6 @@ export default function NotificationPrefsPage() {
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
                 <div className="space-y-6">
                     <SettingsPanel
-                        eyebrow="Delivery methods"
                         title="Channel routing"
                         description="Choose where the platform sends alerts. Keep at least one channel active for critical workflow visibility."
                         items={filteredDeliveryMethods}
@@ -211,7 +210,6 @@ export default function NotificationPrefsPage() {
                     />
 
                     <SettingsPanel
-                        eyebrow="Event categories"
                         title="Alert subscriptions"
                         description="Select the operational domains that should generate notifications for this account."
                         items={eventCategories}
@@ -291,7 +289,6 @@ export default function NotificationPrefsPage() {
 }
 
 function SettingsPanel({
-    eyebrow,
     title,
     description,
     items,
@@ -299,7 +296,6 @@ function SettingsPanel({
     onChange,
     smsLocked = false,
 }: {
-    eyebrow: string;
     title: string;
     description: string;
     items: PreferenceConfig[];
@@ -312,8 +308,7 @@ function SettingsPanel({
             <CardContent className="p-0">
                 <div className="flex flex-col gap-2 border-b border-slate-100 p-5 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{eyebrow}</p>
-                        <h2 className="mt-1 text-lg font-black text-slate-950">{title}</h2>
+                        <h2 className="text-lg font-black text-slate-950">{title}</h2>
                         <p className="mt-1 max-w-2xl text-xs font-semibold leading-relaxed text-slate-500">{description}</p>
                     </div>
                     <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">

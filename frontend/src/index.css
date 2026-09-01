@@ -490,7 +490,7 @@ textarea::-moz-placeholder {
   }
 }
 
-/* Section header — eyebrow + title + description in a single block. */
+/* Section header — title + description in a single block. */
 .page-header {
   display: flex;
   flex-direction: column;
