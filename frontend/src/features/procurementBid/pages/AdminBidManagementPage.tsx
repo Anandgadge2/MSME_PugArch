@@ -24,7 +24,9 @@ import { useAuth } from '../../../hooks/useAuth';
 import { downloadCsv } from '../../shared/exportUtils';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
-import { usePagination } from '../../shared/hooks';
+import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
+import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { cn } from '../../../lib/utils';
 import { formatRefId } from '../../../utils/refIdUtils';
 import {
   PageShell,
@@ -35,7 +37,8 @@ import {
   ResultsTable,
   StatusBadge,
 } from '../components';
-import { formatDate, money, type ProcurementBid, type ProcurementBidAward, type ProcurementBidParticipation } from '../data';
+import { money, type ProcurementBid, type ProcurementBidAward, type ProcurementBidParticipation } from '../data';
+import { formatDate } from '../../shared/format';
 import { procurementBidApi } from '../api';
 
 type FilterState = {
@@ -111,7 +114,17 @@ const sortedRanking = (participants: ProcurementBidParticipation[]) =>
       return (Number(a.totalAmount) || Number.MAX_SAFE_INTEGER) - (Number(b.totalAmount) || Number.MAX_SAFE_INTEGER);
     });
 
+function GridInfo({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <span className="block text-[9px] font-black uppercase tracking-wider text-slate-500">{label}</span>
+      <span className="mt-0.5 block font-semibold text-slate-700 truncate">{value}</span>
+    </div>
+  );
+}
+
 export default function AdminBidManagementPage() {
+  const [viewMode, setViewMode] = useResponsiveViewMode('admin-bids:view-mode');
   const { user } = useAuth();
   const [bids, setBids] = useState<ProcurementBid[]>([]);
   const [intakeRecords, setIntakeRecords] = useState<ProcurementIntakeRecord[]>([]);
@@ -447,71 +460,132 @@ export default function AdminBidManagementPage() {
             </div>
 
             {intakeRecords.length > 0 && (
-              <section className="mt-5 rounded-lg border border-amber-200 bg-amber-50/40 p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-base font-black text-[#0b2447]">Create Procurement Intake</h2>
-                    <p className="text-xs font-semibold text-slate-600">Buyer procurements submitted from the new method-first wizard before they become published seller-facing bids.</p>
+              <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+                <div className="border-b border-slate-100 p-5">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-base font-black text-[#0b2447]">Create Procurement Intake</h2>
+                      <p className="mt-1 text-xs font-medium text-slate-500">Buyer procurements submitted from the new method-first wizard before they become published seller-facing bids.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex h-6 items-center rounded-full bg-slate-100 px-2.5 text-[10px] font-black tracking-wide text-slate-600">
+                        {intakeRecords.length} intake record(s)
+                      </span>
+                      <ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />
+                    </div>
                   </div>
-                  <span className="inline-flex h-9 items-center justify-center rounded-md border border-amber-200 bg-white px-3 text-xs font-black text-[#0b2447]">
-                    {intakeRecords.length} intake record(s)
-                  </span>
                 </div>
-                <div className="mt-4 overflow-x-auto rounded-md border border-amber-100 bg-white">
-                  <table className="min-w-[1080px] w-full text-left text-xs">
-                    <thead className="bg-amber-50 text-[10px] font-black uppercase tracking-wider text-amber-800">
-                      <tr>
-                        {['Reference', 'Title', 'Method', 'Buyer', 'Status', 'Documents', 'Value', 'Updated', 'Actions'].map(head => <th key={head} className="px-3 py-2">{head}</th>)}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {pagedIntakeRecords.map(record => {
-                        const docs = record.payload?.documents?.filter(document => document.fileName || document.fileAssetId || document.documentUrl) || [];
-                        const isUpdating = updatingIntakeId === record.id;
-                        const canAct = !['APPROVED', 'REJECTED', 'PUBLISHED', 'OPEN'].includes(String(record.status || '').toUpperCase());
-                        return (
-                          <tr key={record.id} className="align-top">
-                            <td className="px-3 py-2 font-black text-[#0b2447]">{formatRefId('REQ', record.id, record.requirementNumber)}</td>
-                            <td className="px-3 py-2 font-bold text-slate-900">{record.title}</td>
-                            <td className="px-3 py-2 font-semibold text-slate-600">{readable(record.methodSlug || record.procurementMethod)}</td>
-                            <td className="px-3 py-2 font-semibold text-slate-600">{record.organization?.organizationName || record.buyer?.organization?.organizationName || record.buyer?.name || 'Buyer'}</td>
-                            <td className="px-3 py-2"><StatusBadge label={readable(record.status)} /></td>
-                            <td className="px-3 py-2">
-                              {docs.length ? (
+                {viewMode === 'grid' ? (
+                  <div className="p-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3 bg-slate-50 border-b border-slate-100">
+                    {pagedIntakeRecords.map(record => {
+                      const docs = record.payload?.documents?.filter(document => document.fileName || document.fileAssetId || document.documentUrl) || [];
+                      const isUpdating = updatingIntakeId === record.id;
+                      const canAct = !['APPROVED', 'REJECTED', 'PUBLISHED', 'OPEN'].includes(String(record.status || '').toUpperCase());
+                      return (
+                        <div key={record.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between group">
+                          <div className="space-y-3 w-full">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-[#c86413]">{formatRefId('REQ', record.id, record.requirementNumber)}</p>
+                                <h3 className="mt-1 text-sm font-black text-slate-900 group-hover:text-[#12335f] transition-colors line-clamp-2 leading-snug">{record.title}</h3>
+                              </div>
+                              <StatusBadge label={readable(record.status)} />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-slate-100">
+                              <GridInfo label="Procurement Method" value={readable(record.methodSlug || record.procurementMethod)} />
+                              <GridInfo label="Buyer Organization" value={record.organization?.organizationName || record.buyer?.organization?.organizationName || record.buyer?.name || 'Buyer'} />
+                              <GridInfo label="Est. Value" value={money(Number(record.estimatedValue || 0))} />
+                              <GridInfo label="Updated Date" value={formatDate(record.updatedAt)} />
+                            </div>
+
+                            {docs.length > 0 && (
+                              <div className="pt-2 border-t border-slate-100">
+                                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Documents ({docs.length})</span>
                                 <div className="space-y-1">
-                                  {docs.slice(0, 3).map(document => (
-                                    <p key={document.id || document.fileName || document.fileAssetId} className="max-w-[180px] truncate font-semibold text-slate-600">
-                                      {document.name || document.label || 'Document'}: {document.fileName || `Asset #${document.fileAssetId}`}
+                                  {docs.slice(0, 2).map((document, index) => (
+                                    <p key={document.id || document.fileAssetId || `${document.fileName || 'doc'}-${index}`} className="truncate text-xs font-semibold text-slate-600">
+                                      {document.name || document.label || 'Document'}: <span className="font-bold text-slate-900">{document.fileName || `Asset #${document.fileAssetId}`}</span>
                                     </p>
                                   ))}
-                                  {docs.length > 3 && <p className="text-[10px] font-black text-slate-400">+{docs.length - 3} more</p>}
+                                  {docs.length > 2 && <p className="text-[10px] font-bold text-slate-400">+{docs.length - 2} more</p>}
                                 </div>
-                              ) : (
-                                <span className="font-semibold text-slate-400">No files</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 font-black text-slate-900">{money(Number(record.estimatedValue || 0))}</td>
-                            <td className="px-3 py-2 font-semibold text-slate-500">{record.updatedAt ? formatDate(record.updatedAt) : '-'}</td>
-                            <td className="px-3 py-2">
-                              <div className="flex flex-wrap gap-2">
-                                {canAct && (
-                                  <>
-                                    <button type="button" disabled={isUpdating} onClick={() => updateIntakeStatus(record, 'APPROVED')} className="inline-flex h-8 items-center rounded-md bg-emerald-600 px-3 text-[10px] font-black text-white disabled:opacity-60">Approve</button>
-                                    <button type="button" disabled={isUpdating} onClick={() => updateIntakeStatus(record, 'REJECTED')} className="inline-flex h-8 items-center rounded-md bg-red-600 px-3 text-[10px] font-black text-white disabled:opacity-60">Reject</button>
-                                  </>
-                                )}
-                                {!canAct && (
-                                  <span className="inline-flex h-8 items-center rounded-md border border-slate-200 px-3 text-[10px] font-black text-slate-500">No action</span>
-                                )}
                               </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                            )}
+
+                            <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                              {canAct && (
+                                <>
+                                  <button type="button" disabled={isUpdating} onClick={() => updateIntakeStatus(record, 'APPROVED')} className="flex h-8 items-center rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60">Approve</button>
+                                  <button type="button" disabled={isUpdating} onClick={() => updateIntakeStatus(record, 'REJECTED')} className="flex h-8 items-center rounded-lg bg-red-600 px-3 text-[10px] font-black uppercase text-white shadow-sm hover:bg-red-700 disabled:opacity-60">Reject</button>
+                                </>
+                              )}
+                              {!canAct && <span className="flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-[10px] font-black uppercase text-slate-400">No action</span>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[1080px] border-collapse text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
+                          {['Reference', 'Title', 'Method', 'Buyer', 'Status', 'Documents', 'Value', 'Updated', 'Actions'].map(head => <th key={head} className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">{head}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                        {pagedIntakeRecords.map(record => {
+                          const docs = record.payload?.documents?.filter(document => document.fileName || document.fileAssetId || document.documentUrl) || [];
+                          const isUpdating = updatingIntakeId === record.id;
+                          const canAct = !['APPROVED', 'REJECTED', 'PUBLISHED', 'OPEN'].includes(String(record.status || '').toUpperCase());
+                          return (
+                            <tr key={record.id} className="cursor-pointer transition hover:bg-slate-50/50 align-top">
+                              <td className="p-3 font-mono font-bold text-slate-900 whitespace-nowrap">{formatRefId('REQ', record.id, record.requirementNumber)}</td>
+                              <td className="p-3">
+                                <p className="font-bold text-slate-900 line-clamp-1 max-w-[220px]">{record.title}</p>
+                              </td>
+                              <td className="p-3 text-slate-600">{readable(record.methodSlug || record.procurementMethod)}</td>
+                              <td className="p-3 text-slate-600">{record.organization?.organizationName || record.buyer?.organization?.organizationName || record.buyer?.name || 'Buyer'}</td>
+                              <td className="p-3"><StatusBadge label={readable(record.status)} /></td>
+                              <td className="p-3">
+                                {docs.length ? (
+                                  <div className="space-y-1">
+                                    {docs.slice(0, 3).map((document, index) => (
+                                      <p key={document.id || document.fileAssetId || `${document.fileName || 'doc'}-${index}`} className="max-w-[180px] truncate font-semibold text-slate-600">
+                                        {document.name || document.label || 'Document'}: <span className="font-bold text-slate-900">{document.fileName || `Asset #${document.fileAssetId}`}</span>
+                                      </p>
+                                    ))}
+                                    {docs.length > 3 && <p className="text-[10px] font-black text-slate-400">+{docs.length - 3} more</p>}
+                                  </div>
+                                ) : (
+                                  <span className="font-semibold text-slate-400">No files</span>
+                                )}
+                              </td>
+                              <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{money(Number(record.estimatedValue || 0))}</td>
+                              <td className="p-3 text-slate-500 whitespace-nowrap">{formatDate(record.updatedAt)}</td>
+                              <td className="p-3 text-right">
+                                <div className="flex justify-end gap-2">
+                                  {canAct && (
+                                    <>
+                                      <button type="button" disabled={isUpdating} onClick={() => updateIntakeStatus(record, 'APPROVED')} className="flex h-8 items-center rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60">Approve</button>
+                                      <button type="button" disabled={isUpdating} onClick={() => updateIntakeStatus(record, 'REJECTED')} className="flex h-8 items-center rounded-lg bg-red-600 px-3 text-[10px] font-black uppercase text-white shadow-sm hover:bg-red-700 disabled:opacity-60">Reject</button>
+                                    </>
+                                  )}
+                                  {!canAct && (
+                                    <span className="flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-[10px] font-black uppercase text-slate-400">No action</span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div className="border-t border-slate-100 bg-slate-50/50 p-3">
                   <Pagination
                     page={intakePage}
                     pageSize={intakePageSize}
@@ -536,9 +610,12 @@ export default function AdminBidManagementPage() {
                     </div>
                     <p className="mt-1 text-xs font-medium text-slate-500">Live admin records only. No demo procurement bids are shown here.</p>
                   </div>
-                  <button onClick={() => setShowFilters(!showFilters)} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition-colors hover:bg-slate-50">
-                    <Filter className="h-3.5 w-3.5" /> {showFilters ? 'Hide filters' : 'Filters'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />
+                    <button onClick={() => setShowFilters(!showFilters)} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition-colors hover:bg-slate-50">
+                      <Filter className="h-3.5 w-3.5" /> {showFilters ? 'Hide filters' : 'Filters'}
+                    </button>
+                  </div>
                 </div>
 
                 {showFilters && (
@@ -596,43 +673,79 @@ export default function AdminBidManagementPage() {
                 <div className="py-12"><ProcurementEmptyState title="No admin bids match these filters." message="Change filters or wait for buyers to submit bids for approval." /></div>
               ) : (
                 <div className="flex flex-col">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-[1400px] w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-                        <tr>{['Bid number', 'Title', 'Buyer', 'Category', 'Type', 'Status', 'Approval', 'Start', 'End', 'Participants', 'Lifecycle', 'Actions'].map(head => <th key={head} className="whitespace-nowrap px-4 py-3 font-black">{head}</th>)}</tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {pagedBids.map(bid => (
-                          <tr key={bid.id} className="bg-white hover:bg-slate-50">
-                            <td className="whitespace-nowrap px-4 py-3.5 font-black text-[#0b2447]">{bid.id}</td>
-                            <td className="px-4 py-3.5">
-                              <p className="font-bold text-slate-900 line-clamp-2" title={bid.title}>{bid.title}</p>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <p className="font-semibold text-slate-700">{bid.buyerName}</p>
-                              <p className="mt-0.5 text-[10px] font-medium text-slate-400">{bid.buyerType}</p>
-                            </td>
-                            <td className="px-4 py-3.5 font-medium text-slate-600">{bid.category}</td>
-                            <td className="whitespace-nowrap px-4 py-3.5 font-medium text-slate-600">{bid.procurementType || bid.bidType}</td>
-                            <td className="whitespace-nowrap px-4 py-3.5"><StatusBadge label={bid.status} /></td>
-                            <td className="whitespace-nowrap px-4 py-3.5"><StatusBadge label={readable(bid.approvalStatus)} /></td>
-                            <td className="whitespace-nowrap px-4 py-3.5 font-medium text-slate-600">{formatDate(bid.startDate)}</td>
-                            <td className="whitespace-nowrap px-4 py-3.5 font-medium text-slate-600">{formatDate(bid.endDate)}</td>
-                            <td className="whitespace-nowrap px-4 py-3.5 font-black text-slate-700">{bid.participantsCount || bid.results.length}</td>
-                            <td className="whitespace-nowrap px-4 py-3.5"><StatusBadge label={bid.currentStage} /></td>
-                            <td className="whitespace-nowrap px-4 py-3.5">
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => refreshSelectedBid(bid)} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 px-2 text-[10px] font-black text-slate-700 transition-colors hover:bg-slate-50"><Eye className="h-3 w-3" /> Review</button>
-                                <button onClick={() => approve(bid.id)} className="inline-flex h-7 items-center gap-1 rounded bg-emerald-600 px-2 text-[10px] font-black text-white transition-colors hover:bg-emerald-700"><ShieldCheck className="h-3 w-3" /> Approve</button>
-                                <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="inline-flex h-7 items-center gap-1 rounded bg-red-600 px-2 text-[10px] font-black text-white transition-colors hover:bg-red-700"><XCircle className="h-3 w-3" /> Reject</button>
-                                <Link href={`/bids/${bid.id}`} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 px-2 text-[10px] font-black text-slate-700 transition-colors hover:bg-slate-50">Details</Link>
+                  {viewMode === 'grid' ? (
+                    <div className="p-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3 bg-slate-50 border-b border-slate-100">
+                      {pagedBids.map(bid => (
+                        <div key={bid.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between group">
+                          <div className="space-y-3 w-full">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-[#c86413]">#{bid.id}</p>
+                                <h3 className="mt-1 text-sm font-black text-slate-900 group-hover:text-[#12335f] transition-colors line-clamp-2 leading-snug">{bid.title}</h3>
                               </div>
-                            </td>
+                              <StatusBadge label={bid.status} />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-slate-100">
+                              <GridInfo label="Buyer Organization" value={bid.buyerName} />
+                              <GridInfo label="Category" value={bid.category} />
+                              <GridInfo label="Participants" value={String(bid.participantsCount || bid.results?.length || 0)} />
+                              <GridInfo label="Lifecycle Stage" value={bid.currentStage} />
+                              <GridInfo label="Approval Status" value={readable(bid.approvalStatus)} />
+                              <GridInfo label="Closing Date" value={formatDate(bid.endDate)} />
+                            </div>
+                            
+                            <div className="pt-3 border-t border-slate-100 flex flex-wrap justify-end gap-2">
+                              <button onClick={() => refreshSelectedBid(bid)} className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase text-slate-700 shadow-sm transition-colors hover:bg-slate-50"><Eye className="h-3 w-3" /> Review</button>
+                              <button onClick={() => approve(bid.id)} className="flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase text-white shadow-sm transition-colors hover:bg-emerald-700"><ShieldCheck className="h-3 w-3" /> Approve</button>
+                              <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="flex h-8 items-center gap-1.5 rounded-lg bg-red-600 px-3 text-[10px] font-black uppercase text-white shadow-sm transition-colors hover:bg-red-700"><XCircle className="h-3 w-3" /> Reject</button>
+                              <Link href={`/bids/${bid.id}`} className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase text-slate-700 shadow-sm transition-colors hover:bg-slate-50">Details</Link>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[1400px] border-collapse text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
+                            {['Bid number', 'Title', 'Buyer', 'Category', 'Type', 'Status', 'Approval', 'Start', 'End', 'Participants', 'Lifecycle', 'Actions'].map(head => <th key={head} className="whitespace-nowrap p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">{head}</th>)}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                          {pagedBids.map(bid => (
+                            <tr key={bid.id} className="cursor-pointer transition hover:bg-slate-50/50">
+                              <td className="whitespace-nowrap p-3 font-mono font-bold text-slate-900">#{bid.id}</td>
+                              <td className="p-3">
+                                <p className="font-bold text-slate-900 line-clamp-2" title={bid.title}>{bid.title}</p>
+                              </td>
+                              <td className="p-3 text-slate-700">
+                                {bid.buyerName}
+                                <span className="block mt-0.5 text-[10px] font-medium text-slate-400">{bid.buyerType}</span>
+                              </td>
+                              <td className="p-3 text-slate-600">{bid.category}</td>
+                              <td className="whitespace-nowrap p-3 text-slate-600">{bid.procurementType || bid.bidType}</td>
+                              <td className="whitespace-nowrap p-3"><StatusBadge label={bid.status} /></td>
+                              <td className="whitespace-nowrap p-3"><StatusBadge label={readable(bid.approvalStatus)} /></td>
+                              <td className="whitespace-nowrap p-3 text-slate-500">{formatDate(bid.startDate)}</td>
+                              <td className="whitespace-nowrap p-3 text-slate-500">{formatDate(bid.endDate)}</td>
+                              <td className="whitespace-nowrap p-3 font-bold text-slate-900">{bid.participantsCount || bid.results.length}</td>
+                              <td className="whitespace-nowrap p-3"><StatusBadge label={bid.currentStage} /></td>
+                              <td className="whitespace-nowrap p-3 text-right">
+                                <div className="flex justify-end gap-2">
+                                  <button onClick={() => refreshSelectedBid(bid)} className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase text-slate-700 shadow-sm transition-colors hover:bg-slate-50"><Eye className="h-3 w-3" /> Review</button>
+                                  <button onClick={() => approve(bid.id)} className="flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase text-white shadow-sm transition-colors hover:bg-emerald-700"><ShieldCheck className="h-3 w-3" /> Approve</button>
+                                  <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="flex h-8 items-center gap-1.5 rounded-lg bg-red-600 px-3 text-[10px] font-black uppercase text-white shadow-sm transition-colors hover:bg-red-700"><XCircle className="h-3 w-3" /> Reject</button>
+                                  <Link href={`/bids/${bid.id}`} className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase text-slate-700 shadow-sm transition-colors hover:bg-slate-50">Details</Link>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   <div className="border-t border-slate-100 bg-slate-50/50 p-3">
                     <Pagination
                       page={bidsPage}
@@ -704,29 +817,33 @@ export default function AdminBidManagementPage() {
                   <StatusBadge label={`${participants.length} sellers`} />
                 </div>
                 {detailLoading ? <ProcurementLoadingState message="Loading participant review..." /> : !participants.length ? <ProcurementEmptyState title="No participating sellers yet." message="Seller submissions will appear after participation starts." /> : (
-                  <div className="table-shell">
-                    <div className="table-shell-scroller">
-                      <table className="min-w-[1180px] w-full text-xs">
-                        <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-                          <tr>{['Participation', 'Seller', 'Verification', 'Submitted', 'Technical', 'Financial', 'Final', 'Rank', 'Documents'].map(head => <th key={head} className="px-4 py-3 font-black">{head}</th>)}</tr>
+                  <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[1180px] border-collapse text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
+                            {['Participation', 'Seller', 'Verification', 'Submitted', 'Technical', 'Financial', 'Final', 'Rank', 'Documents'].map(head => <th key={head} className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">{head}</th>)}
+                          </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                           {participants.map(participant => (
-                            <tr key={participant.id} className="align-top">
-                              <td className="px-4 py-3 font-black text-[#0b2447]">{participant.participationNumber || participant.id}</td>
-                              <td className="px-4 py-3">{participant.seller?.name || 'Seller'}</td>
-                              <td className="px-4 py-3"><StatusBadge label={readable(participant.seller?.onboardingStatus || 'Verified')} /></td>
-                              <td className="px-4 py-3">{participant.submittedAt ? new Date(participant.submittedAt).toLocaleString('en-IN') : readable(participant.submissionStatus)}</td>
-                              <td className="px-4 py-3"><StatusBadge label={readable(participant.technicalStatus)} /></td>
-                              <td className="px-4 py-3"><StatusBadge label={readable(participant.financialStatus)} /></td>
-                              <td className="px-4 py-3"><StatusBadge label={readable(participant.finalStatus)} /></td>
-                              <td className="px-4 py-3"><StatusBadge label={rankLabel(participant.rank)} /></td>
-                              <td className="px-4 py-3">
+                            <tr key={participant.id} className="cursor-pointer transition hover:bg-slate-50/50 align-top">
+                              <td className="p-3 font-mono font-bold text-slate-900 whitespace-nowrap">{participant.participationNumber || participant.id}</td>
+                              <td className="p-3 text-slate-700">{participant.seller?.name || 'Seller'}</td>
+                              <td className="p-3"><StatusBadge label={readable(participant.seller?.onboardingStatus || 'Verified')} /></td>
+                              <td className="p-3 text-slate-500 whitespace-nowrap">{participant.submittedAt ? new Date(participant.submittedAt).toLocaleString('en-IN') : readable(participant.submissionStatus)}</td>
+                              <td className="p-3"><StatusBadge label={readable(participant.technicalStatus)} /></td>
+                              <td className="p-3"><StatusBadge label={readable(participant.financialStatus)} /></td>
+                              <td className="p-3"><StatusBadge label={readable(participant.finalStatus)} /></td>
+                              <td className="p-3"><StatusBadge label={rankLabel(participant.rank)} /></td>
+                              <td className="p-3">
                                 <div className="space-y-1">
                                   {(participant.documents || []).map(doc => (
-                                    <p key={doc.id} className="text-[11px] font-bold text-slate-600">{doc.documentCategory === 'FINANCIAL_QUOTE' && participant.financialStatus !== 'OPENED' ? 'Sealed financial quote' : doc.documentName || doc.fileName || doc.documentCategory}</p>
+                                    <p key={doc.id} className="max-w-[180px] truncate font-semibold text-slate-600">
+                                      {doc.documentCategory === 'FINANCIAL_QUOTE' && participant.financialStatus !== 'OPENED' ? 'Sealed financial quote' : <>{doc.documentName || doc.documentCategory || 'Document'}: <span className="font-bold text-slate-900">{doc.fileName || 'file'}</span></>}
+                                    </p>
                                   ))}
-                                  {!(participant.documents || []).length && <p className="text-[11px] text-slate-400">No documents</p>}
+                                  {!(participant.documents || []).length && <span className="font-semibold text-slate-400">No documents</span>}
                                 </div>
                               </td>
                             </tr>
