@@ -470,8 +470,10 @@ export default function CatalogueFormPage() {
     }
   };
 
-  const submitForm = async (event: FormEvent) => {
-    event.preventDefault();
+  const submitForm = async (event?: FormEvent | React.MouseEvent | React.SyntheticEvent) => {
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
     setAttemptedSubmit(true);
 
     if (!isAllValid) {
@@ -632,7 +634,7 @@ export default function CatalogueFormPage() {
           <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-0.5" />
           Back to Catalogue
         </button>
-        <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between relative z-10">
+        <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between relative z-10">
           <div className="max-w-2xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#12335f]">
               <Sparkles className="h-3.5 w-3.5" /> {kind === 'product' ? 'product onboarding' : 'service onboarding'}
@@ -640,25 +642,50 @@ export default function CatalogueFormPage() {
             <h1 className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl text-slate-900">{title}</h1>
             <p className="mt-2 text-xs font-semibold text-slate-500">{descriptionText}</p>
           </div>
-          <div className="grid gap-2 rounded-2xl border border-slate-200/80 bg-slate-50 p-3 text-xs sm:grid-cols-3 text-slate-700">
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-              <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
-                <Package className="h-3.5 w-3.5" /> {kind === 'product' ? 'SKU' : 'Scope'}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="grid gap-2 rounded-2xl border border-slate-200/80 bg-slate-50 p-3 text-xs sm:grid-cols-3 text-slate-700">
+              <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
+                  <Package className="h-3.5 w-3.5" /> {kind === 'product' ? 'SKU' : 'Scope'}
+                </div>
+                <p className="mt-1 text-xs font-bold text-slate-800">Ready to publish</p>
               </div>
-              <p className="mt-1 text-xs font-bold text-slate-800">Ready to publish</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-              <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
-                <ShieldCheck className="h-3.5 w-3.5" /> Verification
+              <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Verification
+                </div>
+                <p className="mt-1 text-xs font-bold text-slate-800">Fast review</p>
               </div>
-              <p className="mt-1 text-xs font-bold text-slate-800">Fast review</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-              <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
-                <BadgeCheck className="h-3.5 w-3.5" /> Buyer ready
+              <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
+                  <BadgeCheck className="h-3.5 w-3.5" /> Buyer ready
+                </div>
+                <p className="mt-1 text-xs font-bold text-slate-800">RFQ enabled</p>
               </div>
-              <p className="mt-1 text-xs font-bold text-slate-800">RFQ enabled</p>
             </div>
+            <Button
+              type="button"
+              onClick={submitForm}
+              disabled={!isAllValid || saving || uploading}
+              title={!isAllValid ? 'Complete all 4 steps and required fields to proceed' : undefined}
+              className={cn(
+                "h-10 rounded-xl text-xs font-black uppercase text-white shadow-md px-6 transition-all shrink-0",
+                !isAllValid && "opacity-50 cursor-not-allowed",
+                kind === 'product' ? 'bg-[#059669] hover:bg-emerald-800' : 'bg-emerald-600 hover:bg-emerald-700'
+              )}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  {isEdit ? 'Save Changes' : `Add ${kind === 'product' ? 'Product' : 'Service'}`}
+                </>
+              )}
+            </Button>
           </div>
         </div>
       </div>
