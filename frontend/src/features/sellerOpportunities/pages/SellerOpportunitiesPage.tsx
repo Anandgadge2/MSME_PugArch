@@ -310,7 +310,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   }
   const [status, setStatus] = useState('');
   const [location, setLocation] = useState('');
-  const [closingDate, setClosingDate] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -323,6 +324,38 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const [sortField, setSortField] = useState<'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue' | ''>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [nowMs] = useState(() => Date.now());
+
+  const todayStr = useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  const handleStartDateChange = (val: string) => {
+    if (val && val > todayStr) {
+      toast.warning('Future dates are not allowed');
+      return;
+    }
+    setStartDate(val);
+    if (endDate && val && val > endDate) {
+      setEndDate(val);
+    }
+    setPage(1);
+  };
+
+  const handleEndDateChange = (val: string) => {
+    if (val && val > todayStr) {
+      toast.warning('Future dates are not allowed');
+      return;
+    }
+    setEndDate(val);
+    if (startDate && val && val < startDate) {
+      setStartDate(val);
+    }
+    setPage(1);
+  };
 
   const handleSort = (field: 'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue') => {
     if (sortField === field) {
@@ -928,13 +961,23 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         if (valueRange === 'above1cr' && val < 10000000) return false;
       }
 
-      if (closingDate === '7') {
-        if (!isClosingSoonOpportunity(item, nowMs)) return false;
+      if (startDate || endDate) {
+        const rawDate = item.publishedAt || item.closingDate;
+        if (!rawDate) return false;
+        const d = new Date(rawDate);
+        if (Number.isNaN(d.getTime())) return false;
+        const itemYear = d.getFullYear();
+        const itemMonth = String(d.getMonth() + 1).padStart(2, '0');
+        const itemDay = String(d.getDate()).padStart(2, '0');
+        const itemDateStr = `${itemYear}-${itemMonth}-${itemDay}`;
+
+        if (startDate && itemDateStr < startDate) return false;
+        if (endDate && itemDateStr > endDate) return false;
       }
 
       return true;
     });
-  }, [closingDate, items, location, query, status, type, category, buyerFilter, valueRange, nowMs]);
+  }, [startDate, endDate, items, location, query, status, type, category, buyerFilter, valueRange, nowMs]);
 
   const kpis = useMemo(() => {
     let live = 0;
@@ -1024,7 +1067,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   }, [baseFiltered, kpiFilter, sortField, sortDirection, nowMs]);
 
   // Reset KPI filter and pagination when filters change (render-pass adjustment, no cascading renders)
-  const filterKey = `${query}|${type}|${status}|${location}|${closingDate}|${category}|${buyerFilter}|${valueRange}`;
+  const filterKey = `${query}|${type}|${status}|${location}|${startDate}|${endDate}|${category}|${buyerFilter}|${valueRange}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   const pageFilterKey = `${filterKey}|${viewMode}|${kpiFilter}`;
   const [prevPageFilterKey, setPrevPageFilterKey] = useState(pageFilterKey);
@@ -1047,7 +1090,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     setType('');
     setStatus('');
     setLocation('');
-    setClosingDate('');
+    setStartDate('');
+    setEndDate('');
     setCategory('');
     setBuyerFilter('');
     setValueRange('');
@@ -1239,7 +1283,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       {/* ── Search + Filter + View Toggle Toolbar ── */}
       <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
         <ResponsiveFilterBar
-          activeFilterCount={(query ? 1 : 0) + (type ? 1 : 0) + (status ? 1 : 0) + (category ? 1 : 0) + (buyerFilter ? 1 : 0) + (location ? 1 : 0) + (closingDate ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
+          activeFilterCount={(query ? 1 : 0) + (type ? 1 : 0) + (status ? 1 : 0) + (category ? 1 : 0) + (buyerFilter ? 1 : 0) + (location ? 1 : 0) + (startDate ? 1 : 0) + (endDate ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -1324,21 +1368,43 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 </select>
               </div>
 
-              {/* Closing Date Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[130px]">
-                <select
-                  value={closingDate}
-                  onChange={e => { setClosingDate(e.target.value); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
-                  aria-label="Filter by closing deadline"
-                >
-                  <option value="">Closing Date</option>
-                  <option value="7">Next 7 days</option>
-                </select>
+              {/* Start Date Filter */}
+              <div className="w-full sm:w-auto sm:min-w-[140px] sm:max-w-[165px]">
+                <div className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-2.5 hover:border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/10 transition-colors shadow-xs">
+                  <span className="text-[10px] font-bold text-slate-400 mr-1.5 uppercase select-none shrink-0">From</span>
+                  <input
+                    id="filter-start-date"
+                    type="date"
+                    value={startDate}
+                    max={endDate && endDate <= todayStr ? endDate : todayStr}
+                    onChange={e => handleStartDateChange(e.target.value)}
+                    className="w-full text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer"
+                    aria-label="Start date (From)"
+                    title="Start Date (Published on or after)"
+                  />
+                </div>
+              </div>
+
+              {/* End Date Filter */}
+              <div className="w-full sm:w-auto sm:min-w-[140px] sm:max-w-[165px]">
+                <div className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-2.5 hover:border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/10 transition-colors shadow-xs">
+                  <span className="text-[10px] font-bold text-slate-400 mr-1.5 uppercase select-none shrink-0">To</span>
+                  <input
+                    id="filter-end-date"
+                    type="date"
+                    value={endDate}
+                    min={startDate || undefined}
+                    max={todayStr}
+                    onChange={e => handleEndDateChange(e.target.value)}
+                    className="w-full text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer"
+                    aria-label="End date (To)"
+                    title="End Date (Published on or before)"
+                  />
+                </div>
               </div>
 
               {/* Reset Trigger */}
-              {(query || type || status || category || buyerFilter || location || closingDate || kpiFilter !== 'all') && (
+              {(query || type || status || category || buyerFilter || location || startDate || endDate || kpiFilter !== 'all') && (
                 <Button
                   type="button"
                   variant="outline"

@@ -174,14 +174,14 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   const durationMin = Math.round((endMs - startMs) / 60000);
 
   const RowItem = ({ icon: Icon, label, value, highlight }: { icon: React.ElementType; label: string; value: string; highlight?: boolean }) => (
-    <div className="flex items-center gap-3.5 py-1.5 group">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 border border-slate-200/80 text-[#0b2447] shadow-xs group-hover:scale-105 group-hover:border-blue-300 transition-all duration-200">
-        <Icon className="h-4 w-4" />
+    <div className="flex items-center justify-between py-2 px-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors rounded-lg">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <Icon className="h-4 w-4 text-slate-400 shrink-0" />
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate">{label}</span>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{label}</p>
-        <p title={value} className={cn("mt-0.5 text-xs sm:text-[13px] font-black truncate", highlight ? "text-blue-600" : "text-slate-800")}>{value}</p>
-      </div>
+      <span title={value} className={cn("text-xs font-black truncate text-right max-w-[55%]", highlight ? "text-blue-600 font-extrabold" : "text-slate-900")}>
+        {value}
+      </span>
     </div>
   );
 
@@ -590,9 +590,9 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 hover:bg-slate-50 hover:border-slate-200 transition">
-      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-1 text-xs sm:text-[13px] font-bold text-slate-800 text-wrap-anywhere leading-relaxed">{value}</p>
+    <div className="py-2.5 px-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors rounded-lg flex flex-col justify-center">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">{label}</p>
+      <p className="mt-0.5 text-xs sm:text-[13px] font-bold text-slate-900 text-wrap-anywhere leading-snug">{value}</p>
     </div>
   );
 }
