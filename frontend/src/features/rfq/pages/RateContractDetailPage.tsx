@@ -625,7 +625,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       return;
     }
     const targetId = rcData.id || requirementId || requestId;
-    router.push(`/seller/rate-contract/submit-quotation?requirementId=${targetId}`);
+    router.push(`/seller/procurement/rate-contract/${targetId}/respond`);
   };
 
   const handleViewDoc = (doc: typeof uploadedDocuments[0]) => {

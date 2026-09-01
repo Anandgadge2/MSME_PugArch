@@ -250,7 +250,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
       <section className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 border-b border-zinc-200 pb-6">
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2.5">
-            <Link href={`/reverse-auctions/${id}`} className="inline-flex h-8 items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 transition">
+            <Link href={`/seller/procurement/reverse-auction/${id}`} className="inline-flex h-8 items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 transition">
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Auction Details
             </Link>
             
@@ -293,7 +293,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
             <Button type="button" variant="outline" onClick={invalidate} disabled={summary.isFetching} className="border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700">
               <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', summary.isFetching && 'animate-spin')} /> Refresh
             </Button>
-            <Link href={`/reverse-auctions/${id}`}>
+            <Link href={`/seller/procurement/reverse-auction/${id}`}>
               <Button type="button" variant="outline" className="border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700">Details</Button>
             </Link>
             
@@ -311,7 +311,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
                 {['LIVE', 'PAUSED'].includes(status) && (
                   <Button onClick={() => transition.mutate('close')} className="bg-red-600 hover:bg-red-500 text-white font-bold">Close</Button>
                 )}
-                <Link href={`/reverse-auctions/${id}/results`}>
+                <Link href={`/seller/procurement/reverse-auction/${id}/results`}>
                   <Button type="button" variant="secondary" className="bg-zinc-100 hover:bg-zinc-200 text-zinc-800">Results</Button>
                 </Link>
               </>

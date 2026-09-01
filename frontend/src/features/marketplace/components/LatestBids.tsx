@@ -13,6 +13,7 @@ import { useResponsiveViewMode } from '../../shared/hooks';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import type { MarketplaceBid, MarketplaceTender } from '../api';
 import { resolveMediaUrl } from '../../../lib/api';
+import { sellerRoutes } from '@/lib/routes';
 import { 
     formatSingleBudget, 
     formatDateIN, 
@@ -496,20 +497,20 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             // Link formatting based on authentication & procurement method
             let link = sourceId ? `/marketplace/requirements/${sourceId}` : '/marketplace/requirements';
             if (r.linkedAuctionId) {
-                link = `/reverse-auctions/${r.linkedAuctionId}`;
+                link = sellerRoutes.detail('REVERSE_AUCTION', r.linkedAuctionId);
             } else {
                 const isLoggedIn = !!user;
                 const isSeller = user?.role === 'seller';
                 if (isLoggedIn && isSeller) {
                     if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'RATE_CONTRACT'].includes(method)) {
-                        link = `/seller/rfq?requirementId=${sourceId}`;
+                        link = sellerRoutes.detail('RFQ', sourceId);
                     } else if (['RFP', 'SINGLE_SOURCE', 'PAC'].includes(method)) {
-                        link = `/seller/rfp?requirementId=${sourceId}`;
+                        link = sellerRoutes.detail('RFP', sourceId);
                     } else if (['OPEN_TENDER', 'LIMITED_TENDER', 'TWO_STAGE_TENDER', 'EMERGENCY_PURCHASE'].includes(method)) {
                         if (r.requirementNumber) {
                             link = `/tenders?tender=${r.requirementNumber}`;
                         } else {
-                            link = `/seller/rfq?requirementId=${sourceId}`;
+                            link = sellerRoutes.detail('RFQ', sourceId);
                         }
                     }
                 }
@@ -609,9 +610,9 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                         }}
                     >
                         <div>
-                            <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-blue-200/80 bg-blue-50/80 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#0b2447] shadow-2xs">
+                            {/* <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-blue-200/80 bg-blue-50/80 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#0b2447] shadow-2xs">
                                 🏛️ Procurement Hub
-                            </span>
+                            </span> */}
                             <h2 id="opportunities-heading" className="text-xl font-black text-[#0b2447] sm:text-2xl md:text-3xl tracking-tight">
                                 Active Procurement Opportunities
                             </h2>

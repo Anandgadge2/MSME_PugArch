@@ -62,6 +62,7 @@ import { openFileAsset } from '../../../lib/files';
 import { formatDate } from '../../shared/format';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useQuery } from '@tanstack/react-query';
+import { sellerRoutes, buyerRoutes } from '@/lib/routes';
 
 function ProcurementsTableSkeleton() {
   return (
@@ -517,7 +518,7 @@ export default function MyProcurementsPage() {
       // A reverse auction is stored as a Requirement; the biddable entity is the
       // linked Auction. Use its id (falling back to the auction row's own id).
       const auctionId = p.linkedAuctionId || (typeLower === 'reverse_auction' ? p.id : null);
-      route = auctionId ? `/reverse-auctions/${auctionId}` : null;
+      route = auctionId ? sellerRoutes.detail('REVERSE_AUCTION', auctionId) : null;
     } else if (typeLower === 'bid_tender') {
       const consolidated = getConsolidatedType(p);
       if (consolidated === 'OpenTender' || consolidated === 'Limited Tender') {

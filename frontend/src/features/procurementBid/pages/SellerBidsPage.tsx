@@ -25,6 +25,7 @@ import { Card, CardContent } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
 import { toast } from 'sonner';
 import { api } from '../../../lib/api';
+import { sellerRoutes } from '@/lib/routes';
 import { useAuth } from '../../../hooks/useAuth';
 import { procurementBidApi } from '../api';
 import { formatDate } from '../../shared/format';
@@ -351,10 +352,8 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
 
   const handleAction = (item: any) => {
     if (item.isMarketplaceResponse) {
-      const targetPath = item.bid?.category?.toLowerCase().includes('proposal') || item.bid?.category?.toLowerCase().includes('rfp') 
-        ? '/seller/rfp' 
-        : '/seller/rfq';
-      router.push(`${targetPath}?requirementId=${item.requirementId}`);
+      const isRfp = item.bid?.category?.toLowerCase().includes('proposal') || item.bid?.category?.toLowerCase().includes('rfp');
+      router.push(sellerRoutes.detail(isRfp ? 'RFP' : 'RFQ', item.requirementId));
       return;
     }
     const bidId = item.bid?.id || item.bidId;
@@ -369,9 +368,9 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       router.push(`/bids/${bidId}/participate`);
     } else {
       if (isRfp) {
-        router.push(`/seller/rfp?requestId=${bidId}`);
+        router.push(sellerRoutes.detail('RFP', bidId));
       } else if (isRfq) {
-        router.push(`/seller/rfq?requestId=${bidId}`);
+        router.push(sellerRoutes.detail('RFQ', bidId));
       } else {
         router.push(`/bids/${bidId}`);
       }

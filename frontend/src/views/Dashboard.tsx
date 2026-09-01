@@ -567,7 +567,7 @@ export default function Dashboard() {
     {
       title: 'Reverse Auction Monitoring',
       detail: 'Track live auctions, monitor L1 rankings, review results, and open award recommendations.',
-      path: '/reverse-auctions',
+      path: '/seller/opportunities/auctions',
       icon: Gavel
     }
   ], []);

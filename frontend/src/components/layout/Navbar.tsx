@@ -801,11 +801,34 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   const [notifications, setNotifications] = useState<PortalNotification[]>([]);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
+  const profileTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [roleAction, setRoleAction] = useState<'buyer' | 'seller' | null>(null);
   const [pendingActivateRole, setPendingActivateRole] = useState<'buyer' | 'seller' | null>(null);
   const [activateConsent1, setActivateConsent1] = useState(false);
   const [activateConsent2, setActivateConsent2] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+
+  const handleProfileMouseEnter = () => {
+    if (profileTimeoutRef.current) {
+      clearTimeout(profileTimeoutRef.current);
+      profileTimeoutRef.current = null;
+    }
+    setIsProfileDropdownOpen(true);
+  };
+
+  const handleProfileMouseLeave = () => {
+    profileTimeoutRef.current = setTimeout(() => {
+      setIsProfileDropdownOpen(false);
+    }, 180);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (profileTimeoutRef.current) {
+        clearTimeout(profileTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setIsMounted(true);
@@ -1193,7 +1216,12 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
           <div className="h-8 w-px bg-slate-200 hidden sm:block" />
 
-          <div className="relative" ref={profileDropdownRef}>
+          <div 
+            className="relative" 
+            ref={profileDropdownRef}
+            onMouseEnter={handleProfileMouseEnter}
+            onMouseLeave={handleProfileMouseLeave}
+          >
             <button
               onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
               className="flex items-center gap-3 p-1 rounded-lg hover:bg-slate-50 transition-colors group text-left"

@@ -2076,7 +2076,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       return;
     }
 
-    router.push(`/seller/rfp/submit-quotation?requirementId=${targetBidId}`);
+    router.push(`/seller/procurement/rfp/${targetBidId}/respond`);
   };
 
   const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.id === rfpData?.buyer?.id;

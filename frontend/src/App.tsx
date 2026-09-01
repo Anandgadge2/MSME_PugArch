@@ -6,6 +6,7 @@ import { useAuth } from './hooks/useAuth';
 import { cn } from './lib/utils';
 import { isShgUser } from './lib/shg';
 import { getCookieValue } from './lib/auth';
+import { resolveLegacyUrl } from './lib/routes';
 
 // Eagerly imported (small, always-needed for initial routes).
 import Login from './views/Login';
@@ -124,6 +125,8 @@ const TenderDetailPage = lazy(() => import('./features/tenders/pages/TenderDetai
 const RfqDetailPage = lazy(() => import('./features/rfq/pages/RfqDetailPage'));
 const RfpDetailPage = lazy(() => import('./features/rfq/pages/RfpDetailPage'));
 const RateContractDetailPage = lazy(() => import('./features/rfq/pages/RateContractDetailPage'));
+const OpenTenderDetailPage = lazy(() => import('./features/rfq/pages/OpenTenderDetailPage'));
+const LimitedTenderDetailPage = lazy(() => import('./features/rfq/pages/LimitedTenderDetailPage'));
 const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotationPage'));
 const RfqComparisonPage = lazy(() => import('./features/rfq/pages/RfqComparisonPage'));
 const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLoginPopup'));
@@ -665,6 +668,38 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
       }
     }
 
+    // ── Canonical procurement detail routes: /{role}/procurement/{type}/{id} ──
+    {
+      const procDetailMatch = pathname.match(/^\/(seller|shg)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)$/);
+      if (procDetailMatch) {
+        const [, , typeSlug, rawId] = procDetailMatch;
+        const id = decodeURIComponent(rawId);
+        switch (typeSlug) {
+          case 'rfq':              return <RfqDetailPage />;
+          case 'rfp':              return <RfpDetailPage />;
+          case 'open-tender':      return <OpenTenderDetailPage />;
+          case 'limited-tender':   return <LimitedTenderDetailPage />;
+          case 'rate-contract':    return <RateContractDetailPage />;
+          case 'reverse-auction': {
+            const numId = Number(id);
+            if (Number.isFinite(numId) && numId > 0) return <ReverseAuctionDetailPage id={numId} />;
+            break;
+          }
+        }
+      }
+      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg)\/procurement\/reverse-auction\/([^/]+)\/live$/);
+      if (procAuctionLiveMatch) {
+        const id = Number(decodeURIComponent(procAuctionLiveMatch[2]));
+        if (Number.isFinite(id) && id > 0) return <ReverseAuctionLivePage id={id} />;
+      }
+      const procAuctionResultMatch = pathname.match(/^\/(seller|shg)\/procurement\/reverse-auction\/([^/]+)\/results$/);
+      if (procAuctionResultMatch) {
+        const id = Number(decodeURIComponent(procAuctionResultMatch[2]));
+        if (Number.isFinite(id) && id > 0) return <AuctionResultPage id={id} />;
+      }
+    }
+
+    // ── Legacy procurement routes → redirect to canonical URLs ──
     if (pathname === '/seller/rfq' || pathname === '/shg/rfq') return <RfqDetailPage />;
     if (pathname === '/seller/rfp' || pathname === '/shg/rfp') return <RfpDetailPage />;
     if (pathname === '/seller/rate-contract' || pathname === '/shg/rate-contract') return <RateContractDetailPage />;
@@ -720,6 +755,13 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
       const sellerEventDetailMatch = pathname.match(/^\/(seller|shg)\/procurement\/events\/([^/]+)$/);
       if (sellerEventDetailMatch && roleOk(user.role, ['seller', 'shg'])) {
         return <SellerEventDetailPage id={sellerEventDetailMatch[2]} />;
+      }
+    }
+    // Canonical respond routes: /{role}/procurement/{type}/{id}/respond
+    {
+      const procRespondMatch = pathname.match(/^\/(seller|shg)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract)\/([^/]+)\/respond$/);
+      if (procRespondMatch && roleOk(user.role, ['seller', 'shg'])) {
+        return <PermissionRouteGuard permission="bid.submit"><SubmitQuotationPage /></PermissionRouteGuard>;
       }
     }
     if ((pathname === '/seller/rfq/submit-quotation' || pathname === '/seller/rfp/submit-quotation' || pathname === '/seller/rfp/respond' || pathname === '/seller/rate-contract/submit-quotation' || pathname === '/seller/rate-contracts/submit-quotation' || pathname.startsWith('/shg/rfq/submit-quotation') || pathname.startsWith('/shg/rate-contract/submit-quotation')) && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SubmitQuotationPage /></PermissionRouteGuard>;

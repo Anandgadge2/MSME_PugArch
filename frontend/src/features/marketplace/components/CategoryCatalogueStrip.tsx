@@ -181,7 +181,6 @@ export function CategoryCatalogueStrip({
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-2">
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-200/80 shadow-xs">
-                                <Sparkles className="h-3.5 w-3.5 text-blue-600" />
                                 {categories.length} Industrial Sectors &amp; Work Categories
                             </span>
                         </div>

@@ -687,7 +687,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     const id = requestId || rawBid?.bidNumber || requirementId || reqObj?.id || linkedRequirementId || rawBid?.id;
     if (!id) { toast.error('Procurement ID not found'); return; }
     const param = requestId || rawBid?.bidNumber ? 'requestId' : 'requirementId';
-    router.push(`/seller/rfq/submit-quotation?${param}=${encodeURIComponent(String(id))}`);
+    router.push(`/seller/procurement/rfq/${encodeURIComponent(String(id))}/respond`);
   };
 
   const isAwarded = String(status).toUpperCase() === 'AWARDED' || 

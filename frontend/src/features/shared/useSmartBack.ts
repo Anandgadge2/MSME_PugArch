@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
  */
 const REDIRECTING_PATH_PATTERNS: RegExp[] = [
   /^\/marketplace\/requirements\/-?\d+$/, // BuyerRequirementDetailsPage → redirects to type-specific page
-  /^\/bids\/\d+$/,                          // BidDetailsPage → redirects to /seller/rfq|rfp|tenders
+  /^\/bids\/\d+$/,                          // BidDetailsPage → redirects to /seller/procurement/{type}/{id}
 ];
 
 const isRedirectingPath = (path: string): boolean =>

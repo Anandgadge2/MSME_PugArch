@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { sellerRoutes } from '@/lib/routes';
 import { useSearchParams } from 'next/navigation';
 import { Building2, CalendarDays, ChevronDown, ChevronUp, ClipboardList, Eye, FileText, Gavel, MapPin, RefreshCw, Search, ShieldCheck, X, IndianRupee, Clock, Users, CheckCircle2, type LucideIcon } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
@@ -400,20 +401,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         let detailsHref = `/bids/${bid.id}`;
 
         if (opportunityType === 'Rate Contract') {
-          href = `/seller/rate-contract/submit-quotation?requestId=${bid.id}`;
-          detailsHref = `/seller/rate-contract?requestId=${bid.id}`;
+          href = sellerRoutes.respond('RATE_CONTRACT', bid.id);
+          detailsHref = sellerRoutes.detail('RATE_CONTRACT', bid.id);
           actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
         } else if (bid.sourceModel === 'TENDER' && bid.sourceId) {
           href = `/seller/tenders/${bid.sourceId}/bid`;
           detailsHref = `/tenders?tender=${bid.sourceId}`;
           actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
         } else if (method === 'RFP' || opportunityType === 'RFP') {
-          href = `/seller/rfp?requestId=${bid.id}`;
-          detailsHref = `/seller/rfp?requestId=${bid.id}`;
+          href = sellerRoutes.detail('RFP', bid.id);
+          detailsHref = sellerRoutes.detail('RFP', bid.id);
           actionLabel = 'Submit Proposal';
         } else {
-          href = `/seller/rfq?requestId=${bid.id}`;
-          detailsHref = `/seller/rfq?requestId=${bid.id}`;
+          href = sellerRoutes.detail('RFQ', bid.id);
+          detailsHref = sellerRoutes.detail('RFQ', bid.id);
           actionLabel = 'Submit Quote';
         }
 
@@ -510,17 +511,18 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const documents = asTextList(req.requiredDocuments);
         const linkedBidId = req.payload?.linkedProcurementBidId;
         const buildDetailHref = () => {
-          if (opportunityType === 'Rate Contract') return `/seller/rate-contract?requirementId=${req.id}`;
-          if (opportunityType === 'RFQ') return `/seller/rfq?requirementId=${req.id}`;
-          if (opportunityType === 'RFP') return `/seller/rfp?requirementId=${req.id}`;
-          if (opportunityType === 'Open Tender' || opportunityType === 'Limited Tender') return `/seller/rfq?requirementId=${req.id}`;
-          if (opportunityType === 'Reverse Auction') return `/reverse-auctions/${req.sourceId || req.id}`;
+          if (opportunityType === 'Rate Contract') return sellerRoutes.detail('RATE_CONTRACT', req.id);
+          if (opportunityType === 'RFQ') return sellerRoutes.detail('RFQ', req.id);
+          if (opportunityType === 'RFP') return sellerRoutes.detail('RFP', req.id);
+          if (opportunityType === 'Open Tender') return sellerRoutes.detail('OPEN_TENDER', req.id);
+          if (opportunityType === 'Limited Tender') return sellerRoutes.detail('LIMITED_TENDER', req.id);
+          if (opportunityType === 'Reverse Auction') return sellerRoutes.detail('REVERSE_AUCTION', req.sourceId || req.id);
           return `/marketplace/requirements/${req.sourceId || req.id}`;
         };
         const detailHref = buildDetailHref();
         const responseHref = linkedBidId 
-          ? (opportunityType === 'Rate Contract' ? `/seller/rate-contract/submit-quotation?requestId=${linkedBidId}` : `/bids/${linkedBidId}/participate`)
-          : (opportunityType === 'Rate Contract' ? `/seller/rate-contract/submit-quotation?requirementId=${req.id}` : detailHref);
+          ? (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', linkedBidId) : `/bids/${linkedBidId}/participate`)
+          : (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', req.id) : detailHref);
         const opportunity: SellerOpportunity = {
           id: `req-${req.id}`,
           type: opportunityType,
@@ -600,8 +602,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           eligibility: isQrPrivate ? 'Invited Sellers Only' : 'Open Sourcing',
           status: qr.status || 'OPEN',
           actionLabel: 'Submit Quote',
-          href: `/seller/rfq?requestId=${qr.id}`,
-          detailsHref: `/seller/rfq?requestId=${qr.id}`,
+          href: sellerRoutes.detail('RFQ', qr.id),
+          detailsHref: sellerRoutes.detail('RFQ', qr.id),
           sourceRef: qr.quoteNumber || `RFQ-${qr.id}`,
           publishedAt: qr.createdAt,
           quantity: qr.quantity,
@@ -646,8 +648,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           eligibility: 'Check invitation',
           status: auction.statusEnum || auction.status || 'Scheduled',
           actionLabel: 'Join Auction',
-          href: `/reverse-auctions/${auction.id}/live`,
-          detailsHref: `/reverse-auctions/${auction.id}`,
+          href: sellerRoutes.auctionLive(auction.id),
+          detailsHref: sellerRoutes.detail('REVERSE_AUCTION', auction.id),
           sourceRef: auction.auctionCode || `RA-${auction.id}`,
           publishedAt: auction.startTime,
           description: auction.description,
@@ -703,11 +705,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           status: rc.status || meta.activeState || 'ACTIVE',
           actionLabel: 'Submit Quote',
           href: hasReqId
-            ? `/seller/rate-contract/submit-quotation?requirementId=${meta.requirementId}`
-            : `/seller/rate-contract/submit-quotation?requestId=${rc.id}`,
+            ? sellerRoutes.respond('RATE_CONTRACT', meta.requirementId)
+            : sellerRoutes.respond('RATE_CONTRACT', rc.id),
           detailsHref: hasReqId
-            ? `/seller/rate-contract?requirementId=${meta.requirementId}`
-            : `/seller/rate-contract?requestId=${rc.id}`,
+            ? sellerRoutes.detail('RATE_CONTRACT', meta.requirementId)
+            : sellerRoutes.detail('RATE_CONTRACT', rc.id),
           sourceRef: refNo,
           publishedAt: rc.startDate || rc.createdAt,
           quantity: meta.minimumOrderQuantity ? `${meta.minimumOrderQuantity} min qty` : undefined,
