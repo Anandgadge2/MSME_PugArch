@@ -74,7 +74,7 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
-            status: data.status as any,
+            status: String(data.status).toLowerCase() as any,
             statusEnum: data.status as any
           };
         });
@@ -108,6 +108,8 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
       let baseUrl = getBaseUrl().replace(/\/$/, '');
       if (!baseUrl && typeof window !== 'undefined') {
         baseUrl = window.location.origin;
+      } else if (baseUrl.startsWith('/') && typeof window !== 'undefined') {
+        baseUrl = window.location.origin + baseUrl;
       }
       const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/ws';
       console.log(`[WS] Connecting to ${wsUrl} for dispute ${disputeId}`);
@@ -157,7 +159,7 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
               if (!oldData) return oldData;
               return {
                 ...oldData,
-                status: data.status as any,
+                status: String(data.status).toLowerCase() as any,
                 statusEnum: data.status as any
               };
             });

@@ -107,18 +107,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = useCallback(async (redirectPath?: string | any) => {
     const target = typeof redirectPath === 'string' ? redirectPath : '/';
     setIsLoggingOut(true);
+
+    // 1. Immediately wipe local auth state and cache (instant UI logout)
+    clearLocalSession();
+
+    // 2. Immediately redirect the user without waiting for network latency
+    router.replace(target);
+    if (target === '/' && typeof window !== 'undefined' && window.location.pathname !== '/') {
+      window.history.replaceState(null, '', '/');
+    }
+
+    // 3. Fire-and-forget server logout in background to invalidate backend session/cookies
     try {
-      // Do not generate a predictable 401 for visitors who never had a
-      // session. A real cookie session always has the readable CSRF marker.
       if (getCookieValue('csrfToken') || getStoredToken()) {
-        await api.post('/api/auth/logout', {}).catch(() => undefined);
+        api.post('/api/auth/logout', {}).catch(() => undefined);
       }
+    } catch {
+      // ignore
     } finally {
-      clearLocalSession();
-      router.replace(target);
-      if (target === '/' && typeof window !== 'undefined' && window.location.pathname !== '/') {
-        window.history.replaceState(null, '', '/');
-      }
+      setIsLoggingOut(false);
     }
   }, [clearLocalSession, router]);
 

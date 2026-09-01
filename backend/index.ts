@@ -228,7 +228,16 @@ app.post('/api/pusher/auth', authenticate, async (req: AuthRequest, res) => {
 
       const dispute = await prisma.dispute.findUnique({
         where: { id: disputeId },
-        select: { buyerId: true, sellerId: true, againstOrgId: true }
+        select: { 
+          buyerId: true, 
+          sellerId: true, 
+          raisedById: true,
+          raisedByUserId: true,
+          againstOrgId: true,
+          raisedByOrgId: true,
+          buyerOrgId: true,
+          sellerOrgId: true
+        }
       });
 
       if (!dispute) {
@@ -236,12 +245,22 @@ app.post('/api/pusher/auth', authenticate, async (req: AuthRequest, res) => {
       }
 
       const isAdmin = ['admin', 'master_admin'].includes(user.role || '');
-      const isParticipant =
-        user.id === dispute.buyerId ||
-        user.id === dispute.sellerId ||
-        (user.organizationId && user.organizationId === dispute.againstOrgId);
+      
+      const isParticipantUser = [
+        dispute.buyerId, 
+        dispute.sellerId, 
+        dispute.raisedById, 
+        dispute.raisedByUserId
+      ].includes(user.id);
+      
+      const isParticipantOrg = user.organizationId && [
+        dispute.againstOrgId,
+        dispute.raisedByOrgId,
+        dispute.buyerOrgId,
+        dispute.sellerOrgId
+      ].includes(user.organizationId);
 
-      if (!isAdmin && !isParticipant) {
+      if (!isAdmin && !isParticipantUser && !isParticipantOrg) {
         return res.status(403).json({ message: 'Forbidden: Unauthorized for this dispute channel' });
       }
     } else if (channelName.startsWith('private-conversation-')) {
@@ -5062,10 +5081,10 @@ app.post('/api/admin/status', authenticate, authorizeAdmin, async (req, res) => 
   }
 });
 
-app.get('/api/vendors', authenticate, authorize('buyer', 'admin'), async (req, res) => {
+app.get('/api/vendors', authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
   try {
     const vendors = await prisma.user.findMany({
-      where: { role: 'seller', onboardingStatus: 'approved_for_procurement' },
+      where: { role: { in: ['seller', 'shg'] }, onboardingStatus: 'approved_for_procurement' },
       include: {
         sellerProfile: {
           include: {
@@ -5080,7 +5099,7 @@ app.get('/api/vendors', authenticate, authorize('buyer', 'admin'), async (req, r
         const profileAny = safeVendor.sellerProfile as any;
         const offices = safeVendor.sellerProfile.offices || [];
         const gstOffice = offices.find((o: any) => o.gstNumber);
-        profileAny.gst = gstOffice?.gstNumber || null;
+        profileAny.gst = gstOffice?.gstNumber || profileAny.gst || null;
 
         if (gstOffice) {
           profileAny.city = profileAny.city || gstOffice.city;
@@ -5097,10 +5116,14 @@ app.get('/api/vendors', authenticate, authorize('buyer', 'admin'), async (req, r
   }
 });
 
-app.get('/api/vendors/:id', authenticate, authorize('buyer', 'admin'), async (req, res) => {
+app.get('/api/vendors/:id', authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
   try {
-    const vendor = await prisma.user.findUnique({
-      where: { id: Number(req.params.id), role: 'seller' },
+    const vendorId = Number(req.params.id);
+    if (!vendorId || Number.isNaN(vendorId)) {
+      return res.status(400).json({ message: 'Invalid vendor ID' });
+    }
+    const vendor = await prisma.user.findFirst({
+      where: { id: vendorId, role: { in: ['seller', 'shg'] } },
       include: {
         buyerProfile: true,
         sellerProfile: {
@@ -5148,6 +5171,20 @@ app.get('/api/vendors/:id', authenticate, authorize('buyer', 'admin'), async (re
         accountNumber: bank.accountNumberMasked || maskValue(bank.accountNumber)
       }));
     }
+    if (vendorSafe.sellerProfile) {
+      const profileAny = vendorSafe.sellerProfile as any;
+      const offices = vendorSafe.sellerProfile.offices || [];
+      const gstOffice = offices.find((o: any) => o.gstNumber);
+      profileAny.gst = gstOffice?.gstNumber || profileAny.gst || null;
+
+      if (gstOffice) {
+        profileAny.city = profileAny.city || gstOffice.city;
+        profileAny.state = profileAny.state || gstOffice.state;
+      } else if (offices[0]) {
+        profileAny.city = profileAny.city || offices[0].city;
+        profileAny.state = offices[0].state;
+      }
+    }
     res.json(maskSensitive({
       ...vendorSafe,
       _id: vendor.id,
@@ -5159,9 +5196,12 @@ app.get('/api/vendors/:id', authenticate, authorize('buyer', 'admin'), async (re
   }
 });
 
-app.get('/api/vendors/:id/catalogue', authenticate, authorize('buyer', 'admin'), async (req, res) => {
+app.get('/api/vendors/:id/catalogue', authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
   try {
     const sellerId = Number(req.params.id);
+    if (!sellerId || Number.isNaN(sellerId)) {
+      return res.status(400).json({ message: 'Invalid vendor ID' });
+    }
     const [products, services] = await Promise.all([
       prisma.product.findMany({
         where: { sellerId, status: 'ACTIVE' },

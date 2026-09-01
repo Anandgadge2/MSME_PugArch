@@ -41,33 +41,12 @@ export default function MarketplaceProductDetail() {
     const { data: detailData, isLoading: loading } = useTanstackQuery({
         queryKey: ['marketplaceProduct', productId],
         enabled: productId > 0,
-        staleTime: 5 * 60 * 1000,
-        initialData: () => {
-            const cachedDetail = queryClient.getQueryData<any>(['marketplaceProduct', productId]);
-            if (cachedDetail) return cachedDetail;
-
-            const cacheState = queryClient.getQueryCache().getAll();
-            for (const query of cacheState) {
-                const data = query.state.data as any;
-                if (data?.featuredProducts) {
-                    const found = data.featuredProducts.find((p: any) => p.id === productId);
-                    if (found) return { product: found, relatedProducts: [] };
-                }
-                if (data?.products) {
-                    const found = data.products.find((p: any) => p.id === productId);
-                    if (found) return { product: found, relatedProducts: [] };
-                }
-                if (data?.records) {
-                    const found = data.records.find((p: any) => p.id === productId);
-                    if (found) return { product: found, relatedProducts: [] };
-                }
-            }
-            return undefined;
-        },
+        staleTime: 30 * 1000,
         queryFn: async () => {
             if (!productId) return undefined;
             const res = await marketplaceApi.getProductDetail(productId);
-            if (res.product) return res;
+            if (res?.product) return res;
+            if (res?.id) return { product: res, relatedProducts: [] };
             try {
                 const legacyRes = await api.get(`/api/marketplace/products/${productId}`);
                 const data = unwrapApiData(legacyRes);
@@ -75,16 +54,6 @@ export default function MarketplaceProductDetail() {
                 if (data?.id) return { product: data, relatedProducts: [] };
             } catch {
                 // Ignore fallback error
-            }
-            try {
-                const catalogueRes = await api.get('/api/catalogue');
-                const data = unwrapApiData(catalogueRes);
-                if (data?.records && Array.isArray(data.records)) {
-                    const found = data.records.find((p: any) => p.id === productId);
-                    if (found) return { product: found, relatedProducts: [] };
-                }
-            } catch {
-                // Ignore
             }
             return undefined;
         },
@@ -147,19 +116,20 @@ export default function MarketplaceProductDetail() {
             toast.info('Quote requests are available from buyer accounts.');
             return;
         }
-        const sellerUserId = Number((product as any).seller?.id || (product as any).sellerId || 0);
-        if (!sellerUserId) {
+        const sellerOrgId = (product as any).organization?.id || (product as any).organizationId;
+        const sellerUserId = Number((product as any).seller?.id || (product as any).sellerId || sellerOrgId || 0);
+        if (!sellerUserId && !sellerOrgId) {
             toast.info('Seller contact details are unavailable for this product.');
             return;
         }
         const params = new URLSearchParams({
             intent: 'quote',
-            sellerId: String(sellerUserId),
+            sellerId: String(sellerUserId || sellerOrgId),
             productId: String(product.id || ''),
             productName: product.name || '',
             price: String(product.price || ''),
             subject: `Quote Request: ${product.name}`,
-            message: `Hello, I would like to request a formal quotation for ${product.name}.\n\nCategory: ${product.category?.name || 'General'}\nBase Unit Price: ₹${Number(product.price || 0).toLocaleString('en-IN')}\nQuantity: Please confirm minimum order quantity and best pricing for volume orders.\nDelivery: Please provide delivery timeline to our destination and payment terms.`
+            message: `Hello, I would like to request a formal quotation for ${product.name}.\n\nCategory: ${product.category?.name || (product as any).categoryName || 'General'}\nBase Unit Price: ₹${Number(product.price || 0).toLocaleString('en-IN')}\nQuantity: Please confirm minimum order quantity and best pricing for volume orders.\nDelivery: Please provide delivery timeline to our destination and payment terms.`
         });
         router.push(`/buyer/messages?${params.toString()}`);
     };
@@ -207,9 +177,12 @@ export default function MarketplaceProductDetail() {
     const imageCandidates = getMarketplaceImageCandidates(product).filter((image) => !failedImages.includes(image));
     const fallbackProductImage = buildProductFallbackImage(product);
     const currentImage = imageCandidates[selectedImage] || imageCandidates[0] || fallbackProductImage;
-    const isVerified = product.organization?.verificationStatus === 'VERIFIED';
-    const location = product.organization?.city || product.organization?.district || product.organization?.state;
     const productAny = product as any;
+    const isVerified = product.organization?.verificationStatus === 'VERIFIED' || productAny.sellerVerified || Boolean(product.organization?.id);
+    const location = product.organization?.city || product.organization?.district || product.organization?.state || productAny.location || (productAny.district ? `${productAny.district}, ${productAny.state || 'ODISHA'}` : undefined);
+    const sellerOrgId = product.organization?.id || productAny.organizationId;
+    const sellerUserId = Number(product.seller?.id || productAny.sellerId || 0);
+    const sellerDisplayName = product.organization?.organizationName || product.seller?.name || productAny.sellerName || productAny.vendorName || 'Verified Supplier';
 
     const price = productAny.price ? Number(productAny.price) : 0;
     const discountPrice = productAny.discountPrice ? Number(productAny.discountPrice) : 0;
@@ -218,16 +191,16 @@ export default function MarketplaceProductDetail() {
     const discountPercent = hasOffer ? Math.round(((price - displayPrice) / price) * 100) : 0;
 
     const handleSaveSupplier = () => {
-        if (!product.organization?.id) {
+        if (!sellerOrgId && !sellerUserId) {
             toast.error('Supplier details are not available for this listing.');
             return;
         }
         saveSupplier({
-            id: product.organization.id,
-            sellerUserId: product.seller?.id || null,
-            name: product.organization.organizationName || product.seller?.name || 'Verified supplier',
-            location: [product.organization.city, product.organization.district, product.organization.state].filter(Boolean).join(', '),
-            verificationStatus: product.organization.verificationStatus,
+            id: sellerOrgId || sellerUserId,
+            sellerUserId: sellerUserId || null,
+            name: sellerDisplayName,
+            location: [product.organization?.city, product.organization?.district, product.organization?.state].filter(Boolean).join(', ') || location || 'India',
+            verificationStatus: product.organization?.verificationStatus || (isVerified ? 'VERIFIED' : 'PENDING'),
             source: product.name,
         });
         toast.success('Supplier added to saved sellers!');
@@ -478,11 +451,11 @@ export default function MarketplaceProductDetail() {
                             <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition mt-6">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-11 h-11 rounded-xl bg-slate-900 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
-                                        {(product.organization?.organizationName || product.seller?.name || 'M')[0].toUpperCase()}
+                                        {(sellerDisplayName || 'M')[0].toUpperCase()}
                                     </div>
                                     <div className="min-w-0">
-                                        <h4 title={product.organization?.organizationName || product.seller?.name || 'Verified Supplier'} className="text-xs font-extrabold text-slate-900 truncate">
-                                            {product.organization?.organizationName || product.seller?.name || 'Verified Supplier'}
+                                        <h4 title={sellerDisplayName} className="text-xs font-extrabold text-slate-900 truncate">
+                                            {sellerDisplayName}
                                         </h4>
                                         <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500">
                                             {location && (
@@ -498,9 +471,9 @@ export default function MarketplaceProductDetail() {
                                         </div>
                                     </div>
                                 </div>
-                                {product.organization?.id && (
+                                {sellerOrgId && (
                                     <Link
-                                        href={`/marketplace/sellers/${product.organization.id}`}
+                                        href={`/marketplace/sellers/${sellerOrgId}`}
                                         className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0b2447] hover:underline shrink-0 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200/60"
                                     >
                                         Storefront <ExternalLink className="h-3 w-3" />
@@ -630,7 +603,7 @@ export default function MarketplaceProductDetail() {
                                                 </div>
                                                 <div>
                                                     <h4 className="text-sm font-extrabold text-slate-900">
-                                                        {product.organization?.organizationName || product.seller?.name || 'Verified Supplier'}
+                                                        {sellerDisplayName}
                                                     </h4>
                                                     <p className="text-xs text-slate-500 font-medium">MSME Portal Registration & Identity Verification Status</p>
                                                 </div>
@@ -770,20 +743,20 @@ export default function MarketplaceProductDetail() {
                     </div>
 
                     {/* Uploaded Documents & Certifications Section */}
-                    <div className="mt-12 pt-8 border-t border-slate-200/80">
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                                    <FileText className="h-5 w-5 text-[#0b2447]" /> Uploaded Documents & Certifications
-                                </h3>
-                                <p className="text-xs text-slate-500 font-medium">Compliance documents, ISO certificates, and product catalogues uploaded by seller.</p>
+                    {productDocuments.length > 0 && (
+                        <div className="mt-12 pt-8 border-t border-slate-200/80">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                                        <FileText className="h-5 w-5 text-[#0b2447]" /> Uploaded Documents & Certifications
+                                    </h3>
+                                    <p className="text-xs text-slate-500 font-medium">Compliance documents, ISO certificates, and product catalogues uploaded by seller.</p>
+                                </div>
+                                <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+                                    {productDocuments.length} Documents
+                                </span>
                             </div>
-                            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-                                {productDocuments.length} Documents
-                            </span>
-                        </div>
 
-                        {productDocuments.length > 0 ? (
                             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 {productDocuments.map((cert: any) => {
                                     return (
@@ -828,14 +801,8 @@ export default function MarketplaceProductDetail() {
                                     );
                                 })}
                             </div>
-                        ) : (
-                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-8 text-center">
-                                <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                                <p className="text-xs font-bold text-slate-600">No verification documents attached yet</p>
-                                <p className="text-[11px] text-slate-400 mt-1">Official certifications and spec sheets will appear here once uploaded by the seller.</p>
-                            </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
 
                     {/* Related Products Section */}
                     {related.length > 0 && (

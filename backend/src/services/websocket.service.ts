@@ -79,7 +79,16 @@ const handleSubscribe = async (socket: AuthenticatedWebSocket, disputeId: number
   try {
     const dispute = await prisma.dispute.findUnique({
       where: { id: disputeId },
-      select: { buyerId: true, sellerId: true, againstOrgId: true }
+      select: { 
+        buyerId: true, 
+        sellerId: true, 
+        raisedById: true,
+        raisedByUserId: true,
+        againstOrgId: true,
+        raisedByOrgId: true,
+        buyerOrgId: true,
+        sellerOrgId: true
+      }
     });
 
     if (!dispute) {
@@ -88,12 +97,22 @@ const handleSubscribe = async (socket: AuthenticatedWebSocket, disputeId: number
     }
 
     const isAdmin = ['admin', 'master_admin'].includes(socket.user.role || '');
-    const isParticipant =
-      socket.user.id === dispute.buyerId ||
-      socket.user.id === dispute.sellerId ||
-      (socket.user.organizationId && socket.user.organizationId === dispute.againstOrgId);
+    
+    const isParticipantUser = [
+      dispute.buyerId, 
+      dispute.sellerId, 
+      dispute.raisedById, 
+      dispute.raisedByUserId
+    ].includes(socket.user.id);
+    
+    const isParticipantOrg = socket.user.organizationId && [
+      dispute.againstOrgId,
+      dispute.raisedByOrgId,
+      dispute.buyerOrgId,
+      dispute.sellerOrgId
+    ].includes(socket.user.organizationId);
 
-    if (!isAdmin && !isParticipant) {
+    if (!isAdmin && !isParticipantUser && !isParticipantOrg) {
       socket.send(JSON.stringify({ type: 'ERROR', message: 'Unauthorized for this dispute' }));
       return;
     }

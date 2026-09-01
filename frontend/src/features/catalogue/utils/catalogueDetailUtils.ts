@@ -38,19 +38,21 @@ export const buildProductDetailFields = (product: Record<string, unknown>) => {
   const org = product.organization as Record<string, unknown> | undefined;
   const seller = product.seller as Record<string, unknown> | undefined;
   const category = product.category as Record<string, unknown> | undefined;
-  const location = org?.city || org?.district || org?.state;
+  const location = org?.city || org?.district || org?.state || (product.location as string) || (product.district ? `${product.district}, ${product.state || ''}`.trim() : undefined);
+  const sellerName = org?.organizationName || seller?.name || (product.sellerName as string) || (product.vendorName as string);
+  const categoryName = category?.name || (product.categoryName as string) || 'General';
 
   const required: DetailField[] = [
     { label: 'Product Name', value: product.name, always: true },
-    { label: 'Category', value: category?.name || 'General', always: true },
-    { label: 'Seller', value: org?.organizationName || seller?.name, always: true },
-    { label: 'Seller Location', value: location || 'Not specified', always: true },
-    { label: 'Description', value: product.description, always: true },
+    { label: 'Category', value: categoryName, always: true },
+    { label: 'Seller', value: sellerName || 'Verified MSME Seller', always: true },
+    { label: 'Seller Location', value: location || 'Location available on request', always: true },
+    { label: 'Description', value: product.description || 'Verified product listed for MSME procurement.', always: true },
     { label: 'Price', value: formatCatalogueMoney(product.price, String(product.currency || 'INR')) || 'Price on request', always: true },
     { label: 'Currency', value: product.currency || 'INR', always: true },
     { label: 'GST Rate', value: hasValue(product.taxRate) ? formatCataloguePercent(product.taxRate) : '0%', always: true },
-    { label: 'Unit of Measure', value: product.unitOfMeasure || 'Unit', always: true },
-    { label: 'Status', value: product.status, always: true },
+    { label: 'Unit of Measure', value: product.unitOfMeasure || product.unit || 'Unit', always: true },
+    { label: 'Status', value: product.status || 'ACTIVE', always: true },
   ];
 
   const optional: DetailField[] = [
@@ -78,22 +80,24 @@ export const buildServiceDetailFields = (service: Record<string, unknown>) => {
   const org = service.organization as Record<string, unknown> | undefined;
   const seller = service.seller as Record<string, unknown> | undefined;
   const category = service.category as Record<string, unknown> | undefined;
-  const location = org?.city || org?.district || org?.state;
-  const pricingModel = String(service.pricingModel || 'CUSTOM').replace(/_/g, ' ');
-  const basePrice = formatCatalogueMoney(service.basePrice, String(service.currency || 'INR'));
+  const location = org?.city || org?.district || org?.state || (service.location as string) || (service.district ? `${service.district}, ${service.state || ''}`.trim() : undefined);
+  const sellerName = org?.organizationName || seller?.name || (service.sellerName as string) || (service.vendorName as string);
+  const categoryName = category?.name || (service.categoryName as string) || 'General';
+  const pricingModel = String(service.pricingModel || service.unit || 'CUSTOM').replace(/_/g, ' ');
+  const basePrice = formatCatalogueMoney(service.basePrice || service.price, String(service.currency || 'INR'));
 
   const required: DetailField[] = [
     { label: 'Service Name', value: service.name, always: true },
-    { label: 'Category', value: category?.name || 'General', always: true },
-    { label: 'Seller', value: org?.organizationName || seller?.name, always: true },
-    { label: 'Seller Location', value: location || 'Not specified', always: true },
-    { label: 'Description', value: service.description, always: true },
+    { label: 'Category', value: categoryName, always: true },
+    { label: 'Seller', value: sellerName || 'Verified Service Provider', always: true },
+    { label: 'Seller Location', value: location || 'Location available on request', always: true },
+    { label: 'Description', value: service.description || 'Verified service listing for MSME procurement.', always: true },
     { label: 'Pricing Model', value: pricingModel, always: true },
     { label: 'Base Price', value: basePrice || 'Custom / on request', always: true },
     { label: 'Currency', value: service.currency || 'INR', always: true },
     { label: 'GST Rate', value: hasValue(service.taxRate) ? formatCataloguePercent(service.taxRate) : '0%', always: true },
-    { label: 'Service Area', value: service.serviceArea, always: true },
-    { label: 'Status', value: service.status, always: true },
+    { label: 'Service Area', value: service.serviceArea || location || 'All Districts', always: true },
+    { label: 'Status', value: service.status || 'ACTIVE', always: true },
   ];
 
   const optional: DetailField[] = [

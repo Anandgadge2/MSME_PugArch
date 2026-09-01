@@ -2945,10 +2945,13 @@ function PurchaseBidModal({ item, actionState, onActionCreated, onClose }: {
 }
 
 function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading: boolean; onClose: () => void }) {
-  const profile = seller?.sellerProfile || {};
-  const offices = normalizeList<any>(profile.offices);
-  const categories = normalizeList<string>(profile.productCategories);
+  const profile = seller?.sellerProfile || seller?.buyerProfile || seller || {};
+  const offices = normalizeList<any>(seller?.sellerProfile?.offices || seller?.offices || profile.offices);
+  const categories = normalizeList<string>(profile.productCategories || profile.categories);
   const primaryOffice = offices[0] || {};
+  const location = [profile.city || primaryOffice.city, profile.state || primaryOffice.state].filter(Boolean).join(', ') || profile.location || primaryOffice.address || 'Not available';
+  const pan = profile.pan || profile.panMasked || seller?.pan || 'Not available';
+  const gst = profile.gst || profile.gstMasked || primaryOffice.gstNumber || seller?.gst || 'Not available';
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -2960,7 +2963,7 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-[#059669]">Seller Profile</p>
-              <h2 className="truncate text-lg font-black text-neutral-900">{profile.businessName || seller?.name || 'Seller'}</h2>
+              <h2 className="truncate text-lg font-black text-neutral-900">{profile.businessName || profile.companyName || seller?.name || 'Seller'}</h2>
             </div>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-650 hover:bg-slate-105 transition-all">
@@ -2977,7 +2980,7 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
             <>
               <div className="flex flex-wrap gap-2">
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                  {String(seller?.onboardingStatus || 'approved').replace(/_/g, ' ')}
+                  {String(seller?.onboardingStatus || profile?.onboardingStatus || 'approved').replace(/_/g, ' ')}
                 </span>
                 {profile.organizationType && (
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-slate-600">
@@ -2992,12 +2995,12 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <SellerInfoBox icon={Mail} label="Email" value={seller?.email || 'Not available'} />
-                <SellerInfoBox icon={Building2} label="Business Name" value={profile.businessName || seller?.name || 'Not available'} />
-                <SellerInfoBox icon={MapPin} label="Location" value={[profile.city || primaryOffice.city, profile.state || primaryOffice.state].filter(Boolean).join(', ') || 'Not available'} />
+                <SellerInfoBox icon={Mail} label="Email" value={seller?.email || profile?.email || 'Not available'} />
+                <SellerInfoBox icon={Building2} label="Business Name" value={profile.businessName || profile.companyName || seller?.name || 'Not available'} />
+                <SellerInfoBox icon={MapPin} label="Location" value={location} />
                 <SellerInfoBox icon={CalendarDays} label="Incorporated" value={profile.dateOfIncorporation ? new Date(profile.dateOfIncorporation).toLocaleDateString() : 'Not available'} />
-                <SellerInfoBox icon={ShieldCheck} label="PAN" value={profile.pan || profile.panMasked || 'Not available'} />
-                <SellerInfoBox icon={FileText} label="GST" value={profile.gst || profile.gstMasked || primaryOffice.gstNumber || 'Not available'} />
+                <SellerInfoBox icon={ShieldCheck} label="PAN" value={pan} />
+                <SellerInfoBox icon={FileText} label="GST" value={gst} />
               </div>
 
               {categories.length > 0 && (
