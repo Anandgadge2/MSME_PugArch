@@ -134,26 +134,33 @@ export default function TeamManagementPage() {
     const roleOptions = useMemo(() => {
         const labels = new Map<string, string>();
         members.forEach(member => {
-            if (member.orgRole) labels.set(member.orgRole, member.orgRole.replace(/_/g, ' '));
+            const roleName = member.customRole?.name || member.orgRole.replace(/_/g, ' ');
+            labels.set(roleName, roleName);
+        });
+        roles.forEach(role => {
+            if (role.name) labels.set(role.name, role.name);
         });
         invitations.forEach(invite => {
-            if (invite.orgRole) labels.set(invite.orgRole, invite.orgRole.replace(/_/g, ' '));
+            const roleName = invite.customRole?.name || invite.orgRole.replace(/_/g, ' ');
+            labels.set(roleName, roleName);
         });
         return Array.from(labels, ([value, label]) => ({ value, label }));
-    }, [invitations, members]);
+    }, [invitations, members, roles]);
     const visibleMembers = useMemo(() => {
         const text = searchTerm.trim().toLowerCase();
         return [...members].filter(member => {
+            const roleName = member.customRole?.name || member.orgRole.replace(/_/g, ' ');
             const haystack = [
                 member.userId,
                 member.user.name,
                 member.user.email,
                 member.user.mobile,
                 member.orgRole,
+                roleName,
                 member.user.accountStatus
             ].join(' ').toLowerCase();
             if (text && !haystack.includes(text)) return false;
-            if (roleFilter && member.orgRole !== roleFilter) return false;
+            if (roleFilter && member.orgRole !== roleFilter && roleName !== roleFilter) return false;
             if (statusFilter === 'active' && !member.isActive) return false;
             if (statusFilter === 'inactive' && member.isActive) return false;
             return true;
@@ -161,7 +168,7 @@ export default function TeamManagementPage() {
             const valueFor = (member: Member) => {
                 if (sortKey === 'name') return member.user.name || '';
                 if (sortKey === 'email') return member.user.email || '';
-                if (sortKey === 'role') return member.orgRole || '';
+                if (sortKey === 'role') return member.customRole?.name || member.orgRole || '';
                 if (sortKey === 'status') return member.isActive ? 'active' : 'inactive';
                 if (sortKey === 'lastLogin') return new Date(member.user.lastLoginAt || 0).getTime();
                 return new Date(member.acceptedAt || member.invitedAt || 0).getTime();
@@ -470,7 +477,7 @@ export default function TeamManagementPage() {
                                         </span>
                                     </div>
                                     <div className="mt-4 grid gap-2 text-xs font-semibold text-slate-600">
-                                        <p><span className="font-black text-slate-900">Role:</span> <span className={`ml-1 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>{member.orgRole.replace(/_/g, ' ')}</span></p>
+                                        <p><span className="font-black text-slate-900">Role:</span> <span className={`ml-1 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>{member.customRole?.name || member.orgRole.replace(/_/g, ' ')}</span></p>
                                         <p><span className="font-black text-slate-900">Joined:</span> {formatDateTime(member.acceptedAt || member.invitedAt)}</p>
                                         <p><span className="font-black text-slate-900">Last login:</span> {member.user.lastLoginAt ? formatRelative(member.user.lastLoginAt) : 'Never'}</p>
                                         {member.user.mobile && <p><span className="font-black text-slate-900">Mobile:</span> {member.user.mobile}</p>}
@@ -503,17 +510,17 @@ export default function TeamManagementPage() {
                                 <tbody className="divide-y divide-slate-100">
                                     {pageItems.map((member, idx) => (
                                         <tr key={member.id} className="hover:bg-slate-50/60">
-                                            <td className="px-4 py-3 text-xs font-mono text-slate-400">{String((page - 1) * pageSize + idx + 1).padStart(2, '0')}</td>
-                                            <td className="px-4 py-3">
-                                                <EntityIdLink label={`MBR-${member.userId}`} id={member.userId} size="sm" onClick={() => { }} />
-                                                <p className="mt-1 text-sm font-black text-slate-900 text-wrap-anywhere">{member.user.name}</p>
-                                            </td>
-                                            <td className="px-4 py-3 text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{member.user.email}</td>
-                                            <td className="px-4 py-3">
-                                                <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>
-                                                    {member.orgRole.replace(/_/g, ' ')}
-                                                </span>
-                                            </td>
+                                             <td className="px-4 py-3 text-xs font-mono text-slate-400">{String((page - 1) * pageSize + idx + 1).padStart(2, '0')}</td>
+                                             <td className="px-4 py-3">
+                                                 <EntityIdLink label={`MBR-${member.userId}`} id={member.userId} size="sm" onClick={() => { }} />
+                                                 <p className="mt-1 text-sm font-black text-slate-900 text-wrap-anywhere">{member.user.name}</p>
+                                             </td>
+                                             <td className="px-4 py-3 text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{member.user.email}</td>
+                                             <td className="px-4 py-3">
+                                                 <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>
+                                                     {member.customRole?.name || member.orgRole.replace(/_/g, ' ')}
+                                                 </span>
+                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${member.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
                                                     {member.isActive ? 'Active' : 'Inactive'}
@@ -847,17 +854,20 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: OrgCustomRole[]; on
 // ─── Change Role Modal ────────────────────────────────────────────────────────
 
 function ChangeRoleModal({ member, roles, onClose, onSuccess }: { member: Member; roles: OrgCustomRole[]; onClose: () => void; onSuccess: () => void }) {
-    const [customRoleId, setCustomRoleId] = useState<number | ''>(member.customRoleId || '');
+    const initialRoleId = member.customRoleId || member.customRole?.id || roles.find(r => r.roleKey.toLowerCase().replace(/-/g, '_') === String(member.orgRole).toLowerCase().replace(/-/g, '_'))?.id || '';
+    const [customRoleId, setCustomRoleId] = useState<number | ''>(initialRoleId);
     const [saving, setSaving] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
         try {
+            const selectedRoleId = customRoleId === '' ? null : Number(customRoleId);
+            const selectedRole = roles.find(r => r.id === selectedRoleId);
             await putApi(`/api/org/members/${member.userId}/role`, {
-                customRoleId: customRoleId === '' ? null : customRoleId
+                customRoleId: selectedRoleId
             });
-            toast.success(`${member.user.name}'s role assignment updated`);
+            toast.success(`${member.user.name}'s role assignment updated to ${selectedRole?.name || 'custom role'}`);
             onSuccess();
         } catch (err: any) {
             toast.error(err?.message || 'Failed to update role');
@@ -881,14 +891,23 @@ function ChangeRoleModal({ member, roles, onClose, onSuccess }: { member: Member
                 <form onSubmit={handleSubmit} className="p-5 space-y-4">
                     <div className="space-y-1">
                         <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Dynamic Role</label>
-                        <select value={customRoleId} onChange={e => setCustomRoleId(e.target.value === '' ? '' : Number(e.target.value))} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-                            <option value="">No custom role</option>
-                            {roles.filter(role => role.isActive).map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
+                        <select
+                            value={customRoleId}
+                            onChange={e => setCustomRoleId(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 bg-white text-slate-900"
+                        >
+                            <option value="">Select a role...</option>
+                            {roles.filter(role => role.isActive).map(role => (
+                                <option key={role.id} value={role.id}>{role.name}</option>
+                            ))}
                         </select>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1">
+                            The member will immediately receive permissions associated with this role upon saving.
+                        </p>
                     </div>
                     <div className="flex justify-end gap-2 pt-2">
                         <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-                        <Button type="submit" disabled={saving} className="bg-[#12335f] text-white">
+                        <Button type="submit" disabled={saving || customRoleId === ''} className="bg-[#12335f] text-white font-bold">
                             {saving ? 'Saving...' : 'Update Role'}
                         </Button>
                     </div>

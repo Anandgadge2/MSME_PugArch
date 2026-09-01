@@ -92,3 +92,74 @@ export const DEFAULT_ORG_ROLE_TEMPLATES: Array<{ name: string; roleKey: string; 
 export const FALLBACK_ORG_ROLE_PERMISSIONS: Record<OrgRole, OrgPermissionKey[]> = Object.fromEntries(
   DEFAULT_ORG_ROLE_TEMPLATES.map(template => [template.orgRole, template.permissions])
 ) as Record<OrgRole, OrgPermissionKey[]>;
+
+export const ORG_KEY_TO_RBAC_CODES: Record<OrgPermissionKey, string[]> = {
+  CATALOG_VIEW: ['catalogue.product.view', 'catalogue.service.view', 'catalog:view', 'catalogue.view'],
+  CATALOG_CREATE: ['catalogue.product.create', 'catalogue.service.create', 'catalog:create', 'seller.catalogue.create'],
+  CATALOG_EDIT: ['catalogue.product.update', 'catalogue.service.update', 'catalog:edit', 'catalogue.product.edit'],
+  CATALOG_DELETE: ['catalogue.product.delete', 'catalogue.service.delete', 'catalog:delete'],
+  MARKETPLACE_VIEW: ['marketplace.view', 'marketplace:view'],
+  MARKETPLACE_COMPARE: ['marketplace.compare', 'compare:marketplace_items', 'marketplace:compare'],
+  CART_ADD: ['cart.add', 'cart.view', 'cart:add'],
+  CART_SUBMIT_FOR_APPROVAL: ['cart.submit_for_approval', 'checkout.initiate', 'cart:submit_for_approval'],
+  REQUIREMENT_VIEW: ['requirement.view', 'requirement:view'],
+  REQUIREMENT_CREATE: ['requirement.create', 'requirement:create'],
+  REQUIREMENT_EDIT: ['requirement.update', 'requirement.edit', 'requirement.create', 'requirement:edit'],
+  REQUIREMENT_PUBLISH: ['requirement.publish', 'requirement:publish'],
+  REQUIREMENT_RESPONSE_COMPARE: ['compare:requirement_responses', 'requirement.response.compare', 'requirement.view'],
+  RFQ_CREATE: ['rfq.create', 'requirement.create', 'quotation:create', 'rfq:create'],
+  RFQ_MANAGE: ['rfq.manage', 'requirement.update', 'requirement.view', 'rfq:manage'],
+  TENDER_VIEW: ['tender.view', 'tenders:read', 'tenders:bids:read'],
+  TENDER_CREATE: ['tender.create', 'tender:create', 'tenders:write'],
+  TENDER_PUBLISH: ['tender.publish', 'tender:publish', 'tenders:status:write'],
+  BID_EVALUATE_TECHNICAL: ['bid.technical.evaluate', 'bid.evaluate', 'bid:technical:evaluate'],
+  BID_EVALUATE_FINANCIAL: ['bid.financial.evaluate', 'bid.evaluate', 'bid:financial:evaluate', 'compare:procurement_bids'],
+  AWARD_RECOMMEND: ['award.recommend', 'award:recommend', 'reverse_auction:award'],
+  PURCHASE_ORDER_VIEW: ['purchase_order.view', 'purchase_order:view', 'po.view'],
+  PURCHASE_ORDER_APPROVE: ['purchase_order.approve', 'purchase_order:approve', 'po.generate'],
+  REVERSE_AUCTION_VIEW: ['reverse_auction.view', 'reverse_auction:view'],
+  REVERSE_AUCTION_CREATE: ['reverse_auction.create', 'reverse_auction:create'],
+  REVERSE_AUCTION_MANAGE: ['reverse_auction.manage', 'reverse_auction.update', 'reverse_auction.publish', 'reverse_auction.close', 'reverse_auction.invite_seller', 'reverse_auction:manage'],
+  REVERSE_AUCTION_BID: ['reverse_auction.bid.submit', 'reverse_auction:bid'],
+  REVERSE_AUCTION_AWARD: ['reverse_auction.award', 'reverse_auction:award'],
+  INVOICE_VIEW: ['invoice.view', 'invoice:view'],
+  INVOICE_APPROVE: ['invoice.approve', 'invoice.verify', 'invoice:approve'],
+  PAYMENT_VIEW: ['payment.view', 'payment:view'],
+  PAYMENT_INITIATE: ['payment.initiate', 'payment.portal_initiate', 'payment:portal_initiate', 'payment:initiate'],
+  PAYMENT_OFFLINE_PROOF_UPLOAD: ['payment:offline_proof_upload', 'payment.offline_proof_upload', 'payment.initiate'],
+  PAYMENT_VERIFY: ['payment.verify', 'payment:offline_proof_verify', 'payment.offline_proof_verify'],
+  ESCROW_VIEW: ['escrow.view', 'escrow:view'],
+  ESCROW_RELEASE: ['escrow.release', 'escrow:release'],
+  DELIVERY_VIEW: ['delivery.view', 'delivery:view', 'parcel.tracking'],
+  DELIVERY_UPDATE: ['delivery.update', 'delivery.create', 'delivery.dispatch', 'delivery.confirm', 'delivery:update'],
+  GRN_VIEW: ['grn.view', 'grn:view'],
+  GRN_CREATE: ['grn.create', 'grn:create'],
+  GRN_APPROVE: ['grn.approve', 'grn:approve'],
+  INSPECTION_APPROVE: ['inspection.approve', 'inspection.create', 'inspection.view', 'inspection:approve'],
+  DISPUTE_VIEW: ['dispute.view', 'dispute:view'],
+  DISPUTE_RAISE: ['dispute.create', 'dispute.manage', 'dispute.view', 'dispute:raise'],
+  DISPUTE_RESPOND: ['dispute.respond', 'dispute.manage', 'dispute.view', 'dispute:respond'],
+  DISPUTE_RESOLVE_ORG_SIDE: ['dispute.resolve', 'dispute.manage', 'dispute.view', 'dispute:resolve'],
+  TEAM_VIEW: ['team.member.view', 'team.role.view', 'team:view'],
+  TEAM_INVITE: ['team.member.invite', 'team:invite'],
+  TEAM_ROLE_MANAGE: ['team.role.manage', 'team.role.assign', 'team:role:manage'],
+  TEAM_MEMBER_DISABLE: ['team.member.disable', 'team:member:disable'],
+  ORG_SETTINGS_VIEW: ['organization.view', 'organization:view'],
+  ORG_SETTINGS_EDIT: ['organization.update', 'organization.manage', 'organization:edit'],
+  BANNER_ELIGIBILITY_VIEW: ['banner.view', 'banner:view'],
+  BANNER_UPLOAD: ['banner:upload_eligible_org', 'banner.create', 'banner:upload'],
+  REPORTS_VIEW: ['report.view', 'reports:view', 'admin.reports.view'],
+  REPORTS_EXPORT: ['report.export', 'reports:export']
+};
+
+export const expandOrgPermissions = (permissionKeys: string[]): string[] => {
+  const result = new Set<string>();
+  for (const key of permissionKeys) {
+    result.add(key);
+    const mapped = ORG_KEY_TO_RBAC_CODES[key as OrgPermissionKey];
+    if (mapped) {
+      mapped.forEach(code => result.add(code));
+    }
+  }
+  return Array.from(result);
+};

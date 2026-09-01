@@ -69,18 +69,38 @@ export function usePermissions() {
 
     const permissions = useMemo(() => {
         const cached = Array.isArray(user?.permissions) ? user.permissions : [];
-        const roleDefaults = user?.role === 'buyer'
-            ? ['dashboard.view', 'marketplace.view', 'cart.view', 'cart.add', 'cart.submit_for_approval', 'approval.view', 'approval.submit', 'purchase_order.view', 'purchase_order.create', 'checkout.initiate', 'checkout.approve', 'delivery.view', 'delivery.manage', 'payment.view', 'payment.initiate', 'invoice.view', 'grn.view', 'grn.create', 'grn.approve']
-            : user?.role === 'seller'
-            ? ['dashboard.view', 'marketplace.view', 'purchase_order.view', 'delivery.view', 'delivery.manage', 'payment.view', 'invoice.view', 'grn.view']
-            : (user?.role === 'master_admin' || user?.role === 'admin')
-            ? ['*']
-            : [];
-        return Array.from(new Set([...roleDefaults, ...cached, ...remotePermissions]));
-    }, [remotePermissions, user?.permissions, user?.role]);
+        const isMasterOrAdmin = user?.role === 'master_admin' || user?.role === 'admin';
+        if (isMasterOrAdmin) return ['*'];
+
+        const serverPerms = remotePermissions.length > 0 ? remotePermissions : cached;
+
+        // If server permissions exist, respect them strictly
+        if (serverPerms.length > 0) {
+            return serverPerms;
+        }
+
+        // Only standalone single-user accounts without an organization receive generic defaults
+        if (!user?.organizationId && !user?.isSubUser) {
+            if (user?.role === 'buyer') {
+                return ['dashboard.view', 'marketplace.view', 'requirement.view', 'requirement.create', 'requirement.publish', 'tender.view', 'tender.create', 'tender.update', 'tender.publish', 'cart.view', 'cart.add', 'cart.submit_for_approval', 'approval.view', 'approval.submit', 'purchase_order.view', 'purchase_order.create', 'purchase_order.approve', 'checkout.initiate', 'checkout.approve', 'delivery.view', 'delivery.confirm', 'payment.view', 'payment.initiate', 'invoice.view', 'invoice.approve', 'grn.view', 'grn.create', 'grn.approve', 'dispute.view', 'dispute.manage', 'reverse_auction.view', 'team.member.view', 'team.role.manage', 'organization.view', 'organization.update', 'report.view'];
+            }
+            if (user?.role === 'seller' || user?.role === 'shg') {
+                return ['dashboard.view', 'catalogue.product.view', 'catalogue.product.create', 'catalogue.product.update', 'catalogue.product.delete', 'catalogue.service.view', 'catalogue.service.create', 'catalogue.service.update', 'catalogue.service.delete', 'marketplace.view', 'bid.submit', 'delivery.view', 'delivery.create', 'delivery.update', 'delivery.dispatch', 'purchase_order.view', 'payment.view', 'invoice.view', 'invoice.approve', 'grn.view', 'dispute.view', 'reverse_auction.view', 'reverse_auction.bid.submit', 'team.member.view', 'team.role.manage', 'organization.view', 'organization.update', 'report.view'];
+            }
+        }
+
+        return ['dashboard.view'];
+    }, [remotePermissions, user?.isSubUser, user?.organizationId, user?.permissions, user?.role]);
 
     const hasPermission = useCallback((permissionCode: string) => {
-        return permissions.includes('*') || permissions.includes(permissionCode);
+        if (!permissionCode) return false;
+        if (permissions.includes('*')) return true;
+        if (permissions.includes(permissionCode)) return true;
+        const upper = permissionCode.toUpperCase().replace(/\./g, '_');
+        if (permissions.includes(upper)) return true;
+        const lower = permissionCode.toLowerCase().replace(/_/g, '.');
+        if (permissions.includes(lower)) return true;
+        return false;
     }, [permissions]);
 
     return { permissions, hasPermission, loading, reload: load };

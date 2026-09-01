@@ -357,6 +357,48 @@ function Redirect({ to }: { to: string }) {
   return null;
 }
 
+import { usePermissions } from './hooks/useOrgRole';
+
+function PermissionRouteGuard({
+  permission,
+  children
+}: {
+  permission: string;
+  children: React.ReactNode;
+}) {
+  const { hasPermission, loading } = usePermissions();
+  const router = useRouter();
+
+  if (loading) return <RouteFallback />;
+
+  if (!hasPermission(permission)) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center p-6 text-center">
+        <div className="max-w-md border border-slate-200 bg-white rounded-2xl p-8 shadow-sm space-y-6">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+            <svg className="h-7 w-7 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">Access Restricted</h2>
+            <p className="text-sm font-semibold leading-relaxed text-slate-500">
+              You do not have permission to view or manage this section ({permission}). Contact your organization administrator for access.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            <button onClick={() => router.push('/dashboard')} className="w-full bg-[#12335f] hover:bg-[#0e2c53] text-white font-black h-11 uppercase text-[10px] tracking-widest rounded-lg shadow-sm transition">
+              Go to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 function LegacyNoticePage({ title, target = '/buyer/procurement/create' }: { title: string; target?: string }) {
   const router = useRouter();
   return (
@@ -682,107 +724,104 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
         return <SellerEventDetailPage id={sellerEventDetailMatch[2]} />;
       }
     }
-    if ((pathname === '/seller/rfq/submit-quotation' || pathname === '/seller/rfp/submit-quotation' || pathname === '/seller/rfp/respond' || pathname === '/seller/rate-contract/submit-quotation' || pathname === '/seller/rate-contracts/submit-quotation' || pathname.startsWith('/shg/rfq/submit-quotation') || pathname.startsWith('/shg/rate-contract/submit-quotation')) && roleOk(user.role, ['seller', 'shg'])) return <SubmitQuotationPage />;
-    if ((pathname === '/seller/marketplace' || pathname === '/shg/marketplace') && roleOk(user.role, ['seller', 'shg'])) return <MarketplaceProductList />;
-    if ((pathname === '/seller/catalogue' || pathname === '/shg/catalogue') && roleOk(user.role, ['seller', 'shg'])) return <CataloguePage mode="seller" />;
-    if ((pathname === '/seller/products/new' || pathname === '/shg/products/new') && roleOk(user.role, ['seller', 'shg'])) return <CatalogueFormPage />;
-    if (/^\/(seller|shg)\/products\/[^/]+\/edit$/.test(pathname) && roleOk(user.role, ['seller', 'shg'])) return <CatalogueFormPage />;
-    if ((pathname === '/seller/services/new' || pathname === '/shg/services/new') && roleOk(user.role, ['seller', 'shg'])) return <CatalogueFormPage />;
-    if (/^\/(seller|shg)\/services\/[^/]+\/edit$/.test(pathname) && roleOk(user.role, ['seller', 'shg'])) return <CatalogueFormPage />;
-    if ((pathname === '/seller/orders' || pathname === '/shg/orders') && roleOk(user.role, ['seller', 'shg'])) return <PurchaseOrders />;
+    if ((pathname === '/seller/rfq/submit-quotation' || pathname === '/seller/rfp/submit-quotation' || pathname === '/seller/rfp/respond' || pathname === '/seller/rate-contract/submit-quotation' || pathname === '/seller/rate-contracts/submit-quotation' || pathname.startsWith('/shg/rfq/submit-quotation') || pathname.startsWith('/shg/rate-contract/submit-quotation')) && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SubmitQuotationPage /></PermissionRouteGuard>;
+    if ((pathname === '/seller/marketplace' || pathname === '/shg/marketplace') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="marketplace.view"><MarketplaceProductList /></PermissionRouteGuard>;
+    if ((pathname === '/seller/catalogue' || pathname === '/shg/catalogue') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="catalogue.product.view"><CataloguePage mode="seller" /></PermissionRouteGuard>;
+    if ((pathname === '/seller/products/new' || pathname === '/shg/products/new') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="catalogue.product.create"><CatalogueFormPage /></PermissionRouteGuard>;
+    if (/^\/(seller|shg)\/products\/[^/]+\/edit$/.test(pathname) && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="catalogue.product.update"><CatalogueFormPage /></PermissionRouteGuard>;
+    if ((pathname === '/seller/services/new' || pathname === '/shg/services/new') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="catalogue.service.create"><CatalogueFormPage /></PermissionRouteGuard>;
+    if (/^\/(seller|shg)\/services\/[^/]+\/edit$/.test(pathname) && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="catalogue.service.update"><CatalogueFormPage /></PermissionRouteGuard>;
+    if ((pathname === '/seller/orders' || pathname === '/shg/orders') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
     if ((pathname === '/seller/delivery' || pathname === '/shg/delivery') && roleOk(user.role, ['seller', 'shg'])) return <Redirect to={isCurrentShg ? "/shg/delivery-management" : "/seller/delivery-management"} />;
-    if ((pathname === '/seller/delivery-management' || pathname === '/shg/delivery-management') && roleOk(user.role, ['seller', 'shg'])) return <SellerDeliveryManagementPage />;
-    if ((pathname === '/seller/invoices' || pathname === '/shg/invoices') && roleOk(user.role, ['seller', 'shg'])) return <InvoiceRegisterPage role="seller" />;
-    if ((pathname === '/seller/disputes' || pathname === '/shg/disputes') && roleOk(user.role, ['seller', 'shg'])) return <DisputesPage />;
+    if ((pathname === '/seller/delivery-management' || pathname === '/shg/delivery-management') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="delivery.view"><SellerDeliveryManagementPage /></PermissionRouteGuard>;
+    if ((pathname === '/seller/invoices' || pathname === '/shg/invoices') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="invoice.view"><InvoiceRegisterPage role="seller" /></PermissionRouteGuard>;
+    if ((pathname === '/seller/disputes' || pathname === '/shg/disputes') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="dispute.view"><DisputesPage /></PermissionRouteGuard>;
     if ((pathname === '/seller/messages' || pathname === '/shg/messages') && roleOk(user.role, ['seller', 'shg'])) return <MessagesPage />;
     if ((pathname === '/seller/ratings' || pathname === '/shg/ratings') && roleOk(user.role, ['seller', 'shg'])) return <RatingsPage endpoint={`/api/ratings/supplier/${user.id}`} mode="supplier" />;
 
     if ((pathname === '/seller/settings' || pathname === '/shg/settings') && roleOk(user.role, ['seller', 'shg'])) return <SellerSettings />;
 
     // Seller & SHG Bids (explicit route-to-prop mapping)
-    if ((pathname === '/seller/bids/submitted' || pathname === '/shg/bids/submitted') && roleOk(user.role, ['seller', 'shg'])) return <SellerBidsPage key={pathname} subRouteType="submitted" />;
-    if ((pathname === '/seller/bids/draft' || pathname === '/shg/bids/draft') && roleOk(user.role, ['seller', 'shg'])) return <SellerBidsPage key={pathname} subRouteType="draft" />;
-    if ((pathname === '/seller/bids/awarded' || pathname === '/shg/bids/awarded') && roleOk(user.role, ['seller', 'shg'])) return <SellerBidsPage key={pathname} subRouteType="awarded" />;
+    if ((pathname === '/seller/bids/submitted' || pathname === '/shg/bids/submitted') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="submitted" /></PermissionRouteGuard>;
+    if ((pathname === '/seller/bids/draft' || pathname === '/shg/bids/draft') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="draft" /></PermissionRouteGuard>;
+    if ((pathname === '/seller/bids/awarded' || pathname === '/shg/bids/awarded') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="awarded" /></PermissionRouteGuard>;
     
     // Seller & Buyer repeat orders
-    if (pathname === '/orders/repeat' && roleOk(user.role, ['buyer', 'seller'])) return <RepeatOrders />;
+    if (pathname === '/orders/repeat' && roleOk(user.role, ['buyer', 'seller'])) return <PermissionRouteGuard permission="purchase_order.view"><RepeatOrders /></PermissionRouteGuard>;
     
     if (pathname === '/buyer/onboarding' && roleOk(user.role, ['buyer'])) return <BuyerOnboarding />;
     if (pathname === '/buyer/profile' && roleOk(user.role, ['buyer'])) return <BuyerProfile />;
     if (pathname === '/buyer/create-bid' && roleOk(user.role, ['buyer'])) {
       return <Redirect to="/buyer/procurement/create" />;
     }
-    if (pathname === '/buyer/procurement/create' && roleOk(user.role, ['buyer'])) return <CreateProcurementPage />;
-    if (pathname === '/buyer/procurement/drafts' && roleOk(user.role, ['buyer'])) return <ProcurementDraftsPage />;
-    if (pathname === '/buyer/procurement/responses' && roleOk(user.role, ['buyer'])) return <SupplierResponsesPage />;
+    if (pathname === '/buyer/procurement/create' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.create"><CreateProcurementPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/procurement/drafts' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.create"><ProcurementDraftsPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/procurement/responses' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><SupplierResponsesPage /></PermissionRouteGuard>;
     {
       const rfqCompareMatch = pathname.match(/^\/buyer\/(?:quote-requests|rfq|quotations)\/(\d+)(?:\/compare|\/review)?$/);
       if (rfqCompareMatch && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
         const id = Number(rfqCompareMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <RfqComparisonPage id={id} />;
+        if (Number.isFinite(id) && id > 0) return <PermissionRouteGuard permission="requirement.view"><RfqComparisonPage id={id} /></PermissionRouteGuard>;
       }
       if ((pathname === '/buyer/rfq/compare' || pathname === '/buyer/quote-requests/compare' || pathname === '/buyer/quotations/review') && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
-        return <RfqComparisonPage />;
+        return <PermissionRouteGuard permission="requirement.view"><RfqComparisonPage /></PermissionRouteGuard>;
       }
     }
     
     
-    if (pathname === '/buyer/marketplace' && roleOk(user.role, ['buyer'])) return <MarketplaceProductList />;
+    if (pathname === '/buyer/marketplace' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="marketplace.view"><MarketplaceProductList /></PermissionRouteGuard>;
     
     if (pathname === '/buyer/requirements/new' && roleOk(user.role, ['buyer'])) {
       return <LegacyNoticePage title="New Buyer Requirement" />;
     }
     if (pathname === '/buyer/procurement' && roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/procurement/create" />;
-    if (pathname === '/buyer/my-procurements' && roleOk(user.role, ['buyer'])) return <MyProcurementsPage />;
-    if (pathname === '/buyer/rfq/detail' && roleOk(user.role, ['buyer'])) return <RfqDetailPage />;
-    if (pathname === '/buyer/rfp/detail' && roleOk(user.role, ['buyer'])) return <RfpDetailPage />;
-    if (pathname === '/buyer/rate-contracts' && roleOk(user.role, ['buyer'])) return <RateContractsPage />;
-    if ((pathname === '/buyer/checkout' || pathname === '/buyer/direct-purchase/checkout') && roleOk(user.role, ['buyer'])) return <DirectCheckoutPage />;
-    if (pathname === '/buyer/procurement/checkout' && roleOk(user.role, ['buyer'])) return <ProcurementCheckoutPage />;
-    if (pathname === '/buyer/address-book' && roleOk(user.role, ['buyer'])) return <AddressBookPage />;
+    if (pathname === '/buyer/my-procurements' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><MyProcurementsPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/rfq/detail' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><RfqDetailPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/rfp/detail' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><RfpDetailPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/rate-contracts' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><RateContractsPage /></PermissionRouteGuard>;
+    if ((pathname === '/buyer/checkout' || pathname === '/buyer/direct-purchase/checkout') && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="cart.view"><DirectCheckoutPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/procurement/checkout' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="cart.view"><ProcurementCheckoutPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/address-book' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="organization.view"><AddressBookPage /></PermissionRouteGuard>;
 
+    if (pathname === '/buyer/vendors' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="vendor.view"><Vendors /></PermissionRouteGuard>;
+    if (pathname === '/buyer/saved-suppliers' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="vendor.view"><SavedSuppliersPage /></PermissionRouteGuard>;
     
-    
-    if (pathname === '/buyer/vendors' && roleOk(user.role, ['buyer'])) return <Vendors />;
-    if (pathname === '/buyer/saved-suppliers' && roleOk(user.role, ['buyer'])) return <SavedSuppliersPage />;
-    
-    
-    if (pathname === '/buyer/orders' && roleOk(user.role, ['buyer'])) return <PurchaseOrders />;
-    if (pathname === '/buyer/repeat-orders' && roleOk(user.role, ['buyer'])) return <RepeatOrders />;
-    if (pathname === '/buyer/inspection' && roleOk(user.role, ['buyer'])) return <GenericFeaturePage title="Inspection" eyebrow="Quality Control" description="Inspection reports connected to purchase orders." endpoint="/api/purchase-orders" />;
-    if (pathname === '/buyer/invoices' && roleOk(user.role, ['buyer'])) return <InvoiceRegisterPage role="buyer" />;
-    if (pathname === '/buyer/payments' && roleOk(user.role, ['buyer'])) return <PaymentHistoryPage />;
-    if (pathname === '/buyer/escrow' && roleOk(user.role, ['buyer'])) return <EscrowPage />;
-    if (pathname === '/buyer/disputes' && roleOk(user.role, ['buyer'])) return <DisputesPage />;
-    if (pathname === '/buyer/messages' && roleOk(user.role, ['buyer'])) return <MessagesPage />;
+    if (pathname === '/buyer/orders' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
+    if (pathname === '/buyer/repeat-orders' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="purchase_order.view"><RepeatOrders /></PermissionRouteGuard>;
+    if (pathname === '/buyer/inspection' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="inspection.approve"><GenericFeaturePage title="Inspection" eyebrow="Quality Control" description="Inspection reports connected to purchase orders." endpoint="/api/purchase-orders" /></PermissionRouteGuard>;
+    if (pathname === '/buyer/invoices' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="invoice.view"><InvoiceRegisterPage role="buyer" /></PermissionRouteGuard>;
+    if (pathname === '/buyer/payments' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="payment.view"><PaymentHistoryPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/escrow' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="escrow.view"><EscrowPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/disputes' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="dispute.view"><DisputesPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/messages' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="vendor.view"><MessagesPage /></PermissionRouteGuard>;
     if (pathname === '/admin/messages' && roleOk(user.role, ['admin'])) return <MessagesPage />;
     if (pathname === '/buyer/ratings' && roleOk(user.role, ['buyer'])) return <RatingsPage endpoint={`/api/ratings/buyer/${user.id}`} mode="buyer" />;
-    if (pathname === '/payments' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
-    if (pathname === '/payments/payment-status' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
-    if (pathname === '/payments/transactions' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PaymentHistoryPage admin={user.role === 'admin'} />;
-    if (pathname === '/payments/invoices' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <InvoiceRegisterPage role={user.role === 'admin' ? 'admin' : roleOk(user.role, ['seller']) ? 'seller' : 'buyer'} />;
-    if (pathname === '/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <EscrowPage />;
-    if (pathname === '/payments/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <EscrowPage />;
+    if (pathname === '/payments' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PermissionRouteGuard permission="payment.view"><PaymentHistoryPage admin={user.role === 'admin'} /></PermissionRouteGuard>;
+    if (pathname === '/payments/payment-status' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PermissionRouteGuard permission="payment.view"><PaymentHistoryPage admin={user.role === 'admin'} /></PermissionRouteGuard>;
+    if (pathname === '/payments/transactions' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PermissionRouteGuard permission="payment.view"><PaymentHistoryPage admin={user.role === 'admin'} /></PermissionRouteGuard>;
+    if (pathname === '/payments/invoices' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PermissionRouteGuard permission="invoice.view"><InvoiceRegisterPage role={user.role === 'admin' ? 'admin' : roleOk(user.role, ['seller']) ? 'seller' : 'buyer'} /></PermissionRouteGuard>;
+    if (pathname === '/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PermissionRouteGuard permission="escrow.view"><EscrowPage /></PermissionRouteGuard>;
+    if (pathname === '/payments/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PermissionRouteGuard permission="escrow.view"><EscrowPage /></PermissionRouteGuard>;
     
-    if (pathname === '/orders' && roleOk(user.role, ['buyer', 'seller'])) return <PurchaseOrders />;
+    if (pathname === '/orders' && roleOk(user.role, ['buyer', 'seller'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
     if (pathname === '/orders' && roleOk(user.role, ['admin'])) return <ProcurementOrdersPage />;
     if (pathname === '/orders/delivery-confirmation' && roleOk(user.role, ['buyer'])) return <Redirect to="/orders/tracking?tab=confirmation" />;
     if ((pathname === '/orders/tracking' || pathname === '/tracking' || pathname === '/delivery' || pathname === '/orders/delivery' || pathname === '/delivery-management') && roleOk(user.role, ['buyer', 'seller', 'admin'])) {
-      if (user.role === 'seller') return <SellerDeliveryManagementPage />;
+      if (user.role === 'seller') return <PermissionRouteGuard permission="delivery.view"><SellerDeliveryManagementPage /></PermissionRouteGuard>;
       if (user.role === 'admin') return <DeliveryListPage scope="admin" />;
-      return <ParcelTracking />;
+      return <PermissionRouteGuard permission="delivery.view"><ParcelTracking /></PermissionRouteGuard>;
     }
-    if ((pathname === '/buyer/tracking' || pathname === '/buyer/delivery') && roleOk(user.role, ['buyer'])) return <ParcelTracking />;
+    if ((pathname === '/buyer/tracking' || pathname === '/buyer/delivery') && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="delivery.view"><ParcelTracking /></PermissionRouteGuard>;
     if (pathname === '/admin/delivery' && roleOk(user.role, ['admin'])) return <DeliveryListPage scope="admin" />;
     {
       const deliveryDetailMatch = pathname.match(/^\/delivery\/(\d+)$/);
       if (deliveryDetailMatch) {
         const id = Number(deliveryDetailMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <DeliveryDetailPage deliveryId={id} onClose={() => router.back()} />;
+        if (Number.isFinite(id) && id > 0) return <PermissionRouteGuard permission="delivery.view"><DeliveryDetailPage deliveryId={id} onClose={() => router.back()} /></PermissionRouteGuard>;
       }
     }
     if (pathname === '/profile') return <Profile />;
-    if (pathname === '/reports' && roleOk(user.role, ['buyer', 'seller'])) return <RoleReportsPage />;
+    if (pathname === '/reports' && roleOk(user.role, ['buyer', 'seller'])) return <PermissionRouteGuard permission="report.view"><RoleReportsPage /></PermissionRouteGuard>;
     if (pathname === '/admin/onboarding' && roleOk(user.role, ['admin'])) return <AdminOnboarding />;
     if (pathname === '/admin/shg-applications' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/onboarding?tab=shg" />;
     if (/^\/admin\/shg-applications\/\d+$/.test(pathname) && roleOk(user.role, ['admin'])) return <Redirect to="/admin/onboarding?tab=shg" />;
@@ -800,22 +839,20 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/admin/reports' && roleOk(user.role, ['admin'])) return <MISReports />;
     if (pathname === '/admin/banners' && roleOk(user.role, ['admin'])) return <AdminBannerManagementPage />;
     if (pathname === '/admin/monthly-rankings' && roleOk(user.role, ['admin'])) return <MonthlyRankingsAdminPage />;
-    if (pathname === '/roles-permissions') return <RbacPanel />;
+    if (pathname === '/roles-permissions') return <PermissionRouteGuard permission="team.role.manage"><RbacPanel /></PermissionRouteGuard>;
     if (pathname === '/admin/rbac' && roleOk(user.role, ['admin'])) return <RbacPanel />;
     if (pathname === '/master-admin/rbac' && roleOk(user.role, ['master_admin'])) return <RbacPanel />;
     if (pathname === '/admin/organizations' && roleOk(user.role, ['admin'])) return <OrganizationManagement />;
     if (pathname === '/notifications') return <NotificationCenter />;
-    if (pathname === '/org/team') return <TeamManagementPage />;
-    if (pathname === '/cart') return <CartPage />;
+    if (pathname === '/org/team') return <PermissionRouteGuard permission="team.member.view"><TeamManagementPage /></PermissionRouteGuard>;
+    if (pathname === '/cart') return <PermissionRouteGuard permission="cart.view"><CartPage /></PermissionRouteGuard>;
     
-    
-    
-    if (pathname === '/grn' || pathname === '/buyer/grn') return <GrnListPage />;
+    if (pathname === '/grn' || pathname === '/buyer/grn') return <PermissionRouteGuard permission="grn.view"><GrnListPage /></PermissionRouteGuard>;
     {
       const grnDetailMatch = pathname.match(/^\/grn\/(\d+)$/);
       if (grnDetailMatch) {
         const id = Number(grnDetailMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <GrnDetailPage id={id} />;
+        if (Number.isFinite(id) && id > 0) return <PermissionRouteGuard permission="grn.view"><GrnDetailPage id={id} /></PermissionRouteGuard>;
       }
       const tenderEvalMatch = pathname.match(/^\/buyer\/tenders\/(\d+)\/evaluate$/);
       if (tenderEvalMatch && roleOk(user.role, ['buyer'])) {

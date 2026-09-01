@@ -37,6 +37,7 @@ import type { AuthRequest } from '../../middleware/auth.js';
 import { notificationService } from '../../services/notification.service.js';
 import { onUserLinkedToOrganization } from '../../services/org-membership.service.js';
 import { getDefaultCompanyId } from '../../services/default-company.service.js';
+import { invalidateUserAuthCache } from '../../services/rbac.service.js';
 
 // CreateNotificationSafe mock for backward compatibility if not globally service-ified yet
 
@@ -1002,6 +1003,7 @@ export const authController = {
         where: { id: user.id },
         data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }
       });
+      await invalidateUserAuthCache(user.id);
       const tokens = await issueCookieAuth(req, res, updatedUser);
       await auditLog({
         actorUserId: user.id,
@@ -1051,6 +1053,7 @@ export const authController = {
         where: { id: user.id },
         data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }
       });
+      await invalidateUserAuthCache(user.id);
       const tokens = await issueCookieAuth(req, res, updatedUser);
       await auditLog({
         actorUserId: user.id,

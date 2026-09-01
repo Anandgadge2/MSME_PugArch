@@ -39,6 +39,7 @@ import { getOrSetCache } from '../services/cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { getBuyerProcurementsData } from './phase4.routes.js';
+import { invalidateUserAuthCache, invalidateRoleMembersAuthCache } from '../services/rbac.service.js';
 
 const router = Router();
 
@@ -51,6 +52,10 @@ const asyncRoute = (
         try {
             await handler(req, res);
         } catch (err: any) {
+            if (err instanceof z.ZodError) {
+                const issues = err.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ');
+                return apiResponse.error(res, 400, issues || 'Invalid input data', 'VALIDATION_ERROR');
+            }
             const status = err?.statusCode || 500;
             const message = status < 500 ? err.message : 'Unable to complete request';
             if (status >= 500) {
@@ -113,7 +118,7 @@ const inviteSchema = z.object({
     name: z.string().trim().min(2).max(120).optional(),
     email: z.string().email().toLowerCase().trim(),
     mobile: z.string().trim().max(20).optional(),
-    orgRole: z.enum(ORG_ROLE_VALUES as [string, ...string[]]).optional(),
+    orgRole: z.string().optional().nullable(),
     customRoleId: z.number().int().positive().optional(),
     message: z.string().max(1000).optional()
 });
@@ -126,7 +131,7 @@ const inviteSignupSchema = z.object({
 });
 
 const roleUpdateSchema = z.object({
-    orgRole: z.enum(ORG_ROLE_VALUES as [string, ...string[]]).optional(),
+    orgRole: z.string().optional().nullable(),
     customRoleId: z.number().int().positive().nullable().optional()
 });
 
@@ -344,6 +349,7 @@ router.patch('/org/roles/:id', authenticate, requireAccountType('buyer', 'seller
             include: { permissions: true }
         });
     });
+    void invalidateRoleMembersAuthCache(id);
     await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'org.role.updated', entityType: 'orgCustomRole', entityId: id, ipAddress: req.ip, metadata: { permissionsChanged: Boolean(body.permissions) } });
     ok(res, role);
 }));
@@ -355,6 +361,7 @@ router.delete('/org/roles/:id', authenticate, requireAccountType('buyer', 'selle
     if (role.isSystemRole) throw new ApiError(409, 'System role templates cannot be deleted.', 'SYSTEM_ROLE_LOCKED');
     if (role._count.memberships > 0) throw new ApiError(409, 'Role is assigned to members. Deactivate it instead.', 'ROLE_IN_USE');
     await (prisma as any).orgCustomRole.update({ where: { id }, data: { isActive: false } });
+    void invalidateRoleMembersAuthCache(id);
     await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'org.role.deactivated', entityType: 'orgCustomRole', entityId: id, ipAddress: req.ip });
     ok(res, { success: true });
 }));
@@ -372,6 +379,7 @@ router.post('/org/roles/:id/permissions', authenticate, requireAccountType('buye
         }
         return (tx as any).orgCustomRole.findUnique({ where: { id }, include: { permissions: true } });
     });
+    void invalidateRoleMembersAuthCache(id);
     await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'org.role.permissions_updated', entityType: 'orgCustomRole', entityId: id, ipAddress: req.ip, metadata: { count: body.permissions.length } });
     ok(res, updated);
 }));
@@ -742,35 +750,59 @@ router.get(
     asyncRoute(async (req, res) => {
         if (!req.user?.organizationId) throw new ApiError(400, 'No organisation linked', 'ORG_REQUIRED');
 
-        const members = await prisma.orgMembership.findMany({
-            where: { organizationId: orgId(req) },
-            include: {
-                user: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                        mobile: true,
-                        accountStatus: true,
-                        lastLoginAt: true,
-                        createdAt: true
-                    }
+        await ensureDefaultOrgRoles(orgId(req), userId(req));
+
+        const [members, orgRoles] = await Promise.all([
+            prisma.orgMembership.findMany({
+                where: { organizationId: orgId(req) },
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            mobile: true,
+                            accountStatus: true,
+                            lastLoginAt: true,
+                            createdAt: true
+                        }
+                    },
+                    customRole: {
+                        select: {
+                            id: true,
+                            name: true,
+                            roleKey: true,
+                            isSystemRole: true,
+                            permissions: { select: { permissionKey: true, allowed: true } }
+                        }
+                    },
+                    invitedBy: { select: { id: true, name: true, email: true } }
                 },
-                customRole: {
-                    select: {
-                        id: true,
-                        name: true,
-                        roleKey: true,
-                        isSystemRole: true,
-                        permissions: { select: { permissionKey: true, allowed: true } }
-                    }
-                },
-                invitedBy: { select: { id: true, name: true, email: true } }
-            },
-            orderBy: { createdAt: 'asc' }
+                orderBy: { createdAt: 'asc' }
+            }),
+            (prisma as any).orgCustomRole.findMany({
+                where: { organizationId: orgId(req), isActive: true },
+                select: { id: true, name: true, roleKey: true, isSystemRole: true }
+            })
+        ]);
+
+        const roleByKey = new Map((orgRoles as any[]).map(r => [r.roleKey.toLowerCase().replace(/-/g, '_'), r]));
+
+        const enrichedMembers = members.map((m: any) => {
+            if (!m.customRole && m.orgRole) {
+                const matched = roleByKey.get(String(m.orgRole).toLowerCase().replace(/-/g, '_'));
+                if (matched) {
+                    return {
+                        ...m,
+                        customRoleId: m.customRoleId || matched.id,
+                        customRole: matched
+                    };
+                }
+            }
+            return m;
         });
 
-        ok(res, members);
+        ok(res, enrichedMembers);
     })
 );
 
@@ -1266,14 +1298,45 @@ router.put(
             : null;
         if (customRoleId && !customRole) throw new ApiError(404, 'Custom role not found', 'ROLE_NOT_FOUND');
 
+        let targetOrgRole = (orgRole || membership.orgRole) as OrgRole;
+        if (customRole?.roleKey) {
+            const normalizedKey = customRole.roleKey.toUpperCase().replace(/-/g, '_');
+            if (ORG_ROLE_VALUES.includes(normalizedKey)) {
+                targetOrgRole = normalizedKey as OrgRole;
+            }
+        }
+
         const updated = await prisma.orgMembership.update({
             where: { userId_organizationId: { userId: memberId, organizationId: orgId(req) } },
             data: {
-                orgRole: (orgRole || membership.orgRole) as OrgRole,
+                orgRole: targetOrgRole,
                 customRoleId: customRoleId === undefined ? membership.customRoleId : customRoleId
             },
-            include: { customRole: { include: { permissions: true } } }
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        mobile: true,
+                        accountStatus: true,
+                        lastLoginAt: true,
+                        createdAt: true
+                    }
+                },
+                customRole: {
+                    select: {
+                        id: true,
+                        name: true,
+                        roleKey: true,
+                        isSystemRole: true,
+                        permissions: { select: { permissionKey: true, allowed: true } }
+                    }
+                }
+            }
         });
+
+        void invalidateUserAuthCache(memberId);
 
         await auditLog({
             actorUserId: userId(req),
@@ -1290,7 +1353,6 @@ router.put(
 );
 
 router.patch('/org/members/:memberId/role', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_ROLE_MANAGE'), asyncRoute(async (req, res) => {
-    req.method = 'PUT';
     const memberId = Number(req.params.memberId);
     if (!memberId) throw new ApiError(400, 'Invalid member ID', 'INVALID_ID');
     const { orgRole, customRoleId } = roleUpdateSchema.parse(req.body);
@@ -1299,13 +1361,42 @@ router.patch('/org/members/:memberId/role', authenticate, requireAccountType('bu
     if (memberId === userId(req)) throw new ApiError(409, 'You cannot change your own role.', 'SELF_ROLE_CHANGE');
     const customRole = customRoleId ? await (prisma as any).orgCustomRole.findFirst({ where: { id: customRoleId, organizationId: orgId(req), isActive: true } }) : null;
     if (customRoleId && !customRole) throw new ApiError(404, 'Custom role not found', 'ROLE_NOT_FOUND');
+    let targetOrgRole = (orgRole || membership.orgRole) as OrgRole;
+    if (customRole?.roleKey) {
+        const normalizedKey = customRole.roleKey.toUpperCase().replace(/-/g, '_');
+        if (ORG_ROLE_VALUES.includes(normalizedKey)) {
+            targetOrgRole = normalizedKey as OrgRole;
+        }
+    }
     const updated = await prisma.orgMembership.update({
         where: { userId_organizationId: { userId: memberId, organizationId: orgId(req) } },
-        data: { orgRole: (orgRole || membership.orgRole) as OrgRole, customRoleId: customRoleId === undefined ? membership.customRoleId : customRoleId },
-        include: { customRole: { include: { permissions: true } } }
+        data: { orgRole: targetOrgRole, customRoleId: customRoleId === undefined ? membership.customRoleId : customRoleId },
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    mobile: true,
+                    accountStatus: true,
+                    lastLoginAt: true,
+                    createdAt: true
+                }
+            },
+            customRole: {
+                select: {
+                    id: true,
+                    name: true,
+                    roleKey: true,
+                    isSystemRole: true,
+                    permissions: { select: { permissionKey: true, allowed: true } }
+                }
+            }
+        }
     });
+    void invalidateUserAuthCache(memberId);
     await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'org.member.role_changed', entityType: 'orgMembership', entityId: updated.id, ipAddress: req.ip, metadata: { memberId, orgRole: updated.orgRole, customRoleId: updated.customRoleId } });
-    ok(res, updated);
+    ok(res, { id: updated.id, userId: memberId, orgRole: updated.orgRole, customRoleId: updated.customRoleId, customRole: updated.customRole });
 }));
 
 router.patch('/org/members/:memberId/deactivate', authenticate, requireAccountType('buyer', 'seller'), requireOrgPermission('TEAM_MEMBER_DISABLE'), asyncRoute(async (req, res) => {
@@ -1323,6 +1414,7 @@ router.patch('/org/members/:memberId/deactivate', authenticate, requireAccountTy
         where: { id: membership.id },
         data: { isActive: false, deactivatedAt: new Date(), deactivatedByUserId: userId(req), deactivationReason: body.reason || 'Deactivated by org admin' }
     });
+    void invalidateUserAuthCache(memberId);
     await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'org.member.deactivated', entityType: 'orgMembership', entityId: updated.id, ipAddress: req.ip, metadata: { memberId, reason: body.reason } });
     ok(res, updated);
 }));
@@ -1333,6 +1425,7 @@ router.patch('/org/members/:memberId/reactivate', authenticate, requireAccountTy
     const membership = await prisma.orgMembership.findUnique({ where: { userId_organizationId: { userId: memberId, organizationId: orgId(req) } } });
     if (!membership) throw new ApiError(404, 'Member not found in your organisation.', 'MEMBER_NOT_FOUND');
     const updated = await prisma.orgMembership.update({ where: { id: membership.id }, data: { isActive: true, deactivatedAt: null, deactivatedByUserId: null, deactivationReason: null } });
+    void invalidateUserAuthCache(memberId);
     await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'org.member.reactivated', entityType: 'orgMembership', entityId: updated.id, ipAddress: req.ip, metadata: { memberId } });
     ok(res, updated);
 }));

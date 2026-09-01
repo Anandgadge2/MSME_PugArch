@@ -374,8 +374,11 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
   );
 });
 
+import { usePermissions } from '../../hooks/useOrgRole';
+
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onHoverChange }: SidebarProps) {
   const { user, logout } = useAuth();
+  const { hasPermission: checkUserPermission } = usePermissions();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -537,93 +540,94 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Compliance', path: '/admin/compliance-rules', icon: ShieldCheck, roles: ['admin'] },
     // Buyer Marketplace
     { label: 'Marketplace', icon: ShoppingCart, roles: ['buyer'], children: [
-      { label: 'Products & Services', path: '/buyer/marketplace', icon: Store, roles: ['buyer'] },
-      { label: 'Cart', path: '/cart', icon: ShoppingCart, roles: ['buyer'] }
+      { label: 'Products & Services', path: '/buyer/marketplace', icon: Store, roles: ['buyer'], permission: 'marketplace.view' },
+      { label: 'Cart', path: '/cart', icon: ShoppingCart, roles: ['buyer'], permission: 'cart.view' }
     ] },
     // Buyer Procurement
     { label: 'Procurement', icon: ClipboardCheck, roles: ['buyer'], children: [
-      { label: 'Create Procurement', path: '/buyer/procurement/create', icon: PlusCircle, roles: ['buyer'] },
-      { label: 'My Procurements', path: '/buyer/my-procurements', icon: ClipboardList, roles: ['buyer'] },
-      { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'] },
-      { label: 'Supplier Responses', path: '/buyer/procurement/responses', icon: FileText, roles: ['buyer'] }
+      { label: 'Create Procurement', path: '/buyer/procurement/create', icon: PlusCircle, roles: ['buyer'], permission: 'requirement.create' },
+      { label: 'My Procurements', path: '/buyer/my-procurements', icon: ClipboardList, roles: ['buyer'], permission: 'requirement.view' },
+      { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'], permission: 'requirement.create' },
+      { label: 'Supplier Responses', path: '/buyer/procurement/responses', icon: FileText, roles: ['buyer'], permission: 'requirement.view' }
     ] },
     // Buyer Orders
     { label: 'Orders', icon: Truck, roles: ['buyer'], children: [
-      { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['buyer'] },
-      { label: 'Goods Receipt Notes (GRN)', path: '/grn', icon: ClipboardCheck, roles: ['buyer'] },
-      { label: 'Repeat Orders', path: '/buyer/repeat-orders', icon: RotateCcw, roles: ['buyer'] },
-      { label: 'Delivery Management', path: '/orders/tracking', icon: Truck, roles: ['buyer'] }
+      { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['buyer'], permission: 'purchase_order.view' },
+      { label: 'Goods Receipt Notes (GRN)', path: '/grn', icon: ClipboardCheck, roles: ['buyer'], permission: 'grn.view' },
+      { label: 'Repeat Orders', path: '/buyer/repeat-orders', icon: RotateCcw, roles: ['buyer'], permission: 'purchase_order.view' },
+      { label: 'Delivery Management', path: '/orders/tracking', icon: Truck, roles: ['buyer'], permission: 'delivery.view' }
     ] },
     // Buyer Payments
     { label: 'Payments', icon: CreditCard, roles: ['buyer'], children: [
-      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['buyer'] },
-      { label: 'Transactions', path: '/payments/transactions', icon: CreditCard, roles: ['buyer'] },
-      { label: 'Escrow (Feature Controlled)', path: '/payments/escrow', icon: Landmark, roles: ['buyer'], featureCode: 'escrow-nodal-bank' }
+      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['buyer'], permission: 'invoice.view' },
+      { label: 'Transactions', path: '/payments/transactions', icon: CreditCard, roles: ['buyer'], permission: 'payment.view' },
+      { label: 'Escrow (Feature Controlled)', path: '/payments/escrow', icon: Landmark, roles: ['buyer'], permission: 'escrow.view', featureCode: 'escrow-nodal-bank' }
     ] },
     // Buyer Suppliers
     { label: 'Suppliers', icon: Users, roles: ['buyer'], children: [
-      { label: 'Supplier Directory', path: '/buyer/vendors', icon: Users, roles: ['buyer'] },
-      { label: 'Saved Suppliers', path: '/buyer/saved-suppliers', icon: CheckCircle2, roles: ['buyer'] },
-      { label: 'Messages', path: '/buyer/messages', icon: MessageSquare, roles: ['buyer'] }
+      { label: 'Supplier Directory', path: '/buyer/vendors', icon: Users, roles: ['buyer'], permission: 'vendor.view' },
+      { label: 'Saved Suppliers', path: '/buyer/saved-suppliers', icon: CheckCircle2, roles: ['buyer'], permission: 'vendor.view' },
+      { label: 'Messages', path: '/buyer/messages', icon: MessageSquare, roles: ['buyer'], permission: 'vendor.view' }
     ] },
     // Buyer Reports
-    { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['buyer'] },
+    { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['buyer'], permission: 'report.view' },
     // Buyer Administration
     { label: 'Administration', icon: Settings, roles: ['buyer'], children: [
       { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['buyer'], permission: 'team.member.view' },
-      { label: 'Delivery Addresses', path: '/buyer/address-book', icon: MapPin, roles: ['buyer'] },
-      { label: 'Settings', path: '/buyer/profile', icon: Settings, roles: ['buyer'] }
+      { label: 'Delivery Addresses', path: '/buyer/address-book', icon: MapPin, roles: ['buyer'], permission: 'organization.view' },
+      { label: 'Settings', path: '/buyer/profile', icon: Settings, roles: ['buyer'], permission: 'organization.view' }
     ] },
     // Buyer Disputes
-    { label: 'Disputes', path: '/buyer/disputes', icon: AlertTriangle, roles: ['buyer'] },
+    { label: 'Disputes', path: '/buyer/disputes', icon: AlertTriangle, roles: ['buyer'], permission: 'dispute.view' },
 
     // Seller Opportunities
     { label: 'Opportunities', icon: Globe, roles: ['seller'], children: [
-      { label: 'All Opportunities', path: '/seller/opportunities', icon: Globe, roles: ['seller'] },
-      { label: 'RFQs', path: '/seller/opportunities/rfqs', icon: FileText, roles: ['seller'] },
-      { label: 'RFPs', path: '/seller/opportunities/rfps', icon: Layers, roles: ['seller'] },
-      { label: 'Open Tenders', path: '/seller/opportunities/open-tenders', icon: ClipboardList, roles: ['seller'] },
-      { label: 'Limited Tenders', path: '/seller/opportunities/invitations', icon: Users, roles: ['seller'] },
-      { label: 'Reverse Auctions', path: '/seller/opportunities/auctions', icon: Gavel, roles: ['seller'] },
-      { label: 'Rate Contracts', path: '/seller/opportunities/rate-contracts', icon: RotateCcw, roles: ['seller'] }
+      { label: 'All Opportunities', path: '/seller/opportunities', icon: Globe, roles: ['seller'], permission: 'marketplace.view' },
+      { label: 'RFQs', path: '/seller/opportunities/rfqs', icon: FileText, roles: ['seller'], permission: 'requirement.view' },
+      { label: 'RFPs', path: '/seller/opportunities/rfps', icon: Layers, roles: ['seller'], permission: 'requirement.view' },
+      { label: 'Open Tenders', path: '/seller/opportunities/open-tenders', icon: ClipboardList, roles: ['seller'], permission: 'tender.view' },
+      { label: 'Limited Tenders', path: '/seller/opportunities/invitations', icon: Users, roles: ['seller'], permission: 'tender.view' },
+      { label: 'Reverse Auctions', path: '/seller/opportunities/auctions', icon: Gavel, roles: ['seller'], permission: 'reverse_auction.view' },
+      { label: 'Rate Contracts', path: '/seller/opportunities/rate-contracts', icon: RotateCcw, roles: ['seller'], permission: 'requirement.view' }
     ] },
     // Seller My Bids
     { label: 'My Bids', icon: ClipboardList, roles: ['seller'], children: [
-      { label: 'Submitted Bids', path: '/seller/bids/submitted', icon: CheckCircle2, roles: ['seller'] },
-      { label: 'Draft Bids', path: '/seller/bids/draft', icon: FileText, roles: ['seller'] },
-      { label: 'Awarded Contracts', path: '/seller/bids/awarded', icon: Trophy, roles: ['seller'] }
+      { label: 'Submitted Bids', path: '/seller/bids/submitted', icon: CheckCircle2, roles: ['seller'], permission: 'bid.submit' },
+      { label: 'Draft Bids', path: '/seller/bids/draft', icon: FileText, roles: ['seller'], permission: 'bid.submit' },
+      { label: 'Awarded Contracts', path: '/seller/bids/awarded', icon: Trophy, roles: ['seller'], permission: 'bid.submit' }
     ] },
     // Seller Orders
     { label: 'Orders', icon: Truck, roles: ['seller'], children: [
-      { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['seller'] },
-      { label: 'Goods Receipt Note', path: '/grn', icon: ClipboardCheck, roles: ['seller'] },
-      { label: 'Repeat Orders', path: '/orders/repeat', icon: RotateCcw, roles: ['seller'] },
-      { label: 'Delivery Management', path: '/seller/delivery-management', icon: Truck, roles: ['seller'] }
+      { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['seller'], permission: 'purchase_order.view' },
+      { label: 'Goods Receipt Note', path: '/grn', icon: ClipboardCheck, roles: ['seller'], permission: 'grn.view' },
+      { label: 'Repeat Orders', path: '/orders/repeat', icon: RotateCcw, roles: ['seller'], permission: 'purchase_order.view' },
+      { label: 'Delivery Management', path: '/seller/delivery-management', icon: Truck, roles: ['seller'], permission: 'delivery.view' }
     ] },
     // Seller Marketplace
-    { label: 'My Catalogue', path: '/seller/catalogue', icon: ShoppingCart, roles: ['seller', 'shg']},   // Seller Payments
+    { label: 'My Catalogue', path: '/seller/catalogue', icon: ShoppingCart, roles: ['seller', 'shg'], permission: 'catalogue.product.view' },
+    // Seller Payments
     { label: 'Payments', icon: CreditCard, roles: ['seller'], children: [
-      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['seller'] },
-      { label: 'Payment Status', path: '/payments/transactions', icon: CreditCard, roles: ['seller'] }
+      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['seller'], permission: 'invoice.view' },
+      { label: 'Payment Status', path: '/payments/transactions', icon: CreditCard, roles: ['seller'], permission: 'payment.view' }
     ] },
     // Seller Messages
-    { label: 'Messages', path: '/seller/messages', icon: MessageSquare, roles: ['seller'] },
+    { label: 'Messages', path: '/seller/messages', icon: MessageSquare, roles: ['seller'], permission: 'marketplace.view' },
     // Seller Reports
-    { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['seller'] },
+    { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['seller'], permission: 'report.view' },
     // Seller Ratings
-    { label: 'Ratings', path: '/seller/ratings', icon: CheckCircle2, roles: ['seller'] },
+    { label: 'Ratings', path: '/seller/ratings', icon: CheckCircle2, roles: ['seller'], permission: 'marketplace.view' },
     // Seller Administration
     { label: 'Administration', icon: Settings, roles: ['seller', 'shg'], children: [
       { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['seller', 'shg'], permission: 'team.member.view' },
-      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller', 'shg'] }
+      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller', 'shg'], permission: 'organization.view' }
     ] },
     // Seller Disputes
-    { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'] },
+    { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'], permission: 'dispute.view' },
 
     // Common items
-    { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin', 'shg'] },
-    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin', 'shg'] },
-    { label: 'Disputes', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
+    { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
+    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
+    { label: 'Disputes', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'], permission: 'dispute.view' },
     { label: 'Onboarding Hub', path: isShgAccount ? '/shg/onboarding' : (user ? getSellerPortalPath(user) : '/seller/onboarding'), icon: Store, roles: ['seller', 'shg'] },
     { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
     // { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
@@ -638,12 +642,11 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       if (!user.enabledFeatures.includes(item.featureCode)) return false;
     }
     if (item.permission) {
-      if (user.role === 'admin' || user.role === 'master_admin') return true;
-      if (!user.isSubUser) return true;
-      return user.permissions?.includes(item.permission) || user.permissions?.includes('*') || false;
+      if (user.role === 'master_admin') return true;
+      return checkUserPermission(item.permission);
     }
     return true;
-  }, [user, isShgAccount]);
+  }, [user, isShgAccount, checkUserPermission]);
 
   const filteredNav = useMemo(() => {
     const mapItemForShg = (item: SidebarItem): SidebarItem => {
@@ -662,7 +665,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         if (!isAllowed(item)) return null;
         if (!item.children?.length) return mapItemForShg(item);
         const children = item.children.filter(isAllowed);
-        return children.length ? mapItemForShg({ ...item, children }) : null;
+        if (children.length === 0) return null;
+        return mapItemForShg({ ...item, children });
       })
       .filter(Boolean) as SidebarItem[];
   }, [isAllowed, navItems, isShgAccount]);

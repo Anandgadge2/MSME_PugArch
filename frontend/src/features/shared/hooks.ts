@@ -136,8 +136,10 @@ export const useFeatureQuery = <T,>(endpoint: string, initialValue: T) => {
 
   const reload = useCallback(async () => {
     setOverride(null);
+    featureQueryGlobalCache.delete(endpoint);
+    await queryClient.invalidateQueries({ queryKey });
     await query.refetch();
-  }, [query]);
+  }, [query, queryClient, queryKey, endpoint]);
 
   // `loading` should only be true when we have no data at all. Background
   // refetches must not blank the UI - that's the whole point of caching.
