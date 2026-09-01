@@ -1,7 +1,7 @@
 /**
  * Messages / Conversations API client.
  */
-import { getApi, patchApi, postApi } from '../shared/apiClient';
+import { deleteApi, getApi, patchApi, postApi } from '../shared/apiClient';
 
 export type MessageRole = 'buyer' | 'seller' | 'admin' | 'master_admin' | 'financier' | 'shg' | string;
 
@@ -10,10 +10,25 @@ export interface MessageUserDto {
     name: string;
     email?: string;
     role: MessageRole;
+    lastLoginAt?: string | null;
+    updatedAt?: string;
     organization?: { id: number; organizationName?: string; name?: string } | null;
     buyerProfile?: { id?: number; organizationName?: string } | null;
     sellerProfile?: { id?: number; businessName?: string } | null;
     company?: { id: number; name?: string; portalDisplayName?: string } | null;
+}
+
+export interface MessageAttachmentDto {
+    id: number;
+    fileAssetId: number;
+    fileAsset?: {
+        id: number;
+        originalName?: string;
+        mimeType?: string;
+        size?: number;
+        viewUrl?: string;
+        downloadUrl?: string;
+    };
 }
 
 export interface MessageDto {
@@ -21,22 +36,16 @@ export interface MessageDto {
     conversationId: number;
     senderId: number;
     content: string;
-    status?: string;
+    status?: 'sending' | 'sent' | 'delivered' | 'read' | 'deleted' | string;
     createdAt: string;
     sender?: MessageUserDto;
-    attachments?: Array<{
-        id: number;
-        fileAssetId: number;
-        fileAsset?: {
-            id: number;
-            originalName?: string;
-            mimeType?: string;
-            size?: number;
-            viewUrl?: string;
-            downloadUrl?: string;
-        };
-    }>;
+    attachments?: MessageAttachmentDto[];
     pending?: boolean;
+    replyTo?: {
+        id: number;
+        senderName?: string;
+        content?: string;
+    };
 }
 
 export interface ConversationDto {
@@ -80,6 +89,9 @@ export const createConversation = (data: {
 
 export const sendMessage = (conversationId: number, data: { content?: string; fileAssetIds?: number[] }) =>
     postApi<MessageDto>(`/api/conversations/${conversationId}/messages`, data);
+
+export const deleteMessage = (conversationId: number, messageId: number) =>
+    deleteApi<{ success: boolean; message: MessageDto }>(`/api/conversations/${conversationId}/messages/${messageId}`);
 
 export const markConversationRead = (conversationId: number) =>
     patchApi<{ success: boolean; readCount: number }>(`/api/conversations/${conversationId}/read`, {});

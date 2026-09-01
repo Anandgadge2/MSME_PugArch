@@ -130,6 +130,13 @@ const roleUpdateSchema = z.object({
     customRoleId: z.number().int().positive().nullable().optional()
 });
 
+const memberUpdateSchema = z.object({
+    name: z.string().trim().min(2).max(120).optional(),
+    mobile: z.string().trim().max(20).optional().nullable(),
+    orgRole: z.enum(ORG_ROLE_VALUES as [string, ...string[]]).optional(),
+    customRoleId: z.number().int().positive().nullable().optional()
+});
+
 const roleCreateSchema = z.object({
     name: z.string().trim().min(2).max(80),
     description: z.string().trim().max(300).optional().nullable(),
@@ -973,6 +980,78 @@ router.delete(
     })
 );
 
+// ─── POST /api/org/invitations/:id/resend — resend invitation email ───────────
+router.post(
+    '/org/invitations/:id/resend',
+    authenticate,
+    requireAccountType('buyer', 'seller'),
+    requireOrgPermission('TEAM_INVITE'),
+    asyncRoute(async (req, res) => {
+        const id = Number(req.params.id);
+        if (!id) throw new ApiError(400, 'Invalid invitation ID', 'INVALID_ID');
+
+        const invite = await prisma.orgInvitation.findFirst({
+            where: { id, organizationId: orgId(req) },
+            include: { customRole: true }
+        });
+        if (!invite) throw new ApiError(404, 'Invitation not found', 'INVITE_NOT_FOUND');
+        if (invite.acceptedAt) throw new ApiError(409, 'Invitation has already been accepted', 'INVITE_ACCEPTED');
+
+        const org = await prisma.organization.findUnique({
+            where: { id: orgId(req) },
+            select: { organizationName: true }
+        });
+
+        const tempPassword = generateSecureTemporaryPassword(12);
+        const hashedPassword = await hashPassword(tempPassword);
+
+        // Update target user with fresh temporary password
+        const targetUser = await prisma.user.findUnique({ where: { email: invite.email } });
+        if (targetUser) {
+            await prisma.user.update({
+                where: { id: targetUser.id },
+                data: {
+                    password: hashedPassword,
+                    mustChangePassword: true,
+                    accountStatus: 'ACTIVE' as any
+                }
+            });
+        }
+
+        const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        const updatedInvite = await prisma.orgInvitation.update({
+            where: { id },
+            data: {
+                status: 'PENDING' as any,
+                expiresAt: newExpiresAt
+            }
+        });
+
+        const roleName = invite.customRole?.name || String(invite.orgRole).replace(/_/g, ' ');
+        const loginUrl = `${env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+
+        await sendSubUserInvitationEmail(invite.email, {
+            name: targetUser?.name || 'Team Member',
+            organizationName: org?.organizationName || 'Your Organization',
+            roleName,
+            tempPassword,
+            loginUrl
+        });
+
+        await auditLog({
+            actorUserId: userId(req),
+            actorRole: req.user!.role,
+            action: 'org.invitation.resent',
+            entityType: 'orgInvitation',
+            entityId: invite.id,
+            ipAddress: req.ip,
+            metadata: { email: invite.email, orgRole: invite.orgRole }
+        });
+
+        ok(res, { invitation: updatedInvite, message: 'Invitation resent successfully' });
+    })
+);
+
 // ─── GET /api/org/invite/info — (public) look up an invite by token ──────────
 // Lets an invited person see which organisation and role the invite is for
 // BEFORE they have an account. No auth required; only non-sensitive fields are
@@ -1236,6 +1315,97 @@ router.post(
             orgRole: invite.orgRole,
             customRole: invite.customRole
         });
+    })
+);
+
+// ─── PATCH /api/org/members/:memberId — edit member details (name, mobile, role) ───
+router.patch(
+    '/org/members/:memberId',
+    authenticate,
+    requireAccountType('buyer', 'seller'),
+    requireOrgPermission('TEAM_ROLE_MANAGE'),
+    asyncRoute(async (req, res) => {
+        const memberId = Number(req.params.memberId);
+        if (!memberId) throw new ApiError(400, 'Invalid member ID', 'INVALID_ID');
+
+        const body = memberUpdateSchema.parse(req.body);
+
+        const membership = await prisma.orgMembership.findUnique({
+            where: { userId_organizationId: { userId: memberId, organizationId: orgId(req) } }
+        });
+        if (!membership) throw new ApiError(404, 'Member not found in your organisation.', 'MEMBER_NOT_FOUND');
+
+        // If changing role of self, guard against self-demotion
+        if (body.orgRole && body.orgRole !== membership.orgRole && memberId === userId(req)) {
+            throw new ApiError(409, 'You cannot change your own role.', 'SELF_ROLE_CHANGE');
+        }
+
+        // Validate custom role if supplied
+        const customRole = body.customRoleId
+            ? await (prisma as any).orgCustomRole.findFirst({
+                where: { id: body.customRoleId, organizationId: orgId(req), isActive: true }
+            })
+            : null;
+        if (body.customRoleId && !customRole) throw new ApiError(404, 'Custom role not found', 'ROLE_NOT_FOUND');
+
+        // Update user details (name, mobile)
+        const userUpdateData: { name?: string; mobile?: string | null } = {};
+        if (body.name) userUpdateData.name = body.name;
+        if (body.mobile !== undefined) userUpdateData.mobile = body.mobile || null;
+
+        if (Object.keys(userUpdateData).length > 0) {
+            await prisma.user.update({
+                where: { id: memberId },
+                data: userUpdateData
+            });
+        }
+
+        // Update membership role details if provided
+        const membershipUpdateData: { orgRole?: OrgRole; customRoleId?: number | null } = {};
+        if (body.orgRole) membershipUpdateData.orgRole = body.orgRole as OrgRole;
+        if (body.customRoleId !== undefined) membershipUpdateData.customRoleId = body.customRoleId;
+
+        let updatedMembership = membership;
+        if (Object.keys(membershipUpdateData).length > 0) {
+            updatedMembership = await prisma.orgMembership.update({
+                where: { id: membership.id },
+                data: membershipUpdateData,
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            mobile: true,
+                            accountStatus: true,
+                            lastLoginAt: true,
+                            createdAt: true
+                        }
+                    },
+                    customRole: {
+                        select: {
+                            id: true,
+                            name: true,
+                            roleKey: true,
+                            isSystemRole: true,
+                            permissions: { select: { permissionKey: true, allowed: true } }
+                        }
+                    }
+                }
+            }) as any;
+        }
+
+        await auditLog({
+            actorUserId: userId(req),
+            actorRole: req.user!.role,
+            action: 'org.member.updated',
+            entityType: 'orgMembership',
+            entityId: membership.id,
+            ipAddress: req.ip,
+            metadata: { memberId, ...body }
+        });
+
+        ok(res, updatedMembership);
     })
 );
 
