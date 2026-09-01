@@ -38,15 +38,26 @@ export function formatRefId(
     if (/^[A-Z]{2,4}-20\d{2}-\d{5}$/i.test(trimmed)) {
       return trimmed.toUpperCase();
     }
-  }
 
-  const year = new Date().getFullYear();
+    // If rawRef is in 5-digit format like REQ-86638 or RC-86638, preserve it
+    if (/^[A-Z]{2,4}-\d{5}$/i.test(trimmed)) {
+      return trimmed.toUpperCase();
+    }
+
+    // If rawRef is in long timestamp format like RC-1786170101620, normalize it to 5 digits (RC-01620)
+    if (/^[A-Z]{2,4}-\d{10,}$/i.test(trimmed)) {
+      const match = trimmed.match(/^([A-Z]{2,4})-(\d+)$/i);
+      if (match) {
+        return `${match[1].toUpperCase()}-${match[2].slice(-5)}`;
+      }
+    }
+  }
 
   if (cleanId !== null && cleanId > 0) {
-    return `${p}-${year}-${String(cleanId).padStart(5, '0')}`;
+    return `${p}-${String(cleanId).padStart(5, '0')}`;
   }
 
-  return `${p}-${year}-00001`;
+  return `${p}-00001`;
 }
 
 export function formatRequirementNumber(

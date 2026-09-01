@@ -464,7 +464,7 @@ const importedCsvRowToItem = (headers: string[], row: string[], index: number): 
 };
 
 const defaultAuctionConfig = (method: ProcurementMethodId): AuctionConfig => ({
-  auctionNumber: `RA-${Date.now()}`,
+  auctionNumber: `RA-${Math.floor(10000 + Math.random() * 90000)}`,
   auctionTitle: '',
   auctionDescription: '',
   procurementMethod: 'REVERSE_AUCTION',
@@ -525,7 +525,7 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
     },
     auctionConfig: {
       ...base,
-  procurementMethod: 'REVERSE_AUCTION',
+      procurementMethod: 'REVERSE_AUCTION',
       auctionTitle: base.auctionTitle || draft.basics.title,
       auctionDescription: base.auctionDescription || draft.basics.justification,
       auctionCategory: base.auctionCategory || draft.basics.category,
@@ -535,14 +535,14 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
       startingBidPrice: base.startingBidPrice || draft.basics.estimatedValue || 0,
       triggerConfiguration: {
         ...base.triggerConfiguration,
-    preBidStageRequired: false,
+        preBidStageRequired: false,
       },
     },
   };
 };
 
 const defaultRateContractConfig = (): RateContractConfig => ({
-  rateContractNumber: `RC-${Date.now()}`,
+  rateContractNumber: `RC-${Math.floor(10000 + Math.random() * 90000)}`,
   contractTitle: '',
   contractDescription: '',
   contractCategory: '',

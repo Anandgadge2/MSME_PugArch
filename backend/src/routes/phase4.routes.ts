@@ -1593,8 +1593,8 @@ const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procu
   return db.requirement.findUnique({ where: { id: saved.id }, include: procurementDraftInclude });
 };
 
-const nextProcurementAuctionCode = () => `RA-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-const nextRateContractCode = () => `RC-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+const nextProcurementAuctionCode = () => `RA-${Math.floor(10000 + Math.random() * 90000)}`;
+const nextRateContractCode = () => `RC-${Math.floor(10000 + Math.random() * 90000)}`;
 
 const createAuctionForSubmittedProcurement = async (req: AuthRequest, requirement: any, draftBody: z.infer<typeof procurementDraftBody>) => {
   const methodSlug = methodSlugForDraft(draftBody);

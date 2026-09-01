@@ -535,7 +535,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           actionLabel: req.responsesCount > 0 ? 'View Response' : (opportunityType === 'Rate Contract' ? 'Submit Rate' : 'Submit Quotation'),
           href: responseHref,
           detailsHref: detailHref,
-          sourceRef: formatRefId('REQ', req.sourceId || req.id, req.requirementNumber),
+          sourceRef: formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'REQ', req.sourceId || req.id, req.requirementNumber),
           publishedAt: req.approvedAt || req.createdAt,
           quantity: formatQuantity(req.quantity, req.unit),
           description: req.description,
@@ -682,8 +682,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         if (!rc) return;
         const meta = rc.metadata || {};
         const hasReqId = Boolean(meta.requirementId);
-        const reqId = meta.requirementId || rc.id;
-        const refNo = rc.contractNumber || meta.requirementNumber || `RC-${rc.id}`;
+        const rawRef = rc.contractNumber || meta.requirementNumber || `RC-${rc.id}`;
+        const refNo = formatRefId('RC', rc.id, rawRef);
 
         const reqTitle = meta.requirementTitle || meta.basics?.title || meta.contractTitle || meta.title || rc.title;
         const buyerName = meta.buyerOrganizationName || meta.buyerOrganization?.organizationName || meta.buyerName || meta.orgName || rc.buyerOrganizationName || 'Verified Buyer';
