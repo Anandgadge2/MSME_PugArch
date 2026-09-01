@@ -8,14 +8,15 @@
 import { useMemo, useState } from 'react';
 import {
     Mail, Plus, RefreshCw, Search, Shield, Trash2, UserCheck,
-    UserPlus, Users, X, ChevronDown, Clock, CheckCircle2, KeyRound, History, Copy, Power
+    UserPlus, Users, X, ChevronDown, Clock, CheckCircle2, KeyRound, History, Copy, Power,
+    Pencil, UserX, Send, Phone
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { useAuth } from '../../../hooks/useAuth';
 import { useOrgRole, usePermissions, type OrgRole } from '../../../hooks/useOrgRole';
-import { getApi, postApi, putApi, deleteApi } from '../../shared/apiClient';
+import { getApi, postApi, putApi, patchApi, deleteApi } from '../../shared/apiClient';
 import { formatDateTime, formatRelative } from '../../shared/format';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
@@ -134,26 +135,33 @@ export default function TeamManagementPage() {
     const roleOptions = useMemo(() => {
         const labels = new Map<string, string>();
         members.forEach(member => {
-            if (member.orgRole) labels.set(member.orgRole, member.orgRole.replace(/_/g, ' '));
+            const roleName = member.customRole?.name || member.orgRole.replace(/_/g, ' ');
+            labels.set(roleName, roleName);
+        });
+        roles.forEach(role => {
+            if (role.name) labels.set(role.name, role.name);
         });
         invitations.forEach(invite => {
-            if (invite.orgRole) labels.set(invite.orgRole, invite.orgRole.replace(/_/g, ' '));
+            const roleName = invite.customRole?.name || invite.orgRole.replace(/_/g, ' ');
+            labels.set(roleName, roleName);
         });
         return Array.from(labels, ([value, label]) => ({ value, label }));
-    }, [invitations, members]);
+    }, [invitations, members, roles]);
     const visibleMembers = useMemo(() => {
         const text = searchTerm.trim().toLowerCase();
         return [...members].filter(member => {
+            const roleName = member.customRole?.name || member.orgRole.replace(/_/g, ' ');
             const haystack = [
                 member.userId,
                 member.user.name,
                 member.user.email,
                 member.user.mobile,
                 member.orgRole,
+                roleName,
                 member.user.accountStatus
             ].join(' ').toLowerCase();
             if (text && !haystack.includes(text)) return false;
-            if (roleFilter && member.orgRole !== roleFilter) return false;
+            if (roleFilter && member.orgRole !== roleFilter && roleName !== roleFilter) return false;
             if (statusFilter === 'active' && !member.isActive) return false;
             if (statusFilter === 'inactive' && member.isActive) return false;
             return true;
@@ -161,7 +169,7 @@ export default function TeamManagementPage() {
             const valueFor = (member: Member) => {
                 if (sortKey === 'name') return member.user.name || '';
                 if (sortKey === 'email') return member.user.email || '';
-                if (sortKey === 'role') return member.orgRole || '';
+                if (sortKey === 'role') return member.customRole?.name || member.orgRole || '';
                 if (sortKey === 'status') return member.isActive ? 'active' : 'inactive';
                 if (sortKey === 'lastLogin') return new Date(member.user.lastLoginAt || 0).getTime();
                 return new Date(member.acceptedAt || member.invitedAt || 0).getTime();
@@ -180,6 +188,42 @@ export default function TeamManagementPage() {
         setSortDirection(prev => sortKey === field && prev === 'asc' ? 'desc' : 'asc');
         setSortKey(field);
         setPage(1);
+    };
+
+    const [resendingInviteId, setResendingInviteId] = useState<number | null>(null);
+
+    const handleToggleMemberStatus = async (member: Member) => {
+        const action = member.isActive ? 'deactivate' : 'reactivate';
+        const confirmMessage = member.isActive
+            ? `Are you sure you want to deactivate ${member.user.name}? They will not be able to log in or access organization features until reactivated.`
+            : `Reactivate login access for ${member.user.name}?`;
+        if (!window.confirm(confirmMessage)) return;
+
+        try {
+            if (member.isActive) {
+                await patchApi(`/api/org/members/${member.userId}/deactivate`, { reason: 'Deactivated by Org Admin' });
+                toast.success(`${member.user.name} has been deactivated`);
+            } else {
+                await patchApi(`/api/org/members/${member.userId}/reactivate`, {});
+                toast.success(`${member.user.name} has been reactivated`);
+            }
+            reloadMembers();
+        } catch (err: any) {
+            toast.error(err?.message || `Failed to ${action} member`);
+        }
+    };
+
+    const handleResendInvite = async (invite: Invitation) => {
+        setResendingInviteId(invite.id);
+        try {
+            await postApi(`/api/org/invitations/${invite.id}/resend`, {});
+            toast.success(`Invitation credentials resent to ${invite.email}`);
+            reloadInvites();
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to resend invitation');
+        } finally {
+            setResendingInviteId(null);
+        }
     };
 
     const handleRemoveMember = async (member: Member) => {
@@ -211,10 +255,24 @@ export default function TeamManagementPage() {
                         <button
                             type="button"
                             onClick={() => setEditingMember(member)}
-                            title="Change role"
-                            className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-[#12335f] hover:bg-slate-50"
+                            title="Edit member details"
+                            className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-[#12335f] hover:bg-slate-50 transition"
                         >
-                            <Shield className="h-3.5 w-3.5" />
+                            <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                    )}
+                    {canDisableMembers && (
+                        <button
+                            type="button"
+                            onClick={() => handleToggleMemberStatus(member)}
+                            title={member.isActive ? "Deactivate member" : "Activate member"}
+                            className={`flex h-8 w-8 items-center justify-center rounded-md border transition ${
+                                member.isActive
+                                    ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            }`}
+                        >
+                            {member.isActive ? <Power className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                         </button>
                     )}
                     {canAssignRoles && (
@@ -222,34 +280,17 @@ export default function TeamManagementPage() {
                             type="button"
                             onClick={() => setTransferMember(member)}
                             title="Transfer access"
-                            className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-indigo-700 hover:bg-indigo-50"
+                            className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-indigo-700 hover:bg-indigo-50 transition"
                         >
                             <History className="h-3.5 w-3.5" />
-                        </button>
-                    )}
-                    {canAssignRoles && (
-                        <button
-                            type="button"
-                            onClick={async () => {
-                                try {
-                                    await putApi(`/api/org/members/${member.userId}/role`, { customRoleId: member.customRoleId ?? null });
-                                    toast.success('Access refreshed');
-                                } catch {
-                                    toast.error('Unable to refresh access');
-                                }
-                            }}
-                            title="Refresh role assignment"
-                            className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                        >
-                            <Power className="h-3.5 w-3.5" />
                         </button>
                     )}
                     {canDisableMembers && (
                         <button
                             type="button"
                             onClick={() => handleRemoveMember(member)}
-                            title="Remove member"
-                            className="flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50"
+                            title="Remove member permanently"
+                            className="flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 transition"
                         >
                             <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -257,7 +298,7 @@ export default function TeamManagementPage() {
                 </div>
             )}
             {member.userId === Number(user?.id) && (
-                <span className="text-[10px] font-black uppercase text-slate-400">You</span>
+                <span className="text-[10px] font-black uppercase text-slate-400 bg-slate-100 px-2 py-0.5 rounded">You (Admin)</span>
             )}
         </>
     );
@@ -470,7 +511,7 @@ export default function TeamManagementPage() {
                                         </span>
                                     </div>
                                     <div className="mt-4 grid gap-2 text-xs font-semibold text-slate-600">
-                                        <p><span className="font-black text-slate-900">Role:</span> <span className={`ml-1 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>{member.orgRole.replace(/_/g, ' ')}</span></p>
+                                        <p><span className="font-black text-slate-900">Role:</span> <span className={`ml-1 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>{member.customRole?.name || member.orgRole.replace(/_/g, ' ')}</span></p>
                                         <p><span className="font-black text-slate-900">Joined:</span> {formatDateTime(member.acceptedAt || member.invitedAt)}</p>
                                         <p><span className="font-black text-slate-900">Last login:</span> {member.user.lastLoginAt ? formatRelative(member.user.lastLoginAt) : 'Never'}</p>
                                         {member.user.mobile && <p><span className="font-black text-slate-900">Mobile:</span> {member.user.mobile}</p>}
@@ -507,11 +548,16 @@ export default function TeamManagementPage() {
                                             <td className="px-4 py-3">
                                                 <EntityIdLink label={`MBR-${member.userId}`} id={member.userId} size="sm" onClick={() => { }} />
                                                 <p className="mt-1 text-sm font-black text-slate-900 text-wrap-anywhere">{member.user.name}</p>
+                                                {member.user.mobile && (
+                                                    <p className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                                                        <Phone className="h-2.5 w-2.5" /> {member.user.mobile}
+                                                    </p>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{member.user.email}</td>
                                             <td className="px-4 py-3">
                                                 <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>
-                                                    {member.orgRole.replace(/_/g, ' ')}
+                                                    {member.customRole?.name || member.orgRole.replace(/_/g, ' ')}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3">
@@ -560,18 +606,32 @@ export default function TeamManagementPage() {
                                         <div className="min-w-0">
                                             <p className="text-sm font-black text-slate-900 text-wrap-anywhere">{invite.email}</p>
                                             <p className="text-[10px] font-semibold text-slate-500">
-                                                Invited as <span className="font-black">{invite.orgRole.replace(/_/g, ' ')}</span> · Expires {formatRelative(invite.expiresAt)}
+                                                Invited as <span className="font-black">{invite.customRole?.name || invite.orgRole.replace(/_/g, ' ')}</span> · Expires {formatRelative(invite.expiresAt)}
                                             </p>
                                         </div>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleCancelInvite(invite)}
-                                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50"
-                                        title="Cancel invitation"
-                                    >
-                                        <X className="h-3.5 w-3.5" />
-                                    </button>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {canInviteTeam && (
+                                            <button
+                                                type="button"
+                                                disabled={resendingInviteId === invite.id}
+                                                onClick={() => handleResendInvite(invite)}
+                                                className="flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-bold text-[#12335f] hover:bg-slate-50 transition disabled:opacity-50"
+                                                title="Resend invitation email"
+                                            >
+                                                <Send className={`h-3.5 w-3.5 ${resendingInviteId === invite.id ? 'animate-pulse' : ''}`} />
+                                                <span>{resendingInviteId === invite.id ? 'Sending...' : 'Resend'}</span>
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCancelInvite(invite)}
+                                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 transition"
+                                            title="Cancel invitation"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>}
@@ -657,7 +717,7 @@ export default function TeamManagementPage() {
                 />
             )}
             {editingMember && (
-                <ChangeRoleModal
+                <EditMemberModal
                     member={editingMember}
                     roles={roles}
                     onClose={() => setEditingMember(null)}
@@ -844,53 +904,139 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: OrgCustomRole[]; on
     );
 }
 
-// ─── Change Role Modal ────────────────────────────────────────────────────────
+// ─── Edit Member Modal ────────────────────────────────────────────────────────
 
-function ChangeRoleModal({ member, roles, onClose, onSuccess }: { member: Member; roles: OrgCustomRole[]; onClose: () => void; onSuccess: () => void }) {
-    const [customRoleId, setCustomRoleId] = useState<number | ''>(member.customRoleId || '');
+function EditMemberModal({
+    member,
+    roles,
+    onClose,
+    onSuccess
+}: {
+    member: Member;
+    roles: OrgCustomRole[];
+    onClose: () => void;
+    onSuccess: () => void;
+}) {
+    const initialRoleId = member.customRoleId || member.customRole?.id || roles.find(r => r.roleKey.toLowerCase().replace(/-/g, '_') === String(member.orgRole).toLowerCase().replace(/-/g, '_'))?.id || '';
+    const [name, setName] = useState(member.user.name || '');
+    const [mobile, setMobile] = useState(member.user.mobile || '');
+    const [orgRole, setOrgRole] = useState<OrgRole>(member.orgRole || 'ORG_MEMBER');
+    const [customRoleId, setCustomRoleId] = useState<number | ''>(initialRoleId);
     const [saving, setSaving] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const trimmedName = name.trim();
+        if (!trimmedName || trimmedName.length < 2) {
+            toast.error('Please enter a valid full name (at least 2 characters).');
+            return;
+        }
+
+        const trimmedMobile = mobile.trim();
+        if (trimmedMobile && !/^[6-9]\d{9}$/.test(trimmedMobile)) {
+            toast.error('Please enter a valid 10-digit mobile number starting with 6-9, or leave it blank.');
+            return;
+        }
+
         setSaving(true);
         try {
-            await putApi(`/api/org/members/${member.userId}/role`, {
-                customRoleId: customRoleId === '' ? null : customRoleId
+            await patchApi(`/api/org/members/${member.userId}`, {
+                name: trimmedName,
+                mobile: trimmedMobile || null,
+                orgRole,
+                customRoleId: customRoleId === '' ? null : Number(customRoleId)
             });
-            toast.success(`${member.user.name}'s role assignment updated`);
+            toast.success(`${trimmedName}'s details updated successfully`);
             onSuccess();
         } catch (err: any) {
-            toast.error(err?.message || 'Failed to update role');
+            toast.error(err?.message || 'Failed to update member details');
         } finally {
             setSaving(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
-            <div className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="edit-member-title">
+            <div className="w-full max-w-lg overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200">
                 <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
                     <div>
-                        <h3 className="text-sm font-black uppercase tracking-widest">Change Role</h3>
-                        <p className="mt-0.5 text-[10px] text-white/70">{member.user.name} · {member.user.email}</p>
+                        <h3 id="edit-member-title" className="text-sm font-black uppercase tracking-widest">Edit Member Details</h3>
+                        <p className="mt-0.5 text-[10px] text-white/70">{member.user.email}</p>
                     </div>
-                    <button onClick={onClose} className="rounded-md p-1 text-white/80 hover:bg-white/10">
+                    <button onClick={onClose} aria-label="Close dialog" className="rounded-md p-1 text-white/80 hover:bg-white/10 transition">
                         <X className="h-4 w-4" />
                     </button>
                 </div>
                 <form onSubmit={handleSubmit} className="p-5 space-y-4">
                     <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Dynamic Role</label>
-                        <select value={customRoleId} onChange={e => setCustomRoleId(e.target.value === '' ? '' : Number(e.target.value))} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20">
-                            <option value="">No custom role</option>
-                            {roles.filter(role => role.isActive).map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
-                        </select>
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Full Name *</label>
+                        <input
+                            type="text"
+                            required
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            placeholder="e.g. Rajesh Kumar"
+                            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f]"
+                        />
                     </div>
-                    <div className="flex justify-end gap-2 pt-2">
-                        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-                        <Button type="submit" disabled={saving} className="bg-[#12335f] text-white">
-                            {saving ? 'Saving...' : 'Update Role'}
-                        </Button>
+
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Mobile Number</label>
+                        <input
+                            type="tel"
+                            value={mobile}
+                            onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                            placeholder="10-digit mobile number"
+                            maxLength={10}
+                            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] font-mono"
+                        />
+                        <p className="text-[10px] text-slate-400">Used for transaction updates and verification alerts.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Primary Role *</label>
+                            <select
+                                value={orgRole}
+                                onChange={e => setOrgRole(e.target.value as OrgRole)}
+                                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f]"
+                            >
+                                <option value="ORG_ADMIN">Admin (Full Access)</option>
+                                <option value="ORG_MANAGER">Manager</option>
+                                <option value="PROCUREMENT_OFFICER">Procurement Officer</option>
+                                <option value="FINANCE_OFFICER">Finance Officer</option>
+                                <option value="TECHNICAL_OFFICER">Technical Officer</option>
+                                <option value="LOGISTICS_OFFICER">Logistics Officer</option>
+                                <option value="ORG_MEMBER">Member (Standard)</option>
+                                <option value="VIEWER">Viewer (Read-only)</option>
+                            </select>
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Custom Dynamic Role</label>
+                            <select
+                                value={customRoleId}
+                                onChange={e => setCustomRoleId(e.target.value === '' ? '' : Number(e.target.value))}
+                                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f]"
+                            >
+                                <option value="">No custom role</option>
+                                {roles.filter(role => role.isActive).map(role => (
+                                    <option key={role.id} value={role.id}>{role.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                        <div className="text-[11px] text-slate-400">
+                            Status: <span className={member.isActive ? "font-bold text-emerald-600" : "font-bold text-amber-600"}>{member.isActive ? "Active" : "Inactive"}</span>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+                            <Button type="submit" disabled={saving} className="bg-[#12335f] hover:bg-[#0b2447] text-white font-bold">
+                                {saving ? 'Saving...' : 'Save Changes'}
+                            </Button>
+                        </div>
                     </div>
                 </form>
             </div>

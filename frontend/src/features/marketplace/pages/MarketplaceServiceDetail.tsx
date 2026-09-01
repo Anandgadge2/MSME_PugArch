@@ -44,31 +44,20 @@ export default function MarketplaceServiceDetail() {
 
     const { data: detailData, isLoading: loading } = useQuery({
         queryKey: ['marketplaceService', serviceId],
-        queryFn: () => marketplaceApi.getServiceDetail(serviceId),
         enabled: serviceId > 0,
-        staleTime: 5 * 60 * 1000,
-        initialData: () => {
-            const cachedDetail = queryClient.getQueryData<any>(['marketplaceService', serviceId]);
-            if (cachedDetail) return cachedDetail;
-
-            const peeked = api.peek(`/api/marketplace/services/${serviceId}`);
-            if (peeked) return unwrapApiData(peeked);
-
-            const cacheState = queryClient.getQueryCache().getAll();
-            for (const query of cacheState) {
-                const data = query.state.data as any;
-                if (data?.featuredServices) {
-                    const found = data.featuredServices.find((s: any) => s.id === serviceId);
-                    if (found) return { service: found, relatedServices: [] };
-                }
-                if (data?.services) {
-                    const found = data.services.find((s: any) => s.id === serviceId);
-                    if (found) return { service: found, relatedServices: [] };
-                }
-                if (data?.records) {
-                    const found = data.records.find((s: any) => s.id === serviceId);
-                    if (found) return { service: found, relatedServices: [] };
-                }
+        staleTime: 30 * 1000,
+        queryFn: async () => {
+            if (!serviceId) return undefined;
+            const res = await marketplaceApi.getServiceDetail(serviceId);
+            if (res?.service) return res;
+            if (res?.id) return { service: res, relatedServices: [] };
+            try {
+                const legacyRes = await api.get(`/api/marketplace/services/${serviceId}`);
+                const data = unwrapApiData(legacyRes);
+                if (data?.service) return { service: data.service, relatedServices: data.relatedServices || [] };
+                if (data?.id) return { service: data, relatedServices: [] };
+            } catch {
+                // Ignore fallback error
             }
             return undefined;
         },
@@ -83,6 +72,13 @@ export default function MarketplaceServiceDetail() {
     useEffect(() => {
         setImageFailed(false);
     }, [serviceId]);
+
+    const serviceAny = (service || {}) as any;
+    const isVerified = service?.organization?.verificationStatus === 'VERIFIED' || serviceAny?.sellerVerified || Boolean(service?.organization?.id);
+    const location = service?.organization?.city || service?.organization?.district || service?.organization?.state || serviceAny?.location || (serviceAny?.district ? `${serviceAny.district}, ${serviceAny.state || 'ODISHA'}` : undefined);
+    const sellerOrgId = service?.organization?.id || serviceAny?.organizationId;
+    const sellerUserId = Number(service?.seller?.id || serviceAny?.sellerId || 0);
+    const sellerDisplayName = service?.organization?.organizationName || service?.seller?.name || serviceAny?.sellerName || serviceAny?.vendorName || 'Verified Provider';
 
     const cartQuantity = getQuantity(serviceId, 'service');
 
@@ -121,16 +117,16 @@ export default function MarketplaceServiceDetail() {
             toast.info('Quote requests are available from buyer accounts.');
             return;
         }
-        const sellerUserId = Number(service.seller?.id || 0);
-        if (!sellerUserId) {
+        const targetSellerId = sellerUserId || sellerOrgId;
+        if (!targetSellerId) {
             toast.error('Seller contact is not available for this listing.');
             return;
         }
         const params = new URLSearchParams({
             intent: 'quote',
-            sellerId: String(sellerUserId),
+            sellerId: String(targetSellerId),
             subject: `Quote request: ${service.name}`,
-            message: `Hello, I would like to request a quotation for ${service.name}.\n\nCategory: ${service.category?.name || 'Not specified'}\nService area: ${service.serviceArea || 'Please confirm'}\nPlease share scope, delivery timeline, payment terms, and applicable taxes.`
+            message: `Hello, I would like to request a quotation for ${service.name}.\n\nCategory: ${service.category?.name || serviceAny.categoryName || 'Not specified'}\nService area: ${service.serviceArea || location || 'Please confirm'}\nPlease share scope, delivery timeline, payment terms, and applicable taxes.`
         });
         router.push(`/buyer/messages?${params.toString()}`);
     };
@@ -169,27 +165,23 @@ export default function MarketplaceServiceDetail() {
         );
     }
 
-    const isVerified = service.organization?.verificationStatus === 'VERIFIED';
-    const location = service.organization?.city || service.organization?.district || service.organization?.state;
-
     const handleSaveSupplier = () => {
-        if (!service.organization?.id) {
+        if (!sellerOrgId && !sellerUserId) {
             toast.error('Supplier details are not available for this listing.');
             return;
         }
         saveSupplier({
-            id: service.organization.id,
-            sellerUserId: service.seller?.id || null,
-            name: service.organization.organizationName || service.seller?.name || 'Verified supplier',
-            location: [service.organization.city, service.organization.district, service.organization.state].filter(Boolean).join(', '),
-            verificationStatus: service.organization.verificationStatus,
+            id: sellerOrgId || sellerUserId,
+            sellerUserId: sellerUserId || null,
+            name: sellerDisplayName,
+            location: [service.organization?.city, service.organization?.district, service.organization?.state].filter(Boolean).join(', ') || location || 'India',
+            verificationStatus: service.organization?.verificationStatus || (isVerified ? 'VERIFIED' : 'PENDING'),
             source: service.name,
         });
         toast.success('Service provider added to saved sellers!');
     };
 
     const imageUrl = imageFailed ? '' : resolveMarketplaceImage(service, 'service');
-    const serviceAny = service as any;
 
     const serviceDocuments = (() => {
         if (!service) return [];
@@ -355,11 +347,11 @@ export default function MarketplaceServiceDetail() {
                             <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-11 h-11 rounded-xl bg-slate-900 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
-                                        <Building2 className="h-5 w-5" />
+                                        {(sellerDisplayName || 'M')[0].toUpperCase()}
                                     </div>
                                     <div className="min-w-0">
-                                        <h4 title={service.organization?.organizationName || service.seller?.name || 'Verified Service Provider'} className="text-xs font-extrabold text-slate-900 truncate">
-                                            {service.organization?.organizationName || service.seller?.name || 'Verified Service Provider'}
+                                        <h4 title={sellerDisplayName} className="text-xs font-extrabold text-slate-900 truncate">
+                                            {sellerDisplayName}
                                         </h4>
                                         <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500">
                                             {location && (
@@ -375,9 +367,9 @@ export default function MarketplaceServiceDetail() {
                                         </div>
                                     </div>
                                 </div>
-                                {service.organization?.id && (
+                                {sellerOrgId && (
                                     <Link
-                                        href={`/marketplace/sellers/${service.organization.id}`}
+                                        href={`/marketplace/sellers/${sellerOrgId}`}
                                         className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0b2447] hover:underline shrink-0 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200/60"
                                     >
                                         Storefront <ExternalLink className="h-3 w-3" />
@@ -531,7 +523,7 @@ export default function MarketplaceServiceDetail() {
                                                 </div>
                                                 <div>
                                                     <h4 className="text-sm font-extrabold text-slate-900">
-                                                        {service.organization?.organizationName || service.seller?.name || 'Verified Provider'}
+                                                        {sellerDisplayName}
                                                     </h4>
                                                     <p className="text-xs text-slate-500 font-medium">MSME Registered Service Provider Profile</p>
                                                 </div>
@@ -555,20 +547,20 @@ export default function MarketplaceServiceDetail() {
                             </div>
 
                             {/* Uploaded Documents and Certifications */}
-                            <div className="pt-6 border-t border-slate-200/80">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div>
-                                        <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                                            <FileText className="h-5 w-5 text-[#0b2447]" /> Provider Certifications & Documents
-                                        </h3>
-                                        <p className="text-xs text-slate-500 font-medium">Licenses, compliance certificates, and service brochures.</p>
+                            {serviceDocuments.length > 0 && (
+                                <div className="pt-6 border-t border-slate-200/80">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div>
+                                            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                                                <FileText className="h-5 w-5 text-[#0b2447]" /> Provider Certifications & Documents
+                                            </h3>
+                                            <p className="text-xs text-slate-500 font-medium">Licenses, compliance certificates, and service brochures.</p>
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+                                            {serviceDocuments.length} Attachments
+                                        </span>
                                     </div>
-                                    <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-                                        {serviceDocuments.length} Attachments
-                                    </span>
-                                </div>
 
-                                {serviceDocuments.length > 0 ? (
                                     <div className="grid gap-3 sm:grid-cols-2">
                                         {serviceDocuments.map((cert: any) => {
                                             return (
@@ -598,12 +590,8 @@ export default function MarketplaceServiceDetail() {
                                             );
                                         })}
                                     </div>
-                                ) : (
-                                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-8 text-center text-xs font-semibold text-slate-500">
-                                        No certification attachments submitted for this service yet.
-                                    </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* COLUMN 3: Sidebar Actions */}

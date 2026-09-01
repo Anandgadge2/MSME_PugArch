@@ -499,7 +499,7 @@ function SellerBackedShgPage({ section }: { section: string }) {
   if (section === 'schemes') {
     const schemes = [
       ['Marketplace readiness', 'Complete verification and publish catalogue items to become visible to institutional buyers.', '/shg/products'],
-      ['Procurement opportunities', 'Browse active RFQs, tenders, and buyer requirements available to verified suppliers.', '/seller/opportunities'],
+      ['Procurement opportunities', 'Browse active RFQs, tenders, and buyer requirements available to verified suppliers.', '/shg/opportunities'],
       ['SHG documentation support', 'Keep bank, member, authorization, and registration records ready for portal review.', '/shg/documents'],
     ];
     return (
@@ -662,7 +662,7 @@ function ShgDashboardSection({ section, profile, progress }: { section: string; 
   if (section === 'schemes') {
     return (
       <ShgSectionLayout eyebrow="Growth & Enablement" title="Schemes and Opportunities" description="Use the portal to prepare your SHG for catalogue discovery and procurement participation.">
-        <div className="grid gap-4 lg:grid-cols-3"><NativeQuickLink title="Complete onboarding" text="Finish group, bank, member, and document verification." href="/shg/onboarding" /><NativeQuickLink title="Publish products" text="Create catalogue items for institutional buyers." href="/shg/products" /><NativeQuickLink title="Find opportunities" text="Review procurement opportunities open to suppliers." href="/seller/opportunities" /></div>
+        <div className="grid gap-4 lg:grid-cols-3"><NativeQuickLink title="Complete onboarding" text="Finish group, bank, member, and document verification." href="/shg/onboarding" /><NativeQuickLink title="Publish products" text="Create catalogue items for institutional buyers." href="/shg/products" /><NativeQuickLink title="Find opportunities" text="Review procurement opportunities open to suppliers." href="/shg/opportunities" /></div>
       </ShgSectionLayout>
     );
   }

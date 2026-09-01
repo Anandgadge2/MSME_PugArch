@@ -374,8 +374,11 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
   );
 });
 
+import { usePermissions } from '../../hooks/useOrgRole';
+
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onHoverChange }: SidebarProps) {
   const { user, logout } = useAuth();
+  const { hasPermission: checkUserPermission } = usePermissions();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -383,7 +386,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     const query = searchParams.toString();
     return query ? `${pathname}?${query}` : pathname;
   }, [pathname, searchParams]);
-  const [isHovered, setIsHovered] = useState(false);
   const [openGroups, setOpenGroups] = useState<SidebarGroupState>({});
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
@@ -448,46 +450,17 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     }
   }, []);
 
-  const handleHover = useCallback((value: boolean) => {
-    setIsHovered(value);
-    onHoverChange?.(value);
-  }, [onHoverChange]);
-
+  // Close mobile drawer when pressing Escape key
   useEffect(() => {
-    if (sidebarRef.current) {
-      const isCurrentlyHovered = sidebarRef.current.matches(':hover');
-      if (isCurrentlyHovered) {
-        handleHover(true);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isHovered) return;
-
-    const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (!sidebarRef.current) return;
-
-      const rect = sidebarRef.current.getBoundingClientRect();
-      const isInside = (
-        e.clientX >= rect.left &&
-        e.clientX <= rect.right &&
-        e.clientY >= rect.top &&
-        e.clientY <= rect.bottom
-      );
-
-      if (!isInside) {
-        handleHover(false);
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
       }
     };
-
-    document.addEventListener('mousemove', handleGlobalMouseMove);
-    return () => {
-      document.removeEventListener('mousemove', handleGlobalMouseMove);
-    };
-  }, [isHovered]);
-
-  const isActuallyCollapsed = isCollapsed && !isHovered;
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const handleLogout = useCallback(() => {
     logout('/');
@@ -537,93 +510,94 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Compliance', path: '/admin/compliance-rules', icon: ShieldCheck, roles: ['admin'] },
     // Buyer Marketplace
     { label: 'Marketplace', icon: ShoppingCart, roles: ['buyer'], children: [
-      { label: 'Products & Services', path: '/buyer/marketplace', icon: Store, roles: ['buyer'] },
-      { label: 'Cart', path: '/cart', icon: ShoppingCart, roles: ['buyer'] }
+      { label: 'Products & Services', path: '/buyer/marketplace', icon: Store, roles: ['buyer'], permission: 'marketplace.view' },
+      { label: 'Cart', path: '/cart', icon: ShoppingCart, roles: ['buyer'], permission: 'cart.view' }
     ] },
     // Buyer Procurement
     { label: 'Procurement', icon: ClipboardCheck, roles: ['buyer'], children: [
-      { label: 'Create Procurement', path: '/buyer/procurement/create', icon: PlusCircle, roles: ['buyer'] },
-      { label: 'My Procurements', path: '/buyer/my-procurements', icon: ClipboardList, roles: ['buyer'] },
-      { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'] },
-      { label: 'Supplier Responses', path: '/buyer/procurement/responses', icon: FileText, roles: ['buyer'] }
+      { label: 'Create Procurement', path: '/buyer/procurement/create', icon: PlusCircle, roles: ['buyer'], permission: 'requirement.create' },
+      { label: 'My Procurements', path: '/buyer/my-procurements', icon: ClipboardList, roles: ['buyer'], permission: 'requirement.view' },
+      { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'], permission: 'requirement.create' },
+      { label: 'Supplier Responses', path: '/buyer/procurement/responses', icon: FileText, roles: ['buyer'], permission: 'requirement.view' }
     ] },
     // Buyer Orders
     { label: 'Orders', icon: Truck, roles: ['buyer'], children: [
-      { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['buyer'] },
-      { label: 'Goods Receipt Notes (GRN)', path: '/grn', icon: ClipboardCheck, roles: ['buyer'] },
-      { label: 'Repeat Orders', path: '/buyer/repeat-orders', icon: RotateCcw, roles: ['buyer'] },
-      { label: 'Delivery Management', path: '/orders/tracking', icon: Truck, roles: ['buyer'] }
+      { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['buyer'], permission: 'purchase_order.view' },
+      { label: 'Goods Receipt Notes (GRN)', path: '/grn', icon: ClipboardCheck, roles: ['buyer'], permission: 'grn.view' },
+      { label: 'Repeat Orders', path: '/buyer/repeat-orders', icon: RotateCcw, roles: ['buyer'], permission: 'purchase_order.view' },
+      { label: 'Delivery Management', path: '/orders/tracking', icon: Truck, roles: ['buyer'], permission: 'delivery.view' }
     ] },
     // Buyer Payments
     { label: 'Payments', icon: CreditCard, roles: ['buyer'], children: [
-      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['buyer'] },
-      { label: 'Transactions', path: '/payments/transactions', icon: CreditCard, roles: ['buyer'] },
-      { label: 'Escrow (Feature Controlled)', path: '/payments/escrow', icon: Landmark, roles: ['buyer'], featureCode: 'escrow-nodal-bank' }
+      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['buyer'], permission: 'invoice.view' },
+      { label: 'Transactions', path: '/payments/transactions', icon: CreditCard, roles: ['buyer'], permission: 'payment.view' },
+      { label: 'Escrow (Feature Controlled)', path: '/payments/escrow', icon: Landmark, roles: ['buyer'], permission: 'escrow.view', featureCode: 'escrow-nodal-bank' }
     ] },
     // Buyer Suppliers
     { label: 'Suppliers', icon: Users, roles: ['buyer'], children: [
-      { label: 'Supplier Directory', path: '/buyer/vendors', icon: Users, roles: ['buyer'] },
-      { label: 'Saved Suppliers', path: '/buyer/saved-suppliers', icon: CheckCircle2, roles: ['buyer'] },
-      { label: 'Messages', path: '/buyer/messages', icon: MessageSquare, roles: ['buyer'] }
+      { label: 'Supplier Directory', path: '/buyer/vendors', icon: Users, roles: ['buyer'], permission: 'vendor.view' },
+      { label: 'Saved Suppliers', path: '/buyer/saved-suppliers', icon: CheckCircle2, roles: ['buyer'], permission: 'vendor.view' },
+      { label: 'Messages', path: '/buyer/messages', icon: MessageSquare, roles: ['buyer'], permission: 'vendor.view' }
     ] },
     // Buyer Reports
-    { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['buyer'] },
+    { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['buyer'], permission: 'report.view' },
     // Buyer Administration
     { label: 'Administration', icon: Settings, roles: ['buyer'], children: [
       { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['buyer'], permission: 'team.member.view' },
-      { label: 'Delivery Addresses', path: '/buyer/address-book', icon: MapPin, roles: ['buyer'] },
-      { label: 'Settings', path: '/buyer/profile', icon: Settings, roles: ['buyer'] }
+      { label: 'Delivery Addresses', path: '/buyer/address-book', icon: MapPin, roles: ['buyer'], permission: 'organization.view' },
+      { label: 'Settings', path: '/buyer/profile', icon: Settings, roles: ['buyer'], permission: 'organization.view' }
     ] },
     // Buyer Disputes
-    { label: 'Disputes', path: '/buyer/disputes', icon: AlertTriangle, roles: ['buyer'] },
+    { label: 'Disputes', path: '/buyer/disputes', icon: AlertTriangle, roles: ['buyer'], permission: 'dispute.view' },
 
     // Seller Opportunities
     { label: 'Opportunities', icon: Globe, roles: ['seller'], children: [
-      { label: 'All Opportunities', path: '/seller/opportunities', icon: Globe, roles: ['seller'] },
-      { label: 'RFQs', path: '/seller/opportunities/rfqs', icon: FileText, roles: ['seller'] },
-      { label: 'RFPs', path: '/seller/opportunities/rfps', icon: Layers, roles: ['seller'] },
-      { label: 'Open Tenders', path: '/seller/opportunities/open-tenders', icon: ClipboardList, roles: ['seller'] },
-      { label: 'Limited Tenders', path: '/seller/opportunities/invitations', icon: Users, roles: ['seller'] },
-      { label: 'Reverse Auctions', path: '/seller/opportunities/auctions', icon: Gavel, roles: ['seller'] },
-      { label: 'Rate Contracts', path: '/seller/opportunities/rate-contracts', icon: RotateCcw, roles: ['seller'] }
+      { label: 'All Opportunities', path: '/seller/opportunities', icon: Globe, roles: ['seller'], permission: 'marketplace.view' },
+      { label: 'RFQs', path: '/seller/opportunities/rfqs', icon: FileText, roles: ['seller'], permission: 'requirement.view' },
+      { label: 'RFPs', path: '/seller/opportunities/rfps', icon: Layers, roles: ['seller'], permission: 'requirement.view' },
+      { label: 'Open Tenders', path: '/seller/opportunities/open-tenders', icon: ClipboardList, roles: ['seller'], permission: 'tender.view' },
+      { label: 'Limited Tenders', path: '/seller/opportunities/invitations', icon: Users, roles: ['seller'], permission: 'tender.view' },
+      { label: 'Reverse Auctions', path: '/seller/opportunities/auctions', icon: Gavel, roles: ['seller'], permission: 'reverse_auction.view' },
+      { label: 'Rate Contracts', path: '/seller/opportunities/rate-contracts', icon: RotateCcw, roles: ['seller'], permission: 'requirement.view' }
     ] },
     // Seller My Bids
     { label: 'My Bids', icon: ClipboardList, roles: ['seller'], children: [
-      { label: 'Submitted Bids', path: '/seller/bids/submitted', icon: CheckCircle2, roles: ['seller'] },
-      { label: 'Draft Bids', path: '/seller/bids/draft', icon: FileText, roles: ['seller'] },
-      { label: 'Awarded Contracts', path: '/seller/bids/awarded', icon: Trophy, roles: ['seller'] }
+      { label: 'Submitted Bids', path: '/seller/bids/submitted', icon: CheckCircle2, roles: ['seller'], permission: 'bid.submit' },
+      { label: 'Draft Bids', path: '/seller/bids/draft', icon: FileText, roles: ['seller'], permission: 'bid.submit' },
+      { label: 'Awarded Contracts', path: '/seller/bids/awarded', icon: Trophy, roles: ['seller'], permission: 'bid.submit' }
     ] },
     // Seller Orders
     { label: 'Orders', icon: Truck, roles: ['seller'], children: [
-      { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['seller'] },
-      { label: 'Goods Receipt Note', path: '/grn', icon: ClipboardCheck, roles: ['seller'] },
-      { label: 'Repeat Orders', path: '/orders/repeat', icon: RotateCcw, roles: ['seller'] },
-      { label: 'Delivery Management', path: '/seller/delivery-management', icon: Truck, roles: ['seller'] }
+      { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['seller'], permission: 'purchase_order.view' },
+      { label: 'Goods Receipt Note', path: '/grn', icon: ClipboardCheck, roles: ['seller'], permission: 'grn.view' },
+      { label: 'Repeat Orders', path: '/orders/repeat', icon: RotateCcw, roles: ['seller'], permission: 'purchase_order.view' },
+      { label: 'Delivery Management', path: '/seller/delivery-management', icon: Truck, roles: ['seller'], permission: 'delivery.view' }
     ] },
     // Seller Marketplace
-    { label: 'My Catalogue', path: '/seller/catalogue', icon: ShoppingCart, roles: ['seller', 'shg']},   // Seller Payments
+    { label: 'My Catalogue', path: '/seller/catalogue', icon: ShoppingCart, roles: ['seller', 'shg'], permission: 'catalogue.product.view' },
+    // Seller Payments
     { label: 'Payments', icon: CreditCard, roles: ['seller'], children: [
-      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['seller'] },
-      { label: 'Payment Status', path: '/payments/transactions', icon: CreditCard, roles: ['seller'] }
+      { label: 'Invoices', path: '/payments/invoices', icon: FileText, roles: ['seller'], permission: 'invoice.view' },
+      { label: 'Payment Status', path: '/payments/transactions', icon: CreditCard, roles: ['seller'], permission: 'payment.view' }
     ] },
     // Seller Messages
-    { label: 'Messages', path: '/seller/messages', icon: MessageSquare, roles: ['seller'] },
+    { label: 'Messages', path: '/seller/messages', icon: MessageSquare, roles: ['seller'], permission: 'marketplace.view' },
     // Seller Reports
-    { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['seller'] },
+    { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['seller'], permission: 'report.view' },
     // Seller Ratings
-    { label: 'Ratings', path: '/seller/ratings', icon: CheckCircle2, roles: ['seller'] },
+    { label: 'Ratings', path: '/seller/ratings', icon: CheckCircle2, roles: ['seller'], permission: 'marketplace.view' },
     // Seller Administration
     { label: 'Administration', icon: Settings, roles: ['seller', 'shg'], children: [
       { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['seller', 'shg'], permission: 'team.member.view' },
-      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller', 'shg'] }
+      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller', 'shg'], permission: 'organization.view' }
     ] },
     // Seller Disputes
-    { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'] },
+    { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'], permission: 'dispute.view' },
 
     // Common items
-    { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin', 'shg'] },
-    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin', 'shg'] },
-    { label: 'Disputes', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
+    { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
+    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
+    { label: 'Disputes', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'], permission: 'dispute.view' },
     { label: 'Onboarding Hub', path: isShgAccount ? '/shg/onboarding' : (user ? getSellerPortalPath(user) : '/seller/onboarding'), icon: Store, roles: ['seller', 'shg'] },
     { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
     // { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
@@ -638,12 +612,11 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       if (!user.enabledFeatures.includes(item.featureCode)) return false;
     }
     if (item.permission) {
-      if (user.role === 'admin' || user.role === 'master_admin') return true;
-      if (!user.isSubUser) return true;
-      return user.permissions?.includes(item.permission) || user.permissions?.includes('*') || false;
+      if (user.role === 'master_admin') return true;
+      return checkUserPermission(item.permission);
     }
     return true;
-  }, [user, isShgAccount]);
+  }, [user, isShgAccount, checkUserPermission]);
 
   const filteredNav = useMemo(() => {
     const mapItemForShg = (item: SidebarItem): SidebarItem => {
@@ -662,7 +635,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         if (!isAllowed(item)) return null;
         if (!item.children?.length) return mapItemForShg(item);
         const children = item.children.filter(isAllowed);
-        return children.length ? mapItemForShg({ ...item, children }) : null;
+        if (children.length === 0) return null;
+        return mapItemForShg({ ...item, children });
       })
       .filter(Boolean) as SidebarItem[];
   }, [isAllowed, navItems, isShgAccount]);
@@ -722,25 +696,24 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
 
       <aside
         ref={sidebarRef}
-        onMouseEnter={() => handleHover(true)}
+        aria-label="Main Navigation"
         className={cn(
-          "w-64 gov-sidebar-surface text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out lg:translate-x-0 border-r border-white/5 shadow-xl shadow-slate-900/10",
-          isActuallyCollapsed ? "lg:w-20" : "w-64",
-          !isActuallyCollapsed && "lg:w-64",
+          "gov-sidebar-surface text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-[width,transform] duration-300 ease-in-out lg:translate-x-0 border-r border-white/5 shadow-xl shadow-slate-900/10",
+          isCollapsed ? "w-64 lg:w-20" : "w-64",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}>
         {/* Tricolor strip — official portal cue */}
         <div className="brand-tricolor-strip" />
-        <div className={cn("h-14 px-3 border-b border-white/10 flex items-center", isActuallyCollapsed ? "justify-center" : "justify-between")}>
+        <div className={cn("h-14 px-3 border-b border-white/10 flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
           <div
-            className={cn("flex items-center gap-3 min-w-0 select-none", isActuallyCollapsed && "lg:justify-center")}
+            className={cn("flex items-center gap-3 min-w-0 select-none", isCollapsed && "lg:justify-center")}
             title="MSME Portal"
           >
             <div className="w-11 h-11 bg-white rounded-md flex items-center justify-center overflow-hidden shadow-sm border border-white/20 shrink-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logoo.png" alt="SMiLE MSME Logo" className="h-full w-full object-contain" />
             </div>
-            <div className={cn("flex flex-col leading-tight min-w-0", isActuallyCollapsed && "lg:hidden")}>
+            <div className={cn("flex flex-col leading-tight min-w-0", isCollapsed && "lg:hidden")}>
               <span className="font-bold tracking-tight text-base truncate text-white">MSME Portal</span>
               <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#c8a45c] truncate">Govt. of India</span>
             </div>
@@ -754,9 +727,9 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         <nav
           ref={navRef}
           onScroll={handleScroll}
-          className={cn("sidebar-scroll-dark flex-1 overflow-y-auto", isActuallyCollapsed ? "p-2 space-y-1" : "p-3 space-y-1")}
+          className={cn("sidebar-scroll-dark flex-1 overflow-y-auto", isCollapsed ? "p-2 space-y-1" : "p-3 space-y-1")}
         >
-          <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", isActuallyCollapsed && "lg:hidden")}>Navigation</div>
+          <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", isCollapsed && "lg:hidden")}>Navigation</div>
           {filteredNav.map((item) => {
             const isGroupActive = Boolean(item.children?.some(child => isSidebarRouteActive(child.path, pathname, currentPathWithQuery)));
             return (
@@ -765,8 +738,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
                 item={item}
                 pathname={pathname}
                 currentPathWithQuery={currentPathWithQuery}
-                isCollapsed={isActuallyCollapsed}
-                isOpen={!isActuallyCollapsed && Boolean(openGroups[item.label] ?? isGroupActive)}
+                isCollapsed={isCollapsed}
+                isOpen={!isCollapsed && Boolean(openGroups[item.label] ?? isGroupActive)}
                 onToggle={() => handleToggleGroup(item.label, isGroupActive)}
                 onClose={onClose}
                 counts={counts}
@@ -775,7 +748,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           })}
         </nav>
 
-        <div className={cn("border-t border-white/10 bg-black/20", isActuallyCollapsed ? "p-2" : "p-3")}>
+        <div className={cn("border-t border-white/10 bg-black/20", isCollapsed ? "p-2" : "p-3")}>
           <Link
             href={pathname === '/profile' ? '/dashboard' : '/profile'}
             scroll={false}
@@ -784,14 +757,14 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             onFocus={() => preloadRoute('/profile')}
             className={cn(
               "flex items-center gap-3 px-2 mb-3 py-1.5 rounded-md hover:bg-white/10 transition-all duration-200",
-              isActuallyCollapsed && "lg:justify-center lg:px-0",
+              isCollapsed && "lg:justify-center lg:px-0",
               pathname === '/profile' && "bg-white/10 ring-1 ring-[#c8a45c]/40"
             )}
           >
             <div className="w-8 h-8 rounded-full bg-[#c8a45c] flex items-center justify-center text-xs font-bold text-[#07172e] shadow-inner">
               {user.name.charAt(0)}
             </div>
-            <div className={cn("flex flex-col min-w-0", isActuallyCollapsed && "lg:hidden")}>
+            <div className={cn("flex flex-col min-w-0", isCollapsed && "lg:hidden")}>
               <span className="text-sm font-medium truncate text-white">{user.name}</span>
               <span className="text-[10px] text-white/60 uppercase tracking-wide font-bold">{accountLabel} Account</span>
             </div>
@@ -801,10 +774,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             size="sm"
             onClick={handleLogout}
             title="Logout"
-            className={cn("w-full bg-transparent border-white/20 text-white hover:bg-white hover:text-[#0b2447] py-2", isActuallyCollapsed && "lg:px-0")}
+            className={cn("w-full bg-transparent border-white/20 text-white hover:bg-white hover:text-[#0b2447] py-2", isCollapsed && "lg:px-0")}
           >
-            <LogOut className={cn("h-4 w-4", !isActuallyCollapsed && "mr-2")} />
-            <span className={cn(isActuallyCollapsed && "lg:hidden")}>Logout</span>
+            <LogOut className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+            <span className={cn(isCollapsed && "lg:hidden")}>Logout</span>
           </Button>
         </div>
       </aside>

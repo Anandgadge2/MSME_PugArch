@@ -98,7 +98,9 @@ function RoleAwareActionCards() {
     const data: DashboardSummary = summary.data || {};
     const isLoading = summary.isLoading && !summary.data;
     const isBuyer = user?.role === 'buyer';
-    const isSeller = user?.role === 'seller' || user?.role === 'shg' || isShgUser(user);
+    const isShgAccount = isShgUser(user) || user?.role === 'shg';
+    const isSeller = user?.role === 'seller' || isShgAccount;
+    const sellerPrefix = isShgAccount ? '/shg' : '/seller';
     const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
     const hasPermission = useCallback((permissionCode: string) => {
         return permissions.includes('*') || permissions.includes(permissionCode);
@@ -212,7 +214,7 @@ function RoleAwareActionCards() {
         {
             label: 'New Opportunities',
             count: data.sellerOpportunitiesCount || 0,
-            href: '/seller/opportunities',
+            href: `${sellerPrefix}/opportunities`,
             icon: ClipboardList,
             tone: 'indigo',
             show: isSeller,
@@ -222,7 +224,7 @@ function RoleAwareActionCards() {
         {
             label: 'Public Tenders',
             count: data.sellerOpenTendersCount || 0,
-            href: '/seller/tenders',
+            href: `${sellerPrefix}/opportunities/open-tenders`,
             icon: Gavel,
             tone: 'blue',
             show: isSeller,
@@ -232,7 +234,7 @@ function RoleAwareActionCards() {
         {
             label: 'My Bids / Quotations',
             count: data.sellerQuotationsCount || 0,
-            href: '/quotations',
+            href: `${sellerPrefix}/bids/submitted`,
             icon: ClipboardCheck,
             tone: 'purple',
             show: isSeller,
@@ -242,7 +244,7 @@ function RoleAwareActionCards() {
         {
             label: 'Orders Received',
             count: data.sellerActivePOsCount || 0,
-            href: '/orders',
+            href: `${sellerPrefix}/orders`,
             icon: Package,
             tone: 'emerald',
             show: isSeller,
@@ -252,7 +254,7 @@ function RoleAwareActionCards() {
         {
             label: 'Catalogue Items',
             count: data.sellerCatalogueItemsCount || 0,
-            href: '/seller/catalogue',
+            href: isShgAccount ? '/shg/products' : '/seller/catalogue',
             icon: Store,
             tone: 'cyan',
             show: isSeller,
@@ -262,7 +264,7 @@ function RoleAwareActionCards() {
         {
             label: 'Active Deliveries',
             count: data.activeDeliveriesCount || 0,
-            href: '/seller/delivery-management',
+            href: `${sellerPrefix}/delivery-management`,
             icon: Truck,
             tone: 'teal',
             show: isSeller,
@@ -272,7 +274,7 @@ function RoleAwareActionCards() {
         {
             label: 'Payment Status',
             count: data.sellerPendingInvoicesCount || 0,
-            href: '/payments/transactions',
+            href: isShgAccount ? '/shg/payments' : '/payments/transactions',
             icon: Receipt,
             tone: 'rose',
             show: isSeller,
@@ -282,7 +284,7 @@ function RoleAwareActionCards() {
         {
             label: 'Request Quotations',
             count: data.sellerQuotationsCount || 0,
-            href: '/seller/rfq',
+            href: `${sellerPrefix}/opportunities/rfqs`,
             icon: FileText,
             tone: 'purple',
             show: isSeller,
@@ -292,7 +294,7 @@ function RoleAwareActionCards() {
         {
             label: 'Live Auctions',
             count: data.reverseAuctionsLive || data.reverseAuctionInvites || 0,
-            href: '/seller/opportunities/auctions',
+            href: `${sellerPrefix}/opportunities/auctions`,
             icon: Gavel,
             tone: 'amber',
             show: isSeller,
@@ -309,7 +311,7 @@ function RoleAwareActionCards() {
             priority: false,
             subtext: 'Early payment financing'
         }
-    ], [data, isBuyer, isSeller, hasPermission]);
+    ], [data, isBuyer, isSeller, isShgAccount, sellerPrefix, hasPermission]);
 
     const visible = useMemo(() => cards.filter(c => c.show), [cards]);
     const openCard = useCallback((href: string) => router.push(href), [router]);

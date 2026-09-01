@@ -228,7 +228,16 @@ app.post('/api/pusher/auth', authenticate, async (req: AuthRequest, res) => {
 
       const dispute = await prisma.dispute.findUnique({
         where: { id: disputeId },
-        select: { buyerId: true, sellerId: true, againstOrgId: true }
+        select: { 
+          buyerId: true, 
+          sellerId: true, 
+          raisedById: true,
+          raisedByUserId: true,
+          againstOrgId: true,
+          raisedByOrgId: true,
+          buyerOrgId: true,
+          sellerOrgId: true
+        }
       });
 
       if (!dispute) {
@@ -236,12 +245,22 @@ app.post('/api/pusher/auth', authenticate, async (req: AuthRequest, res) => {
       }
 
       const isAdmin = ['admin', 'master_admin'].includes(user.role || '');
-      const isParticipant =
-        user.id === dispute.buyerId ||
-        user.id === dispute.sellerId ||
-        (user.organizationId && user.organizationId === dispute.againstOrgId);
+      
+      const isParticipantUser = [
+        dispute.buyerId, 
+        dispute.sellerId, 
+        dispute.raisedById, 
+        dispute.raisedByUserId
+      ].includes(user.id);
+      
+      const isParticipantOrg = user.organizationId && [
+        dispute.againstOrgId,
+        dispute.raisedByOrgId,
+        dispute.buyerOrgId,
+        dispute.sellerOrgId
+      ].includes(user.organizationId);
 
-      if (!isAdmin && !isParticipant) {
+      if (!isAdmin && !isParticipantUser && !isParticipantOrg) {
         return res.status(403).json({ message: 'Forbidden: Unauthorized for this dispute channel' });
       }
     } else if (channelName.startsWith('private-conversation-')) {
@@ -259,10 +278,9 @@ app.post('/api/pusher/auth', authenticate, async (req: AuthRequest, res) => {
         return res.status(404).json({ message: 'Conversation not found' });
       }
 
-      const isAdmin = ['admin', 'master_admin'].includes(user.role || '');
       const isParticipant = user.id === conversation.buyerId || user.id === conversation.sellerId;
 
-      if (!isAdmin && !isParticipant) {
+      if (!isParticipant) {
         return res.status(403).json({ message: 'Forbidden: Unauthorized for this conversation channel' });
       }
     } else if (channelName.startsWith('private-user-')) {
@@ -1184,7 +1202,7 @@ const canModerateMessages = (user: NonNullable<AuthRequest['user']>) =>
   ['admin', 'master_admin'].includes(String(user.role));
 
 const canAccessConversation = (conversation: any, user: NonNullable<AuthRequest['user']>) =>
-  canModerateMessages(user) || conversation.buyerId === Number(user.id) || conversation.sellerId === Number(user.id);
+  conversation.buyerId === Number(user.id) || conversation.sellerId === Number(user.id);
 
 const enrichMessageAttachments = async (messages: any[] = []) => {
   if (!messages.length) return messages;
@@ -1224,36 +1242,34 @@ const enrichMessageAttachments = async (messages: any[] = []) => {
   }));
 };
 
+const messageSenderSelect = {
+  id: true,
+  name: true,
+  email: true,
+  role: true,
+  lastLoginAt: true,
+  updatedAt: true
+} as const;
+
 const enrichConversationPayload = async (conversation: any) => {
   let quoteRequest: any = null;
   try {
     const idMatch = conversation.subject?.match(/Quote Request #(\d+)/i);
     if (idMatch) {
       const qid = Number(idMatch[1]);
-      quoteRequest = await prisma.quoteRequest.findUnique({
-        where: { id: qid },
-        include: {
-          quoteResponses: {
-            select: { id: true, status: true, totalAmount: true, responseNumber: true, createdAt: true, deliveryDays: true }
+      if (Number.isFinite(qid) && qid > 0) {
+        quoteRequest = await prisma.quoteRequest.findUnique({
+          where: { id: qid },
+          select: {
+            id: true,
+            subject: true,
+            status: true,
+            quoteResponses: {
+              select: { id: true, status: true, totalAmount: true, responseNumber: true, createdAt: true, deliveryDays: true }
+            }
           }
-        }
-      });
-    }
-    if (!quoteRequest && conversation.subject?.toLowerCase().includes('quote request')) {
-      const cleanSubject = conversation.subject.replace(/Quote Request:?/i, '').trim();
-      quoteRequest = await prisma.quoteRequest.findFirst({
-        where: {
-          buyerId: conversation.buyerId,
-          sellerId: conversation.sellerId,
-          ...(cleanSubject ? { subject: { contains: cleanSubject.slice(0, 30), mode: 'insensitive' } } : {})
-        },
-        orderBy: { createdAt: 'desc' },
-        include: {
-          quoteResponses: {
-            select: { id: true, status: true, totalAmount: true, responseNumber: true, createdAt: true, deliveryDays: true }
-          }
-        }
-      });
+        });
+      }
     }
   } catch (err) {
     // Non-critical enrichment error
@@ -1288,9 +1304,11 @@ const conversationUserSelect = {
   name: true,
   email: true,
   role: true,
+  lastLoginAt: true,
+  updatedAt: true,
   organization: { select: { id: true, organizationName: true } },
   buyerProfile: { select: { id: true, organizationName: true } },
-  sellerProfile: { select: { id: true, businessName: true, organization: { select: { id: true, organizationName: true } } } }
+  sellerProfile: { select: { id: true, businessName: true } }
 } as const;
 
 const notifyConversationParticipants = async ({
@@ -5063,10 +5081,10 @@ app.post('/api/admin/status', authenticate, authorizeAdmin, async (req, res) => 
   }
 });
 
-app.get('/api/vendors', authenticate, authorize('buyer', 'admin'), async (req, res) => {
+app.get('/api/vendors', authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
   try {
     const vendors = await prisma.user.findMany({
-      where: { role: 'seller', onboardingStatus: 'approved_for_procurement' },
+      where: { role: { in: ['seller', 'shg'] }, onboardingStatus: 'approved_for_procurement' },
       include: {
         sellerProfile: {
           include: {
@@ -5081,7 +5099,7 @@ app.get('/api/vendors', authenticate, authorize('buyer', 'admin'), async (req, r
         const profileAny = safeVendor.sellerProfile as any;
         const offices = safeVendor.sellerProfile.offices || [];
         const gstOffice = offices.find((o: any) => o.gstNumber);
-        profileAny.gst = gstOffice?.gstNumber || null;
+        profileAny.gst = gstOffice?.gstNumber || profileAny.gst || null;
 
         if (gstOffice) {
           profileAny.city = profileAny.city || gstOffice.city;
@@ -5098,10 +5116,14 @@ app.get('/api/vendors', authenticate, authorize('buyer', 'admin'), async (req, r
   }
 });
 
-app.get('/api/vendors/:id', authenticate, authorize('buyer', 'admin'), async (req, res) => {
+app.get('/api/vendors/:id', authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
   try {
-    const vendor = await prisma.user.findUnique({
-      where: { id: Number(req.params.id), role: 'seller' },
+    const vendorId = Number(req.params.id);
+    if (!vendorId || Number.isNaN(vendorId)) {
+      return res.status(400).json({ message: 'Invalid vendor ID' });
+    }
+    const vendor = await prisma.user.findFirst({
+      where: { id: vendorId, role: { in: ['seller', 'shg'] } },
       include: {
         buyerProfile: true,
         sellerProfile: {
@@ -5149,6 +5171,20 @@ app.get('/api/vendors/:id', authenticate, authorize('buyer', 'admin'), async (re
         accountNumber: bank.accountNumberMasked || maskValue(bank.accountNumber)
       }));
     }
+    if (vendorSafe.sellerProfile) {
+      const profileAny = vendorSafe.sellerProfile as any;
+      const offices = vendorSafe.sellerProfile.offices || [];
+      const gstOffice = offices.find((o: any) => o.gstNumber);
+      profileAny.gst = gstOffice?.gstNumber || profileAny.gst || null;
+
+      if (gstOffice) {
+        profileAny.city = profileAny.city || gstOffice.city;
+        profileAny.state = profileAny.state || gstOffice.state;
+      } else if (offices[0]) {
+        profileAny.city = profileAny.city || offices[0].city;
+        profileAny.state = offices[0].state;
+      }
+    }
     res.json(maskSensitive({
       ...vendorSafe,
       _id: vendor.id,
@@ -5160,9 +5196,12 @@ app.get('/api/vendors/:id', authenticate, authorize('buyer', 'admin'), async (re
   }
 });
 
-app.get('/api/vendors/:id/catalogue', authenticate, authorize('buyer', 'admin'), async (req, res) => {
+app.get('/api/vendors/:id/catalogue', authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
   try {
     const sellerId = Number(req.params.id);
+    if (!sellerId || Number.isNaN(sellerId)) {
+      return res.status(400).json({ message: 'Invalid vendor ID' });
+    }
     const [products, services] = await Promise.all([
       prisma.product.findMany({
         where: { sellerId, status: 'ACTIVE' },
@@ -5510,9 +5549,7 @@ app.get('/api/messages/users/search', authenticate, authorize('buyer', 'seller',
 app.get('/api/messages/unread-count', authenticate, async (req: AuthRequest, res) => {
   try {
     const user = req.user!;
-    const conversationWhere = canModerateMessages(user)
-      ? {}
-      : { OR: [{ buyerId: Number(user.id) }, { sellerId: Number(user.id) }] };
+    const conversationWhere = { OR: [{ buyerId: Number(user.id) }, { sellerId: Number(user.id) }] };
     const unreadCount = await prisma.message.count({
       where: {
         senderId: { not: Number(user.id) },
@@ -5529,9 +5566,7 @@ app.get('/api/messages/unread-count', authenticate, async (req: AuthRequest, res
 app.get('/api/conversations', authenticate, async (req: AuthRequest, res) => {
   try {
     const user = req.user!;
-    const where = canModerateMessages(user)
-      ? {}
-      : { OR: [{ buyerId: Number(user.id) }, { sellerId: Number(user.id) }] };
+    const where = { OR: [{ buyerId: Number(user.id) }, { sellerId: Number(user.id) }] };
     const conversations = await prisma.conversation.findMany({
       where,
       include: {
@@ -5541,7 +5576,7 @@ app.get('/api/conversations', authenticate, async (req: AuthRequest, res) => {
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,
-          include: { sender: { select: conversationUserSelect }, attachments: true }
+          include: { sender: { select: messageSenderSelect }, attachments: true }
         }
       },
       orderBy: { lastMessageAt: 'desc' }
@@ -5597,21 +5632,21 @@ app.post('/api/conversations', authenticate, authorize('buyer', 'seller', 'admin
 
     if (!payload.tenderId) {
       if (actor.role === 'buyer') {
-        if (sellerId) {
-          buyerId = Number(actor.id);
-        } else if (buyerId) {
-          sellerId = buyerId;
-          buyerId = Number(actor.id);
+        buyerId = Number(actor.id);
+        if (!sellerId && payload.buyerId && Number(payload.buyerId) !== Number(actor.id)) {
+          sellerId = Number(payload.buyerId);
         }
-      } else if (actor.role === 'seller') {
-        if (buyerId) {
-          sellerId = Number(actor.id);
-        } else if (sellerId) {
-          buyerId = Number(actor.id);
+      } else if (actor.role === 'seller' || actor.role === 'shg') {
+        sellerId = Number(actor.id);
+        if (!buyerId && payload.sellerId && Number(payload.sellerId) !== Number(actor.id)) {
+          buyerId = Number(payload.sellerId);
         }
       } else {
         if (buyerId && !sellerId) sellerId = Number(actor.id);
-        if (sellerId && !buyerId) buyerId = Number(actor.id);
+        else if (sellerId && !buyerId) buyerId = Number(actor.id);
+        else if (buyerId !== Number(actor.id) && sellerId !== Number(actor.id)) {
+          buyerId = Number(actor.id);
+        }
       }
     }
     if (!buyerId || !sellerId || buyerId === sellerId) {
@@ -5744,7 +5779,7 @@ app.get('/api/conversations/:id', authenticate, async (req: AuthRequest, res) =>
         buyer: { select: conversationUserSelect },
         seller: { select: conversationUserSelect },
         messages: {
-          include: { attachments: true, sender: { select: conversationUserSelect } },
+          include: { attachments: true, sender: { select: messageSenderSelect } },
           orderBy: { createdAt: 'asc' }
         }
       }
@@ -5775,6 +5810,14 @@ app.patch('/api/conversations/:id/read', authenticate, async (req: AuthRequest, 
       },
       data: { status: 'read' }
     });
+    if (result.count > 0) {
+      void publishConversationEvent(conversation.id, {
+        type: 'MESSAGES_READ',
+        conversationId: conversation.id,
+        readByUserId: Number(req.user?.id),
+        readAt: new Date().toISOString()
+      });
+    }
     res.json({ success: true, readCount: result.count });
   } catch (err: any) {
     handleSecureRouteError(res, err, 'Unable to mark conversation read');
@@ -5837,22 +5880,31 @@ app.post('/api/conversations/:id/messages', authenticate, async (req: AuthReques
     const payload = parseSchema(messageCreateSchema, req.body);
     const conversation = await prisma.conversation.findUnique({
       where: { id: Number(req.params.id) },
-      include: { buyer: { select: conversationUserSelect }, seller: { select: conversationUserSelect } }
+      select: {
+        id: true,
+        buyerId: true,
+        sellerId: true,
+        subject: true,
+        buyer: { select: { id: true, role: true } },
+        seller: { select: { id: true, role: true } }
+      }
     });
     if (!conversation || !canAccessConversation(conversation, req.user!)) return res.status(404).json({ message: 'Conversation not found' });
     await assertFileAssetsAccessible(payload.fileAssetIds || [], req.user!);
 
-    const message = await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        senderId: Number(req.user?.id),
-        content: sanitizePortalText(payload.content, 2000),
-        attachments: { create: (payload.fileAssetIds || []).map(fileAssetId => ({ fileAssetId })) }
-      },
-      include: { attachments: true, sender: { select: conversationUserSelect } }
-    });
-    await linkMessageFileAssets(message.id, payload.fileAssetIds || [], Number(req.user?.id));
-    await prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
+    const [message] = await Promise.all([
+      prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          senderId: Number(req.user?.id),
+          content: sanitizePortalText(payload.content, 2000),
+          attachments: { create: (payload.fileAssetIds || []).map(fileAssetId => ({ fileAssetId })) }
+        },
+        include: { attachments: true, sender: { select: messageSenderSelect } }
+      }),
+      linkMessageFileAssets(0, payload.fileAssetIds || [], Number(req.user?.id)),
+      prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } })
+    ]);
     const enrichedMessage = (await enrichMessageAttachments([message]))[0];
     void publishConversationEvent(conversation.id, {
       type: 'MESSAGE_CREATED',
@@ -5886,6 +5938,72 @@ app.post('/api/conversations/:id/messages', authenticate, async (req: AuthReques
     ]).catch(logMessageSideEffectFailure);
   } catch (err: any) {
     handleSecureRouteError(res, err, 'Unable to send message');
+  }
+});
+
+app.delete('/api/conversations/:id/messages/:messageId', authenticate, async (req: AuthRequest, res) => {
+  try {
+    await consumeActionBudget(req, 'messages', 30, 60);
+    const convId = Number(req.params.id);
+    const messageId = Number(req.params.messageId);
+    if (!convId || !messageId) return res.status(400).json({ message: 'Invalid conversation or message ID' });
+
+    const message = await prisma.message.findUnique({
+      where: { id: messageId },
+      select: {
+        id: true,
+        conversationId: true,
+        senderId: true,
+        createdAt: true,
+        conversation: { select: { id: true, buyerId: true, sellerId: true } }
+      }
+    });
+    if (!message || message.conversationId !== convId) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    if (!canAccessConversation(message.conversation, req.user!)) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    if (message.senderId !== Number(req.user?.id)) {
+      return res.status(403).json({ message: 'You can only delete your own messages' });
+    }
+
+    // 10-minute window for delete for everyone
+    const diffMs = Date.now() - new Date(message.createdAt).getTime();
+    const tenMinutesMs = 10 * 60 * 1000;
+    if (diffMs > tenMinutesMs) {
+      return res.status(400).json({
+        message: 'Messages can only be deleted for everyone within 10 minutes of sending'
+      });
+    }
+
+    const [, updated] = await Promise.all([
+      prisma.messageAttachment.deleteMany({ where: { messageId } }),
+      prisma.message.update({
+        where: { id: messageId },
+        data: {
+          content: 'This message was deleted',
+          status: 'deleted'
+        },
+        include: {
+          attachments: true,
+          sender: { select: messageSenderSelect }
+        }
+      })
+    ]);
+
+    void publishConversationEvent(convId, {
+      type: 'MESSAGE_DELETED',
+      conversationId: convId,
+      messageId,
+      message: updated
+    });
+
+    res.json({ success: true, message: updated });
+  } catch (err: any) {
+    handleSecureRouteError(res, err, 'Unable to delete message');
   }
 });
 

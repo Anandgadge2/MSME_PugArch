@@ -37,6 +37,7 @@ import type { AuthRequest } from '../../middleware/auth.js';
 import { notificationService } from '../../services/notification.service.js';
 import { onUserLinkedToOrganization } from '../../services/org-membership.service.js';
 import { getDefaultCompanyId } from '../../services/default-company.service.js';
+import { invalidateUserAuthCache } from '../../services/rbac.service.js';
 
 // CreateNotificationSafe mock for backward compatibility if not globally service-ified yet
 
@@ -1002,6 +1003,7 @@ export const authController = {
         where: { id: user.id },
         data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }
       });
+      await invalidateUserAuthCache(user.id);
       const tokens = await issueCookieAuth(req, res, updatedUser);
       await auditLog({
         actorUserId: user.id,
@@ -1051,6 +1053,7 @@ export const authController = {
         where: { id: user.id },
         data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }
       });
+      await invalidateUserAuthCache(user.id);
       const tokens = await issueCookieAuth(req, res, updatedUser);
       await auditLog({
         actorUserId: user.id,
@@ -1083,24 +1086,35 @@ export const authController = {
   logout: async (req: AuthRequest, res: Response) => {
     try {
       const refreshToken = getRefreshTokenFromRequest(req);
-      if (refreshToken) await revokeRefreshSession(refreshToken).catch(() => undefined);
-      if (req.user?.id) {
-        await prisma.user.update({
-          where: { id: Number(req.user.id) },
-          data: { sessionVersion: { increment: 1 } }
-        }).catch(() => undefined);
-        await auditLog({
-          actorUserId: Number(req.user.id),
-          actorRole: req.user.role,
-          action: 'auth.logout',
-          entityType: 'user',
-          entityId: Number(req.user.id),
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent']
-        }).catch(() => undefined);
-      }
+      const userId = req.user?.id ? Number(req.user.id) : null;
+      const userRole = req.user?.role;
+      const ip = req.ip;
+      const userAgent = req.headers['user-agent'];
+
+      // 1. Immediately clear authentication cookies and return success
       clearAuthCookies(res);
       res.json({ success: true });
+
+      // 2. Perform backend session revocation and audit logging asynchronously
+      if (refreshToken) {
+        revokeRefreshSession(refreshToken).catch(() => undefined);
+      }
+      if (userId) {
+        prisma.user.update({
+          where: { id: userId },
+          data: { sessionVersion: { increment: 1 } }
+        }).catch(() => undefined);
+
+        auditLog({
+          actorUserId: userId,
+          actorRole: userRole,
+          action: 'auth.logout',
+          entityType: 'user',
+          entityId: userId,
+          ipAddress: ip,
+          userAgent: userAgent
+        }).catch(() => undefined);
+      }
     } catch {
       clearAuthCookies(res);
       res.json({ success: true });

@@ -331,73 +331,7 @@ export default function RoleReportsPage() {
                         </ReportCard>
                     </section>
 
-                    <section className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
-                        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <h2 className="text-base font-black text-slate-950">Where to Find Key Workflows</h2>
-                            <div className="mt-4 space-y-3">
-                                <WorkflowLink icon={ShoppingCart} title="Create Tender / Procurement" text="Buyer: Procurement > Create Procurement. Use RFQ, tender, auction, requirement, or direct purchase as per need." href="/buyer/procurement/create" />
-                                <WorkflowLink icon={Truck} title="See Purchase Orders" text="Orders > Active Orders opens generated PO/work orders. Direct PO URLs are also available from award records." href="/orders" />
-                                <WorkflowLink icon={BarChart3} title="Review Reports" text="Reports shows conversion, order value, lifecycle readiness, aging, and exportable order details." href="/reports" />
-                            </div>
-                        </div>
-
-                        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                            <div className="grid gap-3 md:grid-cols-[1fr_180px]">
-                                <div className="relative">
-                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                                    <input
-                                        value={query}
-                                        onChange={(event) => setQuery(event.target.value)}
-                                        placeholder="Search PO, party, delivery, invoice..."
-                                        className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-semibold outline-none focus:border-[#12335f]"
-                                    />
-                                </div>
-                                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-xs font-black outline-none">
-                                    <option value="">All statuses</option>
-                                    {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
-                                </select>
-                            </div>
-                            <div className="mt-4 overflow-x-auto">
-                                <table className="w-full min-w-[900px] text-left text-sm">
-                                    <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-                                        <tr>
-                                            <th className="px-3 py-3">PO</th>
-                                            <th className="px-3 py-3">Parties</th>
-                                            <th className="px-3 py-3 text-right">Value</th>
-                                            <th className="px-3 py-3">Status</th>
-                                            <th className="px-3 py-3">Lifecycle</th>
-                                            <th className="px-3 py-3">Created</th>
-                                            <th className="px-3 py-3 text-right">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {pagedOrders.map((order) => (
-                                            <tr key={order.id} className="hover:bg-blue-50/40">
-                                                <td className="px-3 py-3"><p className="text-xs font-black text-[#12335f]">{order.poNumber || `PO-${order.id}`}</p><p className="text-[11px] font-semibold text-slate-500">{order.title || 'Procurement order'}</p></td>
-                                                <td className="px-3 py-3 text-xs font-semibold text-slate-600">{order.buyer?.name || '-'} to {order.seller?.name || '-'}</td>
-                                                <td className="px-3 py-3 text-right text-xs font-black text-slate-900">{money(Number(order.amount || 0))}</td>
-                                                <td className="px-3 py-3"><StatusPill label={normalizeStatus(order.status)} /></td>
-                                                <td className="px-3 py-3 text-[11px] font-semibold text-slate-500">Delivery {normalizeStatus(order.deliveryTrackings?.[0]?.status)} / Invoice {normalizeStatus(order.invoices?.[0]?.status)}</td>
-                                                <td className="px-3 py-3 text-xs font-semibold text-slate-500">{dateLabel(order.createdAt)}</td>
-                                                <td className="px-3 py-3 text-right"><Link href={order.sourceType === 'procurement_bid_award' ? `/procurement-orders/${order.id}` : '/orders'} className="inline-flex h-8 items-center rounded-md bg-[#12335f] px-3 text-[10px] font-black text-white">Open</Link></td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                                {filteredOrders.length === 0 && <p className="py-8 text-center text-xs font-bold text-slate-500">No report rows match the current filters.</p>}
-                            </div>
-                            <div className="border-t border-slate-200 bg-white">
-                                <Pagination
-                                    page={page}
-                                    pageSize={pageSize}
-                                    total={total}
-                                    onPageChange={setPage}
-                                    onPageSizeChange={setPageSize}
-                                    label="orders"
-                                />
-                            </div>
-                        </div>
-                    </section>
+                   
                 </>
             )}
         </div>

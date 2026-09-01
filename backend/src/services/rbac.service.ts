@@ -38,6 +38,37 @@ export const isMasterAdmin = (user?: { role?: string; accountType?: unknown; acc
   return user.role === 'master_admin' || account.accountType === 'MASTER_ADMIN' || account.accountTypeId === 0;
 };
 
+import { ALL_ORG_PERMISSION_KEYS, FALLBACK_ORG_ROLE_PERMISSIONS, expandOrgPermissions } from '../constants/org-permissions.js';
+import { deleteCache, invalidateByPattern } from './cache.service.js';
+
+export const invalidateUserAuthCache = async (userId: number | string) => {
+  await invalidateByPattern(`*cache:auth:user:${userId}*`);
+  await invalidateByPattern(`*user:${userId}*`);
+  await invalidateByPattern(`*org:status*`);
+  await invalidateByPattern(`*org:members*`);
+  await invalidateByPattern(`*org:roles*`);
+  await invalidateByPattern(`*permissions*`);
+  await deleteCache(`/api/auth/me`).catch(() => undefined);
+  await deleteCache(`/api/auth/me/permissions`).catch(() => undefined);
+  await deleteCache(`/api/org/status`).catch(() => undefined);
+  await deleteCache(`/api/org/members`).catch(() => undefined);
+  await deleteCache(`/api/org/me`).catch(() => undefined);
+};
+
+export const invalidateRoleMembersAuthCache = async (roleId: number) => {
+  try {
+    const members = await prisma.orgMembership.findMany({
+      where: { customRoleId: roleId },
+      select: { userId: true }
+    });
+    for (const m of members) {
+      await invalidateUserAuthCache(m.userId);
+    }
+  } catch (err) {
+    console.error('[invalidateRoleMembersAuthCache] Failed to invalidate role members cache:', err);
+  }
+};
+
 export const getCurrentUserPermissions = async (userId: number, scope?: RbacScope) => {
   const normalized = normalizeScope(scope);
   const now = new Date();
@@ -78,109 +109,134 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true }
+    select: { id: true, role: true, isSubUser: true, organizationId: true }
   });
 
+  const orgPermissions: string[] = [];
   const defaults: string[] = [];
+
   if (user) {
-    if (normalized.scopeType === 'ORGANIZATION' && normalized.scopeId) {
+    const orgIdNum = normalized.scopeType === 'ORGANIZATION' && normalized.scopeId
+      ? Number(normalized.scopeId)
+      : user.organizationId;
+
+    let isOrgSubUser = Boolean(user.isSubUser);
+
+    if (orgIdNum) {
       const membership = await prisma.orgMembership.findUnique({
-        where: { userId_organizationId: { userId, organizationId: Number(normalized.scopeId) } },
-        select: { orgRole: true, isActive: true }
+        where: { userId_organizationId: { userId, organizationId: orgIdNum } },
+        include: {
+          customRole: {
+            include: {
+              permissions: {
+                where: { allowed: true }
+              }
+            }
+          }
+        }
       }).catch(() => null);
-      if (membership?.isActive && membership.orgRole === 'ORG_ADMIN') {
-        defaults.push(
-          'team.member.view',
-          'team.member.invite',
-          'team.member.disable',
-          'team.role.view',
-          'team.role.manage',
-          'team.role.assign',
-          'organization.view',
-          'organization.update'
-        );
+
+      if (membership && membership.isActive) {
+        if (membership.customRoleId && membership.customRole && membership.customRole.isActive) {
+          // Custom Role assigned to member: extract exactly the configured permissions from OrgRolePermission
+          isOrgSubUser = true;
+          const assignedKeys = membership.customRole.permissions.map((p: any) => p.permissionKey);
+          orgPermissions.push('dashboard.view', ...expandOrgPermissions(assignedKeys));
+        } else if (membership.orgRole === 'ORG_ADMIN' && !user.isSubUser && !membership.customRoleId) {
+          // Organization Admin / Owner has full organization access
+          orgPermissions.push('*', ...expandOrgPermissions(ALL_ORG_PERMISSION_KEYS));
+        } else if (FALLBACK_ORG_ROLE_PERMISSIONS[membership.orgRole as keyof typeof FALLBACK_ORG_ROLE_PERMISSIONS]) {
+          isOrgSubUser = true;
+          const fallbackKeys = FALLBACK_ORG_ROLE_PERMISSIONS[membership.orgRole as keyof typeof FALLBACK_ORG_ROLE_PERMISSIONS];
+          orgPermissions.push('dashboard.view', ...expandOrgPermissions(fallbackKeys));
+        }
       }
     }
 
-    if (user.role === 'seller' || user.role === 'shg') {
-      defaults.push(
-        'dashboard.view',
-        'catalogue.product.view',
-        'catalogue.product.create',
-        'catalogue.product.update',
-        'catalogue.product.delete',
-        'catalogue.service.view',
-        'catalogue.service.create',
-        'catalogue.service.update',
-        'catalogue.service.delete',
-        'marketplace.view',
-        'bid.submit',
-        'delivery.view',
-        'delivery.create',
-        'delivery.update',
-        'delivery.dispatch',
-        'grn.view',
-        'invoice.view',
-        'invoice.approve',
-        'payment.view',
-        'escrow.view',
-        'dispute.view',
-        'reverse_auction.view',
-        'reverse_auction.bid.submit'
-      );
-    } else if (user.role === 'buyer') {
-      defaults.push(
-        'dashboard.view',
-        'marketplace.view',
-        'requirement.view',
-        'requirement.create',
-        'requirement.publish',
-        'tender.view',
-        'tender.create',
-        'tender.update',
-        'tender.publish',
-        'bid.technical.evaluate',
-        'bid.financial.evaluate',
-        'award.recommend',
-        'approval.view',
-        'approval.submit',
-        'purchase_order.view',
-        'purchase_order.create',
-        'purchase_order.approve',
-        'cart.view',
-        'cart.add',
-        'cart.submit_for_approval',
-        'checkout.initiate',
-        'checkout.approve',
-        'delivery.view',
-        'delivery.confirm',
-        'grn.view',
-        'grn.create',
-        'grn.approve',
-        'inspection.view',
-        'inspection.create',
-        'inspection.approve',
-        'invoice.view',
-        'invoice.approve',
-        'payment.view',
-        'payment.initiate',
-        'escrow.release',
-        'dispute.view',
-        'dispute.manage',
-        'reverse_auction.view',
-        'reverse_auction.create',
-        'reverse_auction.update',
-        'reverse_auction.publish',
-        'reverse_auction.close',
-        'reverse_auction.invite_seller',
-        'reverse_auction.award'
-      );
-    } else if (user.role === 'master_admin') {
+    if (user.role === 'master_admin') {
       defaults.push('*');
+    } else if (user.role === 'admin') {
+      defaults.push('dashboard.view', 'report.view', 'audit.view');
+    } else if (!user.organizationId && !isOrgSubUser) {
+      // Standalone single-user buyers/sellers (without organization) receive baseline default permissions
+      if (user.role === 'seller' || user.role === 'shg') {
+        defaults.push(
+          'dashboard.view',
+          'catalogue.product.view',
+          'catalogue.product.create',
+          'catalogue.product.update',
+          'catalogue.product.delete',
+          'catalogue.service.view',
+          'catalogue.service.create',
+          'catalogue.service.update',
+          'catalogue.service.delete',
+          'marketplace.view',
+          'bid.submit',
+          'delivery.view',
+          'delivery.create',
+          'delivery.update',
+          'delivery.dispatch',
+          'grn.view',
+          'invoice.view',
+          'invoice.approve',
+          'payment.view',
+          'escrow.view',
+          'dispute.view',
+          'reverse_auction.view',
+          'reverse_auction.bid.submit'
+        );
+      } else if (user.role === 'buyer') {
+        defaults.push(
+          'dashboard.view',
+          'marketplace.view',
+          'requirement.view',
+          'requirement.create',
+          'requirement.publish',
+          'tender.view',
+          'tender.create',
+          'tender.update',
+          'tender.publish',
+          'bid.technical.evaluate',
+          'bid.financial.evaluate',
+          'award.recommend',
+          'approval.view',
+          'approval.submit',
+          'purchase_order.view',
+          'purchase_order.create',
+          'purchase_order.approve',
+          'cart.view',
+          'cart.add',
+          'cart.submit_for_approval',
+          'checkout.initiate',
+          'checkout.approve',
+          'delivery.view',
+          'delivery.confirm',
+          'grn.view',
+          'grn.create',
+          'grn.approve',
+          'inspection.view',
+          'inspection.create',
+          'inspection.approve',
+          'invoice.view',
+          'invoice.approve',
+          'payment.view',
+          'payment.initiate',
+          'escrow.release',
+          'dispute.view',
+          'dispute.manage',
+          'reverse_auction.view',
+          'reverse_auction.create',
+          'reverse_auction.update',
+          'reverse_auction.publish',
+          'reverse_auction.close',
+          'reverse_auction.invite_seller',
+          'reverse_auction.award'
+        );
+      }
     }
   }
 
-  return Array.from(new Set<string>([...assigned, ...defaults]));
+  return Array.from(new Set<string>([...assigned, ...orgPermissions, ...defaults]));
 };
 
 export const getActivePermissionCodes = getCurrentUserPermissions;
@@ -194,6 +250,10 @@ export const userHasPermission = async (
 
   const dbPermissions = await getCurrentUserPermissions(user.id, scope);
   if (dbPermissions.includes('*') || dbPermissions.includes(permissionCode)) return true;
+  const upper = permissionCode.toUpperCase().replace(/\./g, '_');
+  if (dbPermissions.includes(upper)) return true;
+  const lower = permissionCode.toLowerCase().replace(/_/g, '.');
+  if (dbPermissions.includes(lower)) return true;
   return false;
 };
 

@@ -68,8 +68,14 @@ export const requirePermission = (permission: Permission | string, options?: Per
     try {
       const scope = resolvePermissionScope(req, options);
       const permissions = await getCurrentUserPermissions(req.user.id, scope);
-      (req as any).rbac = { scope, permissions };
-      const allowed = isMasterAdmin(req.user) || permissions.includes('*') || permissions.includes(String(permission));
+      const permStr = String(permission);
+      const permUpper = permStr.toUpperCase().replace(/\./g, '_');
+      const permLower = permStr.toLowerCase().replace(/_/g, '.');
+      const allowed = isMasterAdmin(req.user) ||
+        permissions.includes('*') ||
+        permissions.includes(permStr) ||
+        permissions.includes(permUpper) ||
+        permissions.includes(permLower);
       if (!allowed) {
         return apiResponse.error(res, 403, `Missing permission: ${permission}`, 'PERMISSION_DENIED', { requiredPermission: permission });
       }
