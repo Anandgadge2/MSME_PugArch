@@ -41,56 +41,161 @@ interface UseOrgRoleReturn {
     reload: () => void;
 }
 
-export function usePermissions() {
-    const { user, token } = useAuth();
-    const [remotePermissions, setRemotePermissions] = useState<string[]>([]);
-    const [loading, setLoading] = useState(Boolean(token && user));
+export const DEFAULT_BUYER_PERMISSIONS: string[] = [
+    'dashboard.view', 'marketplace.view', 'requirement.view', 'requirement.create', 
+    'requirement.publish', 'tender.view', 'tender.create', 'tender.update', 
+    'tender.publish', 'cart.view', 'cart.add', 'cart.submit_for_approval', 
+    'approval.view', 'approval.submit', 'purchase_order.view', 'purchase_order.create', 
+    'purchase_order.approve', 'checkout.initiate', 'checkout.approve', 'delivery.view', 
+    'delivery.confirm', 'payment.view', 'payment.initiate', 'invoice.view', 
+    'invoice.approve', 'grn.view', 'grn.create', 'grn.approve', 'dispute.view', 
+    'dispute.manage', 'reverse_auction.view', 'team.member.view', 'team.role.manage', 
+    'organization.view', 'organization.update', 'report.view'
+];
 
-    const load = useCallback(async () => {
-        if (!token || !user) {
+export const DEFAULT_SELLER_PERMISSIONS: string[] = [
+    'dashboard.view', 'catalogue.product.view', 'catalogue.product.create', 
+    'catalogue.product.update', 'catalogue.product.delete', 'catalogue.service.view', 
+    'catalogue.service.create', 'catalogue.service.update', 'catalogue.service.delete', 
+    'marketplace.view', 'bid.submit', 'delivery.view', 'delivery.create', 
+    'delivery.update', 'delivery.dispatch', 'purchase_order.view', 'payment.view', 
+    'invoice.view', 'invoice.approve', 'grn.view', 'dispute.view', 'reverse_auction.view', 
+    'reverse_auction.bid.submit', 'team.member.view', 'team.role.manage', 
+    'organization.view', 'organization.update', 'report.view'
+];
+
+const PERMISSIONS_CACHE_KEY = 'msme_permissions_cache';
+let inMemoryPermissions: string[] | null = null;
+let permissionsFetchPromise: Promise<string[]> | null = null;
+
+const getStoredPermissions = (): string[] | null => {
+    if (inMemoryPermissions && inMemoryPermissions.length > 0) return inMemoryPermissions;
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem(PERMISSIONS_CACHE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                inMemoryPermissions = parsed;
+                return parsed;
+            }
+        }
+    } catch {
+        // ignore
+    }
+    return null;
+};
+
+const storePermissions = (perms: string[]) => {
+    inMemoryPermissions = perms;
+    if (typeof window !== 'undefined') {
+        try {
+            localStorage.setItem(PERMISSIONS_CACHE_KEY, JSON.stringify(perms));
+        } catch {
+            // ignore
+        }
+    }
+};
+
+export const clearPermissionsCache = () => {
+    inMemoryPermissions = null;
+    permissionsFetchPromise = null;
+    if (typeof window !== 'undefined') {
+        try {
+            localStorage.removeItem(PERMISSIONS_CACHE_KEY);
+        } catch {
+            // ignore
+        }
+    }
+};
+
+export function usePermissions() {
+    const { user } = useAuth();
+    const [remotePermissions, setRemotePermissions] = useState<string[]>(() => {
+        const stored = getStoredPermissions();
+        if (stored && stored.length > 0) return stored;
+        if (Array.isArray(user?.permissions) && user.permissions.length > 0) return user.permissions;
+        return [];
+    });
+    const [loading, setLoading] = useState(false);
+
+    const load = useCallback(async (force = false) => {
+        if (!user) {
             setRemotePermissions([]);
             setLoading(false);
             return;
         }
-        setLoading(true);
+
+        if (user.role === 'master_admin' || user.role === 'admin') {
+            setRemotePermissions(['*']);
+            setLoading(false);
+            return;
+        }
+
+        const existing = getStoredPermissions() || (Array.isArray(user.permissions) && user.permissions.length > 0 ? user.permissions : null);
+        if (existing && existing.length > 0 && !force) {
+            setRemotePermissions(existing);
+        } else if (!existing) {
+            setLoading(true);
+        }
+
         try {
-            const data = await getApi<PermissionPayload>('/api/auth/me/permissions', true);
-            setRemotePermissions(Array.isArray(data?.permissions) ? data.permissions : []);
-        } catch {
-            setRemotePermissions(Array.isArray(user.permissions) ? user.permissions : []);
+            if (!permissionsFetchPromise || force) {
+                permissionsFetchPromise = (async () => {
+                    try {
+                        const data = await getApi<PermissionPayload>('/api/auth/me/permissions', force);
+                        const perms = Array.isArray(data?.permissions) ? data.permissions : [];
+                        if (perms.length > 0) {
+                            storePermissions(perms);
+                        }
+                        return perms;
+                    } catch {
+                        const fallback = Array.isArray(user.permissions) && user.permissions.length > 0
+                            ? user.permissions
+                            : (existing || []);
+                        return fallback;
+                    } finally {
+                        permissionsFetchPromise = null;
+                    }
+                })();
+            }
+            const perms = await permissionsFetchPromise;
+            if (perms.length > 0) {
+                setRemotePermissions(perms);
+            }
         } finally {
             setLoading(false);
         }
-    }, [token, user]);
+    }, [user]);
 
     useEffect(() => {
         void load();
     }, [load]);
 
     const permissions = useMemo(() => {
-        const cached = Array.isArray(user?.permissions) ? user.permissions : [];
         const isMasterOrAdmin = user?.role === 'master_admin' || user?.role === 'admin';
         if (isMasterOrAdmin) return ['*'];
 
+        const cached = Array.isArray(user?.permissions) && user.permissions.length > 0 ? user.permissions : [];
         const serverPerms = remotePermissions.length > 0 ? remotePermissions : cached;
 
-        // If server permissions exist, respect them strictly
+        // If server or cached permissions exist, respect them strictly
         if (serverPerms.length > 0) {
             return serverPerms;
         }
 
-        // Only standalone single-user accounts without an organization receive generic defaults
-        if (!user?.organizationId && !user?.isSubUser) {
+        // For standard primary users (non-subusers), provide immediate default role permissions
+        if (!user?.isSubUser) {
             if (user?.role === 'buyer') {
-                return ['dashboard.view', 'marketplace.view', 'requirement.view', 'requirement.create', 'requirement.publish', 'tender.view', 'tender.create', 'tender.update', 'tender.publish', 'cart.view', 'cart.add', 'cart.submit_for_approval', 'approval.view', 'approval.submit', 'purchase_order.view', 'purchase_order.create', 'purchase_order.approve', 'checkout.initiate', 'checkout.approve', 'delivery.view', 'delivery.confirm', 'payment.view', 'payment.initiate', 'invoice.view', 'invoice.approve', 'grn.view', 'grn.create', 'grn.approve', 'dispute.view', 'dispute.manage', 'reverse_auction.view', 'team.member.view', 'team.role.manage', 'organization.view', 'organization.update', 'report.view'];
+                return DEFAULT_BUYER_PERMISSIONS;
             }
             if (user?.role === 'seller' || user?.role === 'shg') {
-                return ['dashboard.view', 'catalogue.product.view', 'catalogue.product.create', 'catalogue.product.update', 'catalogue.product.delete', 'catalogue.service.view', 'catalogue.service.create', 'catalogue.service.update', 'catalogue.service.delete', 'marketplace.view', 'bid.submit', 'delivery.view', 'delivery.create', 'delivery.update', 'delivery.dispatch', 'purchase_order.view', 'payment.view', 'invoice.view', 'invoice.approve', 'grn.view', 'dispute.view', 'reverse_auction.view', 'reverse_auction.bid.submit', 'team.member.view', 'team.role.manage', 'organization.view', 'organization.update', 'report.view'];
+                return DEFAULT_SELLER_PERMISSIONS;
             }
         }
 
         return ['dashboard.view'];
-    }, [remotePermissions, user?.isSubUser, user?.organizationId, user?.permissions, user?.role]);
+    }, [remotePermissions, user?.isSubUser, user?.permissions, user?.role]);
 
     const hasPermission = useCallback((permissionCode: string) => {
         if (!permissionCode) return false;
@@ -103,7 +208,7 @@ export function usePermissions() {
         return false;
     }, [permissions]);
 
-    return { permissions, hasPermission, loading, reload: load };
+    return { permissions, hasPermission, loading, reload: () => load(true) };
 }
 
 export function usePermission(permissionCode: string) {

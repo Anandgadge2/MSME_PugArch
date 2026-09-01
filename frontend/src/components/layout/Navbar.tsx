@@ -418,6 +418,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       };
     },
     enabled: user?.role === 'seller',
+    staleTime: 30000,
     refetchInterval: 15000,
   });
 
@@ -1057,7 +1058,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
             {isSidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
 
-          <div className="hidden md:flex relative group cursor-pointer" onClick={() => window.dispatchEvent(new CustomEvent('open-global-search'))}>
+          {/* <div className="hidden md:flex relative group cursor-pointer" onClick={() => window.dispatchEvent(new CustomEvent('open-global-search'))}>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-hover:text-[#0b2447] transition-colors" />
             <div className="w-64 h-9 pl-9 pr-4 rounded-lg border border-slate-200 text-sm flex items-center justify-between bg-slate-50 hover:bg-white hover:border-[#0b2447]/30 transition-all text-slate-400">
               <span>Quick search...</span>
@@ -1065,7 +1066,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                 <span className="text-xs">⌘</span>K
               </kbd>
             </div>
-          </div>
+          </div> */}
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
