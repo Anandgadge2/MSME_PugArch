@@ -672,7 +672,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
 
     // ── Canonical procurement detail routes: /{role}/procurement/{type}/{id} ──
     {
-      const procDetailMatch = pathname.match(/^\/(seller|shg)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)$/);
+      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)$/);
       if (procDetailMatch) {
         const [, , typeSlug, rawId] = procDetailMatch;
         const id = decodeURIComponent(rawId);
@@ -689,12 +689,12 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
           }
         }
       }
-      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg)\/procurement\/reverse-auction\/([^/]+)\/live$/);
+      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/live$/);
       if (procAuctionLiveMatch) {
         const id = Number(decodeURIComponent(procAuctionLiveMatch[2]));
         if (Number.isFinite(id) && id > 0) return <ReverseAuctionLivePage id={id} />;
       }
-      const procAuctionResultMatch = pathname.match(/^\/(seller|shg)\/procurement\/reverse-auction\/([^/]+)\/results$/);
+      const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/results$/);
       if (procAuctionResultMatch) {
         const id = Number(decodeURIComponent(procAuctionResultMatch[2]));
         if (Number.isFinite(id) && id > 0) return <AuctionResultPage id={id} />;
@@ -743,7 +743,19 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/admin' && roleOk(user.role, ['admin'])) return <Dashboard />;
     if (pathname === '/seller/onboarding' && roleOk(user.role, ['seller'])) return <SellerOnboarding />;
     
-    // Seller & SHG Opportunities (explicit route-to-prop mapping)
+    // Seller & SHG Opportunities (explicit route-to-prop mapping + canonical listing routes)
+    if ((pathname === '/seller/procurement/opportunities' || pathname === '/shg/procurement/opportunities') && roleOk(user.role, ['seller', 'shg'])) {
+      const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      const typeSlug = (sp.get('type') || '').toLowerCase();
+      let subRouteType: '' | 'RFQ' | 'RFP' | 'Open Tender' | 'Limited Tender' | 'Reverse Auction' | 'Rate Contract' = '';
+      if (typeSlug === 'rfq') subRouteType = 'RFQ';
+      else if (typeSlug === 'rfp') subRouteType = 'RFP';
+      else if (typeSlug === 'open-tender') subRouteType = 'Open Tender';
+      else if (typeSlug === 'limited-tender') subRouteType = 'Limited Tender';
+      else if (typeSlug === 'reverse-auction') subRouteType = 'Reverse Auction';
+      else if (typeSlug === 'rate-contract') subRouteType = 'Rate Contract';
+      return <SellerOpportunitiesPage key={pathname + (typeSlug || '')} subRouteType={subRouteType} />;
+    }
     if ((pathname === '/seller/opportunities' || pathname === '/shg/opportunities') && roleOk(user.role, ['seller', 'shg'])) return <SellerOpportunitiesPage key={pathname} subRouteType="" />;
     if ((pathname === '/seller/opportunities/rfqs' || pathname === '/shg/opportunities/rfqs') && roleOk(user.role, ['seller', 'shg'])) return <SellerOpportunitiesPage key={pathname} subRouteType="RFQ" />;
     if ((pathname === '/seller/opportunities/rfps' || pathname === '/shg/opportunities/rfps') && roleOk(user.role, ['seller', 'shg'])) return <SellerOpportunitiesPage key={pathname} subRouteType="RFP" />;

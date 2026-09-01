@@ -39,6 +39,10 @@ interface DashboardSummary {
     sellerCatalogueItemsCount?: number;
     sellerPendingInvoicesCount?: number;
     sellerQuotationsCount?: number;
+    sellerSubmittedBidsCount?: number;
+    sellerRfqsCount?: number;
+    sellerReceivedRfqsCount?: number;
+    invoiceFactoringCount?: number;
     reverseAuctionsActive?: number;
     reverseAuctionsScheduled?: number;
     reverseAuctionsClosed?: number;
@@ -233,7 +237,7 @@ function RoleAwareActionCards() {
         },
         {
             label: 'My Bids / Quotations',
-            count: data.sellerQuotationsCount || 0,
+            count: data.sellerSubmittedBidsCount ?? data.sellerQuotationsCount ?? 0,
             href: `${sellerPrefix}/bids/submitted`,
             icon: ClipboardCheck,
             tone: 'purple',
@@ -283,7 +287,7 @@ function RoleAwareActionCards() {
         },
         {
             label: 'Request Quotations',
-            count: data.sellerQuotationsCount || 0,
+            count: data.sellerRfqsCount ?? data.sellerReceivedRfqsCount ?? 0,
             href: `${sellerPrefix}/opportunities/rfqs`,
             icon: FileText,
             tone: 'purple',
@@ -303,7 +307,7 @@ function RoleAwareActionCards() {
         },
         {
             label: 'Invoice Factoring',
-            count: 0,
+            count: data.invoiceFactoringCount || 0,
             href: '/factoring',
             icon: Landmark,
             tone: 'slate',

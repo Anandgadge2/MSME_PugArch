@@ -494,17 +494,14 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 sellerActivePOs,
                 sellerCatalogueItems,
                 sellerPendingInvoices,
-                sellerTenderQuotations,
+                sellerSubmittedProposals,
+                sellerRfqs,
                 sellerReceivedRfqs,
-                sellerLiveProcurementBids,
-                sellerProcurementParticipations,
-                sellerBuyerRequirements,
-                sellerLegacyRequirements,
+                sellerOpportunities,
                 sellerActiveAuctions,
                 buyerProcurementActiveBids,
                 buyerProcurementTotalSpent,
-                // Marketplace quotation (RequirementResponse) submissions by this seller
-                sellerMarketplaceResponses
+                sellerInvoiceFactoring
             ] = await Promise.all([
                     // cart item count
                     orgId
@@ -549,9 +546,9 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                         ? prisma.deliveryTracking.count({
                             where: {
                                 purchaseOrder: sellerRecordWhere,
-                                status: { notIn: activeDeliveryTerminalStatuses as any }
+                                status: { notIn: ['DELIVERED', 'COMPLETED', 'ACCEPTED', 'CLOSED', 'CANCELLED', 'RETURNED'] as any }
                             }
-                        })
+                        }).catch(() => 0)
                         : Promise.resolve(0),
                     // ─── Buyer baseline counts (visible to every buyer) ───
                     isBuyer
@@ -584,16 +581,42 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                                         status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED'] }
                                     }
                                 }).catch(() => 0)
-                        ]).then(([q, r]) => q + r)
+                        ]).then(([q, r]) => q + r).catch(() => 0)
                         : Promise.resolve(0),
                     // ─── Seller baseline counts ───
                     isSeller
-                        ? prisma.tender.count({
-                            where: {
-                                status: { in: openTenderStatuses as any },
-                                OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }]
-                            }
-                        }).catch(() => 0)
+                        ? Promise.all([
+                            (prisma as any).procurementBid.count({
+                                where: {
+                                    AND: [
+                                        {
+                                            OR: [
+                                                { procurementType: { in: ['OPEN_TENDER', 'TENDER', 'LIMITED_TENDER', 'open_tender', 'tender'] } },
+                                                { bidType: { in: ['OPEN_TENDER', 'TENDER', 'open_tender', 'tender'] } }
+                                            ]
+                                        },
+                                        {
+                                            OR: [{ endDate: null }, { endDate: { gt: new Date() } }]
+                                        }
+                                    ],
+                                    approvalStatus: { in: ['APPROVED', 'PENDING'] },
+                                    status: { in: publicProcurementBidStatuses }
+                                }
+                            }).catch(() => 0),
+                            prisma.requirement.count({
+                                where: {
+                                    procurementMethod: 'TENDER',
+                                    status: { in: ['APPROVED', 'SOURCING'] },
+                                    AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
+                                }
+                            }).catch(() => 0),
+                            prisma.tender.count({
+                                where: {
+                                    status: { in: openTenderStatuses as any },
+                                    OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }]
+                                }
+                            }).catch(() => 0)
+                        ]).then(([b, r, t]) => b + r + t).catch(() => 0)
                         : Promise.resolve(0),
                     isSeller
                         ? prisma.purchaseOrder.count({
@@ -611,57 +634,109 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                             where: { ...sellerRecordWhere, status: { in: pendingInvoiceStatuses } }
                         }).catch(() => 0)
                         : Promise.resolve(0),
+                    // Seller's submitted proposals/bids across procurement bids, marketplace requirements, and tender bids
                     isSeller
-                        ? prisma.bid.count({
-                            where: { ...sellerRecordWhere, status: { in: activeQuotationStatuses } }
-                        }).catch(() => 0)
+                        ? Promise.all([
+                            (prisma as any).procurementBidParticipation.count({
+                                where: orgId
+                                    ? { OR: [{ sellerId: userIdNum }, { seller: { organizationId: orgId } }], status: { in: ['SUBMITTED', 'TECHNICAL_DOCUMENTS_UPLOADED', 'FINANCIAL_QUOTE_UPLOADED', 'QUALIFIED', 'AWARDED', 'ACCEPTED'] } }
+                                    : { sellerId: userIdNum, status: { in: ['SUBMITTED', 'TECHNICAL_DOCUMENTS_UPLOADED', 'FINANCIAL_QUOTE_UPLOADED', 'QUALIFIED', 'AWARDED', 'ACCEPTED'] } }
+                            }).catch(() => 0),
+                            (prisma as any).requirementResponse.count({
+                                where: {
+                                    sellerUserId: userIdNum,
+                                    status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED'] }
+                                }
+                            }).catch(() => 0),
+                            prisma.bid.count({
+                                where: { ...sellerRecordWhere, status: { in: activeQuotationStatuses } }
+                            }).catch(() => 0)
+                        ]).then(([p, r, b]) => p + r + b).catch(() => 0)
                         : Promise.resolve(0),
+                    // RFQ requests & opportunities available for the seller
+                    isSeller
+                        ? Promise.all([
+                            prisma.quoteRequest.count({ where: { ...sellerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0),
+                            (prisma as any).procurementBid.count({
+                                where: {
+                                    AND: [
+                                        { OR: [{ procurementType: 'RFQ' }, { bidType: 'RFQ' }] },
+                                        { OR: [{ endDate: null }, { endDate: { gt: new Date() } }] }
+                                    ],
+                                    approvalStatus: { in: ['APPROVED', 'PENDING'] },
+                                    status: { in: publicProcurementBidStatuses }
+                                }
+                            }).catch(() => 0),
+                            prisma.requirement.count({
+                                where: {
+                                    procurementMethod: 'RFQ',
+                                    status: { in: ['APPROVED', 'SOURCING'] },
+                                    AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
+                                }
+                            }).catch(() => 0)
+                        ]).then(([qr, pb, req]) => qr + pb + req).catch(() => 0)
+                        : Promise.resolve(0),
+                    // Directly received quote requests
                     isSeller
                         ? prisma.quoteRequest.count({ where: { ...sellerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0)
                         : Promise.resolve(0),
+                    // All open opportunities available for the seller
                     isSeller
-                        ? (prisma as any).procurementBid.count({
-                            where: {
-                                approvalStatus: { in: ['APPROVED', 'PENDING'] },
-                                status: { in: publicProcurementBidStatuses },
-                                endDate: { gt: new Date() }
-                            }
-                        }).catch(() => 0)
+                        ? Promise.all([
+                            (prisma as any).procurementBid.count({
+                                where: {
+                                    approvalStatus: { in: ['APPROVED', 'PENDING'] },
+                                    status: { in: publicProcurementBidStatuses },
+                                    OR: [{ endDate: null }, { endDate: { gt: new Date() } }]
+                                }
+                            }).catch(() => 0),
+                            prisma.quoteRequest.count({ where: { ...sellerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0),
+                            prisma.buyerRequirement.count({
+                                where: {
+                                    status: { in: ['PUBLISHED', 'OPEN'] },
+                                    lastDate: { gte: new Date() }
+                                }
+                            }).catch(() => 0),
+                            prisma.requirement.count({
+                                where: {
+                                    status: { in: ['APPROVED', 'SOURCING'] },
+                                    procurementMethod: { not: 'DIRECT_PURCHASE' },
+                                    AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
+                                }
+                            }).catch(() => 0),
+                            prisma.auction.count({
+                                where: {
+                                    status: { in: ['SCHEDULED', 'LIVE', 'PAUSED', 'scheduled', 'live', 'paused', 'active', 'ACTIVE'] }
+                                }
+                            }).catch(() => 0)
+                        ]).then(([pb, qr, br, req, auc]) => pb + qr + br + req + auc).catch(() => 0)
                         : Promise.resolve(0),
+                    // Live / Active reverse auctions
                     isSeller
-                        ? (prisma as any).procurementBidParticipation.count({
-                            where: orgId
-                                ? { OR: [{ sellerId: userIdNum }, { seller: { organizationId: orgId } }] }
-                                : { sellerId: userIdNum }
-                        }).catch(() => 0)
-                        : Promise.resolve(0),
-                    isSeller
-                        ? prisma.buyerRequirement.count({
-                            where: {
-                                status: { in: ['PUBLISHED', 'OPEN'] },
-                                lastDate: { gte: new Date() }
-                            }
-                        }).catch(() => 0)
-                        : Promise.resolve(0),
-                    isSeller
-                        ? prisma.requirement.count({
-                            where: {
-                                status: { in: ['APPROVED', 'SOURCING'] },
-                                procurementMethod: { not: 'DIRECT_PURCHASE' },
-                                AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
-                            }
-                        }).catch(() => 0)
-                        : Promise.resolve(0),
-                    isSeller
-                        ? prisma.auctionParticipant.findMany({
-                            where: { sellerOrgId: orgId || -1 },
-                            select: { auctionId: true }
-                        }).then(rows => prisma.auction.count({
-                            where: {
-                                id: { in: rows.map((r: any) => r.auctionId) },
-                                status: { in: ['SCHEDULED', 'LIVE', 'PAUSED', 'scheduled', 'live', 'paused', 'active', 'ACTIVE'] }
-                            }
-                        })).catch(() => 0)
+                        ? Promise.all([
+                            prisma.auction.count({
+                                where: {
+                                    status: { in: ['SCHEDULED', 'LIVE', 'PAUSED', 'scheduled', 'live', 'paused', 'active', 'ACTIVE'] }
+                                }
+                            }).catch(() => 0),
+                            (prisma as any).procurementBid.count({
+                                where: {
+                                    AND: [
+                                        { OR: [{ procurementType: 'REVERSE_AUCTION' }, { bidType: 'REVERSE_AUCTION' }] },
+                                        { OR: [{ endDate: null }, { endDate: { gt: new Date() } }] }
+                                    ],
+                                    approvalStatus: { in: ['APPROVED', 'PENDING'] },
+                                    status: { in: publicProcurementBidStatuses }
+                                }
+                            }).catch(() => 0),
+                            prisma.requirement.count({
+                                where: {
+                                    procurementMethod: 'REVERSE_AUCTION',
+                                    status: { in: ['APPROVED', 'SOURCING'] },
+                                    AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
+                                }
+                            }).catch(() => 0)
+                        ]).then(([a, pb, r]) => a + pb + r).catch(() => 0)
                         : Promise.resolve(0),
                     // buyer procurement active bids
                     isBuyer
@@ -676,14 +751,20 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                             _sum: { amount: true }
                         }).then(r => Number(r._sum.amount || 0)).catch(() => 0)
                         : Promise.resolve(0),
-                    // Marketplace RequirementResponse quotations submitted by this seller
+                    // Invoice factoring available/active count
                     isSeller
-                        ? (prisma as any).requirementResponse.count({
-                            where: {
-                                sellerUserId: userIdNum,
-                                status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED'] }
-                            }
-                        }).catch(() => 0)
+                        ? Promise.all([
+                            prisma.invoice.count({
+                                where: {
+                                    ...sellerRecordWhere,
+                                    OR: [{ status: 'approved' }, { invoiceStatus: 'APPROVED' }],
+                                    factoring: null
+                                }
+                            }).catch(() => 0),
+                            (prisma as any).invoiceFactoring.count({
+                                where: { invoice: sellerRecordWhere }
+                            }).catch(() => 0)
+                        ]).then(([inv, fac]) => inv + fac).catch(() => 0)
                         : Promise.resolve(0)
             ]);
 
@@ -736,9 +817,14 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 sellerActivePOsCount: sellerActivePOs,
                 sellerCatalogueItemsCount: sellerCatalogueItems,
                 sellerPendingInvoicesCount: sellerPendingInvoices,
-                // Include marketplace RequirementResponse quotations in the seller bids/quotations count
-                sellerQuotationsCount: sellerTenderQuotations + sellerReceivedRfqs + sellerMarketplaceResponses,
-                sellerOpportunitiesCount: sellerLiveProcurementBids + sellerReceivedRfqs + sellerBuyerRequirements + sellerLegacyRequirements + sellerActiveAuctions,
+                sellerQuotationsCount: sellerSubmittedProposals,
+                sellerSubmittedBidsCount: sellerSubmittedProposals,
+                sellerRfqsCount: sellerRfqs,
+                sellerReceivedRfqsCount: sellerReceivedRfqs,
+                sellerOpportunitiesCount: sellerOpportunities,
+                reverseAuctionsLive: sellerActiveAuctions,
+                reverseAuctionInvites: sellerActiveAuctions,
+                invoiceFactoringCount: sellerInvoiceFactoring,
                 orgRole
             };
         },
