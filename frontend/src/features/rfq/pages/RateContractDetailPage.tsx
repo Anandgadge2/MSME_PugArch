@@ -148,9 +148,13 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
   const [expandedDocs, setExpandedDocs] = useState(false);
 
+  const pathTokens = (pathname || '').split('/').filter(Boolean);
+  const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
+  const pathnameId = (rawPathId && !['rate-contract', 'rfp', 'rfq', 'limited-tender', 'open-tender', 'bids', 'opportunities', 'details'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
+
   const explicitReqId = searchParams?.get('requirementId') || '';
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || '';
-  const rawIdParam = searchParams?.get('id') || '';
+  const rawIdParam = searchParams?.get('id') || pathnameId || '';
 
   let requirementId = explicitReqId;
   let requestId = explicitRequestId;
@@ -162,10 +166,11 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       requestId = rawIdParam.replace(/^(bid|qr|rc)-/, '');
     } else {
       requirementId = rawIdParam;
+      requestId = rawIdParam;
     }
   }
 
-  const activeRcId = requestId || requirementId || rawIdParam;
+  const activeRcId = explicitReqId || explicitRequestId || rawIdParam || pathnameId;
   const isMatchingInitial = Boolean(
     initialData && activeRcId && (
       String(initialData.id).toLowerCase() === String(activeRcId).toLowerCase() ||
@@ -235,8 +240,8 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   } : null);
 
   // ── Normalize rcData from either bidData or reqData ──
-  const preferReq = Boolean(explicitReqId && reqObj);
   const bid: any = bidData;   // Runtime has more fields than the TS type; cast for extraction
+  const preferReq = Boolean((explicitReqId || !bid) && reqObj);
 
   const rcData: any = preferReq ? {
     id: reqObj.id,

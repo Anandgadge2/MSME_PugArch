@@ -132,7 +132,7 @@ const extractIdFromPath = (): string | null => {
 /** Map canonical method to appropriate detail page route */
 const getDetailRoute = (requirement: any): string | null => {
   if (!requirement) return null;
-  const sourceId = requirement.sourceId || Math.abs(requirement.id);
+  const sourceId = requirement.requirementNumber || requirement.sourceId || (typeof requirement.id === 'number' && requirement.id < 0 ? Math.abs(requirement.id) : requirement.id);
   const desc = String(requirement.description || '').toUpperCase();
   const title = String(requirement.title || '').toUpperCase();
   const payload = requirement.payload && typeof requirement.payload === 'object' ? requirement.payload : {};
@@ -167,14 +167,11 @@ const getDetailRoute = (requirement: any): string | null => {
   }
   // Tender-type methods
   if (['OPEN_TENDER', 'LIMITED_TENDER', 'TWO_STAGE_TENDER', 'EMERGENCY_PURCHASE'].includes(method)) {
-    if (requirement.requirementNumber && String(requirement.requirementNumber).startsWith('OT-')) {
-      return `/tenders?tender=${requirement.requirementNumber}`;
-    }
     return method === 'LIMITED_TENDER' ? sellerRoutes.detail('LIMITED_TENDER', sourceId) : sellerRoutes.detail('OPEN_TENDER', sourceId);
   }
   // Reverse auction
   if (method === 'REVERSE_AUCTION') {
-    return sellerRoutes.detail('REVERSE_AUCTION', sourceId);
+    return sellerRoutes.detail('REVERSE_AUCTION', requirement.sourceId || sourceId);
   }
   return sellerRoutes.detail('RFQ', sourceId);
 };

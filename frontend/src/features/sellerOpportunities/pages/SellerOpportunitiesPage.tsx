@@ -510,19 +510,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const documents = asTextList(req.requiredDocuments);
         const linkedBidId = req.payload?.linkedProcurementBidId;
+        const canonicalReqId = req.requirementNumber || req.sourceId || (typeof req.id === 'number' && req.id < 0 ? Math.abs(req.id) : req.id);
         const buildDetailHref = () => {
-          if (opportunityType === 'Rate Contract') return sellerRoutes.detail('RATE_CONTRACT', req.id);
-          if (opportunityType === 'RFQ') return sellerRoutes.detail('RFQ', req.id);
-          if (opportunityType === 'RFP') return sellerRoutes.detail('RFP', req.id);
-          if (opportunityType === 'Open Tender') return sellerRoutes.detail('OPEN_TENDER', req.id);
-          if (opportunityType === 'Limited Tender') return sellerRoutes.detail('LIMITED_TENDER', req.id);
-          if (opportunityType === 'Reverse Auction') return sellerRoutes.detail('REVERSE_AUCTION', req.sourceId || req.id);
-          return `/marketplace/requirements/${req.sourceId || req.id}`;
+          if (opportunityType === 'Rate Contract') return sellerRoutes.detail('RATE_CONTRACT', canonicalReqId);
+          if (opportunityType === 'RFQ') return sellerRoutes.detail('RFQ', canonicalReqId);
+          if (opportunityType === 'RFP') return sellerRoutes.detail('RFP', canonicalReqId);
+          if (opportunityType === 'Open Tender') return sellerRoutes.detail('OPEN_TENDER', canonicalReqId);
+          if (opportunityType === 'Limited Tender') return sellerRoutes.detail('LIMITED_TENDER', canonicalReqId);
+          if (opportunityType === 'Reverse Auction') return sellerRoutes.detail('REVERSE_AUCTION', req.sourceId || canonicalReqId);
+          return `/marketplace/requirements/${canonicalReqId}`;
         };
         const detailHref = buildDetailHref();
         const responseHref = linkedBidId 
           ? (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', linkedBidId) : `/bids/${linkedBidId}/participate`)
-          : (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', req.id) : detailHref);
+          : (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', canonicalReqId) : detailHref);
         const opportunity: SellerOpportunity = {
           id: `req-${req.id}`,
           type: opportunityType,

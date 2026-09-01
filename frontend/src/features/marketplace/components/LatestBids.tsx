@@ -492,7 +492,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                     method = parsed.method.replace(/\s+/g, '_').toUpperCase();
                 }
             }
-            const sourceId = r.sourceId || (r.id ? Math.abs(r.id) : null);
+            const sourceId = r.requirementNumber || r.sourceId || (r.id ? Math.abs(r.id) : null);
             
             // Link formatting based on authentication & procurement method
             let link = sourceId ? `/marketplace/requirements/${sourceId}` : '/marketplace/requirements';
@@ -502,16 +502,20 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                 const isLoggedIn = !!user;
                 const isSeller = user?.role === 'seller';
                 if (isLoggedIn && isSeller) {
-                    if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'RATE_CONTRACT'].includes(method)) {
+                    if (method === 'RATE_CONTRACT' || method.includes('RATE')) {
+                        link = sellerRoutes.detail('RATE_CONTRACT', sourceId);
+                    } else if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER'].includes(method)) {
                         link = sellerRoutes.detail('RFQ', sourceId);
                     } else if (['RFP', 'SINGLE_SOURCE', 'PAC'].includes(method)) {
                         link = sellerRoutes.detail('RFP', sourceId);
-                    } else if (['OPEN_TENDER', 'LIMITED_TENDER', 'TWO_STAGE_TENDER', 'EMERGENCY_PURCHASE'].includes(method)) {
-                        if (r.requirementNumber) {
-                            link = `/tenders?tender=${r.requirementNumber}`;
-                        } else {
-                            link = sellerRoutes.detail('RFQ', sourceId);
-                        }
+                    } else if (method === 'OPEN_TENDER' || method.includes('OPEN')) {
+                        link = sellerRoutes.detail('OPEN_TENDER', sourceId);
+                    } else if (method === 'LIMITED_TENDER' || method.includes('LIMITED')) {
+                        link = sellerRoutes.detail('LIMITED_TENDER', sourceId);
+                    } else if (['TWO_STAGE_TENDER', 'EMERGENCY_PURCHASE'].includes(method)) {
+                        link = sellerRoutes.detail('OPEN_TENDER', sourceId);
+                    } else if (method === 'REVERSE_AUCTION') {
+                        link = sellerRoutes.detail('REVERSE_AUCTION', r.sourceId || sourceId);
                     }
                 }
             }
