@@ -328,26 +328,30 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{cfg.eyebrow}</p>
+          {/* <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{cfg.eyebrow}</p> */}
           <h1 className="text-2xl font-black tracking-tight text-slate-950">{cfg.title}</h1>
           <p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500">{cfg.description}</p>
         </div>
         <div className="flex items-center gap-2">
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase"><RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />Refresh</Button>
         </div>
       </div>
 
-      <div className={cn("grid gap-2.5 sm:gap-3", kind === 'users' ? "grid-cols-2 sm:grid-cols-2" : "grid-cols-2 sm:grid-cols-3")}>
+      <div className={cn(
+        "flex flex-col sm:flex-row gap-2.5 sm:gap-3",
+        kind === 'users' ? "" : "flex-wrap"
+      )}>
         {metrics.map(item => (
-          <KpiCard
-            key={item.label}
-            label={item.label}
-            value={item.value}
-            subtext={item.subtext}
-            icon={Icon}
-            tone={item.tone}
-          />
+          <div key={item.label} className="w-full sm:w-[280px]">
+            <KpiCard
+              label={item.label}
+              value={item.value}
+              subtext={item.subtext}
+              icon={Icon}
+              tone={item.tone}
+            />
+          </div>
         ))}
       </div>
 
@@ -368,15 +372,18 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
               <select value={status} onChange={event => setStatus(event.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold w-full lg:w-[160px] bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"><option value="">All statuses</option><option value="completed">Registration completed</option><option value="incomplete">Registration incomplete</option><option value="approved_for_procurement">Approved onboarding</option><option value="PENDING">Pending account</option><option value="ACTIVE">Active account</option><option value="OPEN">Open</option><option value="CLOSED">Closed</option></select>
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowMobileFilters(!showMobileFilters)}
-              className="lg:hidden h-10 w-full sm:w-auto gap-2 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0"
-            >
-              <Filter className="h-4 w-4 text-slate-500" />
-              <span>Filters {showMobileFilters ? '(Hide)' : '(Show)'}</span>
-            </Button>
+            <div className="flex items-center gap-2 w-full lg:w-auto">
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowMobileFilters(!showMobileFilters)}
+                className="lg:hidden h-10 flex-1 gap-2 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0"
+              >
+                <Filter className="h-4 w-4 text-slate-500" />
+                <span>Filters {showMobileFilters ? '(Hide)' : '(Show)'}</span>
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -919,39 +926,26 @@ const AdminRecordCard = memo(function AdminRecordCard({
   onDelete?: (record: RecordMap) => void;
   currentUserId?: number | null;
 }) {
+  if (kind === 'users') {
+    return (
+      <AdminUserCard 
+        record={record} 
+        onView={onView} 
+        onToggleStatus={onToggleStatus} 
+        onEdit={onEdit} 
+        onDelete={onDelete} 
+        currentUserId={currentUserId} 
+      />
+    );
+  }
+
   return (
     <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
       <CardContent className="p-4 flex flex-col justify-between h-full min-h-[180px]">
         <div>
           <div className="flex items-start justify-between gap-3">
             <span className="rounded bg-slate-50 px-2 py-1 font-mono text-[10px] font-black text-[#12335f]">{String(srNo).padStart(2, '0')}</span>
-            {kind === 'users' && onToggleStatus ? (
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => onToggleStatus(record)}
-                  className={cn(
-                    "relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                    record.accountStatus === 'ACTIVE' ? "bg-emerald-500" : "bg-slate-300"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow transition duration-200 ease-in-out",
-                      record.accountStatus === 'ACTIVE' ? "translate-x-3" : "translate-x-0"
-                    )}
-                  />
-                </button>
-                <span className={cn(
-                  "text-[9px] font-black uppercase tracking-wider",
-                  record.accountStatus === 'ACTIVE' ? "text-emerald-700" : "text-slate-500"
-                )}>
-                  {record.accountStatus === 'ACTIVE' ? "Active" : "Inactive"}
-                </span>
-              </div>
-            ) : (
-              <span className={`rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase ${severityClass(statusOf(kind, record))}`}>{label(statusOf(kind, record))}</span>
-            )}
+            <span className={`rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase ${severityClass(statusOf(kind, record))}`}>{label(statusOf(kind, record))}</span>
           </div>
           <h3 className="mt-3 line-clamp-2 text-sm font-black text-slate-900 text-wrap-anywhere">{rowTitle(kind, record)}</h3>
           <p className="mt-1 line-clamp-2 text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p>
@@ -969,10 +963,104 @@ const AdminRecordCard = memo(function AdminRecordCard({
           <span className="text-[9px] font-bold text-slate-400">{formatDateTime(record.createdAt || record.updatedAt)}</span>
           <div className="flex items-center gap-1.5">
             <Button variant="outline" onClick={onView} className="h-8 rounded-lg text-[10px] font-black px-2.5"><Eye className="mr-1 h-3.5 w-3.5" />View</Button>
-            {kind === 'users' && onEdit && onDelete && (
+
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
+const AdminUserCard = memo(function AdminUserCard({
+  record,
+  onView,
+  onToggleStatus,
+  onEdit,
+  onDelete,
+  currentUserId
+}: {
+  record: RecordMap;
+  onView: () => void;
+  onToggleStatus?: (record: RecordMap) => void;
+  onEdit?: (record: RecordMap) => void;
+  onDelete?: (record: RecordMap) => void;
+  currentUserId?: number | null;
+}) {
+  return (
+    <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow flex flex-col h-full overflow-hidden">
+      <CardContent className="p-0 flex flex-col flex-1">
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-4 py-3">
+          <EntityIdLink label={`USR-${record.id}`} id={record.id} size="sm" onClick={onView} />
+          {onToggleStatus && (
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "text-[9px] font-black uppercase tracking-wider",
+                record.accountStatus === 'ACTIVE' ? "text-emerald-700" : "text-slate-500"
+              )}>
+                {record.accountStatus === 'ACTIVE' ? "Active" : "Inactive"}
+              </span>
+              <button
+                type="button"
+                onClick={() => onToggleStatus(record)}
+                className={cn(
+                  "relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                  record.accountStatus === 'ACTIVE' ? "bg-emerald-500" : "bg-slate-300"
+                )}
+              >
+                <span
+                  className={cn(
+                    "pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow transition duration-200 ease-in-out",
+                    record.accountStatus === 'ACTIVE' ? "translate-x-3" : "translate-x-0"
+                  )}
+                />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 flex-1 flex flex-col space-y-4">
+          <div>
+            <h3 className="text-sm font-black text-slate-900 truncate">{record.name || 'Unnamed User'}</h3>
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-700 border border-blue-100">
+                {record.role || 'User'}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-2 text-xs text-slate-600 font-medium">
+            <div className="flex items-center gap-2.5 truncate">
+              <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span className="truncate">{record.email || '—'}</span>
+            </div>
+            {(record.mobile || record.phone) && (
+              <div className="flex items-center gap-2.5 truncate">
+                <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span className="truncate">{record.mobile || record.phone}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2 pt-4 border-t border-slate-100 mt-auto">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Registration</span>
+              <span className="text-right text-[10px] font-bold text-slate-700">{label(record.registrationStatus || '—')}</span>
+            </div>
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Onboarding</span>
+              <span className="text-right text-[10px] font-bold text-slate-700">{label(record.onboardingStatus || '—')}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-100 bg-slate-50/30 px-4 py-3 flex items-center justify-between gap-2">
+          <span className="text-[9px] font-bold text-slate-400">{formatDateTime(record.createdAt || record.updatedAt)}</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button variant="outline" onClick={onView} className="h-7 rounded-lg px-2 text-[10px] font-black"><Eye className="h-3.5 w-3.5 mr-1" />View</Button>
+            {onEdit && onDelete && (
               <>
-                <Button variant="outline" onClick={() => onEdit(record)} className="h-8 rounded-lg text-[10px] font-black px-2 text-blue-600 hover:text-blue-700 border-blue-100 hover:bg-blue-50/50"><Edit3 className="h-3.5 w-3.5" /></Button>
-                <Button variant="outline" onClick={() => onDelete(record)} className="h-8 rounded-lg text-[10px] font-black px-2 text-rose-600 hover:text-rose-700 border-rose-100 hover:bg-rose-50/50" disabled={Number(record.id) === Number(currentUserId)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                <Button variant="outline" onClick={() => onEdit(record)} className="h-7 w-7 rounded-lg p-0 text-blue-600 hover:text-blue-700 border-blue-100 hover:bg-blue-50/50"><Edit3 className="h-3.5 w-3.5" /></Button>
+                <Button variant="outline" onClick={() => onDelete(record)} className="h-7 w-7 rounded-lg p-0 text-rose-600 hover:text-rose-700 border-rose-100 hover:bg-rose-50/50" disabled={Number(record.id) === Number(currentUserId)}><Trash2 className="h-3.5 w-3.5" /></Button>
               </>
             )}
           </div>

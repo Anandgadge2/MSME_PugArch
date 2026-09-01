@@ -452,6 +452,8 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   const [isPageMounted, setIsPageMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const isEffectivelyCollapsed = isSidebarCollapsed && !isSidebarHovered;
 
   const isFetchingQueries = useIsFetching();
   const [safetyTimeoutPassed, setSafetyTimeoutPassed] = useState(false);
@@ -1000,18 +1002,19 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
             onClose={() => setIsSidebarOpen(false)}
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={toggleSidebarCollapse}
+            onHoverChange={setIsSidebarHovered}
           />
         )}
 
         <div className={cn(
           "flex-1 flex flex-col min-w-0 h-full min-h-0 overflow-hidden transition-all duration-300",
-          showDashboardLayout && (isSidebarCollapsed ? "lg:pl-20" : "lg:pl-64")
+          showDashboardLayout && (isEffectivelyCollapsed ? "lg:pl-20" : "lg:pl-64")
         )}>
           {showDashboardLayout ? (
             <Header
               onMenuClick={() => setIsSidebarOpen(true)}
               onSidebarToggle={toggleSidebarCollapse}
-              isSidebarCollapsed={isSidebarCollapsed}
+              isSidebarCollapsed={isEffectivelyCollapsed}
             />
           ) : (
             !isAuthOrRegisterRoute && <MarketplaceHeader user={user} />
