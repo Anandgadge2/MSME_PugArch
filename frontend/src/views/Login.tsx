@@ -133,12 +133,12 @@ export default function Login() {
           {/* Logo — large and prominent */}
           <div className="relative group">
             <div className="absolute -inset-6 rounded-full bg-gradient-to-tr from-[#c8a45c]/20 to-white/10 blur-3xl opacity-80 group-hover:opacity-100 transition-opacity duration-700" />
-            <div className="relative w-80 h-80 xl:w-96 xl:h-96 bg-white rounded-[2.5rem] shadow-[0_32px_80px_-16px_rgba(0,0,0,0.5)] flex items-center justify-center p-4 xl:p-6 border-2 border-white/30 overflow-hidden transition-all duration-500 group-hover:scale-[1.02] group-hover:shadow-[0_40px_100px_-16px_rgba(0,0,0,0.6)]">
+            <div className="relative w-80 h-80 xl:w-96 xl:h-96 bg-white rounded-[2.5rem] shadow-[0_32px_80px_-16px_rgba(0,0,0,0.5)] flex items-center justify-center p-1 xl:p-1 border-2 border-white/30 overflow-hidden transition-all duration-500 group-hover:scale-[1.01] group-hover:shadow-[0_40px_100px_-16px_rgba(0,0,0,0.6)]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/logoo.png"
-                alt="SMiLE - Synergy for MSME and Industry Linkage Ecosystem"
-                className="w-full h-full object-contain drop-shadow-md transition-transform duration-500 group-hover:scale-[1.04]"
+                alt="JSG SMiLE - Synergy for MSME and Industry Linkage Ecosystem"
+                className="w-full h-full object-contain drop-shadow-md transition-transform duration-500 "
               />
             </div>
           </div>
