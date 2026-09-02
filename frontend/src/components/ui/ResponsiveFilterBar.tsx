@@ -84,25 +84,50 @@ export function ResponsiveFilterBar({
         </div>
       )}
 
-      {/* Desktop / Tablet Layout: Unchanged, standard inline row */}
-      <div className="hidden sm:flex sm:items-center sm:flex-nowrap gap-2 sm:gap-2.5 w-full min-w-0 overflow-x-auto scrollbar-none">
-        <div className="w-52 md:w-60 lg:w-64 xl:w-72 shrink-0">
-          {searchInput}
+      {/* Desktop / Tablet Layout */}
+      {!singleRowDesktop ? (
+        <div className="hidden sm:flex sm:flex-col gap-2.5 w-full min-w-0">
+          {/* Top Row: [ Search Bar (flex-1) ] [ View Mode Toggle / End Content (shrink-0) ] */}
+          <div className="flex items-center justify-between gap-3 w-full min-w-0">
+            <div className="flex-1 min-w-0 max-w-3xl">
+              {searchInput}
+            </div>
+            {(primaryViewToggle || endContent) && (
+              <div className="flex items-center gap-2 shrink-0 ml-auto">
+                {endContent}
+                {primaryViewToggle}
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Row: Filter Ribbon */}
+          {filters && (
+            <div className="flex items-center flex-wrap gap-2 sm:gap-2.5 w-full min-w-0 pt-2.5 border-t border-slate-100/90">
+              {filters}
+            </div>
+          )}
         </div>
-
-        {filters && (
-          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1 flex-wrap">
-            {filters}
+      ) : (
+        /* Desktop / Tablet Single-Row Layout (when all filters fit on one line) */
+        <div className="hidden sm:flex sm:items-center sm:flex-nowrap gap-2 sm:gap-2.5 w-full min-w-0 overflow-x-auto scrollbar-none">
+          <div className="w-52 md:w-60 lg:w-64 xl:w-72 shrink-0">
+            {searchInput}
           </div>
-        )}
 
-        {(primaryViewToggle || endContent) && (
-          <div className="ml-auto flex items-center gap-2 shrink-0">
-            {endContent}
-            {primaryViewToggle}
-          </div>
-        )}
-      </div>
+          {filters && (
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1 flex-wrap">
+              {filters}
+            </div>
+          )}
+
+          {(primaryViewToggle || endContent) && (
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              {endContent}
+              {primaryViewToggle}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

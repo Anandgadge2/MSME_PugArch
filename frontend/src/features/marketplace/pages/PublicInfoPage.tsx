@@ -222,7 +222,7 @@ const sitemapGroups = [
       ['Seller Registration', '/seller/register'],
       ['Seller Opportunities', '/seller/opportunities'],
       ['Catalogue', '/seller/catalogue'],
-      ['Seller RFQ', '/seller/rfq'],
+      ['Seller RFQ', '/seller/opportunities/rfqs'],
       ['Orders', '/seller/orders'],
       ['Invoices', '/seller/invoices'],
     ],

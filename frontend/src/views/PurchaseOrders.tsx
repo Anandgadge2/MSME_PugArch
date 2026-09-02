@@ -113,35 +113,50 @@ const OrderActionsMenu = ({
 }: any) => {
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<any>({ visibility: 'hidden', position: 'fixed', top: 0, left: 0, zIndex: 99999 });
 
-  useEffect(() => {
+  const calculateStyle = (): React.CSSProperties | null => {
+    if (typeof document === 'undefined') return null;
     const btn = document.getElementById(buttonId);
-    const menu = menuRef.current;
-    if (!btn || !menu) return;
+    if (!btn) return null;
 
     const btnRect = btn.getBoundingClientRect();
-    const menuRect = menu.getBoundingClientRect();
+    const menuWidth = 176; // w-44 = 11rem = 176px
+    const spaceBelow = window.innerHeight - btnRect.bottom;
+    const shouldOpenUp = spaceBelow < 220;
 
-    let top = btnRect.bottom + 6;
-    let left = btnRect.right - menuRect.width;
+    let left = btnRect.right - menuWidth;
+    if (left < 6) left = 6;
+    if (left + menuWidth > window.innerWidth - 6) left = window.innerWidth - menuWidth - 6;
 
-    if (top + menuRect.height > window.innerHeight) {
-      top = btnRect.top - menuRect.height - 6;
-    }
-    if (top < 0) top = 6;
-    if (left < 0) left = 6;
-
-    setStyle({
-      position: 'fixed',
-      top: `${top}px`,
+    return {
+      position: 'fixed' as const,
+      top: shouldOpenUp ? undefined : `${btnRect.bottom + 6}px`,
+      bottom: shouldOpenUp ? `${window.innerHeight - btnRect.top + 6}px` : undefined,
       left: `${left}px`,
       zIndex: 99999,
-      visibility: 'visible'
-    });
+      transformOrigin: shouldOpenUp ? 'bottom right' : 'top right'
+    };
+  };
+
+  const [style, setStyle] = useState<React.CSSProperties | null>(calculateStyle);
+
+  useEffect(() => {
+    const updatePosition = () => {
+      const newStyle = calculateStyle();
+      if (newStyle) setStyle(newStyle);
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
   }, [buttonId]);
 
-  if (typeof document === 'undefined') return null;
+  if (typeof document === 'undefined' || !style) return null;
 
   return createPortal(
     <div 
@@ -802,9 +817,7 @@ export default function PurchaseOrders() {
       {/* Transparent Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
-          {/* <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">Procurement Fulfilment</span> */}
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Purchase Orders</h1>
-          {/* <p className="text-xs font-semibold text-slate-500 mt-1">Live PO register from backend procurement workflows.</p> */}
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">Purchase Orders</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={refreshPurchaseOrders} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">

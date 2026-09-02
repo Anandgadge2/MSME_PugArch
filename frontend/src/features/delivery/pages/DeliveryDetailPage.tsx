@@ -11,21 +11,35 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowRight,
+  Building2,
   Calendar,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   ClipboardList,
   Clock,
+  Copy,
+  CreditCard,
   DollarSign,
+  ExternalLink,
   FileText,
   Key,
+  Layers,
+  MapPin,
   Package,
+  Phone,
   RefreshCw,
+  Share2,
+  Shield,
   ShieldAlert,
+  ShieldCheck,
+  Sparkles,
   Star,
   Truck,
   Upload,
+  User,
   Wallet,
   X
 } from 'lucide-react';
@@ -40,7 +54,7 @@ import { cn } from '../../../lib/utils';
 import { runWithToast, notify } from '../../../lib/toast';
 import { DeliveryStatusBadge } from '../components/DeliveryStatusBadge';
 import { DeliveryTimeline } from '../components/DeliveryTimeline';
-import { DELIVERY_STATUS_LABELS } from '../status';
+import { DELIVERY_STATUS_LABELS, isLiveStatus, labelFor } from '../status';
 import { RatingComposer } from '../../ratings/components/RatingComposer';
 import { useMyRatingForPO } from '../../ratings/hooks';
 import { Transaction2FAModal } from '../../../components/common/Transaction2FAModal';
@@ -59,8 +73,8 @@ import {
   useRequestDpExtension,
   useRespondDpExtension,
   useResolveDispute,
-  useSendDeliveryOtp,
-  useVerifyDeliveryOtp,
+  // useSendDeliveryOtp,
+  // useVerifyDeliveryOtp,
   useVerifyInvoice
 } from '../hooks';
 import { uploadDeliveryFile } from '../upload';
@@ -72,10 +86,10 @@ import type {
 
 const ALL_STATUSES = Object.keys(DELIVERY_STATUS_LABELS) as DeliveryStatus[];
 
-const fieldLabel = 'text-[10px] font-black uppercase tracking-widest text-slate-500';
-const sectionHeader = 'text-[11px] font-black uppercase tracking-widest text-[#0f766e]';
-const inputBase = 'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0f766e]/25';
-const textareaBase = `${inputBase} h-24 py-2`;
+const fieldLabel = 'text-[10px] font-black uppercase tracking-wider text-slate-400';
+const sectionHeader = 'text-xs font-black uppercase tracking-wider text-[#0f766e]';
+const inputBase = 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0f766e]/25 transition-all';
+const textareaBase = `${inputBase} h-24 py-2.5`;
 
 const MANUAL_TRACKING_FLOW: DeliveryStatus[] = [
   'READY_FOR_PICKUP',
@@ -100,8 +114,16 @@ const latestManualUpdateFor = (delivery: DeliveryDetailDto) => {
 };
 
 /**
- * Collapsible section wrapper used across the delivery detail page. Renders a
- * clickable header (with optional icon + meta) that expands/collapses the body.
+ * Copy to clipboard helper with sonner toast feedback
+ */
+const copyToClipboard = (text: string, label: string) => {
+  if (!text) return;
+  navigator.clipboard.writeText(text);
+  notify.success(`${label} copied to clipboard!`);
+};
+
+/**
+ * Collapsible section wrapper with sleek visual design
  */
 function CollapsibleSection({
   title,
@@ -120,15 +142,19 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <Card className={cn('overflow-hidden rounded-2xl border-slate-200/80 bg-white/92 shadow-sm', className)}>
+    <Card className={cn('overflow-hidden rounded-2xl border-slate-200/80 bg-white/95 shadow-xs transition-shadow duration-300 hover:shadow-sm', className)}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2.5 sm:gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+        className="flex w-full items-center justify-between gap-2.5 sm:gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50/80 focus:outline-hidden"
       >
-        <span className="flex items-center gap-2">
-          {Icon && <Icon className="h-4 w-4 text-[#0f766e]" />}
+        <span className="flex items-center gap-2.5">
+          {Icon && (
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0f766e]/10 text-[#0f766e]">
+              <Icon className="h-4 w-4" />
+            </span>
+          )}
           <span className={sectionHeader}>{title}</span>
         </span>
         <span className="flex items-center gap-2">
@@ -138,7 +164,7 @@ function CollapsibleSection({
           />
         </span>
       </button>
-      {open && <div className="border-t border-slate-100 px-4 py-4">{children}</div>}
+      {open && <div className="border-t border-slate-100/90 px-4 py-4 sm:px-5 sm:py-5">{children}</div>}
     </Card>
   );
 }
@@ -192,63 +218,213 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   const nextManualStatus = nextManualStatusFor(delivery.status);
   const isSellerTrackingView = accessRole === 'seller';
 
+  const sellerName = po?.seller?.name || 'Seller';
+  const buyerName = po?.buyer?.name || 'Buyer';
+  const poNumber = po?.poNumber || `PO-${delivery.purchaseOrderId}`;
+  const trackingNo = delivery.trackingNumber || `DLV-${delivery.id}`;
+
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-            <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#12335f]/5 text-[#12335f] ring-1 ring-slate-200/50 sm:flex">
-              <Package className="h-5 w-5" />
+      {/* ─── Premium Header Card ─── */}
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-r from-white via-slate-50/50 to-teal-50/30 p-5 shadow-xs sm:p-6">
+        <div className="absolute top-0 right-0 h-32 w-32 translate-x-8 -translate-y-8 rounded-full bg-[#0f766e]/5 blur-2xl pointer-events-none" />
+        
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex min-w-0 items-start gap-3.5 sm:gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#12335f] to-[#07172e] text-white shadow-sm ring-4 ring-[#12335f]/10">
+              <Package className="h-6 w-6" />
             </span>
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 mb-1 sm:mb-2">
-                <span className="rounded-md bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-[#12335f] ring-1 ring-slate-200/60">
-                  Delivery Tracking
-                </span>
-                <DeliveryStatusBadge status={delivery.status} />
+              {/* Top Reference Bar */}
+              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                <DeliveryStatusBadge status={delivery.status} size="sm" />
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(poNumber, 'PO Number')}
+                  className="group inline-flex items-center gap-1.5 rounded-full bg-slate-100 hover:bg-slate-200/80 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-700 transition-colors"
+                  title="Click to copy Purchase Order number"
+                >
+                  <span className="text-slate-400 font-semibold">PO:</span>
+                  <span>{poNumber}</span>
+                  <Copy className="h-2.5 w-2.5 text-slate-400 group-hover:text-slate-700" />
+                </button>
+                <SlaBadge slaStatus={delivery.slaStatus} />
               </div>
-              <h1 className="text-2xl font-black tracking-tight text-slate-950 break-words sm:text-3xl">
+
+              {/* Order Title */}
+              <h1 className="text-xl font-black tracking-tight text-slate-950 break-words sm:text-2xl lg:text-3xl">
                 {po?.title || po?.poNumber || `Delivery #${delivery.id}`}
               </h1>
-              <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">
-                {po?.poNumber || `PO-${delivery.purchaseOrderId}`} · {po?.seller?.name || 'Seller'} → {po?.buyer?.name || 'Buyer'}
-              </p>
+
+              {/* Counterparty Route */}
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 shadow-2xs border border-slate-200/80">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Supplier:</span>
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 text-[9px] font-bold text-slate-700">
+                    {sellerName.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="font-bold text-slate-800 truncate max-w-[150px]">{sellerName}</span>
+                </span>
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 shadow-2xs border border-slate-200/80">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#0f766e]">Consignee:</span>
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-teal-100 text-[9px] font-bold text-[#0f766e]">
+                    {buyerName.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="font-bold text-slate-800 truncate max-w-[150px]">{buyerName}</span>
+                </span>
+              </div>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 mt-2 md:mt-0 md:self-end">
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2 md:self-start">
+           
             <Button
               variant="outline"
               onClick={onClose || (() => window.history.back())}
-              className="h-10 rounded-lg border-slate-200 bg-white px-4 text-xs font-black uppercase text-[#12335f] hover:bg-slate-50"
+              className="h-9.5 rounded-xl border-slate-200 bg-white px-3.5 text-xs font-black uppercase text-slate-700 hover:bg-slate-50 shadow-2xs"
             >
               Back
             </Button>
             <Button
               variant="outline"
               onClick={() => detailQuery.refetch()}
-              className="h-10 rounded-lg border-[#12335f] bg-[#12335f] px-4 text-xs font-black uppercase text-white hover:bg-[#0b1f3b]"
+              className="h-9.5 rounded-xl border-[#0f766e] bg-[#0f766e] px-4 text-xs font-black uppercase text-white hover:bg-[#0d665f] shadow-2xs"
             >
-              <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} /> Refresh
+              <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', isFetching && 'animate-spin')} /> Refresh
             </Button>
           </div>
         </div>
       </div>
-      <CollapsibleSection title="Delivery Overview" icon={Package} defaultOpen>
-        <div className="grid grid-cols-1 gap-2.5 sm:gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Info label="Status">
-            <DeliveryStatusBadge status={delivery.status} />
-          </Info>
-          <Info label="SLA Health">
-            <span className="font-bold">{delivery.slaStatus || 'ON_TIME'}</span>
-          </Info>
-          <Info label="Tracking #" value={delivery.trackingNumber || `DLV-${delivery.id}`} />
-          <Info label="Carrier" value={delivery.carrierName || delivery.logisticsPartnerName || 'Pending'} />
-          <Info label="Expected" value={formatDate(delivery.expectedDelivery || po?.expectedDelivery)} />
-          <Info label="Next Update" value={nextManualStatus ? DELIVERY_STATUS_LABELS[nextManualStatus] : 'Complete'} />
-          <Info label="Current Location" value={delivery.currentLocation || 'Pending'} />
-          <Info label="Address" value={po?.deliveryAddress || 'Address not set'} />
-          <Info label="PO Value" value={formatCurrency(po?.amount || po?.totalValue)} />
-          <Info label="Settlement" value={delivery.settlement?.status || 'PENDING'} />
+
+      {/* ─── Delivery Overview Command Center ─── */}
+      <CollapsibleSection title="Delivery Command Center" icon={Package} defaultOpen>
+        <div className="space-y-4">
+          {/* Top Status & SLA Banner */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-100 bg-gradient-to-r from-teal-50/60 via-emerald-50/30 to-sky-50/40 p-3.5 sm:p-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#0f766e] shadow-xs border border-teal-100">
+                <Truck className="h-5 w-5 dt-bounce-soft" />
+              </span>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Current Movement Status</p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                  <span className="text-base font-black text-slate-950 sm:text-lg">
+                    {DELIVERY_STATUS_LABELS[delivery.status] || delivery.status}
+                  </span>
+                  <DeliveryStatusBadge status={delivery.status} size="sm" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-xl border border-slate-200/80 bg-white px-3.5 py-1.5 shadow-2xs">
+                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Estimated Delivery Date</p>
+                <p className="text-xs font-black text-slate-900 flex items-center gap-1.5 mt-0.5">
+                  <Calendar className="h-3.5 w-3.5 text-[#0f766e]" />
+                  {formatDate(delivery.expectedDelivery || po?.expectedDelivery)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 4 Rich Metric Tiles */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {/* Tile 1: Logistics & Carrier */}
+            <div className="group rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Logistics & Carrier</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-teal-50 text-[#0f766e]">
+                  <Truck className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <p className="mt-1 text-xs font-black text-slate-900 truncate">
+                {delivery.carrierName || delivery.logisticsPartnerName || 'Assigned Courier'}
+              </p>
+              <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-50 px-2.5 py-1.5 border border-slate-100">
+                <div className="min-w-0 pr-1">
+                  <span className="block text-[8px] font-bold uppercase text-slate-400">AWB Tracking No</span>
+                  <span className="font-mono text-[11px] font-bold text-slate-700 truncate block">{trackingNo}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(trackingNo, 'Tracking Number')}
+                  className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-[#0f766e] transition-colors"
+                  aria-label="Copy Tracking Number"
+                  title="Copy Tracking Number"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <p className="mt-1.5 text-[10px] font-semibold text-slate-500 flex items-center gap-1 truncate">
+                <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                Location: {delivery.currentLocation || 'In Transit'}
+              </p>
+            </div>
+
+            {/* Tile 2: Destination & Address */}
+            <div className="group rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Delivery Destination</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
+                  <MapPin className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <p className="mt-1 text-xs font-black text-slate-900 truncate">
+                {buyerName}
+              </p>
+              <p className="mt-1.5 text-[11px] font-semibold text-slate-600 line-clamp-2 leading-relaxed" title={po?.deliveryAddress || 'Address not specified'}>
+                {po?.deliveryAddress || 'Address not specified'}
+              </p>
+            </div>
+
+            {/* Tile 3: Financial & Settlement */}
+            <div className="group rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Order Value & Escrow</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                  <Wallet className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <p className="mt-1 text-base font-black text-slate-950">
+                {formatCurrency(po?.amount || po?.totalValue)}
+              </p>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-500">Escrow State:</span>
+                <span className={cn(
+                  'rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
+                  delivery.settlement?.status === 'RELEASED' ? 'bg-emerald-100 text-emerald-800' :
+                  delivery.settlement?.status === 'APPROVED' ? 'bg-teal-100 text-[#0f766e]' :
+                  'bg-slate-100 text-slate-600'
+                )}>
+                  {delivery.settlement?.status || 'FUNDS SECURED'}
+                </span>
+              </div>
+            </div>
+
+            {/* Tile 4: Next Milestone */}
+            <div className="group rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Next Milestone</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                  <Layers className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <p className="mt-1 text-xs font-black text-slate-900 truncate">
+                {nextManualStatus ? DELIVERY_STATUS_LABELS[nextManualStatus] : 'Fully Completed'}
+              </p>
+              <div className="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-500">
+                <span>SLA Health:</span>
+                <span className="font-extrabold text-[#0f766e]">{delivery.slaStatus || 'ON_TIME'}</span>
+              </div>
+              {delivery.packageWeightKg && (
+                <p className="mt-1 text-[9px] font-bold text-slate-400">
+                  Pkg: {delivery.packageWeightKg} kg • {delivery.packageCount || 1} unit(s)
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </CollapsibleSection>
 
@@ -271,10 +447,19 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
         />
       )}
 
-      <div className={cn('grid grid-cols-1 gap-5', isSellerTrackingView ? 'xl:grid-cols-[minmax(0,1fr)_360px]' : 'xl:grid-cols-[minmax(0,1fr)_380px]')}>
+      {/* ─── Main Content Grid & Right Action Rail ─── */}
+      <div className={cn('grid grid-cols-1 gap-5', isSellerTrackingView ? 'xl:grid-cols-[minmax(0,1fr)_380px]' : 'xl:grid-cols-[minmax(0,1fr)_390px]')}>
         <div className="space-y-5">
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <SectionHeading icon={Truck} title="Tracking Timeline" meta={<span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Read Only</span>} />
+          <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-5">
+            <SectionHeading
+              icon={Truck}
+              title="Live Tracking & Milestones"
+              meta={
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                  Real-Time Updates
+                </span>
+              }
+            />
             <DeliveryTimeline status={delivery.status} events={delivery.events} statusLogs={delivery.statusLogs} />
           </section>
 
@@ -284,17 +469,24 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
                 <DpExtensionSection delivery={delivery} accessRole={accessRole} />
                 <LiquidatedDamagesCard deliveryId={delivery.id} />
               </div>
-
-              {/* <DocumentsPanel docs={docs} deliveryId={delivery.id} accessRole={accessRole} /> */}
             </>
           )}
+
+          <DocumentsPanel docs={docs} deliveryId={delivery.id} accessRole={accessRole} />
         </div>
 
+        {/* ─── Right Action Rail ─── */}
         <aside className="space-y-5 xl:sticky xl:top-4 xl:self-start">
           {accessRole === 'seller' && (
             <ManualTrackingActions delivery={delivery} latestManual={latestManual} />
           )}
+          {accessRole === 'seller' && (
+            <DpExtensionSection delivery={delivery} accessRole={accessRole} />
+          )}
+          
+          {/* Handover OTP Verification — Temporarily commented out as per request */}
           {/* <EmailOtpVerificationCard delivery={delivery} accessRole={accessRole} /> */}
+
           {(accessRole === 'buyer' || accessRole === 'consignee') && (
             <BuyerActions delivery={delivery} />
           )}
@@ -311,46 +503,6 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   );
 }
 
-function Info({ label, value, children }: { label: string; value?: string | null; children?: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-      <p className={fieldLabel}>{label}</p>
-      <div className="mt-1 break-words text-xs font-black text-slate-900">{children ?? value ?? '—'}</div>
-    </div>
-  );
-}
-
-function ShipmentMetric({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div className="bg-white px-5 py-4">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-      <p className="mt-1 break-words text-sm font-black text-slate-950">{value || '-'}</p>
-    </div>
-  );
-}
-
-function ManualFact({
-  icon: Icon,
-  label,
-  value
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value?: string | null;
-}) {
-  return (
-    <div className="flex items-start gap-3 bg-white p-3">
-      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-[#0f766e]">
-        <Icon className="h-4 w-4" />
-      </span>
-      <div className="min-w-0">
-        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-        <p className="mt-1 break-words text-xs font-black text-slate-950">{value || '-'}</p>
-      </div>
-    </div>
-  );
-}
-
 function SectionHeading({
   icon: Icon,
   title,
@@ -362,11 +514,11 @@ function SectionHeading({
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0f766e]/10 text-[#0f766e]">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0f766e]/10 text-[#0f766e] ring-1 ring-[#0f766e]/20">
           <Icon className="h-4 w-4" />
         </span>
-        <h2 className="text-sm font-black uppercase tracking-widest text-slate-950">{title}</h2>
+        <h2 className="text-sm font-black uppercase tracking-wider text-slate-950">{title}</h2>
       </div>
       {meta}
     </div>
@@ -385,40 +537,40 @@ function DocumentsPanel({
   const records = docs || [];
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+    <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-5">
       <SectionHeading
         icon={FileText}
-        title="Documents"
-        meta={<span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{records.length} files</span>}
+        title="Delivery Documents"
+        meta={<span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-500">{records.length} files attached</span>}
       />
       <div className="space-y-3">
         {records.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs font-semibold text-slate-500">
-            No documents uploaded yet.
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-center text-xs font-semibold text-slate-500">
+            No shipping or tax documents uploaded yet.
           </div>
         ) : (
           <div className="grid gap-2">
             {records.map(doc => (
-              <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-xs">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#0f766e] ring-1 ring-slate-200">
+              <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3.5 py-3 text-xs transition-colors hover:bg-slate-50">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#0f766e] ring-1 ring-slate-200 shadow-2xs">
                     <FileText className="h-4 w-4" />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate font-black uppercase tracking-wide text-slate-800">{doc.documentType.replace(/_/g, ' ')}</p>
+                    <p className="truncate font-black uppercase tracking-tight text-slate-900">{doc.documentType.replace(/_/g, ' ')}</p>
                     <p className="truncate text-[10px] font-semibold text-slate-500">{doc.fileAsset?.originalName || `File #${doc.fileAsset?.id}`}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{doc.uploaderRole}</span>
+                  <span className="rounded-md bg-slate-200/60 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600">{doc.uploaderRole}</span>
                   {doc.fileAsset?.id && (
                     <a
                       href={`/api/files/${doc.fileAsset.id}/view`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-[#0f766e] hover:bg-slate-50"
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#0f766e] hover:bg-slate-50 shadow-2xs"
                     >
-                      Open
+                      <ExternalLink className="h-3 w-3" /> View
                     </a>
                   )}
                 </div>
@@ -461,25 +613,25 @@ function RatingCTACard({
 
   return (
     <>
-      <Card className="border-amber-200 bg-amber-50/40">
-        <CardContent className="flex flex-col gap-2.5 sm:gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2.5 sm:gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-              <Star className="h-4 w-4 fill-current" />
+      <Card className="rounded-2xl border-amber-200/90 bg-gradient-to-r from-amber-50/90 via-amber-50/50 to-orange-50/40 shadow-xs">
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 ring-4 ring-amber-200/50 shadow-xs">
+              <Star className="h-5 w-5 fill-current" />
             </div>
             <div>
-              <p className="text-xs font-black uppercase tracking-widest text-amber-700">
-                {hasRated ? 'You rated this transaction' : 'Rate this transaction'}
+              <p className="text-xs font-black uppercase tracking-wider text-amber-900">
+                {hasRated ? 'Transaction Review Recorded' : 'Rate Your Delivery Experience'}
               </p>
-              <p className="mt-1 text-xs font-semibold text-slate-700">
+              <p className="mt-0.5 text-xs font-semibold text-slate-700">
                 {hasRated
-                  ? `Your rating: ${existing?.rating}/5 - feel free to update it.`
-                  : `Help others by sharing your experience with ${counterpartyName || 'the counterparty'}.`}
+                  ? `Your rating: ${existing?.rating}/5 ⭐ — Click to update feedback.`
+                  : `Share your fulfillment feedback for ${counterpartyName || 'the counterparty'}.`}
               </p>
             </div>
           </div>
-          <Button onClick={() => setOpen(true)} className="bg-amber-600 text-white hover:bg-amber-700">
-            {hasRated ? 'Edit rating' : 'Rate now'}
+          <Button onClick={() => setOpen(true)} className="h-9.5 rounded-xl bg-amber-600 text-xs font-black uppercase text-white hover:bg-amber-700 shadow-xs">
+            {hasRated ? 'Edit Rating' : 'Rate Now'}
           </Button>
         </CardContent>
       </Card>
@@ -514,75 +666,115 @@ function ManualTrackingActions({
     runWithToast(
       () => updateMut.mutateAsync({ status: nextStatus }),
       {
-        loading: 'Updating status...',
-        success: `Status updated to ${DELIVERY_STATUS_LABELS[nextStatus]}`,
+        loading: `Advancing status to ${DELIVERY_STATUS_LABELS[nextStatus]}...`,
+        success: `Status advanced to ${DELIVERY_STATUS_LABELS[nextStatus]}!`,
         error: (err: any) => err?.message || 'Status update failed'
       }
     );
   };
 
+  const isCompleted = delivery.status === 'DELIVERED' || delivery.status === 'CLOSED';
+
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+    <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-5">
       <SectionHeading
         icon={Truck}
-        title="Manual Update"
-        meta={<span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seller Controlled</span>}
+        title="Shipment Controls"
+        meta={<span className="rounded-full bg-teal-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#0f766e]">Seller Actions</span>}
       />
       <div className="space-y-4">
-        <div className="overflow-hidden rounded-xl border border-sky-100 bg-sky-100">
-          <div className="bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-4 text-slate-950">
-            <p className="text-[10px] font-black uppercase tracking-widest text-[#0f766e]">Current Movement</p>
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-lg font-black leading-tight">{DELIVERY_STATUS_LABELS[delivery.status] || delivery.status}</h3>
-              <DeliveryStatusBadge status={delivery.status} />
-            </div>
+        {/* Current State Showcase */}
+        <div className="overflow-hidden rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50/70 via-white to-emerald-50/40 p-4 shadow-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-[#0f766e]">Current Milestone</span>
+            <DeliveryStatusBadge status={delivery.status} size="sm" />
           </div>
-          <div className="grid gap-px bg-slate-200">
-            <ManualFact icon={ClipboardList} label="Tracking Number" value={delivery.trackingNumber || `DLV-${delivery.id}`} />
-            <ManualFact icon={Truck} label="Carrier" value={delivery.carrierName || delivery.logisticsPartnerName || 'Pending'} />
-            <ManualFact icon={Calendar} label="Expected Delivery" value={formatDate(delivery.expectedDelivery || delivery.purchaseOrder?.expectedDelivery)} />
+          <h3 className="mt-1 text-lg font-black text-slate-950">
+            {DELIVERY_STATUS_LABELS[delivery.status] || delivery.status}
+          </h3>
+
+          <div className="mt-3 space-y-2 border-t border-teal-100/70 pt-3 text-xs">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-semibold text-slate-500">Tracking AWB:</span>
+              <span className="font-mono font-bold text-slate-900">{delivery.trackingNumber || `DLV-${delivery.id}`}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-semibold text-slate-500">Carrier:</span>
+              <span className="font-bold text-slate-900">{delivery.carrierName || delivery.logisticsPartnerName || 'Standard Delivery'}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-semibold text-slate-500">Expected Date:</span>
+              <span className="font-bold text-slate-900">{formatDate(delivery.expectedDelivery || delivery.purchaseOrder?.expectedDelivery)}</span>
+            </div>
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-3">
-          <p className={fieldLabel}>Seller's Latest Manual Update</p>
+        {/* Previous Update Log */}
+        <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+          <p className={fieldLabel}>Previous Milestone Log</p>
           {latest ? (
-            <div className="mt-2 space-y-1">
-              <DeliveryStatusBadge status={latest.newStatus} />
+            <div className="mt-1.5 space-y-1">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                <span className="text-xs font-bold text-slate-800">{DELIVERY_STATUS_LABELS[latest.newStatus]}</span>
+              </div>
               <p className="text-[10px] font-semibold text-slate-500">
-                {[latest.remarks, formatDate(latest.createdAt)].filter(Boolean).join(' - ')}
+                {[latest.remarks, formatDate(latest.createdAt)].filter(Boolean).join(' • ')}
               </p>
             </div>
           ) : (
-            <p className="mt-1 text-xs font-bold text-slate-500">No manual update yet</p>
+            <p className="mt-1 text-xs font-semibold text-slate-400">No previous milestone updates recorded.</p>
           )}
         </div>
 
-        <div className="rounded-lg border border-slate-100 bg-white px-3 py-3">
-          <p className={fieldLabel}>Next Status</p>
-          <div className="mt-2">
-            {nextStatus ? (
-              <DeliveryStatusBadge status={nextStatus} />
-            ) : (
-              <DeliveryStatusBadge status={delivery.status} />
-            )}
+        {/* Next Action Box with prominent button */}
+        <div className="space-y-2.5 rounded-xl border border-teal-200/70 bg-teal-50/30 p-3.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-[#0f766e]">
+              {isCompleted ? 'Fulfillment Complete' : 'Next Milestone Action'}
+            </span>
           </div>
-        </div>
 
-        <Button
-          className="w-full h-10 rounded-lg bg-[#0f766e] text-xs font-black uppercase text-white hover:bg-[#0d665f] disabled:bg-slate-300 disabled:text-slate-500"
-          disabled={!nextStatus || updateMut.isPending}
-          onClick={updateStatus}
-        >
-          {updateMut.isPending ? (
-            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-          ) : nextStatus ? (
-            <ChevronRight className="mr-2 h-4 w-4" />
-          ) : (
-            <CheckCircle2 className="mr-2 h-4 w-4" />
+          {!isCompleted && nextStatus ? (
+            <div className="rounded-lg bg-white p-2.5 border border-teal-100 shadow-2xs">
+              <p className="text-[10px] font-bold text-slate-500">Advancing To:</p>
+              <p className="text-xs font-black text-slate-900 flex items-center gap-1.5 mt-0.5">
+                <ArrowRight className="h-3.5 w-3.5 text-[#0f766e]" />
+                {DELIVERY_STATUS_LABELS[nextStatus]}
+              </p>
+            </div>
+          ) : null}
+
+          <Button
+            className={cn(
+              'w-full h-11 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 shadow-xs',
+              isCompleted
+                ? 'bg-emerald-600 text-white cursor-default'
+                : 'bg-[#0f766e] text-white hover:bg-[#0d665f] active:scale-98'
+            )}
+            disabled={!nextStatus || updateMut.isPending || isCompleted}
+            onClick={updateStatus}
+          >
+            {updateMut.isPending ? (
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+            ) : isCompleted ? (
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+            ) : (
+              <ChevronRight className="mr-2 h-4 w-4 stroke-[3]" />
+            )}
+            {isCompleted
+              ? 'Delivery Completed'
+              : nextStatus
+              ? `Advance To: ${DELIVERY_STATUS_LABELS[nextStatus]}`
+              : 'Status Up to Date'}
+          </Button>
+
+          {!isCompleted && nextStatus && (
+            <p className="text-[10px] text-center text-slate-500 font-medium">
+              Clicking updates the tracking timeline and notifies the buyer in real time.
+            </p>
           )}
-          Update Status
-        </Button>
+        </div>
       </div>
     </section>
   );
@@ -612,8 +804,8 @@ function BuyerActions({ delivery }: { delivery: DeliveryDetailDto }) {
           missingQuantity: missingQty ? Number(missingQty) : undefined
         }),
       {
-        loading: 'Submitting decision...',
-        success: accept ? 'Delivery accepted' : 'Delivery rejected',
+        loading: 'Submitting receipt decision...',
+        success: accept ? 'Shipment accepted successfully!' : 'Rejection recorded.',
         error: 'Failed to submit decision'
       }
     );
@@ -621,60 +813,119 @@ function BuyerActions({ delivery }: { delivery: DeliveryDetailDto }) {
   const submitReturn = () =>
     runWithToast(
       () => returnMut.mutateAsync({ type: returnType, reason: returnReason }),
-      { loading: 'Initiating return...', success: 'Return initiated', error: 'Action failed' }
+      { loading: 'Initiating return request...', success: 'Return initiated', error: 'Action failed' }
     );
 
   return (
     <CollapsibleSection title="Receipt & Acceptance" icon={CheckCircle2} defaultOpen>
       <div className="space-y-4">
         {!canAcceptStage && (
-          <p className="text-xs font-semibold text-slate-500">
-            Acceptance becomes available once the delivery is marked as delivered.
-          </p>
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-xs font-semibold text-slate-500 flex items-center gap-2">
+            <Clock className="h-4 w-4 text-slate-400 shrink-0" />
+            <span>Acceptance becomes available once the shipment is marked as delivered.</span>
+          </div>
         )}
+
         {canAcceptStage && (
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <Button variant={accept ? 'primary' : 'outline'} className="flex-1 h-10 rounded-lg text-xs font-black uppercase" onClick={() => setAccept(true)}>
-                Accept
-              </Button>
-              <Button variant={!accept ? 'primary' : 'outline'} className="flex-1 h-10 rounded-lg text-xs font-black uppercase" onClick={() => setAccept(false)}>
-                Reject
-              </Button>
+          <div className="space-y-3">
+            <p className={fieldLabel}>Verification Decision</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setAccept(true)}
+                className={cn(
+                  'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-black uppercase tracking-wider transition-all duration-200',
+                  accept
+                    ? 'border-emerald-500 bg-emerald-50/80 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                )}
+              >
+                <CheckCircle2 className={cn('h-5 w-5', accept ? 'text-emerald-600' : 'text-slate-400')} />
+                <span>Accept Delivery</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAccept(false)}
+                className={cn(
+                  'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-black uppercase tracking-wider transition-all duration-200',
+                  !accept
+                    ? 'border-rose-500 bg-rose-50/80 text-rose-800 ring-2 ring-rose-500/20 shadow-xs'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                )}
+              >
+                <AlertTriangle className={cn('h-5 w-5', !accept ? 'text-rose-600' : 'text-slate-400')} />
+                <span>Report / Reject</span>
+              </button>
             </div>
+
             {!accept && (
-              <>
-                <textarea className={textareaBase} placeholder="Rejection reason (required)" value={rejectReason} onChange={e => setRejectReason(e.target.value)} />
-                <textarea className={textareaBase} placeholder="Damage / wrong item notes (optional)" value={damageNotes} onChange={e => setDamageNotes(e.target.value)} />
-                <Input placeholder="Missing quantity" value={missingQty} onChange={e => setMissingQty(e.target.value)} />
-              </>
+              <div className="space-y-2.5 rounded-xl border border-rose-100 bg-rose-50/30 p-3 dt-fade-in-up">
+                <p className="text-[10px] font-black uppercase tracking-wider text-rose-800">Issue Details</p>
+                <textarea
+                  className={textareaBase}
+                  placeholder="State the reason for rejection (required)..."
+                  value={rejectReason}
+                  onChange={e => setRejectReason(e.target.value)}
+                />
+                <textarea
+                  className={textareaBase}
+                  placeholder="Damage / wrong item details (optional)..."
+                  value={damageNotes}
+                  onChange={e => setDamageNotes(e.target.value)}
+                />
+                <Input
+                  placeholder="Missing quantity (if applicable)"
+                  value={missingQty}
+                  onChange={e => setMissingQty(e.target.value)}
+                />
+              </div>
             )}
+
             <Button
-              className="w-full h-10 rounded-lg bg-[#0f5132] text-xs font-black uppercase text-white"
+              className={cn(
+                'w-full h-10.5 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-xs',
+                accept
+                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                  : 'bg-rose-600 hover:bg-rose-700'
+              )}
               disabled={(!accept && !rejectReason.trim()) || acceptanceMut.isPending}
               onClick={submitDecision}
             >
-              Submit Decision
+              {acceptanceMut.isPending ? (
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              ) : accept ? (
+                <Check className="mr-2 h-4 w-4 stroke-[3]" />
+              ) : (
+                <AlertTriangle className="mr-2 h-4 w-4" />
+              )}
+              {accept ? 'Confirm & Accept Delivery' : 'Submit Rejection Report'}
             </Button>
           </div>
         )}
 
         {canReturnStage && (
-          <div className="space-y-2 border-t border-slate-100 pt-3">
-            <p className={fieldLabel}>Return / Replacement</p>
+          <div className="space-y-2.5 border-t border-slate-100 pt-3">
+            <p className={fieldLabel}>Initiate Return / Replacement</p>
             <Select value={returnType} onChange={e => setReturnType(e.target.value as any)}>
-              <option value="RETURN">Return</option>
-              <option value="REPLACEMENT">Replacement</option>
-              <option value="REFUND">Refund</option>
+              <option value="RETURN">Return Goods</option>
+              <option value="REPLACEMENT">Replacement Request</option>
+              <option value="REFUND">Full Refund Request</option>
             </Select>
-            <textarea className={textareaBase} placeholder="Reason" value={returnReason} onChange={e => setReturnReason(e.target.value)} />
+            <textarea
+              className={textareaBase}
+              placeholder="State reason for return/replacement..."
+              value={returnReason}
+              onChange={e => setReturnReason(e.target.value)}
+            />
             <Button
               variant="outline"
-              className="w-full h-10 rounded-lg text-xs font-black uppercase"
+              className="w-full h-10 rounded-xl text-xs font-black uppercase tracking-wider text-slate-700 border-slate-200 hover:bg-slate-50"
               disabled={!returnReason.trim() || returnMut.isPending}
               onClick={submitReturn}
             >
-              Initiate
+              {returnMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Initiate {returnType}
             </Button>
           </div>
         )}
@@ -715,15 +966,14 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
   const { require2FA, modalProps } = useTransaction2FA();
 
   return (
-    <CollapsibleSection title="Finance / Payment" icon={Wallet} defaultOpen>
+    <CollapsibleSection title="Finance & Escrow Settlement" icon={Wallet} defaultOpen>
       <div className="space-y-4">
-
         {delivery.status === 'ACCEPTED' && (
-          <div className="space-y-2">
-            <p className={fieldLabel}>Verify invoice</p>
+          <div className="space-y-3">
+            <p className={fieldLabel}>Invoice Verification</p>
             {invoices.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold text-amber-700">
-                No invoices submitted yet. The seller must raise an invoice for this PO before payment can be released.
+              <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/70 p-3 text-xs font-semibold text-amber-800">
+                No invoices submitted yet. The seller must raise a tax invoice before payment release can be authorized.
               </div>
             ) : (
               <>
@@ -731,19 +981,20 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
                   {invoices.map(inv => (
                     <option key={inv.id} value={inv.id}>
                       {(inv.invoiceNumber || `Invoice #${inv.id}`)}
-                      {inv.amount ? ` · ${formatCurrency(inv.amount)}` : ''}
-                      {inv.invoiceStatus || inv.status ? ` · ${(inv.invoiceStatus || inv.status || '').toString().toUpperCase()}` : ''}
+                      {inv.amount ? ` • ${formatCurrency(inv.amount)}` : ''}
+                      {inv.invoiceStatus || inv.status ? ` • ${(inv.invoiceStatus || inv.status || '').toString().toUpperCase()}` : ''}
                     </option>
                   ))}
                 </Select>
+
                 {selectedInvoice && (
-                  <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-[11px] font-semibold text-slate-600 space-y-1">
-                    <Row label="Number" value={selectedInvoice.invoiceNumber || `#${selectedInvoice.id}`} />
+                  <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 text-xs space-y-1.5">
+                    <Row label="Invoice #" value={selectedInvoice.invoiceNumber || `#${selectedInvoice.id}`} />
                     {selectedInvoice.amount !== undefined && (
-                      <Row label="Amount" value={formatCurrency(selectedInvoice.amount)} />
+                      <Row label="Total Amount" value={formatCurrency(selectedInvoice.amount)} />
                     )}
                     <Row
-                      label="Status"
+                      label="Current State"
                       value={(selectedInvoice.invoiceStatus || selectedInvoice.status || 'submitted').toString().toUpperCase()}
                     />
                     {selectedInvoice.invoiceFile?.id && (
@@ -751,24 +1002,26 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
                         href={`/api/files/${selectedInvoice.invoiceFile.id}/view`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-[#0f766e] hover:underline"
+                        className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-[#0f766e] hover:underline"
                       >
-                        <FileText className="h-3 w-3" /> Preview invoice
+                        <FileText className="h-3.5 w-3.5" /> Preview PDF Document
                       </a>
                     )}
                   </div>
                 )}
+
                 <Button
-                  className="w-full h-10 rounded-lg bg-[#0f766e] text-xs font-black uppercase text-white hover:bg-[#0d665f]"
+                  className="w-full h-10 rounded-xl bg-[#0f766e] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0d665f] shadow-xs"
                   disabled={!invoiceId || verifyMut.isPending}
                   onClick={() =>
                     runWithToast(() => verifyMut.mutateAsync({ invoiceId: Number(invoiceId) }), {
                       loading: 'Verifying invoice...',
-                      success: 'Invoice verified',
+                      success: 'Invoice verified successfully!',
                       error: 'Verification failed'
                     })
                   }
                 >
+                  {verifyMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
                   Mark Invoice Verified
                 </Button>
               </>
@@ -777,19 +1030,19 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
         )}
 
         {delivery.status === 'INVOICE_VERIFIED' && (
-          <div className="space-y-2">
-            <p className={fieldLabel}>Approve / Reject Payment</p>
+          <div className="space-y-3">
+            <p className={fieldLabel}>Payment Decision</p>
             <Select value={decision.approve ? 'approve' : 'reject'} onChange={e => setDecision(s => ({ ...s, approve: e.target.value === 'approve' }))}>
-              <option value="approve">Approve</option>
-              <option value="reject">Reject</option>
+              <option value="approve">Approve Escrow Payment</option>
+              <option value="reject">Reject & Hold Payment</option>
             </Select>
-            <Input placeholder="Deduction amount" value={decision.deductionAmount} onChange={e => setDecision(s => ({ ...s, deductionAmount: e.target.value }))} />
-            <Input placeholder="Penalty amount" value={decision.penaltyAmount} onChange={e => setDecision(s => ({ ...s, penaltyAmount: e.target.value }))} />
+            <Input placeholder="Deduction amount (if any)" value={decision.deductionAmount} onChange={e => setDecision(s => ({ ...s, deductionAmount: e.target.value }))} />
+            <Input placeholder="Penalty amount (if any)" value={decision.penaltyAmount} onChange={e => setDecision(s => ({ ...s, penaltyAmount: e.target.value }))} />
             {!decision.approve && (
-              <textarea className={textareaBase} placeholder="Rejection reason" value={decision.rejectionReason} onChange={e => setDecision(s => ({ ...s, rejectionReason: e.target.value }))} />
+              <textarea className={textareaBase} placeholder="Specify rejection reason..." value={decision.rejectionReason} onChange={e => setDecision(s => ({ ...s, rejectionReason: e.target.value }))} />
             )}
             <Button
-              className="w-full h-10 rounded-lg bg-[#0f5132] text-xs font-black uppercase text-white"
+              className="w-full h-10 rounded-xl bg-[#0f766e] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0d665f] shadow-xs"
               disabled={(!decision.approve && !decision.rejectionReason.trim()) || decisionMut.isPending}
               onClick={() =>
                 runWithToast(
@@ -808,19 +1061,20 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
                 )
               }
             >
-              Submit Decision
+              {decisionMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+              Submit Payment Decision
             </Button>
           </div>
         )}
 
         {delivery.status === 'PAYMENT_APPROVED' && (
-          <div className="space-y-2">
-            <p className={fieldLabel}>Release payment</p>
-            <Input placeholder="Transaction reference" value={release.transactionReference} onChange={e => setRelease(s => ({ ...s, transactionReference: e.target.value }))} />
-            <Input placeholder="Net released amount" value={release.netReleasedAmount} onChange={e => setRelease(s => ({ ...s, netReleasedAmount: e.target.value }))} />
-            <textarea className={textareaBase} placeholder="Remarks" value={release.remarks} onChange={e => setRelease(s => ({ ...s, remarks: e.target.value }))} />
+          <div className="space-y-3">
+            <p className={fieldLabel}>Release Escrow Payment (2FA Required)</p>
+            <Input placeholder="Transaction UTR / Bank Reference" value={release.transactionReference} onChange={e => setRelease(s => ({ ...s, transactionReference: e.target.value }))} />
+            <Input placeholder="Net released amount (₹)" value={release.netReleasedAmount} onChange={e => setRelease(s => ({ ...s, netReleasedAmount: e.target.value }))} />
+            <textarea className={textareaBase} placeholder="Settlement remarks (optional)" value={release.remarks} onChange={e => setRelease(s => ({ ...s, remarks: e.target.value }))} />
             <Button
-              className="w-full h-10 rounded-lg bg-[#0f5132] text-xs font-black uppercase text-white"
+              className="w-full h-11 rounded-xl bg-gradient-to-r from-emerald-600 to-[#0f766e] text-xs font-black uppercase tracking-wider text-white hover:from-emerald-700 hover:to-[#0d665f] shadow-xs"
               disabled={!release.transactionReference.trim() || releaseMut.isPending}
               onClick={() => {
                 require2FA({
@@ -843,17 +1097,19 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
                 });
               }}
             >
-              Release &amp; Close (2FA)
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              Authorize Release & Close (2FA)
             </Button>
           </div>
         )}
 
-        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs">
-          <p className={fieldLabel}>Settlement Snapshot</p>
-          <p className="mt-1 text-slate-700 font-bold">Status: {delivery.settlement?.status || 'PENDING'}</p>
+        {/* Settlement Status Snapshot */}
+        <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 text-xs">
+          <p className={fieldLabel}>Escrow Ledger Snapshot</p>
+          <p className="mt-1 text-slate-800 font-black">Settlement State: {delivery.settlement?.status || 'PENDING'}</p>
           {delivery.settlement?.transactionReference && (
-            <p className="text-[10px] text-slate-500 font-semibold">
-              Reference: {delivery.settlement.transactionReference}
+            <p className="text-[11px] text-slate-600 font-mono font-bold mt-0.5">
+              Ref: {delivery.settlement.transactionReference}
             </p>
           )}
         </div>
@@ -866,7 +1122,7 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
 function Row({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-slate-500 font-semibold">{label}</span>
       <span className="font-black text-slate-900">{value}</span>
     </div>
   );
@@ -877,7 +1133,7 @@ function AdminActions({ delivery }: { delivery: DeliveryDetailDto }) {
   const overrideMut = useAdminOverride(delivery.id);
   return (
     <CollapsibleSection
-      title="Admin Override"
+      title="Admin System Override"
       icon={ShieldAlert}
       defaultOpen={false}
     >
@@ -888,20 +1144,21 @@ function AdminActions({ delivery }: { delivery: DeliveryDetailDto }) {
           ))}
         </Select>
         <Input placeholder="Location (optional)" value={override.location} onChange={e => setOverride(s => ({ ...s, location: e.target.value }))} />
-        <textarea className={textareaBase} placeholder="Reason (required)" value={override.reason} onChange={e => setOverride(s => ({ ...s, reason: e.target.value }))} />
+        <textarea className={textareaBase} placeholder="Override reason (mandatory for audit log)..." value={override.reason} onChange={e => setOverride(s => ({ ...s, reason: e.target.value }))} />
         <Button
           variant="outline"
-          className="w-full h-10 rounded-lg border-amber-200 bg-amber-50 text-xs font-black uppercase text-amber-700"
+          className="w-full h-10 rounded-xl border-amber-300 bg-amber-50 text-xs font-black uppercase tracking-wider text-amber-800 hover:bg-amber-100"
           disabled={!override.reason.trim() || overrideMut.isPending}
           onClick={() =>
             runWithToast(() => overrideMut.mutateAsync(override), {
-              loading: 'Applying override...',
-              success: 'Status overridden',
+              loading: 'Applying administrative override...',
+              success: 'Status successfully overridden!',
               error: 'Override failed'
             })
           }
         >
-          Apply Override
+          {overrideMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <ShieldAlert className="mr-2 h-4 w-4 text-amber-600" />}
+          Execute Admin Override
         </Button>
       </div>
     </CollapsibleSection>
@@ -922,10 +1179,10 @@ function DisputeActions({ delivery, accessRole }: { delivery: DeliveryDetailDto;
   if (!canRaise && !canResolve) return null;
 
   return (
-    <CollapsibleSection title="Dispute" icon={AlertTriangle} defaultOpen={false}>
+    <CollapsibleSection title="Dispute Escalation" icon={AlertTriangle} defaultOpen={false}>
       <div className="space-y-3">
         {canRaise && (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <Select
               value={['Damaged Goods', 'Wrong Item', 'Missing Quantity', 'Delayed Payment'].includes(category) ? category : 'Other'}
               onChange={e => setCategory(e.target.value)}
@@ -934,48 +1191,51 @@ function DisputeActions({ delivery, accessRole }: { delivery: DeliveryDetailDto;
               <option value="Wrong Item">Wrong Item</option>
               <option value="Missing Quantity">Missing Quantity</option>
               <option value="Delayed Payment">Delayed Payment</option>
-              <option value="Other">Other</option>
+              <option value="Other">Other Reason</option>
             </Select>
             {!['Damaged Goods', 'Wrong Item', 'Missing Quantity', 'Delayed Payment'].includes(category) && (
               <Input
                 required
                 value={category === 'Other' ? '' : category}
                 onChange={e => setCategory(e.target.value)}
-                placeholder="Specify Custom Category"
+                placeholder="Specify Dispute Category"
               />
             )}
-            <textarea className={textareaBase} placeholder="Describe the issue" value={reason} onChange={e => setReason(e.target.value)} />
+            <textarea className={textareaBase} placeholder="Describe the dispute issue in detail..." value={reason} onChange={e => setReason(e.target.value)} />
             <Button
               variant="outline"
-              className="w-full h-10 rounded-lg border-red-200 text-xs font-black uppercase text-red-700"
+              className="w-full h-10 rounded-xl border-rose-300 bg-rose-50 text-xs font-black uppercase tracking-wider text-rose-800 hover:bg-rose-100"
               disabled={!reason.trim() || raiseMut.isPending}
               onClick={() =>
                 runWithToast(() => raiseMut.mutateAsync({ category, reason }), {
-                  loading: 'Raising dispute...',
-                  success: 'Dispute raised',
-                  error: 'Failed to raise dispute'
+                  loading: 'Escalating dispute...',
+                  success: 'Dispute submitted for review',
+                  error: 'Failed to submit dispute'
                 })
               }
             >
-              Raise Dispute
+              {raiseMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <AlertTriangle className="mr-2 h-4 w-4 text-rose-600" />}
+              Escalate Dispute
             </Button>
           </div>
         )}
+
         {canResolve && (
-          <div className="space-y-2">
-            <textarea className={textareaBase} placeholder="Resolution remarks" value={resolution} onChange={e => setResolution(e.target.value)} />
+          <div className="space-y-2.5">
+            <textarea className={textareaBase} placeholder="Official resolution findings and decision..." value={resolution} onChange={e => setResolution(e.target.value)} />
             <Button
-              className="w-full h-10 rounded-lg bg-[#0f5132] text-xs font-black uppercase text-white"
+              className="w-full h-10 rounded-xl bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-xs"
               disabled={!resolution.trim() || resolveMut.isPending}
               onClick={() =>
                 runWithToast(() => resolveMut.mutateAsync({ resolutionRemarks: resolution }), {
                   loading: 'Resolving dispute...',
-                  success: 'Dispute resolved',
+                  success: 'Dispute resolved successfully',
                   error: 'Failed to resolve'
                 })
               }
             >
-              Resolve Dispute
+              {resolveMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+              Mark Dispute Resolved
             </Button>
           </div>
         )}
@@ -1003,7 +1263,7 @@ function DocumentUploadForm({ deliveryId }: { deliveryId: number }) {
         onProgress: pct => setProgress(pct)
       });
       await addDocMut.mutateAsync({ documentType: docType, fileAssetId: asset.id, description: description || undefined });
-      notify.success('Document attached', { description: file.name });
+      notify.success('Document attached successfully', { description: file.name });
       setFile(null);
       setDescription('');
     } catch (err) {
@@ -1030,48 +1290,48 @@ function DocumentUploadForm({ deliveryId }: { deliveryId: number }) {
       onDragLeave={() => setIsDragging(false)}
       onDrop={onDrop}
       className={cn(
-        'space-y-2 rounded-lg border border-dashed p-3 transition-colors',
-        isDragging ? 'border-[#0f766e] bg-[#0f766e]/5' : 'border-slate-200'
+        'space-y-2.5 rounded-xl border border-dashed p-3.5 transition-colors',
+        isDragging ? 'border-[#0f766e] bg-[#0f766e]/5' : 'border-slate-200/80 bg-slate-50/50'
       )}
     >
-      <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+      <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
         <Upload className="h-4 w-4 text-[#0f766e]" />
-        <span>Drag a file here, or pick one below</span>
+        <span>Drag a file here or browse</span>
       </div>
       <Select value={docType} onChange={e => setDocType(e.target.value as DeliveryDocumentType)}>
         {(['DELIVERY_CHALLAN', 'PACKING_SLIP', 'COURIER_RECEIPT', 'EWAY_BILL', 'PROOF_OF_DISPATCH', 'PROOF_OF_DELIVERY', 'INSPECTION_REPORT', 'REJECTION_REPORT', 'RETURN_DOCUMENT', 'TAX_INVOICE', 'PAYMENT_PROOF', 'OTHER'] as DeliveryDocumentType[]).map(t => (
           <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
         ))}
       </Select>
-      <input type="file" onChange={e => setFile(e.target.files?.[0] || null)} className="block w-full text-xs" />
+      <input type="file" onChange={e => setFile(e.target.files?.[0] || null)} className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#0f766e]/10 file:text-[#0f766e] hover:file:bg-[#0f766e]/20" />
       {file && (
-        <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold">
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold">
           <span className="truncate">{file.name}</span>
           <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => setFile(null)} aria-label="Remove">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
-      <Input placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} />
+      <Input placeholder="Description or reference notes (optional)" value={description} onChange={e => setDescription(e.target.value)} />
       {progress !== null && (
         <div className="space-y-1">
-          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-2 overflow-hidden rounded-full bg-slate-200">
             <div
-              className="h-full bg-gradient-to-r from-[#0f766e] to-sky-500 transition-all"
+              className="dt-shimmer-bar h-full bg-gradient-to-r from-[#0f766e] to-sky-500 transition-all"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <p className="text-[10px] font-bold text-slate-500">{progress}%</p>
+          <p className="text-[10px] font-bold text-slate-500">{progress}% Uploaded</p>
         </div>
       )}
       <Button
         variant="outline"
-        className="w-full h-10 rounded-lg text-xs font-black uppercase"
+        className="w-full h-10 rounded-xl text-xs font-black uppercase tracking-wider text-[#0f766e] border-teal-200 hover:bg-teal-50"
         disabled={!file || progress !== null || addDocMut.isPending}
         onClick={() => void submit()}
       >
         <ClipboardList className="mr-2 h-4 w-4" />
-        {progress !== null ? 'Uploading...' : 'Attach to delivery'}
+        {progress !== null ? 'Uploading...' : 'Attach Document to Delivery'}
       </Button>
     </div>
   );
@@ -1082,21 +1342,23 @@ function DocumentUploadForm({ deliveryId }: { deliveryId: number }) {
 function SlaBadge({ slaStatus }: { slaStatus?: string | null }) {
   if (slaStatus === 'BREACHED') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-red-700 animate-pulse">
-        <ShieldAlert className="h-3.5 w-3.5" /> SLA Overdue
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 border border-rose-200 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-rose-700">
+        <span className="h-1.5 w-1.5 rounded-full bg-rose-600 animate-ping" />
+        <ShieldAlert className="h-3 w-3" /> SLA Overdue
       </span>
     );
   }
   if (slaStatus === 'IMPENDING_BREACH') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-amber-700 animate-pulse">
-        <Clock className="h-3.5 w-3.5" /> Due within 48h
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 border border-amber-200 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-800">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-600 animate-ping" />
+        <Clock className="h-3 w-3" /> Due &lt;48h
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">
-      <CheckCircle2 className="h-3.5 w-3.5" /> SLA On-Time
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800">
+      <CheckCircle2 className="h-3 w-3 text-emerald-600" /> SLA On-Time
     </span>
   );
 }
@@ -1108,28 +1370,28 @@ function LiquidatedDamagesCard({ deliveryId }: { deliveryId: number }) {
   if (!ld || (ld.delayDays === 0 && !ld.isWaived)) return null;
 
   return (
-    <CollapsibleSection title="Liquidated Damages (LD) Penalty" icon={DollarSign} defaultOpen>
+    <CollapsibleSection title="Liquidated Damages (LD)" icon={DollarSign} defaultOpen>
       <div className="space-y-3 dt-fade-in-up">
-        <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3">
+        <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 text-xs">
           <div>
             <p className={fieldLabel}>Delivery Delay</p>
             <p className="text-xs font-black text-slate-900">{ld.delayDays} Days Overdue</p>
           </div>
           <div>
-            <p className={fieldLabel}>Applicable LD Rate</p>
-            <p className="text-xs font-bold text-slate-700">0.5% / week (Cap 10%)</p>
+            <p className={fieldLabel}>Applicable Rate</p>
+            <p className="text-xs font-bold text-slate-700">0.5% / week</p>
           </div>
           <div>
             <p className={fieldLabel}>Calculated LD</p>
-            <p className={cn("text-xs font-black", ld.isWaived ? "text-emerald-600 line-through" : "text-red-600")}>
+            <p className={cn("text-xs font-black", ld.isWaived ? "text-emerald-600 line-through" : "text-rose-600")}>
               {formatCurrency(ld.calculatedLdAmount)}
             </p>
           </div>
         </div>
         {ld.isWaived && (
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
-            <span>LD penalty is waived due to an approved Delivery Period (DP) Extension.</span>
+          <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 border border-emerald-200">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+            <span>LD penalty is waived due to an approved DP Extension.</span>
           </div>
         )}
       </div>
@@ -1171,23 +1433,23 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
   };
 
   return (
-    <CollapsibleSection title="Delivery Period (DP) Extensions" icon={Calendar} defaultOpen>
-      <div className="space-y-4">
+    <CollapsibleSection title="DP Extension Requests" icon={Calendar} defaultOpen>
+      <div className="space-y-3">
         {extensions.length === 0 ? (
           <p className="text-xs font-semibold text-slate-500">No extension requests submitted.</p>
         ) : (
           <div className="space-y-2">
             {extensions.map(ext => (
-              <div key={ext.id} className="rounded-xl border border-slate-200/80 bg-slate-50 p-3 space-y-1.5 text-xs dt-fade-in-up">
+              <div key={ext.id} className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 space-y-1.5 text-xs dt-fade-in-up">
                 <div className="flex items-center justify-between">
                   <span className="font-black text-slate-900">
-                    Requested: {formatDate(ext.requestedDeliveryDate)}
+                    Target: {formatDate(ext.requestedDeliveryDate)}
                   </span>
                   <span className={cn(
                     'rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider',
-                    ext.status === 'APPROVED' && 'bg-emerald-100 text-emerald-700',
-                    ext.status === 'REJECTED' && 'bg-red-100 text-red-700',
-                    ext.status === 'PENDING' && 'bg-amber-100 text-amber-700 animate-pulse'
+                    ext.status === 'APPROVED' && 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+                    ext.status === 'REJECTED' && 'bg-rose-100 text-rose-800 border border-rose-200',
+                    ext.status === 'PENDING' && 'bg-amber-100 text-amber-800 border border-amber-200 animate-pulse'
                   )}>
                     {ext.status}
                   </span>
@@ -1195,7 +1457,7 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
                 <p className="text-slate-600 font-medium">Reason: {ext.reason}</p>
                 {ext.respondedBy && (
                   <p className="text-[10px] text-slate-500 font-semibold">
-                    Decision by {ext.respondedBy.name || 'User'} {ext.waiveLd && '· LD Waived'} {ext.responseRemarks && `· ${ext.responseRemarks}`}
+                    Decision by {ext.respondedBy.name || 'User'} {ext.waiveLd && '• LD Waived'} {ext.responseRemarks && `• ${ext.responseRemarks}`}
                   </p>
                 )}
               </div>
@@ -1207,11 +1469,11 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
         {accessRole === 'seller' && delivery.status !== 'CLOSED' && delivery.status !== 'CANCELLED' && (
           <div className="space-y-3 border-t border-slate-100 pt-3">
             {!openRequest ? (
-              <Button variant="outline" className="w-full h-10 rounded-lg text-xs font-black uppercase" onClick={() => setOpenRequest(true)}>
-                <Calendar className="mr-2 h-4 w-4" /> Request DP Extension
+              <Button variant="outline" className="w-full h-10 rounded-xl text-xs font-black uppercase tracking-wider text-slate-700 border-slate-200 hover:bg-slate-50" onClick={() => setOpenRequest(true)}>
+                <Calendar className="mr-2 h-4 w-4 text-[#0f766e]" /> Request DP Extension
               </Button>
             ) : (
-              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/50 p-3 dt-fade-in-up">
+              <div className="space-y-2 rounded-xl border border-teal-100 bg-teal-50/30 p-3 dt-fade-in-up">
                 <p className={fieldLabel}>New Requested Delivery Date</p>
                 <Input type="date" value={reqDate} onChange={e => setReqDate(e.target.value)} />
                 <textarea
@@ -1221,10 +1483,10 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
                   onChange={e => setReqReason(e.target.value)}
                 />
                 <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 h-9 text-xs font-bold" onClick={() => setOpenRequest(false)}>
+                  <Button variant="outline" className="flex-1 h-9 rounded-lg text-xs font-bold" onClick={() => setOpenRequest(false)}>
                     Cancel
                   </Button>
-                  <Button className="flex-1 h-9 bg-[#0f766e] text-xs font-bold text-white hover:bg-[#0d665f]" disabled={!reqDate || !reqReason.trim() || requestMut.isPending} onClick={submitRequest}>
+                  <Button className="flex-1 h-9 rounded-lg bg-[#0f766e] text-xs font-bold text-white hover:bg-[#0d665f]" disabled={!reqDate || !reqReason.trim() || requestMut.isPending} onClick={submitRequest}>
                     Submit Request
                   </Button>
                 </div>
@@ -1236,8 +1498,8 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
         {/* Buyer / Admin Action: Respond to pending request */}
         {(accessRole === 'buyer' || accessRole === 'admin') && pendingExt && (
           <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3 dt-fade-in-up">
-            <p className="text-xs font-black text-amber-800">Pending DP Extension Request</p>
-            <p className="text-xs text-amber-700 font-semibold">
+            <p className="text-xs font-black text-amber-900">Pending DP Extension Request</p>
+            <p className="text-xs text-amber-800 font-semibold">
               Seller requested extension to {formatDate(pendingExt.requestedDeliveryDate)}: "{pendingExt.reason}"
             </p>
             <div className="flex items-center gap-2">
@@ -1254,10 +1516,10 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
             </div>
             <Input placeholder="Response remarks (optional)" value={respRemarks} onChange={e => setRespRemarks(e.target.value)} />
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1 h-9 text-xs font-bold text-red-600 border-red-200 hover:bg-red-50" onClick={() => submitResponse(false)} disabled={respondMut.isPending}>
-                Reject Extension
+              <Button variant="outline" className="flex-1 h-9 rounded-lg text-xs font-bold text-rose-700 border-rose-200 hover:bg-rose-50" onClick={() => submitResponse(false)} disabled={respondMut.isPending}>
+                Reject
               </Button>
-              <Button className="flex-1 h-9 bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white" onClick={() => submitResponse(true)} disabled={respondMut.isPending}>
+              <Button className="flex-1 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white" onClick={() => submitResponse(true)} disabled={respondMut.isPending}>
                 Approve Extension
               </Button>
             </div>
@@ -1268,6 +1530,8 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
   );
 }
 
+/* ================== Handover OTP Verification (Temporarily Commented Out) ================== */
+/*
 function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: DeliveryDetailDto; accessRole: string | null }) {
   const sendOtpMut = useSendDeliveryOtp(delivery.id);
   const verifyOtpMut = useVerifyDeliveryOtp(delivery.id);
@@ -1297,15 +1561,15 @@ function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: Delivery
   if (!canVerifyRole && !isVerified) return null;
 
   return (
-    <CollapsibleSection title="Email Delivery OTP Verification" icon={Key} defaultOpen>
+    <CollapsibleSection title="Handover OTP Verification" icon={Key} defaultOpen>
       <div className="space-y-3 dt-fade-in-up">
         {isVerified ? (
-          <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-emerald-800">
+          <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-emerald-900">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
             <div>
-              <p className="text-xs font-black uppercase tracking-wider">Physical Receipt Verified</p>
+              <p className="text-xs font-black uppercase tracking-wider">Physical Handover Verified</p>
               <p className="text-[11px] font-semibold text-emerald-700">
-                Verified via 6-digit Email OTP on {formatDate(delivery.deliveryOtpVerifiedAt)}
+                Receipt confirmed on {formatDate(delivery.deliveryOtpVerifiedAt)}
               </p>
             </div>
           </div>
@@ -1313,13 +1577,13 @@ function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: Delivery
           <div className="space-y-3">
             {isSellerOrCourier ? (
               <>
-                <p className="text-xs font-semibold text-slate-600">
-                  Verify physical delivery handover: Click below to email the 6-digit OTP to the buyer, then enter the OTP provided by the buyer upon handover.
+                <p className="text-xs font-semibold text-slate-600 leading-relaxed">
+                  Verify physical delivery handover: Click to email the 6-digit OTP to the buyer, then enter the OTP upon handover.
                 </p>
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
-                    className="h-10 text-xs font-black uppercase"
+                    className="h-10 rounded-xl text-xs font-black uppercase tracking-wider border-slate-200 hover:bg-slate-50"
                     onClick={handleSend}
                     disabled={sendOtpMut.isPending}
                   >
@@ -1333,14 +1597,14 @@ function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: Delivery
                 </div>
                 <div className="flex gap-2 items-center">
                   <Input
-                    placeholder="Enter Buyer's 6-digit OTP"
+                    placeholder="6-digit OTP"
                     value={otp}
                     maxLength={6}
                     onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-                    className="font-mono text-center tracking-widest text-base font-bold"
+                    className="font-mono text-center tracking-widest text-base font-bold rounded-xl"
                   />
                   <Button
-                    className="h-10 bg-[#0f766e] text-xs font-black uppercase text-white shrink-0 px-4 hover:bg-[#0d665f]"
+                    className="h-10 rounded-xl bg-[#0f766e] text-xs font-black uppercase tracking-wider text-white shrink-0 px-4 hover:bg-[#0d665f] shadow-xs"
                     disabled={otp.length !== 6 || verifyOtpMut.isPending}
                     onClick={handleVerify}
                   >
@@ -1350,18 +1614,18 @@ function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: Delivery
               </>
             ) : (
               <>
-                <div className="rounded-xl border border-[#0f766e]/20 bg-[#0f766e]/5 p-3 space-y-1 text-xs text-slate-700">
+                <div className="rounded-xl border border-teal-100 bg-teal-50/50 p-3.5 space-y-1 text-xs text-slate-700">
                   <p className="font-bold text-[#0f766e] flex items-center gap-1.5">
-                    <Key className="h-4 w-4" /> Delivery Handover Instructions
+                    <Key className="h-4 w-4" /> Handover Instructions
                   </p>
                   <p className="text-slate-600 font-semibold leading-relaxed">
-                    A 6-digit OTP is sent to your registered email when physical delivery is initiated. <strong>Share this OTP with the seller or delivery agent</strong> upon receiving your goods so they can verify handover.
+                    A 6-digit OTP is emailed when delivery is initiated. Share this OTP with the delivery agent upon receiving goods.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   <Button
                     variant="outline"
-                    className="h-10 text-xs font-black uppercase"
+                    className="h-10 rounded-xl text-xs font-black uppercase tracking-wider border-slate-200 hover:bg-slate-50"
                     onClick={handleSend}
                     disabled={sendOtpMut.isPending}
                   >
@@ -1373,29 +1637,6 @@ function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: Delivery
                     Resend OTP to My Email
                   </Button>
                 </div>
-                {/* 
-                <div className="border-t border-slate-100 pt-2 space-y-1.5">
-                  <p className="text-[11px] font-bold text-slate-500">
-                    Alternatively, confirm delivery receipt directly on your portal:
-                  </p>
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      placeholder="Enter 6-digit OTP from email"
-                      value={otp}
-                      maxLength={6}
-                      onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-                      className="font-mono text-center tracking-widest text-base font-bold"
-                    />
-                    <Button
-                      className="h-10 bg-[#0f766e] text-xs font-black uppercase text-white shrink-0 px-4 hover:bg-[#0d665f]"
-                      disabled={otp.length !== 6 || verifyOtpMut.isPending}
-                      onClick={handleVerify}
-                    >
-                      Verify Receipt
-                    </Button>
-                  </div>
-                </div>
-                */}
               </>
             )}
           </div>
@@ -1404,5 +1645,6 @@ function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: Delivery
     </CollapsibleSection>
   );
 }
+*/
 
 export default DeliveryDetailPage;

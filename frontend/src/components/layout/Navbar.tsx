@@ -212,25 +212,7 @@ const ALL_MENU_PATHS = [
   '/orders/delivery-confirmation',
   '/orders/tracking',
   '/grn',
-  '/admin/marketplace/home-sections',
-  '/seller/opportunities/rfqs',
-  '/seller/opportunities/rfps',
-  '/seller/opportunities/open-tenders',
-  '/seller/opportunities/invitations',
-  '/seller/opportunities/auctions',
-  '/seller/opportunities/rate-contracts',
-  '/seller/bids/submitted',
-  '/seller/bids/draft',
-  '/seller/bids/awarded',
-  '/shg/opportunities/rfqs',
-  '/shg/opportunities/rfps',
-  '/shg/opportunities/open-tenders',
-  '/shg/opportunities/invitations',
-  '/shg/opportunities/auctions',
-  '/shg/opportunities/rate-contracts',
-  '/shg/bids/submitted',
-  '/shg/bids/draft',
-  '/shg/bids/awarded',
+  '/admin/marketplace/home-sections'
 ];
 
 const isSidebarRouteActive = (targetPath: string | undefined, pathname?: string | null, currentPathWithQuery?: string) => {
@@ -374,10 +356,39 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
   );
 });
 
-import { usePermissions } from '../../hooks/useOrgRole';
+import { useOrgRole, usePermissions, type OrgStatus } from '../../hooks/useOrgRole';
+
+export function getResolvedOrgName(user: any, orgStatus?: OrgStatus | null): string {
+  if (!user) return '';
+  const reg = (user.registrationDetails || {}) as Record<string, any>;
+  return (
+    orgStatus?.organization?.organizationName ||
+    user.organization?.organizationName ||
+    user.sellerProfile?.businessName ||
+    user.sellerProfile?.companyName ||
+    user.sellerProfile?.nameAsInPan ||
+    user.buyerProfile?.departmentName ||
+    user.buyerProfile?.organizationName ||
+    user.buyerProfile?.entityName ||
+    user.buyerProfile?.companyName ||
+    user.shgProfile?.groupName ||
+    user.shgProfile?.shgName ||
+    reg.businessName ||
+    reg.companyName ||
+    reg.organizationName ||
+    reg.organisation ||
+    reg.enterpriseName ||
+    reg.legalName ||
+    reg.tradeName ||
+    ''
+  );
+}
 
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onHoverChange }: SidebarProps) {
   const { user, logout } = useAuth();
+  const { orgStatus } = useOrgRole();
+  const orgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
+  const isShgAccount = isShgUser(user);
   const { hasPermission: checkUserPermission } = usePermissions();
   const router = useRouter();
   const pathname = usePathname();
@@ -387,8 +398,15 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     return query ? `${pathname}?${query}` : pathname;
   }, [pathname, searchParams]);
   const [openGroups, setOpenGroups] = useState<SidebarGroupState>({});
+  const [isHovered, setIsHovered] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    onHoverChange?.(isHovered);
+  }, [isHovered, onHoverChange]);
+
+  const effectivelyCollapsed = isCollapsed && !isHovered;
 
   const { data: countsData } = useQuery({
     queryKey: ['navigation-counts'],
@@ -408,16 +426,25 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount + rateContractsCount;
 
       return {
-        '/seller/opportunities': allCount,
         '/seller/opportunities/rfqs': rfqsCount,
         '/seller/opportunities/rfps': rfpsCount,
         '/seller/opportunities/open-tenders': openTendersCount,
         '/seller/opportunities/invitations': invitationsCount,
         '/seller/opportunities/auctions': auctionsCount,
-        '/seller/opportunities/rate-contracts': rateContractsCount
+        '/seller/opportunities/rate-contracts': rateContractsCount,
+        '/seller/bids': Number(data.bidsCount || 0),
+        '/shg/bids': Number(data.bidsCount || 0),
+        '/shg/opportunities': allCount,
+        '/shg/opportunities/rfqs': rfqsCount,
+        '/shg/opportunities/rfps': rfpsCount,
+        '/shg/opportunities/open-tenders': openTendersCount,
+        '/shg/opportunities/invitations': invitationsCount,
+        '/shg/opportunities/auctions': auctionsCount,
+        '/shg/opportunities/rate-contracts': rateContractsCount
       };
     },
-    enabled: user?.role === 'seller',
+    enabled: user?.role === 'seller' || user?.role === 'shg' || isShgAccount,
+    staleTime: 30000,
     refetchInterval: 15000,
   });
 
@@ -465,7 +492,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const handleLogout = useCallback(() => {
     logout('/');
   }, [logout]);
-  const isShgAccount = isShgUser(user);
   const accountLabel = isShgAccount ? 'SHG' : user?.role || 'user';
 
   const navItems: SidebarItem[] = useMemo(() => [
@@ -551,21 +577,9 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Disputes', path: '/buyer/disputes', icon: AlertTriangle, roles: ['buyer'], permission: 'dispute.view' },
 
     // Seller Opportunities
-    { label: 'Opportunities', icon: Globe, roles: ['seller'], children: [
-      { label: 'All Opportunities', path: '/seller/opportunities', icon: Globe, roles: ['seller'], permission: 'marketplace.view' },
-      { label: 'RFQs', path: '/seller/opportunities/rfqs', icon: FileText, roles: ['seller'], permission: 'requirement.view' },
-      { label: 'RFPs', path: '/seller/opportunities/rfps', icon: Layers, roles: ['seller'], permission: 'requirement.view' },
-      { label: 'Open Tenders', path: '/seller/opportunities/open-tenders', icon: ClipboardList, roles: ['seller'], permission: 'tender.view' },
-      { label: 'Limited Tenders', path: '/seller/opportunities/invitations', icon: Users, roles: ['seller'], permission: 'tender.view' },
-      { label: 'Reverse Auctions', path: '/seller/opportunities/auctions', icon: Gavel, roles: ['seller'], permission: 'reverse_auction.view' },
-      { label: 'Rate Contracts', path: '/seller/opportunities/rate-contracts', icon: RotateCcw, roles: ['seller'], permission: 'requirement.view' }
-    ] },
+    { label: 'Opportunities', path: '/seller/opportunities', icon: Globe, roles: ['seller', 'shg'], permission: 'marketplace.view' },
     // Seller My Bids
-    { label: 'My Bids', icon: ClipboardList, roles: ['seller'], children: [
-      { label: 'Submitted Bids', path: '/seller/bids/submitted', icon: CheckCircle2, roles: ['seller'], permission: 'bid.submit' },
-      { label: 'Draft Bids', path: '/seller/bids/draft', icon: FileText, roles: ['seller'], permission: 'bid.submit' },
-      { label: 'Awarded Contracts', path: '/seller/bids/awarded', icon: Trophy, roles: ['seller'], permission: 'bid.submit' }
-    ] },
+    { label: 'My Bids', path: '/seller/bids', icon: ClipboardList, roles: ['seller', 'shg'], permission: 'bid.submit' },
     // Seller Orders
     { label: 'Orders', icon: Truck, roles: ['seller'], children: [
       { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['seller'], permission: 'purchase_order.view' },
@@ -697,23 +711,23 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       <aside
         ref={sidebarRef}
         aria-label="Main Navigation"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         className={cn(
           "gov-sidebar-surface text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-[width,transform] duration-300 ease-in-out lg:translate-x-0 border-r border-white/5 shadow-xl shadow-slate-900/10",
-          isCollapsed ? "w-64 lg:w-20" : "w-64",
+          effectivelyCollapsed ? "w-64 lg:w-20" : "w-64",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}>
-        {/* Tricolor strip — official portal cue */}
-        <div className="brand-tricolor-strip" />
-        <div className={cn("h-14 px-3 border-b border-white/10 flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
+        <div className={cn("h-14 px-3 border-b border-white/10 flex items-center", effectivelyCollapsed ? "justify-center" : "justify-between")}>
           <div
-            className={cn("flex items-center gap-3 min-w-0 select-none", isCollapsed && "lg:justify-center")}
+            className={cn("flex items-center gap-3 min-w-0 select-none", effectivelyCollapsed && "lg:justify-center")}
             title="MSME Portal"
           >
             <div className="w-11 h-11 bg-white rounded-md flex items-center justify-center overflow-hidden shadow-sm border border-white/20 shrink-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logoo.png" alt="SMiLE MSME Logo" className="h-full w-full object-contain" />
             </div>
-            <div className={cn("flex flex-col leading-tight min-w-0", isCollapsed && "lg:hidden")}>
+            <div className={cn("flex flex-col leading-tight min-w-0", effectivelyCollapsed && "lg:hidden")}>
               <span className="font-bold tracking-tight text-base truncate text-white">MSME Portal</span>
               <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#c8a45c] truncate">Govt. of India</span>
             </div>
@@ -727,9 +741,9 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         <nav
           ref={navRef}
           onScroll={handleScroll}
-          className={cn("sidebar-scroll-dark flex-1 overflow-y-auto", isCollapsed ? "p-2 space-y-1" : "p-3 space-y-1")}
+          className={cn("sidebar-scroll-dark flex-1 overflow-y-auto", effectivelyCollapsed ? "p-2 space-y-1" : "p-3 space-y-1")}
         >
-          <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", isCollapsed && "lg:hidden")}>Navigation</div>
+          {/* <div className={cn("text-white/40 text-[10px] font-bold uppercase tracking-[0.18em] px-3 mb-2", effectivelyCollapsed && "lg:hidden")}>Navigation</div> */}
           {filteredNav.map((item) => {
             const isGroupActive = Boolean(item.children?.some(child => isSidebarRouteActive(child.path, pathname, currentPathWithQuery)));
             return (
@@ -738,8 +752,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
                 item={item}
                 pathname={pathname}
                 currentPathWithQuery={currentPathWithQuery}
-                isCollapsed={isCollapsed}
-                isOpen={!isCollapsed && Boolean(openGroups[item.label] ?? isGroupActive)}
+                isCollapsed={effectivelyCollapsed}
+                isOpen={!effectivelyCollapsed && Boolean(openGroups[item.label] ?? isGroupActive)}
                 onToggle={() => handleToggleGroup(item.label, isGroupActive)}
                 onClose={onClose}
                 counts={counts}
@@ -748,7 +762,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           })}
         </nav>
 
-        <div className={cn("border-t border-white/10 bg-black/20", isCollapsed ? "p-2" : "p-3")}>
+        <div className={cn("border-t border-white/10 bg-black/20", effectivelyCollapsed ? "p-2" : "p-3")}>
           <Link
             href={pathname === '/profile' ? '/dashboard' : '/profile'}
             scroll={false}
@@ -757,16 +771,20 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             onFocus={() => preloadRoute('/profile')}
             className={cn(
               "flex items-center gap-3 px-2 mb-3 py-1.5 rounded-md hover:bg-white/10 transition-all duration-200",
-              isCollapsed && "lg:justify-center lg:px-0",
+              effectivelyCollapsed && "lg:justify-center lg:px-0",
               pathname === '/profile' && "bg-white/10 ring-1 ring-[#c8a45c]/40"
             )}
           >
             <div className="w-8 h-8 rounded-full bg-[#c8a45c] flex items-center justify-center text-xs font-bold text-[#07172e] shadow-inner">
               {user.name.charAt(0)}
             </div>
-            <div className={cn("flex flex-col min-w-0", isCollapsed && "lg:hidden")}>
-              <span className="text-sm font-medium truncate text-white">{user.name}</span>
-              <span className="text-[10px] text-white/60 uppercase tracking-wide font-bold">{accountLabel} Account</span>
+            <div className={cn("flex flex-col min-w-0", effectivelyCollapsed && "lg:hidden")}>
+              <span className="text-sm font-bold truncate text-white" title={orgName || user.name}>
+                {orgName || user.name}
+              </span>
+              <span className="text-[10px] text-white/70 uppercase tracking-wide font-bold truncate" title={user.name}>
+                {orgName ? `${user.name} • ${accountLabel}` : `${accountLabel} Account`}
+              </span>
             </div>
           </Link>
           <Button
@@ -774,10 +792,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             size="sm"
             onClick={handleLogout}
             title="Logout"
-            className={cn("w-full bg-transparent border-white/20 text-white hover:bg-white hover:text-[#0b2447] py-2", isCollapsed && "lg:px-0")}
+            className={cn("w-full bg-transparent border-white/20 text-white hover:bg-white hover:text-[#0b2447] py-2", effectivelyCollapsed && "lg:px-0")}
           >
-            <LogOut className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-            <span className={cn(isCollapsed && "lg:hidden")}>Logout</span>
+            <LogOut className={cn("h-4 w-4", !effectivelyCollapsed && "mr-2")} />
+            <span className={cn(effectivelyCollapsed && "lg:hidden")}>Logout</span>
           </Button>
         </div>
       </aside>
@@ -793,6 +811,8 @@ interface HeaderProps {
 
 export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: HeaderProps) {
   const { user, token: authToken, logout, login } = useAuth();
+  const { orgStatus } = useOrgRole();
+  const orgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
   const pathname = usePathname();
   const router = useRouter();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -800,11 +820,34 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   const [notifications, setNotifications] = useState<PortalNotification[]>([]);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
+  const profileTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [roleAction, setRoleAction] = useState<'buyer' | 'seller' | null>(null);
   const [pendingActivateRole, setPendingActivateRole] = useState<'buyer' | 'seller' | null>(null);
   const [activateConsent1, setActivateConsent1] = useState(false);
   const [activateConsent2, setActivateConsent2] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+
+  const handleProfileMouseEnter = () => {
+    if (profileTimeoutRef.current) {
+      clearTimeout(profileTimeoutRef.current);
+      profileTimeoutRef.current = null;
+    }
+    setIsProfileDropdownOpen(true);
+  };
+
+  const handleProfileMouseLeave = () => {
+    profileTimeoutRef.current = setTimeout(() => {
+      setIsProfileDropdownOpen(false);
+    }, 180);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (profileTimeoutRef.current) {
+        clearTimeout(profileTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setIsMounted(true);
@@ -1037,7 +1080,6 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
   return (
     <header className="liquid-glass-header z-40">
-      <div className="brand-tricolor-strip" />
       <div className="h-14 px-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
@@ -1057,15 +1099,20 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
             {isSidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
 
-          <div className="hidden md:flex relative group cursor-pointer" onClick={() => window.dispatchEvent(new CustomEvent('open-global-search'))}>
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-hover:text-[#0b2447] transition-colors" />
-            <div className="w-64 h-9 pl-9 pr-4 rounded-lg border border-slate-200 text-sm flex items-center justify-between bg-slate-50 hover:bg-white hover:border-[#0b2447]/30 transition-all text-slate-400">
-              <span>Quick search...</span>
-              <kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-100 px-1.5 font-mono text-[10px] font-medium text-slate-500">
-                <span className="text-xs">⌘</span>K
-              </kbd>
+          {/* Organization Identity Badge in Header */}
+          {orgName ? (
+            <div className="hidden sm:flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-800 shadow-2xs">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#12335f]/10 text-[#12335f]">
+                <Building2 className="h-3.5 w-3.5" />
+              </div>
+              <div className="flex flex-col text-left min-w-0">
+                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 leading-none">Organization</span>
+                <span className="text-xs font-black text-slate-900 truncate max-w-[160px] md:max-w-[240px] lg:max-w-[340px] leading-tight" title={orgName}>
+                  {orgName}
+                </span>
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
@@ -1132,8 +1179,8 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                             <div className="min-w-0">
                               <div className="flex items-start justify-between gap-3">
                                 <p className={cn(
-                                  "text-[10px] font-black uppercase tracking-widest",
-                                  isWarning ? "text-red-600" : isSuccess ? "text-emerald-700" : "text-[#0b2447]"
+                                   "text-[10px] font-black uppercase tracking-widest",
+                                   isWarning ? "text-red-600" : isSuccess ? "text-emerald-700" : "text-[#0b2447]"
                                 )}>{item.title}</p>
                                 {!item.isRead && (
                                   <span
@@ -1192,26 +1239,76 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
           <div className="h-8 w-px bg-slate-200 hidden sm:block" />
 
-          <div className="relative" ref={profileDropdownRef}>
+          <div 
+            className="relative" 
+            ref={profileDropdownRef}
+            onMouseEnter={handleProfileMouseEnter}
+            onMouseLeave={handleProfileMouseLeave}
+          >
             <button
               onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-              className="flex items-center gap-3 p-1 rounded-lg hover:bg-slate-50 transition-colors group text-left"
+              className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-slate-50 transition-colors group text-left cursor-pointer border border-transparent hover:border-slate-200/80"
+              aria-label="User profile options"
             >
-              <div className="h-8 w-8 rounded-full bg-[#0b2447] flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white ring-offset-1 group-hover:ring-offset-2 transition-all">
+              <div className="h-8 w-8 rounded-full bg-[#12335f] flex items-center justify-center text-white font-black text-xs shadow-sm ring-2 ring-white ring-offset-1 group-hover:ring-offset-2 transition-all">
                 {user?.name?.charAt(0) || 'U'}
               </div>
-              <div className="hidden sm:flex flex-col text-left">
-                <span className="text-xs font-bold text-slate-900 truncate max-w-[100px]">{user?.name}</span>
-                <span className="text-[9px] font-black text-[#0b2447] uppercase tracking-widest opacity-70 flex items-center gap-1">
+              <div className="hidden sm:flex flex-col text-left min-w-0">
+                <span className="text-xs font-extrabold text-slate-900 truncate max-w-[140px] md:max-w-[180px] leading-tight" title={user?.name}>
+                  {user?.name}
+                </span>
+                <span className="text-[9px] font-black text-[#12335f] uppercase tracking-widest opacity-80 flex items-center gap-1 leading-tight">
                   {displayRole}
-                  <ChevronDown className="h-2.5 w-2.5 transition-transform duration-200" style={{ transform: isProfileDropdownOpen ? 'rotate(180deg)' : 'none' }} />
+                  {orgName && (
+                    <span className="text-slate-400 font-semibold truncate max-w-[100px] normal-case" title={orgName}>
+                      • {orgName}
+                    </span>
+                  )}
+                  <ChevronDown className="h-2.5 w-2.5 shrink-0 transition-transform duration-200" style={{ transform: isProfileDropdownOpen ? 'rotate(180deg)' : 'none' }} />
                 </span>
               </div>
             </button>
 
             {isProfileDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-2xl border border-slate-200 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-50">
-                <div className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/50">
+              <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200/90 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-50">
+                {/* Organization & User identity card */}
+                <div className="px-4 py-3.5 border-b border-slate-100 bg-slate-50/80">
+                  {orgName ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-slate-500">
+                        <Building2 className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Organization</span>
+                      </div>
+                      <p className="text-xs font-black text-slate-900 leading-snug break-words" title={orgName}>
+                        {orgName}
+                      </p>
+                      <p className="text-[11px] text-slate-600 font-medium truncate pt-0.5">
+                        {user?.name} {user?.email ? <span className="text-slate-400">({user.email})</span> : null}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-black text-slate-900 truncate">{user?.name}</p>
+                      <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
+                    </div>
+                  )}
+                  <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-[#12335f] text-white shadow-2xs">
+                      {displayRole}
+                    </span>
+                    {isPrimaryApproved ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" /> Verified Entity
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-amber-50 text-amber-700 border border-amber-200">
+                        <Clock className="h-2.5 w-2.5 text-amber-600" /> Pending Verification
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="px-4 py-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/40 border-b border-slate-100">
                   Account Options
                 </div>
                 <button
@@ -1219,10 +1316,10 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                     setIsProfileDropdownOpen(false);
                     router.push('/profile');
                   }}
-                  className="w-full text-left px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0b2447] transition-colors flex items-center gap-2"
+                  className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-[#12335f] transition-colors flex items-center gap-2 cursor-pointer"
                 >
                   <UserIcon className="h-4 w-4 text-slate-400" />
-                  My Profile
+                  My Profile & Organization Details
                 </button>
 
                 {/* DUAL ROLE SWITCHER / ACTIVATION */}
@@ -1236,7 +1333,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                           handleSwitchRole(user.role === 'seller' ? 'buyer' : 'seller');
                         }}
                         disabled={Boolean(roleAction)}
-                        className="w-full text-left px-4 py-2.5 text-sm font-bold text-indigo-650 hover:bg-indigo-50 hover:text-indigo-750 transition-colors flex items-center gap-2"
+                        className="w-full text-left px-4 py-2.5 text-xs font-black text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 transition-colors flex items-center gap-2 cursor-pointer"
                       >
                         {user.role === 'seller' ? (
                           <>
@@ -1257,7 +1354,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                           setPendingActivateRole(user?.role === 'seller' ? 'buyer' : 'seller');
                         }}
                         disabled={Boolean(roleAction)}
-                        className="w-full text-left px-4 py-2.5 text-sm font-bold text-amber-700 hover:bg-amber-50 hover:text-amber-800 transition-colors flex items-center gap-2"
+                        className="w-full text-left px-4 py-2.5 text-xs font-black text-amber-700 hover:bg-amber-50 hover:text-amber-800 transition-colors flex items-center gap-2 cursor-pointer"
                       >
                         {user?.role === 'seller' ? (
                           <>
@@ -1281,7 +1378,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                     setIsProfileDropdownOpen(false);
                     handleLogout();
                   }}
-                  className="w-full text-left px-4 py-2.5 text-sm font-semibold text-red-650 hover:bg-red-50 hover:text-red-750 transition-colors flex items-center gap-2"
+                  className="w-full text-left px-4 py-2.5 text-xs font-bold text-red-650 hover:bg-red-50 hover:text-red-750 transition-colors flex items-center gap-2 cursor-pointer"
                 >
                   <LogOut className="h-4 w-4 text-red-500" />
                   Logout

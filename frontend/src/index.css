@@ -441,17 +441,8 @@ textarea::-moz-placeholder {
 
 
 /* ─── Brand utilities ──────────────────────────────────────────────────────
-   Tricolor accent strip — drop-in 2px bar above any page header that
-   wants the government-portal vibe. */
 .brand-tricolor-strip {
-  height: 2px;
-  background: linear-gradient(90deg,
-      #ff9933 0%,
-      #ff9933 33%,
-      #ffffff 33%,
-      #ffffff 66%,
-      #138808 66%,
-      #138808 100%);
+  display: none !important;
 }
 
 /* Navy gradient panel — matches the modal headers used across the portal. */
@@ -490,7 +481,7 @@ textarea::-moz-placeholder {
   }
 }
 
-/* Section header — eyebrow + title + description in a single block. */
+/* Section header — title + description in a single block. */
 .page-header {
   display: flex;
   flex-direction: column;
@@ -979,6 +970,143 @@ textarea.soft-field {
 .animate-pulse-glow {
   animation: pulseGlow 4s ease-in-out infinite;
 }
+
+/* ─── Delivery Tracking Premium Animations ─── */
+@keyframes dt-shimmer-flow {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+@keyframes dt-pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.45), 0 0 15px rgba(15, 118, 110, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(15, 118, 110, 0), 0 0 25px rgba(15, 118, 110, 0.4);
+  }
+}
+
+@keyframes dt-radar-ping {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+}
+
+@keyframes dt-bounce-soft {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes dt-fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dt-slide-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes dt-glow-sweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.dt-shimmer-bar {
+  position: relative;
+  overflow: hidden;
+}
+
+.dt-shimmer-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 100%
+  );
+  animation: dt-shimmer-flow 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.dt-pulse-glow {
+  animation: dt-pulse-glow 2.4s ease-in-out infinite;
+}
+
+.dt-radar-beacon {
+  position: relative;
+}
+
+.dt-radar-beacon::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  background: currentColor;
+  animation: dt-radar-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  z-index: 0;
+}
+
+.dt-bounce-soft {
+  animation: dt-bounce-soft 2s ease-in-out infinite;
+}
+
+.dt-fade-in-up {
+  animation: dt-fade-in-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.dt-slide-in {
+  animation: dt-slide-in 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-shimmer-bar::after,
+  .dt-pulse-glow,
+  .dt-radar-beacon::before,
+  .dt-bounce-soft,
+  .dt-fade-in-up,
+  .dt-slide-in {
+    animation: none !important;
+  }
+}
+
 
 
 

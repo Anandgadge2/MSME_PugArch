@@ -277,22 +277,6 @@ export default function GrnListPage() {
 
     return (
         <div className="space-y-6">
-            {/* Transparent Header */}
-            {/* <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
-                <div className="min-w-0">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">Fulfillment</span>
-                    <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Goods Receipt Notes</h1>
-                    <p className="text-xs font-semibold text-slate-500 mt-1">
-                        Record received goods, run inspection, approve to trigger seller invoice.
-                    </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <Button variant="outline" onClick={() => refetch()} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
-                        <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", isFetching && "animate-spin")} /> Refresh
-                    </Button>
-                </div>
-            </div> */}
-
             {/* KPI Cards Grid */}
             <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <KpiCard

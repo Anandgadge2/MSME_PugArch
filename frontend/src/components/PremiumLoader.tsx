@@ -127,9 +127,6 @@ export default function PremiumLoader({
       {/* Main Glass Card */}
       <div className="relative z-10 flex flex-col items-center justify-center p-8 md:p-12 rounded-3xl border border-white/15 bg-[#081b36]/90 backdrop-blur-xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] max-w-sm md:max-w-md w-[calc(100%-2rem)] mx-4">
 
-        {/* Top Tricolor Strip Accent */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-4/5 h-[4px] rounded-b-full bg-gradient-to-r from-amber-500 via-white to-emerald-500 shadow-[0_0_12px_rgba(255,255,255,0.4)]" />
-
         {/* Enhanced & Animated Logo Section */}
         <div className="relative my-4 flex items-center justify-center">
           {/* Animated Spinning Ring Aura */}

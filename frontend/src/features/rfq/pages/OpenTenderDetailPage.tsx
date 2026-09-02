@@ -39,14 +39,19 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   const { user } = useAuth();
   const currentUser: any = user;
 
+  const explicitReqId = searchParams?.get('requirementId') || '';
+  const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || '';
+  const rawIdParam = searchParams?.get('id') || '';
+
   const pathTokens = pathname.split('/').filter(Boolean);
   const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
   const pathnameId = (rawPathId && !['open-tender', 'bids', 'tenders', 'details'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
 
-  const requestId = searchParams.get('requestId') || searchParams.get('id') || pathnameId;
-  const requirementId = searchParams.get('requirementId') || (!requestId ? pathnameId : '');
+  const activeOpenId = explicitReqId || explicitRequestId || rawIdParam || pathnameId;
+  const requestId = explicitRequestId || (activeOpenId.startsWith('REQ-') ? '' : activeOpenId);
+  const requirementId = explicitReqId || (activeOpenId.startsWith('REQ-') ? activeOpenId : '');
+  const fallbackReqId = activeOpenId;
 
-  const activeOpenId = requestId || requirementId || pathnameId;
   const isMatchingInitial = Boolean(
     initialData && activeOpenId && (
       String(initialData.id).toLowerCase() === String(activeOpenId).toLowerCase() ||
@@ -57,25 +62,25 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   );
 
   const { data: bidData, isLoading: isBidLoading, error: bidError } = useQuery({
-    queryKey: ['open-tender-bid-detail', requestId],
-    queryFn: () => procurementBidApi.detail(requestId!),
-    enabled: !!requestId,
+    queryKey: ['open-tender-bid-detail', requestId || activeOpenId],
+    queryFn: () => procurementBidApi.detail((requestId || activeOpenId)!),
+    enabled: !!(requestId || activeOpenId),
     initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
   });
 
-  const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId;
+  const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || fallbackReqId;
 
   const { data: reqData, isLoading: isReqLoading, error: reqError } = useQuery({
     queryKey: ['open-tender-req-detail', targetReqId],
     queryFn: async () => {
       try {
-        const res = await getApi<any>(`/api/requirements/${targetReqId}`);
-        if (res) return res.data || res;
-      } catch {}
-      try {
         const res2 = await getApi<any>(`/api/marketplace/requirements/${targetReqId}`);
         if (res2) return res2.data || res2;
+      } catch {}
+      try {
+        const res = await getApi<any>(`/api/requirements/${targetReqId}`);
+        if (res) return res.data || res;
       } catch {}
       return null;
     },
@@ -84,7 +89,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     staleTime: 60_000,
   });
 
-  const isLoading = !initialData && (isBidLoading || (!!targetReqId && isReqLoading && !bidData));
+  const isLoading = !initialData && !bidData && !reqData && (isBidLoading || isReqLoading);
   const bid: any = bidData || {};
   const reqObj: any = reqData || {};
   const payload = bid.technicalPacket || bid.payload || reqObj.payload || {};

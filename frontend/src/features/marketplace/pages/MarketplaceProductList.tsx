@@ -18,6 +18,7 @@ import { useDebounce } from '../../../hooks/useDebounce';
 import { CompareToggleButton } from '../components/CompareToggleButton';
 import { CompareTray } from '../components/CompareTray';
 import { CategoryHorizontalBar } from '../components/CategoryHorizontalBar';
+import { MarketplaceFilterPanel } from '../components/MarketplaceFilterPanel';
 import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { cn } from '../../../lib/utils';
@@ -88,11 +89,16 @@ export default function MarketplaceProductList() {
     const [bulkDealFilter, setBulkDealFilter] = useState(searchParams?.get('bulkDeal') === 'true');
     const [taxRateFilter, setTaxRateFilter] = useState(searchParams?.get('taxRate') || '');
     const [brandSearchFilter, setBrandSearchFilter] = useState(searchParams?.get('brand') || '');
-    const [sellerSearchQuery, setSellerSearchQuery] = useState('');
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
     const [page, setPage] = useState(Number(searchParams?.get('page')) || 1);
     const [pageSize, setPageSize] = useState(Number(searchParams?.get('pageSize')) || 16);
+
+    // Reset page and accumulated list on search query or service mode change
+    useEffect(() => {
+        setPage(1);
+        setAccumulatedItems([]);
+    }, [searchQuery, isServices]);
 
     const handleToggleType = (type: 'products' | 'services') => {
         setSelectedCategoryIds([]);
@@ -293,6 +299,14 @@ export default function MarketplaceProductList() {
                     priceFilter === 'mid' || priceFilter === '1K_5K' ? price >= 1000 && price <= 5000 :
                         priceFilter === '5K_20K' ? price > 5000 && price <= 20000 :
                             priceFilter === 'high' || priceFilter === 'ABOVE_20K' ? price > 20000 :
+                                priceFilter.includes('-') ? (
+                                    (() => {
+                                        const [minStr, maxStr] = priceFilter.split('-');
+                                        const min = minStr ? Number(minStr) : 0;
+                                        const max = maxStr ? Number(maxStr) : Infinity;
+                                        return price >= min && (maxStr ? price <= max : true);
+                                    })()
+                                ) :
                                 true);
                                 
         const matchesCondition = isServices || !conditionFilter || String(item.itemCondition || '').toUpperCase() === conditionFilter.toUpperCase();
@@ -304,9 +318,9 @@ export default function MarketplaceProductList() {
         const matchesBrand = !brandSearchFilter || String(item.brand || '').toLowerCase().includes(brandSearchFilter.toLowerCase()) || String(item.organization?.organizationName || '').toLowerCase().includes(brandSearchFilter.toLowerCase());
 
         const matchesDistrict = !districtFilter || String(item.organization?.district || item.organization?.city || item.organization?.state || '').toLowerCase().includes(districtFilter.toLowerCase());
-        const matchesDiscount = !discountFilter || (discountFilter === 'active' && Boolean(item.discountPercent || item.discountPrice));
-        const matchesRating = !minRatingFilter || (4.5 + ((item.id * 3) % 5) / 10) >= minRatingFilter;
-        const matchesFastDispatch = !fastDispatchFilter || Boolean(item.id % 2 === 0 || item.inStock);
+        const matchesDiscount = !discountFilter || (discountFilter === 'active' && Boolean(item.discountPercent || item.discountPrice || (item.originalPrice && item.price && Number(item.originalPrice) > Number(item.price))));
+        const matchesRating = !minRatingFilter || (Number(item.avgRating || item.rating || 0) >= minRatingFilter);
+        const matchesFastDispatch = !fastDispatchFilter || Boolean(item.sellerBadges?.includes('FAST_DISPATCH') || item.sellerBadges?.includes('48H_DISPATCH') || item.organization?.sellerBadges?.includes('FAST_DISPATCH') || item.organization?.sellerBadges?.includes('48H_DISPATCH') || item.isFastDispatch);
 
         return matchesSearch && matchesCategory && matchesSubcategory && matchesStatus && matchesVerification && matchesPrice && matchesCondition && matchesPricingModel && matchesMsme && matchesBulk && matchesTaxRate && matchesBrand && matchesDistrict && matchesDiscount && matchesRating && matchesFastDispatch;
     }), [items, searchQuery, selectedCategoryIds, selectedSubcategories, statusFilter, verificationFilter, priceFilter, conditionFilter, pricingModelFilter, msmeOnlyFilter, bulkDealFilter, taxRateFilter, brandSearchFilter, districtFilter, discountFilter, minRatingFilter, fastDispatchFilter, isServices]);
@@ -325,13 +339,13 @@ export default function MarketplaceProductList() {
             return pB - pA;
         }
         if (sort === 'rating') {
-            const rA = 4.5 + ((a.id * 3) % 5) / 10;
-            const rB = 4.5 + ((b.id * 3) % 5) / 10;
+            const rA = Number(a.avgRating || a.rating || 0);
+            const rB = Number(b.avgRating || b.rating || 0);
             return rB - rA;
         }
         if (sort === 'discount') {
-            const dA = a.discountPercent || 15;
-            const dB = b.discountPercent || 15;
+            const dA = Number(a.discountPercent || 0);
+            const dB = Number(b.discountPercent || 0);
             return dB - dA;
         }
         if (sort === 'latest') {
@@ -354,8 +368,9 @@ export default function MarketplaceProductList() {
         if (conditionFilter) count++;
         if (msmeOnlyFilter) count++;
         if (fastDispatchFilter) count++;
+        if (bulkDealFilter) count++;
         return count;
-    }, [searchQuery, selectedCategoryIds, selectedSubcategories, priceFilter, brandSearchFilter, districtFilter, discountFilter, verificationFilter, minRatingFilter, conditionFilter, msmeOnlyFilter, fastDispatchFilter]);
+    }, [searchQuery, selectedCategoryIds, selectedSubcategories, priceFilter, brandSearchFilter, districtFilter, discountFilter, verificationFilter, minRatingFilter, conditionFilter, msmeOnlyFilter, fastDispatchFilter, bulkDealFilter]);
 
     const handleClearAllFilters = () => {
         setSelectedCategoryIds([]);
@@ -369,6 +384,7 @@ export default function MarketplaceProductList() {
         setConditionFilter('');
         setMsmeOnlyFilter(false);
         setFastDispatchFilter(false);
+        setBulkDealFilter(false);
         setPage(1);
         syncUrl({
             q: '',
@@ -379,6 +395,8 @@ export default function MarketplaceProductList() {
             verifiedSeller: '',
             condition: '',
             msmeOnly: '',
+            bulkDeal: '',
+            price: '',
             page: 1
         });
     };
@@ -520,14 +538,32 @@ export default function MarketplaceProductList() {
     // Compute discount calculation helper
     const getProductPricing = (item: any) => {
         const itemPrice = Number(isServices ? item.basePrice || 0 : item.price || 0);
-        const originalPrice = Number(item.originalPrice || itemPrice * 1.25);
-        const discountPrice = Number(item.discountPrice || itemPrice);
-        const effectivePrice = discountPrice > 0 ? discountPrice : itemPrice;
-        const discountPercent = Number(item.discountPercent || (originalPrice > effectivePrice ? Math.round(((originalPrice - effectivePrice) / originalPrice) * 100) : 15));
+        const originalPrice = Number(item.originalPrice || 0);
+        const discountPrice = Number(item.discountPrice || 0);
+        const explicitPercent = Number(item.discountPercent || 0);
+
+        let effectivePrice = itemPrice;
+        let origPrice = originalPrice > 0 ? originalPrice : itemPrice;
+        let discountPercent = 0;
+
+        if (discountPrice > 0 && discountPrice < origPrice) {
+            effectivePrice = discountPrice;
+            discountPercent = explicitPercent > 0 ? explicitPercent : Math.round(((origPrice - discountPrice) / origPrice) * 100);
+        } else if (originalPrice > 0 && itemPrice > 0 && originalPrice > itemPrice) {
+            effectivePrice = itemPrice;
+            origPrice = originalPrice;
+            discountPercent = explicitPercent > 0 ? explicitPercent : Math.round(((originalPrice - itemPrice) / originalPrice) * 100);
+        } else if (explicitPercent > 0 && explicitPercent < 100 && itemPrice > 0) {
+            discountPercent = explicitPercent;
+            origPrice = originalPrice > 0 ? originalPrice : Math.round(itemPrice / (1 - explicitPercent / 100));
+            effectivePrice = itemPrice;
+        }
+
         return {
             effectivePrice,
-            originalPrice: originalPrice > effectivePrice ? originalPrice : Math.round(effectivePrice * 1.25),
-            discountPercent: discountPercent > 0 ? discountPercent : 15
+            originalPrice: origPrice,
+            discountPercent: discountPercent > 0 ? discountPercent : 0,
+            hasDiscount: discountPercent > 0
         };
     };
 
@@ -568,259 +604,6 @@ export default function MarketplaceProductList() {
 
         return matched.size > 0 ? Array.from(matched) : ['Safety Boots', 'Electric Motors', 'Arc Welders', 'Deep Groove Bearings', 'Seamless Pipes', 'Fire Extinguishers'];
     }, [selectedCategoryIds, categories]);
-
-    const renderFilterContent = () => (
-        <>
-            {/* Multi-Select Categories Filter */}
-            <div>
-                <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Categories</h4>
-                    {selectedCategoryIds.length > 0 && (
-                        <span className="text-[10px] font-bold text-blue-600">
-                            {selectedCategoryIds.length} selected
-                        </span>
-                    )}
-                </div>
-                <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
-                    <label className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-slate-50 transition">
-                        <input
-                            type="checkbox"
-                            checked={selectedCategoryIds.length === 0}
-                            onChange={() => {
-                                setSelectedCategoryIds([]);
-                                setPage(1);
-                                syncUrl({ categoryId: '', page: 1 });
-                            }}
-                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="flex-1">All Categories</span>
-                        <span className="text-[10px] font-semibold text-slate-400">{total}</span>
-                    </label>
-                    {categories.map((cat: any) => {
-                        const catIdStr = String(cat.id);
-                        const isChecked = selectedCategoryIds.includes(catIdStr);
-                        return (
-                            <label
-                                key={cat.id}
-                                className={cn(
-                                    "flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition",
-                                    isChecked ? "bg-blue-50/80 text-blue-900 font-bold" : "text-slate-700 hover:bg-slate-50"
-                                )}
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => {
-                                        let next: string[];
-                                        if (isChecked) {
-                                            next = selectedCategoryIds.filter(id => id !== catIdStr);
-                                        } else {
-                                            next = [...selectedCategoryIds, catIdStr];
-                                        }
-                                        setSelectedCategoryIds(next);
-                                        setPage(1);
-                                        syncUrl({ categoryId: next.join(','), page: 1 });
-                                    }}
-                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <span title={cat.name} className="truncate flex-1">{cat.name}</span>
-                            </label>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* Category-Specific Product Types / Subcategories */}
-            {availableSubcategories.length > 0 && (
-                <div className="border-t border-slate-100 pt-4">
-                    <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Product Type</h4>
-                        {selectedSubcategories.length > 0 && (
-                            <span className="text-[10px] font-bold text-blue-600">
-                                {selectedSubcategories.length}
-                            </span>
-                        )}
-                    </div>
-                    <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                        {availableSubcategories.map((sub: string) => {
-                            const isChecked = selectedSubcategories.includes(sub);
-                            return (
-                                <label
-                                    key={sub}
-                                    className={cn(
-                                        "flex items-center gap-2 px-2 py-1 rounded-md text-xs font-semibold cursor-pointer transition",
-                                        isChecked ? "bg-blue-50/80 text-blue-900 font-bold" : "text-slate-700 hover:bg-slate-50"
-                                    )}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={isChecked}
-                                        onChange={() => {
-                                            const next = isChecked 
-                                                ? selectedSubcategories.filter(s => s !== sub)
-                                                : [...selectedSubcategories, sub];
-                                            setSelectedSubcategories(next);
-                                        }}
-                                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                    <span title={sub} className="truncate flex-1">{sub}</span>
-                                </label>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            {/* Price Range Filter */}
-            {canViewPrice && (
-                <div className="border-t border-slate-100 pt-4">
-                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2.5">Price Range</h4>
-                    <div className="space-y-1.5 text-xs font-semibold text-slate-700">
-                        {[
-                            { label: 'All Prices', val: '' },
-                            { label: 'Under ₹1,000', val: 'UNDER_1K' },
-                            { label: '₹1,000 – ₹5,000', val: '1K_5K' },
-                            { label: '₹5,000 – ₹20,000', val: '5K_20K' },
-                            { label: 'Above ₹20,000', val: 'ABOVE_20K' }
-                        ].map(p => (
-                            <label key={p.val} className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
-                                <input
-                                    type="radio"
-                                    name="priceRange"
-                                    checked={priceFilter === p.val}
-                                    onChange={() => { setPriceFilter(p.val); setPage(1); syncUrl({ price: p.val, page: 1 }); }}
-                                    className="text-blue-600 focus:ring-blue-500"
-                                />
-                                <span>{p.label}</span>
-                            </label>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Verified Sellers & Brands (with quick search) */}
-            <div className="border-t border-slate-100 pt-4">
-                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2">Verified Sellers</h4>
-                <div className="mb-2 relative">
-                    <input
-                        type="text"
-                        value={sellerSearchQuery}
-                        onChange={e => setSellerSearchQuery(e.target.value)}
-                        placeholder="Search vendor..."
-                        className="w-full h-7 px-2 text-[11px] rounded-md border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                </div>
-                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 text-xs font-semibold text-slate-700">
-                    {availableSellers
-                        .filter((s: string) => !sellerSearchQuery || s.toLowerCase().includes(sellerSearchQuery.toLowerCase()))
-                        .map((sellerName: string) => {
-                            const isChecked = brandSearchFilter === sellerName;
-                            return (
-                                <label key={sellerName} className="flex items-center gap-2 cursor-pointer hover:text-blue-600 truncate">
-                                    <input
-                                        type="checkbox"
-                                        checked={isChecked}
-                                        onChange={() => {
-                                            const next = isChecked ? '' : sellerName;
-                                            setBrandSearchFilter(next);
-                                            setPage(1);
-                                            syncUrl({ brand: next, page: 1 });
-                                        }}
-                                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                    <span title={sellerName} className="truncate">{sellerName}</span>
-                                </label>
-                            );
-                        })}
-                </div>
-            </div>
-
-            {/* Location Filter */}
-            <div className="border-t border-slate-100 pt-4">
-                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2.5">Location</h4>
-                <div className="space-y-1.5 text-xs font-semibold text-slate-700">
-                    {[
-                        { label: 'All Locations', val: '' },
-                        { label: 'Jharsuguda Only', val: 'Jharsuguda' },
-                        { label: 'Odisha State', val: 'Odisha' },
-                    ].map(loc => (
-                        <label key={loc.val} className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
-                            <input
-                                type="radio"
-                                name="districtFilter"
-                                checked={districtFilter === loc.val}
-                                onChange={() => {
-                                    setDistrictFilter(loc.val);
-                                    setPage(1);
-                                    syncUrl({ district: loc.val, page: 1 });
-                                }}
-                                className="text-blue-600 focus:ring-blue-500"
-                            />
-                            <span>{loc.label}</span>
-                        </label>
-                    ))}
-                </div>
-            </div>
-
-            {/* Customer Rating Filter */}
-            <div className="border-t border-slate-100 pt-4">
-                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2.5">Customer Rating</h4>
-                <div className="space-y-1.5 text-xs font-semibold text-slate-700">
-                    {[
-                        { label: 'All Ratings', val: 0 },
-                        { label: '★ 4.5 & above', val: 4.5 },
-                        { label: '★ 4.0 & above', val: 4.0 },
-                    ].map(r => (
-                        <label key={r.val} className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
-                            <input
-                                type="radio"
-                                name="ratingFilter"
-                                checked={minRatingFilter === r.val}
-                                onChange={() => { setMinRatingFilter(r.val); setPage(1); }}
-                                className="text-blue-600 focus:ring-blue-500"
-                            />
-                            <span>{r.label}</span>
-                        </label>
-                    ))}
-                </div>
-            </div>
-
-            {/* Fast Dispatch Toggle */}
-            <div className="border-t border-slate-100 pt-4">
-                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2.5">Delivery &amp; Stock</h4>
-                <label className="flex items-center gap-2 cursor-pointer hover:text-blue-600 text-xs font-semibold text-slate-700">
-                    <input
-                        type="checkbox"
-                        checked={fastDispatchFilter}
-                        onChange={e => { setFastDispatchFilter(e.target.checked); setPage(1); }}
-                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span>⚡ 24–48h Fast Dispatch</span>
-                </label>
-            </div>
-
-            {/* Offers & Discounts */}
-            {canViewPrice && (
-                <div className="border-t border-slate-100 pt-4">
-                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2.5">Offers &amp; Deals</h4>
-                    <label className="flex items-center gap-2 cursor-pointer hover:text-blue-600 text-xs font-semibold text-slate-700">
-                        <input
-                            type="checkbox"
-                            checked={discountFilter === 'active'}
-                            onChange={e => {
-                                const next = e.target.checked ? 'active' : '';
-                                setDiscountFilter(next);
-                                setPage(1);
-                                syncUrl({ discount: next, page: 1 });
-                            }}
-                            className="rounded border-slate-300 text-orange-500 focus:ring-orange-400"
-                        />
-                        <span>Active Promotional Discounts</span>
-                    </label>
-                </div>
-            )}
-        </>
-    );
 
     return (
         <div className={useDashboardShell ? "w-full bg-slate-50/50" : "min-h-dvh bg-slate-50/50 flex flex-col"}>
@@ -978,48 +761,101 @@ export default function MarketplaceProductList() {
                     {/* Main Layout: Sticky Left Sidebar Filters + Product Grid */}
                     <div className="flex gap-6 items-start">
                         {/* Sticky Left Sidebar Filters */}
-                        <aside className="hidden lg:block w-72 shrink-0 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm space-y-5 sticky top-24 max-h-[calc(100vh-120px)] overflow-y-auto">
-                            {/* Filter Header */}
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                                <div className="flex items-center gap-2">
-                                    <SlidersHorizontal className="h-4 w-4 text-[#0b2447]" />
-                                    <h3 className="text-xs font-black text-[#0b2447] uppercase tracking-wider">Filters</h3>
-                                    {activeFiltersCount > 0 && (
-                                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-black text-white">
-                                            {activeFiltersCount}
-                                        </span>
-                                    )}
-                                </div>
-                                {activeFiltersCount > 0 && (
-                                    <button
-                                        type="button"
-                                        onClick={handleClearAllFilters}
-                                        className="text-[11px] font-bold text-red-600 hover:underline transition"
-                                    >
-                                        Reset
-                                    </button>
-                                )}
-                            </div>
-
-                            {renderFilterContent()}
-
-                            {/* Clear All Filters Button at the Bottom of Sidepanel */}
-                            <div className="border-t border-slate-100 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={handleClearAllFilters}
-                                    disabled={activeFiltersCount === 0}
-                                    className={cn(
-                                        "w-full h-10 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 shadow-sm",
-                                        activeFiltersCount > 0
-                                            ? "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 active:scale-98"
-                                            : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60"
-                                    )}
-                                >
-                                    <span>Clear All Filters</span>
-                                    {activeFiltersCount > 0 && <span>({activeFiltersCount})</span>}
-                                </button>
-                            </div>
+                        <aside className="hidden lg:block w-76 shrink-0 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm sticky top-24 max-h-[calc(100vh-120px)] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
+                            <MarketplaceFilterPanel
+                                categories={categories.filter((c: any) => isServices ? ['SERVICE', 'BOTH'].includes(c.type) : ['PRODUCT', 'BOTH'].includes(c.type))}
+                                selectedCategoryIds={selectedCategoryIds}
+                                onSelectCategory={(catIdStr) => {
+                                    let next: string[];
+                                    if (selectedCategoryIds.includes(catIdStr)) {
+                                        next = selectedCategoryIds.filter(id => id !== catIdStr);
+                                    } else {
+                                        next = [...selectedCategoryIds, catIdStr];
+                                    }
+                                    setSelectedCategoryIds(next);
+                                    setPage(1);
+                                    syncUrl({ categoryId: next.join(','), page: 1 });
+                                }}
+                                onClearCategories={() => {
+                                    setSelectedCategoryIds([]);
+                                    setPage(1);
+                                    syncUrl({ categoryId: '', page: 1 });
+                                }}
+                                availableSubcategories={availableSubcategories}
+                                selectedSubcategories={selectedSubcategories}
+                                onToggleSubcategory={(sub) => {
+                                    const next = selectedSubcategories.includes(sub)
+                                        ? selectedSubcategories.filter(s => s !== sub)
+                                        : [...selectedSubcategories, sub];
+                                    setSelectedSubcategories(next);
+                                }}
+                                onClearSubcategories={() => setSelectedSubcategories([])}
+                                canViewPrice={canViewPrice}
+                                priceFilter={priceFilter}
+                                onPriceChange={(val) => {
+                                    setPriceFilter(val);
+                                    setPage(1);
+                                    syncUrl({ price: val, page: 1 });
+                                }}
+                                availableSellers={availableSellers}
+                                brandSearchFilter={brandSearchFilter}
+                                onBrandChange={(brand) => {
+                                    setBrandSearchFilter(brand);
+                                    setPage(1);
+                                    syncUrl({ brand, page: 1 });
+                                }}
+                                districtFilter={districtFilter}
+                                onDistrictChange={(dist) => {
+                                    setDistrictFilter(dist);
+                                    setPage(1);
+                                    syncUrl({ district: dist, page: 1 });
+                                }}
+                                discountFilter={discountFilter}
+                                onDiscountToggle={(active) => {
+                                    const next = active ? 'active' : '';
+                                    setDiscountFilter(next);
+                                    setPage(1);
+                                    syncUrl({ discount: next, page: 1 });
+                                }}
+                                msmeOnlyFilter={msmeOnlyFilter}
+                                onMsmeToggle={(active) => {
+                                    setMsmeOnlyFilter(active);
+                                    setPage(1);
+                                    syncUrl({ msmeOnly: active ? 'true' : '', page: 1 });
+                                }}
+                                fastDispatchFilter={fastDispatchFilter}
+                                onFastDispatchToggle={(active) => {
+                                    setFastDispatchFilter(active);
+                                    setPage(1);
+                                }}
+                                minRatingFilter={minRatingFilter}
+                                onRatingChange={(rating) => {
+                                    setMinRatingFilter(rating);
+                                    setPage(1);
+                                }}
+                                verificationFilter={verificationFilter}
+                                onVerificationToggle={(val) => {
+                                    setVerificationFilter(val);
+                                    setPage(1);
+                                    syncUrl({ verifiedSeller: val === 'VERIFIED' ? 'true' : '', page: 1 });
+                                }}
+                                conditionFilter={conditionFilter}
+                                onConditionChange={(cond) => {
+                                    setConditionFilter(cond);
+                                    setPage(1);
+                                    syncUrl({ condition: cond, page: 1 });
+                                }}
+                                bulkDealFilter={bulkDealFilter}
+                                onBulkDealToggle={(bulk) => {
+                                    setBulkDealFilter(bulk);
+                                    setPage(1);
+                                    syncUrl({ bulkDeal: bulk ? 'true' : '', page: 1 });
+                                }}
+                                activeFiltersCount={activeFiltersCount}
+                                totalResults={total}
+                                onClearAll={handleClearAllFilters}
+                                isServices={isServices}
+                            />
                         </aside>
 
                         {/* Mobile Filter Drawer Modal */}
@@ -1044,7 +880,7 @@ export default function MarketplaceProductList() {
                                         </div>
                                         <button
                                             onClick={() => setMobileFiltersOpen(false)}
-                                            className="p-1 rounded-lg hover:bg-white/10 text-white transition-colors"
+                                            className="p-1 rounded-lg hover:bg-white/10 text-white transition-colors cursor-pointer"
                                         >
                                             <ChevronLeft className="h-5 w-5" />
                                         </button>
@@ -1052,7 +888,102 @@ export default function MarketplaceProductList() {
 
                                     {/* Drawer Body */}
                                     <div className="flex-1 overflow-y-auto p-4 space-y-5">
-                                        {renderFilterContent()}
+                                        <MarketplaceFilterPanel
+                                            categories={categories.filter((c: any) => isServices ? ['SERVICE', 'BOTH'].includes(c.type) : ['PRODUCT', 'BOTH'].includes(c.type))}
+                                            selectedCategoryIds={selectedCategoryIds}
+                                            onSelectCategory={(catIdStr) => {
+                                                let next: string[];
+                                                if (selectedCategoryIds.includes(catIdStr)) {
+                                                    next = selectedCategoryIds.filter(id => id !== catIdStr);
+                                                } else {
+                                                    next = [...selectedCategoryIds, catIdStr];
+                                                }
+                                                setSelectedCategoryIds(next);
+                                                setPage(1);
+                                                syncUrl({ categoryId: next.join(','), page: 1 });
+                                            }}
+                                            onClearCategories={() => {
+                                                setSelectedCategoryIds([]);
+                                                setPage(1);
+                                                syncUrl({ categoryId: '', page: 1 });
+                                            }}
+                                            availableSubcategories={availableSubcategories}
+                                            selectedSubcategories={selectedSubcategories}
+                                            onToggleSubcategory={(sub) => {
+                                                const next = selectedSubcategories.includes(sub)
+                                                    ? selectedSubcategories.filter(s => s !== sub)
+                                                    : [...selectedSubcategories, sub];
+                                                setSelectedSubcategories(next);
+                                            }}
+                                            onClearSubcategories={() => setSelectedSubcategories([])}
+                                            canViewPrice={canViewPrice}
+                                            priceFilter={priceFilter}
+                                            onPriceChange={(val) => {
+                                                setPriceFilter(val);
+                                                setPage(1);
+                                                syncUrl({ price: val, page: 1 });
+                                            }}
+                                            availableSellers={availableSellers}
+                                            brandSearchFilter={brandSearchFilter}
+                                            onBrandChange={(brand) => {
+                                                setBrandSearchFilter(brand);
+                                                setPage(1);
+                                                syncUrl({ brand, page: 1 });
+                                            }}
+                                            districtFilter={districtFilter}
+                                            onDistrictChange={(dist) => {
+                                                setDistrictFilter(dist);
+                                                setPage(1);
+                                                syncUrl({ district: dist, page: 1 });
+                                            }}
+                                            discountFilter={discountFilter}
+                                            onDiscountToggle={(active) => {
+                                                const next = active ? 'active' : '';
+                                                setDiscountFilter(next);
+                                                setPage(1);
+                                                syncUrl({ discount: next, page: 1 });
+                                            }}
+                                            msmeOnlyFilter={msmeOnlyFilter}
+                                            onMsmeToggle={(active) => {
+                                                setMsmeOnlyFilter(active);
+                                                setPage(1);
+                                                syncUrl({ msmeOnly: active ? 'true' : '', page: 1 });
+                                            }}
+                                            fastDispatchFilter={fastDispatchFilter}
+                                            onFastDispatchToggle={(active) => {
+                                                setFastDispatchFilter(active);
+                                                setPage(1);
+                                            }}
+                                            minRatingFilter={minRatingFilter}
+                                            onRatingChange={(rating) => {
+                                                setMinRatingFilter(rating);
+                                                setPage(1);
+                                            }}
+                                            verificationFilter={verificationFilter}
+                                            onVerificationToggle={(val) => {
+                                                setVerificationFilter(val);
+                                                setPage(1);
+                                                syncUrl({ verifiedSeller: val === 'VERIFIED' ? 'true' : '', page: 1 });
+                                            }}
+                                            conditionFilter={conditionFilter}
+                                            onConditionChange={(cond) => {
+                                                setConditionFilter(cond);
+                                                setPage(1);
+                                                syncUrl({ condition: cond, page: 1 });
+                                            }}
+                                            bulkDealFilter={bulkDealFilter}
+                                            onBulkDealToggle={(bulk) => {
+                                                setBulkDealFilter(bulk);
+                                                setPage(1);
+                                                syncUrl({ bulkDeal: bulk ? 'true' : '', page: 1 });
+                                            }}
+                                            activeFiltersCount={activeFiltersCount}
+                                            totalResults={total}
+                                            onClearAll={handleClearAllFilters}
+                                            isServices={isServices}
+                                            isMobileDrawer={true}
+                                            onCloseMobileDrawer={() => setMobileFiltersOpen(false)}
+                                        />
                                     </div>
 
                                     {/* Drawer Footer Actions */}
@@ -1061,14 +992,14 @@ export default function MarketplaceProductList() {
                                             type="button"
                                             onClick={handleClearAllFilters}
                                             disabled={activeFiltersCount === 0}
-                                            className="flex-1 h-11 rounded-xl text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                            className="flex-1 h-11 rounded-xl text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
                                         >
                                             Reset All
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setMobileFiltersOpen(false)}
-                                            className="flex-1 h-11 rounded-xl text-xs font-black uppercase tracking-wider bg-[#0b2447] text-white hover:bg-[#12335f] transition shadow-md"
+                                            className="flex-1 h-11 rounded-xl text-xs font-black uppercase tracking-wider bg-[#0b2447] text-white hover:bg-[#12335f] transition shadow-md cursor-pointer"
                                         >
                                             Show {sortedItems.length} Items
                                         </button>
@@ -1089,7 +1020,7 @@ export default function MarketplaceProductList() {
                                             <button
                                                 type="button"
                                                 onClick={() => syncUrl({ q: '', page: 1 })}
-                                                className="hover:text-red-600 ml-1 font-black"
+                                                className="hover:text-red-600 ml-1 font-black cursor-pointer"
                                             >
                                                 ✕
                                             </button>
@@ -1109,7 +1040,7 @@ export default function MarketplaceProductList() {
                                                         setPage(1);
                                                         syncUrl({ categoryId: next.join(','), page: 1 });
                                                     }}
-                                                    className="hover:text-red-600 ml-1 font-black"
+                                                    className="hover:text-red-600 ml-1 font-black cursor-pointer"
                                                 >
                                                     ✕
                                                 </button>
@@ -1122,46 +1053,81 @@ export default function MarketplaceProductList() {
                                             <button
                                                 type="button"
                                                 onClick={() => setSelectedSubcategories(prev => prev.filter(s => s !== sub))}
-                                                className="hover:text-red-600 ml-1 font-black"
+                                                className="hover:text-red-600 ml-1 font-black cursor-pointer"
                                             >
                                                 ✕
                                             </button>
                                         </span>
                                     ))}
                                     {priceFilter && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 border border-slate-200">
-                                            Price: {priceFilter.replace('_', ' ')}
-                                            <button type="button" onClick={() => { setPriceFilter(''); setPage(1); }} className="hover:text-red-600 ml-1 font-black">✕</button>
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+                                            Price: {priceFilter === 'UNDER_1K' ? 'Under ₹1,000' :
+                                                   priceFilter === '1K_5K' ? '₹1,000 – ₹5,000' :
+                                                   priceFilter === '5K_20K' ? '₹5,000 – ₹20,000' :
+                                                   priceFilter === 'ABOVE_20K' ? 'Above ₹20,000' :
+                                                   priceFilter.includes('-') ? `₹${priceFilter.split('-')[0] || 0} – ₹${priceFilter.split('-')[1] || 'above'}` :
+                                                   priceFilter.replace('_', ' ')}
+                                            <button type="button" onClick={() => { setPriceFilter(''); setPage(1); syncUrl({ price: '', page: 1 }); }} className="hover:text-red-600 ml-1 font-black cursor-pointer">✕</button>
+                                        </span>
+                                    )}
+                                    {msmeOnlyFilter && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-800 border border-blue-200">
+                                            🛡️ MSME Assured
+                                            <button type="button" onClick={() => { setMsmeOnlyFilter(false); setPage(1); syncUrl({ msmeOnly: '', page: 1 }); }} className="hover:text-red-600 ml-1 font-black cursor-pointer">✕</button>
+                                        </span>
+                                    )}
+                                    {discountFilter === 'active' && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-800 border border-orange-200">
+                                            % On Sale
+                                            <button type="button" onClick={() => { setDiscountFilter(''); setPage(1); syncUrl({ discount: '', page: 1 }); }} className="hover:text-red-600 ml-1 font-black cursor-pointer">✕</button>
+                                        </span>
+                                    )}
+                                    {verificationFilter === 'VERIFIED' && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-800 border border-indigo-200">
+                                            🏢 Verified Vendors
+                                            <button type="button" onClick={() => { setVerificationFilter(''); setPage(1); syncUrl({ verifiedSeller: '', page: 1 }); }} className="hover:text-red-600 ml-1 font-black cursor-pointer">✕</button>
                                         </span>
                                     )}
                                     {brandSearchFilter && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 border border-slate-200">
-                                            Seller: {brandSearchFilter}
-                                            <button type="button" onClick={() => { setBrandSearchFilter(''); setPage(1); syncUrl({ brand: '', page: 1 }); }} className="hover:text-red-600 ml-1 font-black">✕</button>
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-3 py-1 text-xs font-bold text-purple-800 border border-purple-200">
+                                            Vendor: {brandSearchFilter}
+                                            <button type="button" onClick={() => { setBrandSearchFilter(''); setPage(1); syncUrl({ brand: '', page: 1 }); }} className="hover:text-red-600 ml-1 font-black cursor-pointer">✕</button>
                                         </span>
                                     )}
                                     {districtFilter && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 border border-slate-200">
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-800 border border-rose-200">
                                             Location: {districtFilter}
-                                            <button type="button" onClick={() => { setDistrictFilter(''); setPage(1); syncUrl({ district: '', page: 1 }); }} className="hover:text-red-600 ml-1 font-black">✕</button>
+                                            <button type="button" onClick={() => { setDistrictFilter(''); setPage(1); syncUrl({ district: '', page: 1 }); }} className="hover:text-red-600 ml-1 font-black cursor-pointer">✕</button>
                                         </span>
                                     )}
                                     {minRatingFilter > 0 && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 border border-amber-200">
                                             ★ {minRatingFilter}+
-                                            <button type="button" onClick={() => setMinRatingFilter(0)} className="hover:text-red-600 ml-1 font-black">✕</button>
+                                            <button type="button" onClick={() => setMinRatingFilter(0)} className="hover:text-red-600 ml-1 font-black cursor-pointer">✕</button>
                                         </span>
                                     )}
                                     {fastDispatchFilter && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 border border-amber-200">
                                             ⚡ Fast Dispatch
-                                            <button type="button" onClick={() => setFastDispatchFilter(false)} className="hover:text-red-600 ml-1 font-black">✕</button>
+                                            <button type="button" onClick={() => setFastDispatchFilter(false)} className="hover:text-red-600 ml-1 font-black cursor-pointer">✕</button>
+                                        </span>
+                                    )}
+                                    {bulkDealFilter && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-3 py-1 text-xs font-bold text-cyan-800 border border-cyan-200">
+                                            📦 Bulk Pricing
+                                            <button type="button" onClick={() => { setBulkDealFilter(false); setPage(1); syncUrl({ bulkDeal: '', page: 1 }); }} className="hover:text-red-600 ml-1 font-black cursor-pointer">✕</button>
+                                        </span>
+                                    )}
+                                    {conditionFilter && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-3 py-1 text-xs font-bold text-cyan-800 border border-cyan-200">
+                                            Condition: {conditionFilter === 'NEW' ? 'Brand New' : conditionFilter === 'REFURBISHED' ? 'Refurbished' : conditionFilter}
+                                            <button type="button" onClick={() => { setConditionFilter(''); setPage(1); syncUrl({ condition: '', page: 1 }); }} className="hover:text-red-600 ml-1 font-black cursor-pointer">✕</button>
                                         </span>
                                     )}
                                     <button
                                         type="button"
                                         onClick={handleClearAllFilters}
-                                        className="text-xs font-black text-red-600 hover:underline ml-auto px-2"
+                                        className="text-xs font-black text-red-600 hover:underline ml-auto px-2 cursor-pointer"
                                     >
                                         Clear All
                                     </button>
@@ -1204,11 +1170,33 @@ export default function MarketplaceProductList() {
                                             ? (isServices ? '/marketplace/services' : '/marketplace/products')
                                             : (isServices ? `/marketplace/services/${item.id}` : `/marketplace/products/${item.id}`);
 
-                                        // Mock badges & reviews for authentic e-commerce feel
-                                        const dispatchBadges = ['⚡ 48h Dispatch', 'Top Seller', 'Assured MSME', 'Fast Dispatch'];
-                                        const dispatchBadge = dispatchBadges[idx % dispatchBadges.length];
-                                        const reviewCount = 18 + ((item.id * 7) % 35);
-                                        const ratingScore = (4.5 + ((item.id * 3) % 5) / 10).toFixed(1);
+                                        // Authentic badges & reviews from real backend trust metrics
+                                        const rawRating = item.avgRating ?? item.rating ?? item.sellerRating?.avgRating;
+                                        const ratingScore = rawRating ? Number(rawRating).toFixed(1) : null;
+                                        const reviewCount = Number(item.reviewCount ?? item.sellerRating?.reviewCount ?? 0);
+
+                                        // Compute real badge
+                                        const badges: { label: string; style: string }[] = [];
+                                        if (Array.isArray(item.sellerBadges) && item.sellerBadges.length > 0) {
+                                            item.sellerBadges.forEach((b: string) => {
+                                                if (b === 'TOP_SELLER') badges.push({ label: 'Top Seller', style: 'bg-amber-50 text-amber-700 border-amber-200/60' });
+                                                else if (b === 'ASSURED_MSME') badges.push({ label: 'Assured MSME', style: 'bg-blue-50 text-blue-700 border-blue-200/60' });
+                                                else if (b === '48H_DISPATCH') badges.push({ label: '⚡ 48h Dispatch', style: 'bg-indigo-50 text-indigo-700 border-indigo-200/60' });
+                                                else if (b === 'FAST_DISPATCH') badges.push({ label: 'Fast Dispatch', style: 'bg-sky-50 text-sky-700 border-sky-200/60' });
+                                                else if (b === 'BULK_DEAL') badges.push({ label: 'Bulk Deal', style: 'bg-emerald-50 text-emerald-700 border-emerald-200/60' });
+                                            });
+                                        }
+                                        if (badges.length === 0) {
+                                            const isUdyam = item.organization?.udyamNumber || item.seller?.isUdyamCertified || item.isMsmeMade;
+                                            if (isVerified && isUdyam) {
+                                                badges.push({ label: 'Assured MSME', style: 'bg-blue-50 text-blue-700 border-blue-200/60' });
+                                            } else if (item.isMsmeMade) {
+                                                badges.push({ label: 'MSME Made', style: 'bg-blue-50 text-blue-700 border-blue-200/60' });
+                                            } else if (item.bulkDealAvailable) {
+                                                badges.push({ label: 'Bulk Deal', style: 'bg-emerald-50 text-emerald-700 border-emerald-200/60' });
+                                            }
+                                        }
+                                        const primaryBadge = badges[0] || null;
 
                                         return (
                                             <div
@@ -1217,13 +1205,23 @@ export default function MarketplaceProductList() {
                                             >
                                                 <div>
                                                     {/* Top Badge Header */}
-                                                    <div className="flex flex-wrap sm:flex-nowrap items-start sm:items-center justify-between gap-1 mb-2">
-                                                        <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/60">
-                                                            {dispatchBadge}
-                                                        </span>
-                                                        <span className="text-[9px] sm:text-[10px] font-black text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200 whitespace-nowrap">
-                                                            {pricing.discountPercent}% OFF
-                                                        </span>
+                                                    <div className="flex flex-wrap sm:flex-nowrap items-start sm:items-center justify-between gap-1 mb-2 min-h-[22px]">
+                                                        <div>
+                                                            {primaryBadge ? (
+                                                                <span className={`inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-wider border ${primaryBadge.style}`}>
+                                                                    {primaryBadge.label}
+                                                                </span>
+                                                            ) : isVerified ? (
+                                                                <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-semibold tracking-wider bg-slate-50 text-slate-600 border border-slate-200/60">
+                                                                    Verified Seller
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
+                                                        {pricing.hasDiscount && (
+                                                            <span className="text-[9px] sm:text-[10px] font-black text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200 whitespace-nowrap">
+                                                                {pricing.discountPercent}% OFF
+                                                            </span>
+                                                        )}
                                                     </div>
 
                                                     {/* Realistic Centered Product Image */}
@@ -1249,13 +1247,21 @@ export default function MarketplaceProductList() {
                                                     </Link>
 
                                                     {/* Star Rating Badge */}
-                                                    <div className="flex items-center gap-1 sm:gap-1.5 mt-2 mb-1.5 sm:mt-3 sm:mb-2">
-                                                        <span className="inline-flex items-center gap-1 bg-[#15803d] text-white px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-black">
-                                                            ★ {ratingScore}
-                                                        </span>
-                                                        <span className="text-[9px] sm:text-[10px] font-semibold text-slate-400">
-                                                            ({reviewCount} <span className="hidden sm:inline">Reviews</span><span className="sm:hidden">Rev</span>)
-                                                        </span>
+                                                    <div className="flex items-center gap-1 sm:gap-1.5 mt-2 mb-1.5 sm:mt-3 sm:mb-2 min-h-[22px]">
+                                                        {ratingScore && Number(ratingScore) > 0 ? (
+                                                            <>
+                                                                <span className="inline-flex items-center gap-1 bg-[#15803d] text-white px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-black">
+                                                                    ★ {ratingScore}
+                                                                </span>
+                                                                <span className="text-[9px] sm:text-[10px] font-semibold text-slate-400">
+                                                                    ({reviewCount} <span className="hidden sm:inline">Reviews</span><span className="sm:hidden">Rev</span>)
+                                                                </span>
+                                                            </>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-semibold text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded">
+                                                                ★ New Listing
+                                                            </span>
+                                                        )}
                                                     </div>
 
                                                     {/* Product Title */}
@@ -1284,12 +1290,16 @@ export default function MarketplaceProductList() {
                                                             <span className="text-sm sm:text-lg font-black text-slate-900">
                                                                 ₹{pricing.effectivePrice.toLocaleString('en-IN')}
                                                             </span>
-                                                            <span className="text-[9.5px] sm:text-xs text-slate-400 line-through">
-                                                                ₹{pricing.originalPrice.toLocaleString('en-IN')}
-                                                            </span>
-                                                            <span className="text-[9.5px] sm:text-xs font-black text-emerald-600 whitespace-nowrap">
-                                                                {pricing.discountPercent}% OFF
-                                                            </span>
+                                                            {pricing.hasDiscount && (
+                                                                <>
+                                                                    <span className="text-[9.5px] sm:text-xs text-slate-400 line-through">
+                                                                        ₹{pricing.originalPrice.toLocaleString('en-IN')}
+                                                                    </span>
+                                                                    <span className="text-[9.5px] sm:text-xs font-black text-emerald-600 whitespace-nowrap">
+                                                                        {pricing.discountPercent}% OFF
+                                                                    </span>
+                                                                </>
+                                                            )}
                                                         </div>
                                                     ) : (
                                                         <div className="mb-2 sm:mb-3 mt-1">

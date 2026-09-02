@@ -29,6 +29,11 @@ import {
   User,
   Users,
   PhoneCall,
+  Mail,
+  CheckCircle2,
+  CheckCircle,
+  Scale,
+  Sparkles,
   X,
   Package,
   Award,
@@ -127,6 +132,29 @@ const noisyDetailKeys = new Set([
   'sellerId',
   'bidId',
   'requirementId',
+  'authUserId',
+  'userId',
+  'creatorId',
+  'internalId',
+  'sourceId',
+  'sourceModel',
+  'linkedProcurementBidId',
+  'isDeleted',
+  'originalPayload',
+  'password',
+  'token',
+  'sourcePayload',
+  'rawPayload',
+  'technicalPacket',
+  'fileAssetId',
+  'assetId',
+  'draftMeta',
+  'draftStep',
+  '__v',
+  'statusEnum',
+  'metadata',
+  'hash',
+  'signature',
   'emdRequired',
   'emdAmount',
   'isEmdRequired',
@@ -148,6 +176,7 @@ function humanizeKey(key: string): string {
     .replace(/([A-Z])/g, ' $1')
     .replace(/_/g, ' ')
     .replace(/^\w/, char => char.toUpperCase())
+    .replace(/\b\w/g, l => l.toUpperCase())
     .trim();
 }
 
@@ -155,7 +184,7 @@ function hasDetailData(val: any): boolean {
   if (val === null || val === undefined) return false;
   if (typeof val === 'boolean') return true;
   if (typeof val === 'number') return !isNaN(val);
-  if (typeof val === 'string') return val.trim().length > 0;
+  if (typeof val === 'string') return val.trim().length > 0 && val.trim() !== 'null' && val.trim() !== 'undefined';
   if (Array.isArray(val)) return val.some(hasDetailData);
   if (typeof val === 'object') return Object.values(val).some(hasDetailData);
   return false;
@@ -228,19 +257,30 @@ function formatPrimitiveValue(val: any, valueKey?: string): string {
   if (val === null || val === undefined || val === '') return 'N/A';
   if (typeof val === 'boolean') return val ? 'Yes' : 'No';
   if (typeof val === 'number') {
-    if (valueKey && (valueKey.toLowerCase().includes('amount') || valueKey.toLowerCase().includes('budget') || valueKey.toLowerCase().includes('val'))) {
+    if (valueKey && (valueKey.toLowerCase().includes('amount') || valueKey.toLowerCase().includes('budget') || valueKey.toLowerCase().includes('val') || valueKey.toLowerCase().includes('rate') || valueKey.toLowerCase().includes('price') || valueKey.toLowerCase().includes('cost') || valueKey.toLowerCase().includes('fee') || valueKey.toLowerCase().includes('deposit'))) {
       return formatCurrency(val);
     }
     return val.toLocaleString('en-IN');
   }
   if (typeof val === 'string') {
     const trimmed = val.trim();
-    if (!trimmed) return 'N/A';
+    if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '[object Object]') return 'N/A';
     if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-      const formattedDate = formatDateString(trimmed, trimmed.includes('T'));
+      const formattedDate = formatDateString(trimmed, trimmed.includes('T') || trimmed.includes(':'));
       if (formattedDate) return formattedDate;
     }
+    // Format ALL_CAPS_WITH_UNDERSCORE enums to title case (e.g. ON_DELIVERY -> On Delivery)
+    if (/^[A-Z0-9_ -]+$/.test(trimmed) && trimmed.includes('_')) {
+      return humanizeKey(trimmed.toLowerCase());
+    }
     return trimmed;
+  }
+  if (Array.isArray(val)) {
+    const cleanList = val.map(v => formatPrimitiveValue(v, valueKey)).filter(v => v !== 'N/A' && v !== '');
+    return cleanList.length ? cleanList.join(', ') : 'N/A';
+  }
+  if (typeof val === 'object') {
+    return 'N/A';
   }
   return String(val);
 }
@@ -326,13 +366,21 @@ function StatusBadge({ status }: { status?: string }) {
   );
 }
 
-function SectionHeader({ title, icon: Icon }: { title: string; icon: IconComponent }) {
+function SectionHeader({ title, icon: Icon, badge, action }: { title: string; icon: IconComponent; badge?: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 shadow-2xs">
-        <Icon className="h-4 w-4" />
-      </span>
-      <h2 className="text-sm font-black uppercase tracking-wide text-slate-950">{title}</h2>
+    <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100/80 shadow-2xs">
+          <Icon className="h-4 w-4" />
+        </span>
+        <h2 className="text-xs sm:text-sm font-black uppercase tracking-wide text-slate-950 truncate">{title}</h2>
+      </div>
+      {(badge || action) && (
+        <div className="flex items-center gap-2 shrink-0">
+          {badge}
+          {action}
+        </div>
+      )}
     </div>
   );
 }
@@ -345,7 +393,7 @@ function DetailValue({ value, valueKey }: { value: any; valueKey?: string }) {
   if (typeof value === 'boolean') {
     return (
       <span className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border',
+        'inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider border',
         value ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-600'
       )}>
         {value ? 'Yes' : 'No'}
@@ -362,15 +410,15 @@ function DetailValue({ value, valueKey }: { value: any; valueKey?: string }) {
     if (!list.length) return <span className="text-slate-400 font-normal">N/A</span>;
 
     return (
-      <div className="space-y-2.5 mt-1">
+      <div className="space-y-2 mt-1">
         {list.map((item, index) => (
-          <div key={index} className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
+          <div key={index} className="rounded-xl bg-slate-50/70 p-3.5 border border-slate-150">
             {typeof item === 'object' ? (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <PropertyGrid columns={3}>
                 {detailEntries(item).map(([k, v]) => (
-                  <FieldCard key={k} label={humanizeKey(k)} value={v} />
+                  <PropertyItem key={k} label={humanizeKey(k)} value={v} />
                 ))}
-              </div>
+              </PropertyGrid>
             ) : (
               <span className="text-xs font-bold text-slate-900">{formatPrimitiveValue(item, valueKey)}</span>
             )}
@@ -385,42 +433,315 @@ function DetailValue({ value, valueKey }: { value: any; valueKey?: string }) {
     if (!entries.length) return <span className="text-slate-400 font-normal">N/A</span>;
 
     return (
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-1">
+      <PropertyGrid columns={3} className="mt-1">
         {entries.map(([k, v]) => (
-          <FieldCard key={k} label={humanizeKey(k)} value={v} />
+          <PropertyItem key={k} label={humanizeKey(k)} value={v} />
         ))}
-      </div>
+      </PropertyGrid>
     );
   }
 
   return <span>{String(value)}</span>;
 }
 
-function FieldCard({ label, value, className }: { label: string; value: any; className?: string }) {
-  if (!hasDetailData(value)) return null;
-  const isComplex = Array.isArray(value) || isPlainObject(value);
+function PropertyGrid({
+  columns = 2,
+  children,
+  className,
+}: {
+  columns?: 1 | 2 | 3 | 4 | 5 | 6;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const colClass = {
+    1: 'grid-cols-1',
+    2: 'grid-cols-1 sm:grid-cols-2',
+    3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+    4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
+    5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5',
+    6: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
+  }[columns];
 
   return (
-    <article className={cn('min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-2xs', isComplex && 'sm:col-span-2 xl:col-span-3', className)}>
-      <p className="text-[10px] lg:text-[11px] font-black uppercase tracking-wider text-slate-400 truncate">{label}</p>
-      <div className="mt-1 text-xs lg:text-sm font-semibold leading-relaxed text-slate-900">
-        <DetailValue value={value} valueKey={label} />
-      </div>
-    </article>
+    <dl className={cn('grid gap-x-6 gap-y-4 sm:gap-y-4.5', colClass, className)}>
+      {children}
+    </dl>
   );
 }
 
-function CompactField({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) {
+function PropertyItem({
+  label,
+  value,
+  icon: Icon,
+  className,
+  fullWidth = false,
+  highlight = false,
+  mono = false,
+}: {
+  label: string;
+  value: any;
+  icon?: IconComponent;
+  className?: string;
+  fullWidth?: boolean;
+  highlight?: boolean;
+  mono?: boolean;
+}) {
   if (!hasDetailData(value)) return null;
 
   return (
-    <div className={cn('min-w-0 rounded-lg bg-slate-50/70 px-3 py-2 border border-slate-100', className)}>
-      <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 truncate">{label}</p>
-      <div className="mt-0.5 text-xs font-bold text-slate-900 break-words leading-tight">
+    <div
+      className={cn(
+        'min-w-0 flex flex-col justify-start py-0.5',
+        fullWidth && 'sm:col-span-2 lg:col-span-full',
+        className
+      )}
+    >
+      <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        {Icon && <Icon className="h-3.5 w-3.5 text-slate-400 shrink-0" />}
+        <span className="truncate">{label}</span>
+      </dt>
+      <dd
+        className={cn(
+          'mt-1 text-xs sm:text-sm font-semibold text-slate-900 break-words leading-relaxed',
+          highlight && 'text-blue-700 font-extrabold',
+          mono && 'font-mono text-xs'
+        )}
+      >
         <DetailValue value={value} valueKey={label} />
-      </div>
+      </dd>
     </div>
   );
+}
+
+function DataCard({
+  title,
+  icon: Icon,
+  badge,
+  action,
+  children,
+  className,
+}: {
+  title: string;
+  icon: IconComponent;
+  badge?: React.ReactNode;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={cn('rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4', className)}>
+      <SectionHeader title={title} icon={Icon} badge={badge} action={action} />
+      {children}
+    </section>
+  );
+}
+
+function BuyerProfileSection({
+  orgName,
+  contactPerson,
+  email,
+  phone,
+  address,
+  department,
+}: {
+  orgName?: string;
+  contactPerson?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  department?: string;
+}) {
+  return (
+    <DataCard title="Buyer Information" icon={Building2}>
+      <div className="space-y-4">
+        {/* Org Banner Card */}
+        <div className="flex items-start gap-3.5 rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0b2447] to-[#123668] text-white shadow-xs font-black text-base">
+            <Building2 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-black text-slate-900 leading-tight">
+                {orgName || 'Buyer Organization'}
+              </h3>
+              {department && (
+                <span className="rounded-full bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                  {department}
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-xs font-semibold text-slate-500">
+              Authorized Procurement Authority
+            </p>
+          </div>
+        </div>
+
+        {/* Contact & Location Details in Clean Key-Values */}
+        <div className="grid gap-x-6 gap-y-3.5 sm:grid-cols-2 pt-1">
+          {contactPerson && (
+            <div className="space-y-0.5">
+              <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <User className="h-3.5 w-3.5 text-slate-400" />
+                <span>Contact Person</span>
+              </dt>
+              <dd className="text-xs sm:text-sm font-bold text-slate-900">{contactPerson}</dd>
+            </div>
+          )}
+
+          {email && (
+            <div className="space-y-0.5">
+              <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <Mail className="h-3.5 w-3.5 text-slate-400" />
+                <span>Email Address</span>
+              </dt>
+              <dd className="text-xs sm:text-sm font-semibold">
+                <a href={`mailto:${email}`} className="text-blue-600 hover:text-blue-800 hover:underline transition-colors break-all">
+                  {email}
+                </a>
+              </dd>
+            </div>
+          )}
+
+          {phone && (
+            <div className="space-y-0.5">
+              <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <PhoneCall className="h-3.5 w-3.5 text-slate-400" />
+                <span>Contact Number</span>
+              </dt>
+              <dd className="text-xs sm:text-sm font-semibold">
+                <a href={`tel:${phone}`} className="text-slate-800 hover:text-blue-600 transition-colors font-mono">
+                  {phone}
+                </a>
+              </dd>
+            </div>
+          )}
+
+          {address && (
+            <div className="space-y-0.5 sm:col-span-2">
+              <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                <span>Registered Location</span>
+              </dt>
+              <dd className="text-xs sm:text-sm font-semibold text-slate-700 leading-relaxed">{address}</dd>
+            </div>
+          )}
+        </div>
+      </div>
+    </DataCard>
+  );
+}
+
+function TimelineRibbon({
+  dates,
+}: {
+  dates: Array<{
+    label: string;
+    value?: string | null;
+    icon: IconComponent;
+    tone: Tone;
+  }>;
+}) {
+  const validDates = dates.filter(d => d.value && d.value !== '—' && d.value !== 'N/A');
+  if (!validDates.length) return null;
+
+  return (
+    <section className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
+      <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100/80 shadow-2xs">
+          <CalendarDays className="h-4 w-4" />
+        </span>
+        <h2 className="text-xs sm:text-sm font-black uppercase tracking-wide text-slate-950">
+          Key Dates &amp; Milestone Schedule
+        </h2>
+      </div>
+
+      <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+          {validDates.map((date, idx) => {
+            const styles = toneStyles[date.tone] || toneStyles.slate;
+            return (
+              <div key={idx} className="flex flex-col justify-between space-y-1.5 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className={cn('h-2 w-2 rounded-full shrink-0', styles.icon.replace('text-', 'bg-').split(' ')[0])} />
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                    {date.label}
+                  </span>
+                </div>
+                <p className="text-xs font-black text-slate-900 leading-tight break-words">
+                  {date.value}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PolicyRulesMatrix({
+  rules,
+}: {
+  rules: Array<{ label: string; value: any; icon?: IconComponent }>;
+}) {
+  return (
+    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+      {rules.map((rule, idx) => {
+        const valStr = String(rule.value || '').trim();
+        const isYes = ['yes', 'true', '1', 'enabled'].includes(valStr.toLowerCase());
+        const isNo = ['no', 'false', '0', 'disabled'].includes(valStr.toLowerCase());
+        const Icon = rule.icon || (isYes ? CheckCircle2 : Info);
+
+        return (
+          <div
+            key={idx}
+            className={cn(
+              'flex items-center justify-between gap-2 p-3 rounded-xl border transition-colors',
+              isYes
+                ? 'bg-emerald-50/50 border-emerald-200/80 text-emerald-950'
+                : isNo
+                ? 'bg-slate-50/60 border-slate-200/80 text-slate-700'
+                : 'bg-white border-slate-200 text-slate-900'
+            )}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Icon
+                className={cn(
+                  'h-4 w-4 shrink-0',
+                  isYes ? 'text-emerald-600' : isNo ? 'text-slate-400' : 'text-indigo-600'
+                )}
+              />
+              <span className="text-xs font-bold truncate text-slate-800">{rule.label}</span>
+            </div>
+            <span
+              className={cn(
+                'px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0',
+                isYes
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : isNo
+                  ? 'bg-slate-200/70 text-slate-600'
+                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+              )}
+            >
+              {valStr}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Legacy-compatible Property wrapper without individual box borders */
+function FieldCard({ label, value, className }: { label: string; value: any; className?: string }) {
+  if (!hasDetailData(value)) return null;
+  return <PropertyItem label={label} value={value} className={className} />;
+}
+
+/** Legacy-compatible Compact wrapper */
+function CompactField({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) {
+  if (!hasDetailData(value)) return null;
+  return <PropertyItem label={label} value={value} className={className} />;
 }
 
 function CompactSectionGrid({
@@ -441,30 +762,30 @@ function CompactSectionGrid({
   if (!entries.length) return null;
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
+    <section className="rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between p-3.5 text-left transition hover:bg-slate-50/80"
+        className="flex w-full items-center justify-between p-4 sm:p-5 text-left transition hover:bg-slate-50/80"
       >
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-2xs">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100/80 shadow-2xs">
             <Icon className="h-4 w-4" />
           </span>
-          <h2 className="text-sm font-black uppercase tracking-wide text-slate-950 truncate">{title}</h2>
+          <h2 className="text-xs sm:text-sm font-black uppercase tracking-wide text-slate-950 truncate">{title}</h2>
         </div>
-        <span className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500">
+        <span className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shrink-0">
           {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </span>
       </button>
 
       {isOpen && (
-        <div className="border-t border-slate-100 p-3.5 pt-3">
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="border-t border-slate-100 p-5 pt-4">
+          <PropertyGrid columns={3}>
             {entries.map(([key, value]) => (
-              <FieldCard key={key} label={humanizeKey(key)} value={value} />
+              <PropertyItem key={key} label={humanizeKey(key)} value={value} />
             ))}
-          </div>
+          </PropertyGrid>
         </div>
       )}
     </section>
@@ -486,11 +807,11 @@ function MetricCard({
 }) {
   const styles = toneStyles[tone] || toneStyles.slate;
   return (
-    <article className={cn('flex flex-col justify-between rounded-xl border p-3.5 shadow-2xs h-full min-h-[115px]', styles.card)}>
+    <article className={cn('flex flex-col justify-between rounded-2xl border p-4 shadow-xs h-full min-h-[110px] transition-all hover:shadow-sm', styles.card)}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-[11px] font-black uppercase tracking-wider text-slate-500 line-clamp-1 flex-1">{label}</p>
-        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', styles.icon)}>
-          <Icon className="h-4.5 w-4.5" />
+        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg shadow-2xs', styles.icon)}>
+          <Icon className="h-4 w-4" />
         </span>
       </div>
       <div className="mt-1 min-w-0">
@@ -563,9 +884,9 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
   if (!processedItems.length) return null;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2.5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
           <FileText className="h-4 w-4 text-indigo-600" />
           {title}
         </h3>
@@ -573,17 +894,17 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
           {processedItems.length} {processedItems.length === 1 ? 'Document' : 'Documents'}
         </span>
       </div>
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-3.5 py-2.5">#</th>
-                <th className="px-3.5 py-2.5">DOCUMENT NAME</th>
-                <th className="px-3.5 py-2.5">INSTRUCTIONS</th>
-                <th className="px-3.5 py-2.5">ALLOWED FILE TYPES</th>
-                <th className="px-3.5 py-2.5">MAX SIZE</th>
-                <th className="px-3.5 py-2.5 text-center">STATUS</th>
+                <th className="px-4 py-3">#</th>
+                <th className="px-4 py-3">DOCUMENT NAME</th>
+                <th className="px-4 py-3">INSTRUCTIONS</th>
+                <th className="px-4 py-3">ALLOWED FILE TYPES</th>
+                <th className="px-4 py-3">MAX SIZE</th>
+                <th className="px-4 py-3 text-center">STATUS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
@@ -597,20 +918,20 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
 
                 return (
                   <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="px-3.5 py-2.5 font-bold text-slate-400">{idx + 1}</td>
-                    <td className="px-3.5 py-2.5 font-black text-slate-900">{formatPrimitiveValue(docName)}</td>
-                    <td className="px-3.5 py-2.5 font-medium text-slate-600 max-w-xs">{formatPrimitiveValue(instructions)}</td>
-                    <td className="px-3.5 py-2.5">
+                    <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
+                    <td className="px-4 py-3 font-black text-slate-900">{formatPrimitiveValue(docName)}</td>
+                    <td className="px-4 py-3 font-medium text-slate-600 max-w-xs">{formatPrimitiveValue(instructions)}</td>
+                    <td className="px-4 py-3">
                       <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-700 uppercase">
                         {formatPrimitiveValue(fileType)}
                       </span>
                     </td>
-                    <td className="px-3.5 py-2.5 font-semibold text-slate-700">
+                    <td className="px-4 py-3 font-semibold text-slate-700">
                       {maxSize !== '-' ? `${maxSize} MB` : '-'}
                     </td>
-                    <td className="px-3.5 py-2.5 text-center">
+                    <td className="px-4 py-3 text-center">
                       <span className={cn(
-                        'inline-block rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border',
+                        'inline-block rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider border',
                         isRequired
                           ? 'border-rose-200 bg-rose-50 text-rose-700'
                           : 'border-slate-200 bg-slate-50 text-slate-600'
@@ -675,43 +996,45 @@ function ScopeSummaryCard({
   }
 
   const freeText = textParts.join(' ').trim();
-  const keyValues: { label: string; val: string }[] = [];
-
-  const hasValue = parsedKeyValues.some(kv => kv.label.toLowerCase().includes('value'));
-  if (!hasValue) {
-    const valDisplay = estimatedValue !== undefined && estimatedValue !== null && estimatedValue !== '' && estimatedValue !== 0 && estimatedValue !== '0'
-      ? formatCurrency(estimatedValue)
-      : 'As per schedule';
-    keyValues.push({ label: 'Value', val: valDisplay });
-  }
-
-  const hasUrgency = parsedKeyValues.some(kv => kv.label.toLowerCase().includes('urgency'));
-  if (!hasUrgency) {
-    keyValues.push({ label: 'Urgency', val: urgency || 'Normal' });
-  }
-
-  const hasSourcingMethod = parsedKeyValues.some(kv => kv.label.toLowerCase().includes('sourcing'));
-  if (!hasSourcingMethod) {
-    keyValues.push({ label: 'Sourcing Method', val: procurementMethod || procurementTypeLabel });
-  }
-
-  keyValues.push(...parsedKeyValues);
+  const effectiveUrgency = urgency || 'Normal';
+  const isUrgent = String(effectiveUrgency).toLowerCase().includes('urgent');
 
   return (
-    <div className="space-y-2.5">
-      <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
-        <FileText className="h-4 w-4 text-indigo-600" />
-        {procurementTypeLabel.toUpperCase()} SCOPE &amp; SOURCING SUMMARY
-      </h3>
-      <div className="grid gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-        {keyValues.map((kv, idx) => (
-          <CompactField key={idx} label={kv.label} value={kv.val} />
+    <div className="space-y-4">
+      {/* Top Scope Highlights Ribbon */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Sourcing Method:</span>
+          <span className="text-xs font-black text-slate-900">{procurementMethod || procurementTypeLabel}</span>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Estimated Value:</span>
+          <span className="text-xs font-black text-emerald-700">{formatCurrency(estimatedValue)}</span>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Urgency:</span>
+          <span className={cn(
+            'text-[10px] font-black uppercase px-2 py-0.5 rounded-md border',
+            isUrgent ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-100 text-slate-700 border-slate-200'
+          )}>
+            {effectiveUrgency}
+          </span>
+        </div>
+        {parsedKeyValues.map((kv, idx) => (
+          <div key={idx} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{kv.label}:</span>
+            <span className="text-xs font-bold text-slate-800">{kv.val}</span>
+          </div>
         ))}
       </div>
+
+      {/* Scope Statement */}
       {freeText && freeText !== 'No scope summary provided.' && (
-        <p className="text-xs font-medium text-slate-700 leading-relaxed bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 whitespace-pre-line">
-          {freeText}
-        </p>
+        <div className="rounded-xl border-l-4 border-indigo-600 bg-slate-50/70 p-4 border border-slate-150">
+          <p className="text-xs font-semibold text-slate-700 leading-relaxed whitespace-pre-line">
+            {freeText}
+          </p>
+        </div>
       )}
     </div>
   );
@@ -722,18 +1045,18 @@ function MilestonesTable({ milestones }: { milestones: any }) {
   if (!list.length) return null;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
-      <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-        <ClipboardCheck className="h-3.5 w-3.5 text-emerald-600" /> Payment &amp; Deliverable Milestones
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+      <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
+        <ClipboardCheck className="h-4 w-4 text-emerald-600" /> Payment &amp; Deliverable Milestones
       </h4>
-      <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 border-b border-slate-200 text-[9px] font-black uppercase tracking-wider text-slate-500">
+          <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-2.5 py-1.5">#</th>
-              <th className="px-2.5 py-1.5">Milestone Label</th>
-              <th className="px-2.5 py-1.5">Percentage</th>
-              <th className="px-2.5 py-1.5">Trigger / Condition</th>
+              <th className="px-3.5 py-2.5">#</th>
+              <th className="px-3.5 py-2.5">Milestone Label</th>
+              <th className="px-3.5 py-2.5">Percentage</th>
+              <th className="px-3.5 py-2.5">Trigger / Condition</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
@@ -744,14 +1067,14 @@ function MilestonesTable({ milestones }: { milestones: any }) {
 
               return (
                 <tr key={idx} className="hover:bg-slate-50/60 font-semibold text-slate-800">
-                  <td className="px-2.5 py-1.5 font-bold text-slate-400">{idx + 1}</td>
-                  <td className="px-2.5 py-1.5 font-bold text-slate-900">{formatPrimitiveValue(label)}</td>
-                  <td className="px-2.5 py-1.5">
-                    <span className="inline-block rounded bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-700 text-[10px]">
+                  <td className="px-3.5 py-2.5 font-bold text-slate-400">{idx + 1}</td>
+                  <td className="px-3.5 py-2.5 font-bold text-slate-900">{formatPrimitiveValue(label)}</td>
+                  <td className="px-3.5 py-2.5">
+                    <span className="inline-block rounded-md bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700 text-[10px]">
                       {pct !== '-' ? `${pct}%` : '-'}
                     </span>
                   </td>
-                  <td className="px-2.5 py-1.5 text-slate-600 max-w-xs">{formatPrimitiveValue(trigger)}</td>
+                  <td className="px-3.5 py-2.5 text-slate-600 max-w-xs">{formatPrimitiveValue(trigger)}</td>
                 </tr>
               );
             })}
@@ -766,7 +1089,6 @@ function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
   if (!serviceDetails || !isPlainObject(serviceDetails)) return null;
 
   const { duration, penaltyClause, slaResponseTime, manpowerRequired, experienceRequired, milestones, ...rest } = serviceDetails;
-  const milestonesList = asArray(milestones).filter(hasDetailData);
 
   const mainFields = compactObject({
     duration,
@@ -777,18 +1099,24 @@ function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
     ...rest,
   });
 
+  const entries = detailEntries(mainFields);
+  if (!entries.length) return null;
+
   return (
-    <div className="space-y-2.5">
-      <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+    <div className="space-y-3 pt-2">
+      <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
         <Building2 className="h-4 w-4 text-indigo-600" />
-        Service Details &amp; Parameters
-      </h3>
-      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
-        {detailEntries(mainFields).map(([key, val]) => (
-          <CompactField key={key} label={humanizeKey(key)} value={val} />
-        ))}
+        <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+          Service Details &amp; Parameters
+        </h3>
       </div>
-      {/* {milestonesList.length > 0 && <MilestonesTable milestones={milestonesList} />} */}
+      <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+        <PropertyGrid columns={5}>
+          {entries.map(([key, val]) => (
+            <PropertyItem key={key} label={humanizeKey(key)} value={val} />
+          ))}
+        </PropertyGrid>
+      </div>
     </div>
   );
 }
@@ -798,25 +1126,24 @@ function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?
   if (!list.length) return null;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2.5">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3 pt-2">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
         <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
           <Layers className="h-4 w-4 text-indigo-600" />
           Line Items ({list.length})
         </h3>
       </div>
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-3 py-2">#</th>
-                <th className="px-3 py-2">Item Name</th>
-                <th className="px-3 py-2">Qty &amp; Unit</th>
-                <th className="px-3 py-2">Specification</th>
-                <th className="px-3 py-2">Brand / Policy</th>
-                {/* <th className="px-3 py-2">Delivery Date</th> */}
-                <th className="px-3 py-2">Attachments</th>
+                <th className="px-4 py-3">#</th>
+                <th className="px-4 py-3">Item Name</th>
+                <th className="px-4 py-3">Qty &amp; Unit</th>
+                <th className="px-4 py-3">Specification</th>
+                <th className="px-4 py-3">Brand / Policy</th>
+                <th className="px-4 py-3">Attachments</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
@@ -908,18 +1235,6 @@ function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?
                   ? (itemPolicy ? `${itemBrand} (${itemPolicy})` : itemBrand)
                   : (itemPolicy || 'Any Brand / Open');
 
-                const rawDelDate = firstPresent(
-                  item.deliveryDate,
-                  item.expectedDeliveryDate,
-                  item.deliveryPeriod,
-                  item.deliveryDays,
-                  item.targetDate,
-                  item.leadTime,
-                  item.targetSla,
-                  item.sla,
-                  item.requiredBy
-                );
-
                 const attachedFiles = [
                   ...asArray(item.attachments),
                   ...asArray(item.files),
@@ -931,24 +1246,23 @@ function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?
                 const fileCount = attachedFiles.length || (item.fileAssetId || item.url || item.fileUrl || sp.fileAssetId || sp.url ? 1 : 0);
 
                 return (
-                  <tr key={idx} className="hover:bg-slate-50/60">
-                    <td className="px-3 py-2 font-bold text-slate-400">{idx + 1}</td>
-                    <td className="px-3 py-2 font-black text-slate-900">{formatPrimitiveValue(name)}</td>
-                    <td className="px-3 py-2">
+                  <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
+                    <td className="px-4 py-3 font-black text-slate-900">{formatPrimitiveValue(name)}</td>
+                    <td className="px-4 py-3">
                       {qtyDisplay ? (
-                        <span className="inline-block rounded-md bg-indigo-50 px-2 py-0.5 font-bold text-indigo-700">
+                        <span className="inline-block rounded-md bg-indigo-50 border border-indigo-200/60 px-2.5 py-0.5 font-bold text-indigo-700">
                           {qtyDisplay} {unit}
                         </span>
                       ) : (
                         <span className="text-slate-400">-</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 font-medium text-slate-600 max-w-xs">{rawSpec ? formatPrimitiveValue(rawSpec) : '-'}</td>
-                    <td className="px-3 py-2 text-slate-700">{rawBrand ? formatPrimitiveValue(rawBrand) : '-'}</td>
-                    {/* <td className="px-3 py-2 text-slate-700">{rawDelDate ? (typeof rawDelDate === 'string' && rawDelDate.includes('-') ? formatDateString(rawDelDate) : formatPrimitiveValue(rawDelDate)) : '-'}</td> */}
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3 font-medium text-slate-600 max-w-xs">{rawSpec ? formatPrimitiveValue(rawSpec) : '-'}</td>
+                    <td className="px-4 py-3 text-slate-700">{rawBrand ? formatPrimitiveValue(rawBrand) : '-'}</td>
+                    <td className="px-4 py-3">
                       {fileCount > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200/60 px-2.5 py-0.5 text-[10px] font-bold text-indigo-700">
                           <FileText className="h-3 w-3" />
                           {fileCount} File(s)
                         </span>
@@ -982,25 +1296,25 @@ function BoqTableList({
   if (!list.length) return null;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2.5">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3 pt-2">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
         <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
           <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
           BOQ Table ({list.length})
         </h3>
       </div>
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-3 py-2">Sr #</th>
-                <th className="px-3 py-2">Category</th>
-                <th className="px-3 py-2">Quantity</th>
-                <th className="px-3 py-2">UOM</th>
-                <th className="px-3 py-2">Est. Rate</th>
-                <th className="px-3 py-2">Tax %</th>
-                <th className="px-3 py-2">Total</th>
+                <th className="px-4 py-3">Sr #</th>
+                <th className="px-4 py-3">Category</th>
+                <th className="px-4 py-3">Quantity</th>
+                <th className="px-4 py-3">UOM</th>
+                <th className="px-4 py-3">Est. Rate</th>
+                <th className="px-4 py-3">Tax %</th>
+                <th className="px-4 py-3">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
@@ -1028,14 +1342,14 @@ function BoqTableList({
                   : (defaultEstimatedValue && Number(defaultEstimatedValue) > 0 ? defaultEstimatedValue : '-');
 
                 return (
-                  <tr key={idx} className="hover:bg-slate-50/60">
-                    <td className="px-3 py-2 font-bold text-slate-400">{sr}</td>
-                    <td className="px-3 py-2 font-black text-slate-900">{formatPrimitiveValue(category)}</td>
-                    <td className="px-3 py-2 font-bold text-slate-800">{qty} {uom}</td>
-                    <td className="px-3 py-2 text-slate-600">{formatPrimitiveValue(uom || '-')}</td>
-                    <td className="px-3 py-2 text-slate-700">{rate !== '-' ? (typeof rate === 'number' ? formatCurrency(rate) : formatPrimitiveValue(rate)) : '-'}</td>
-                    <td className="px-3 py-2 text-slate-700">{tax !== '-' ? `${String(tax).replace('%', '')}%` : '-'}</td>
-                    <td className="px-3 py-2 font-black text-slate-900">{total !== '-' ? (typeof total === 'number' ? formatCurrency(total) : formatPrimitiveValue(total)) : '-'}</td>
+                  <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="px-4 py-3 font-bold text-slate-400">{sr}</td>
+                    <td className="px-4 py-3 font-black text-slate-900">{formatPrimitiveValue(category)}</td>
+                    <td className="px-4 py-3 font-bold text-slate-800">{qty} {uom}</td>
+                    <td className="px-4 py-3 text-slate-600">{formatPrimitiveValue(uom || '-')}</td>
+                    <td className="px-4 py-3 text-slate-700">{rate !== '-' ? (typeof rate === 'number' ? formatCurrency(rate) : formatPrimitiveValue(rate)) : '-'}</td>
+                    <td className="px-4 py-3 text-slate-700">{tax !== '-' ? `${String(tax).replace('%', '')}%` : '-'}</td>
+                    <td className="px-4 py-3 font-black text-slate-900">{total !== '-' ? (typeof total === 'number' ? formatCurrency(total) : formatPrimitiveValue(total)) : '-'}</td>
                   </tr>
                 );
               })}
@@ -1061,25 +1375,25 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
   if (!list.length) return null;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2.5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
           <ClipboardCheck className="h-4 w-4 text-indigo-600" />
           Technical Evaluation Criteria ({list.length})
         </h3>
       </div>
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-3.5 py-2.5">#</th>
-                <th className="px-3.5 py-2.5">Criteria Name</th>
-                <th className="px-3.5 py-2.5">Description</th>
-                <th className="px-3.5 py-2.5 text-center">Mandatory</th>
-                <th className="px-3.5 py-2.5 text-center">Min Marks</th>
-                <th className="px-3.5 py-2.5 text-center">Max Score</th>
-                <th className="px-3.5 py-2.5 text-center">Weightage</th>
+                <th className="px-4 py-3">#</th>
+                <th className="px-4 py-3">Criteria Name</th>
+                <th className="px-4 py-3">Description</th>
+                <th className="px-4 py-3 text-center">Mandatory</th>
+                <th className="px-4 py-3 text-center">Min Marks</th>
+                <th className="px-4 py-3 text-center">Max Score</th>
+                <th className="px-4 py-3 text-center">Weightage</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
@@ -1094,12 +1408,12 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
 
                   return (
                     <tr key={item.id || idx} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="px-3.5 py-2.5 font-bold text-slate-400">{idx + 1}</td>
-                      <td className="px-3.5 py-2.5 font-black text-slate-900">{formatPrimitiveValue(name)}</td>
-                      <td className="px-3.5 py-2.5 font-medium text-slate-600 max-w-xs">{formatPrimitiveValue(desc)}</td>
-                      <td className="px-3.5 py-2.5 text-center">
+                      <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
+                      <td className="px-4 py-3 font-black text-slate-900">{formatPrimitiveValue(name)}</td>
+                      <td className="px-4 py-3 font-medium text-slate-600 max-w-xs">{formatPrimitiveValue(desc)}</td>
+                      <td className="px-4 py-3 text-center">
                         <span className={cn(
-                          'inline-block rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border',
+                          'inline-block rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider border',
                           mandatory
                             ? 'border-rose-200 bg-rose-50 text-rose-700'
                             : 'border-slate-200 bg-slate-50 text-slate-600'
@@ -1107,9 +1421,9 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
                           {mandatory ? 'Yes' : 'No'}
                         </span>
                       </td>
-                      <td className="px-3.5 py-2.5 text-center font-bold text-amber-700">{formatPrimitiveValue(minMarks)}</td>
-                      <td className="px-3.5 py-2.5 text-center font-black text-slate-900">{formatPrimitiveValue(maxScore)}</td>
-                      <td className="px-3.5 py-2.5 text-center font-extrabold text-indigo-700">
+                      <td className="px-4 py-3 text-center font-bold text-amber-700">{formatPrimitiveValue(minMarks)}</td>
+                      <td className="px-4 py-3 text-center font-black text-slate-900">{formatPrimitiveValue(maxScore)}</td>
+                      <td className="px-4 py-3 text-center font-extrabold text-indigo-700">
                         {weightage !== '-' ? `${weightage}%` : '-'}
                       </td>
                     </tr>
@@ -1118,8 +1432,8 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
 
                 return (
                   <tr key={idx} className="hover:bg-slate-50/60">
-                    <td className="px-3.5 py-2.5 font-bold text-slate-400">{idx + 1}</td>
-                    <td colSpan={6} className="px-3.5 py-2.5 font-bold text-slate-900">{formatPrimitiveValue(item)}</td>
+                    <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
+                    <td colSpan={6} className="px-4 py-3 font-bold text-slate-900">{formatPrimitiveValue(item)}</td>
                   </tr>
                 );
               })}
@@ -1135,30 +1449,32 @@ function ConsigneeTableList({ data, deliveryLocation, deliveryTerms }: { data: a
   const items = asArray(data).filter(hasDetailData);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-3">
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
       <SectionHeader title="Consignee & Delivery Information" icon={MapPin} />
 
       {(hasDetailData(deliveryLocation) || hasDetailData(deliveryTerms)) && (
-        <div className="grid gap-2.5 sm:grid-cols-2">
-          {hasDetailData(deliveryLocation) && (
-            <FieldCard label="General Delivery Location" value={deliveryLocation} />
-          )}
-          {hasDetailData(deliveryTerms) && (
-            <FieldCard label="Delivery Terms" value={deliveryTerms} />
-          )}
+        <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+          <PropertyGrid columns={2}>
+            {hasDetailData(deliveryLocation) && (
+              <PropertyItem label="General Delivery Location" value={deliveryLocation} />
+            )}
+            {hasDetailData(deliveryTerms) && (
+              <PropertyItem label="Delivery Terms" value={deliveryTerms} />
+            )}
+          </PropertyGrid>
         </div>
       )}
 
       {items.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+              <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-3.5 py-2.5">#</th>
-                  <th className="px-3.5 py-2.5">Consignee Name</th>
-                  <th className="px-3.5 py-2.5">Quantity</th>
-                  <th className="px-3.5 py-2.5">Delivery Location / Address</th>
+                  <th className="px-4 py-3">#</th>
+                  <th className="px-4 py-3">Consignee Name</th>
+                  <th className="px-4 py-3">Quantity</th>
+                  <th className="px-4 py-3">Delivery Location / Address</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
@@ -1170,22 +1486,22 @@ function ConsigneeTableList({ data, deliveryLocation, deliveryTerms }: { data: a
 
                     return (
                       <tr key={item.id || idx} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="px-3.5 py-2.5 font-bold text-slate-400">{idx + 1}</td>
-                        <td className="px-3.5 py-2.5 font-black text-slate-900">{formatPrimitiveValue(name)}</td>
-                        <td className="px-3.5 py-2.5">
-                          <span className="inline-block rounded-md bg-indigo-50 px-2 py-0.5 font-bold text-indigo-700">
+                        <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
+                        <td className="px-4 py-3 font-black text-slate-900">{formatPrimitiveValue(name)}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-block rounded-md bg-indigo-50 border border-indigo-200/60 px-2.5 py-0.5 font-bold text-indigo-700">
                             {formatPrimitiveValue(qty)}
                           </span>
                         </td>
-                        <td className="px-3.5 py-2.5 text-slate-700">{formatPrimitiveValue(loc)}</td>
+                        <td className="px-4 py-3 text-slate-700">{formatPrimitiveValue(loc)}</td>
                       </tr>
                     );
                   }
 
                   return (
                     <tr key={idx} className="hover:bg-slate-50/60">
-                      <td className="px-3.5 py-2.5 font-bold text-slate-400">{idx + 1}</td>
-                      <td colSpan={3} className="px-3.5 py-2.5 font-bold text-slate-900">{formatPrimitiveValue(item)}</td>
+                      <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
+                      <td colSpan={3} className="px-4 py-3 font-bold text-slate-900">{formatPrimitiveValue(item)}</td>
                     </tr>
                   );
                 })}
@@ -2204,82 +2520,60 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
         {/* Tab 1: Overview & Dates */}
         {activeTab === 'overview' && (
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-                <SectionHeader title={`BUYER ${procurementTypeLabel.toUpperCase()} PROCUREMENT INFORMATION`} icon={ClipboardList} />
-                <div className="grid gap-2.5 sm:grid-cols-2">
-                  <FieldCard label={`${procurementTypeLabel.toUpperCase()} NUMBER`} value={procurementNumber} />
-                  <FieldCard label="PROCUREMENT METHOD" value={procurementMethod} />
-                  <FieldCard label="BUYING TYPE" value={buyingType} />
-                  <FieldCard label="CATEGORY" value={category} />
-                  <FieldCard label="SUB CATEGORY" value={subCategory} />
-                  <FieldCard label="PUBLISHED DATE" value={publishedDateFormatted} />
-                  <FieldCard label="SUBMISSION DEADLINE" value={closingDateFormatted} />
-                  <FieldCard label="DELIVERY LOCATION" value={deliveryLocation} />
-                  <FieldCard label="PROJECT DURATION" value={projectDuration} />
-                  <FieldCard label="PAYMENT TERMS" value={paymentTerms} />
-                </div>
-                <FieldCard label={`${procurementTypeLabel.toUpperCase()} SCOPE SUMMARY`} value={scopeText} />
-              </section>
+          <div className="space-y-5">
+            <div className="grid gap-5 lg:grid-cols-2">
+              <DataCard title={`Buyer ${procurementTypeLabel} Information`} icon={ClipboardList}>
+                <PropertyGrid columns={2}>
+                  <PropertyItem label={`${procurementTypeLabel} Number`} value={procurementNumber} mono highlight />
+                  <PropertyItem label="Procurement Method" value={procurementMethod} />
+                  <PropertyItem label="Buying Type" value={buyingType} />
+                  <PropertyItem label="Category" value={category} />
+                  <PropertyItem label="Sub Category" value={subCategory} />
+                  <PropertyItem label="Published Date" value={publishedDateFormatted} />
+                  <PropertyItem label="Submission Deadline" value={closingDateFormatted} />
+                  <PropertyItem label="Delivery Location" value={deliveryLocation} />
+                  <PropertyItem label="Project Duration" value={projectDuration} />
+                  <PropertyItem label="Payment Terms" value={paymentTerms} />
+                  <PropertyItem label="Procurement Brief" value={props.description && props.description.length < 160 && !props.description.includes('\n') ? props.description : (basics.description && basics.description.length < 160 ? basics.description : `${resolvedSubject} (${category})`)} fullWidth />
+                </PropertyGrid>
+              </DataCard>
 
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-                <SectionHeader title="BUYER INFORMATION" icon={Building2} />
-                <div className="grid gap-2.5 sm:grid-cols-2">
-                  <FieldCard label="ORGANIZATION" value={buyerOrgName} />
-                  <FieldCard label="CONTACT PERSON" value={contactPerson} />
-                  <FieldCard label="EMAIL" value={email} />
-                  <FieldCard label="PHONE" value={phone} />
-                  <FieldCard label="ADDRESS" value={buyerAddress} className="sm:col-span-2" />
-                  <FieldCard label="DEPARTMENT" value={department} className="sm:col-span-2" />
-                </div>
-              </section>
+              <BuyerProfileSection
+                orgName={buyerOrgName}
+                contactPerson={contactPerson}
+                email={email}
+                phone={phone}
+                address={buyerAddress}
+                department={department}
+              />
             </div>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-              <SectionHeader title="KEY DATES TIMELINE" icon={CalendarDays} />
-              <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-                {[
-                  { label: 'Published', value: publishedDateFormatted, icon: Calendar, tone: 'emerald' as Tone },
-                  { label: 'Clarification', value: clarificationDateFormatted, icon: Info, tone: 'sky' as Tone },
-                  { label: 'Submission', value: closingDateFormatted, icon: Clock, tone: 'rose' as Tone },
-                  { label: 'Technical Opening', value: technicalDateFormatted, icon: ClipboardCheck, tone: 'indigo' as Tone },
-                  // { label: 'Presentation', value: presentationDateFormatted, icon: User, tone: 'violet' as Tone },
-                  { label: 'Financial Opening', value: financialDateFormatted, icon: IndianRupee, tone: 'amber' as Tone },
-                  { label: 'Award', value: awardDateFormatted, icon: ShieldCheck, tone: 'slate' as Tone },
-                ].map(date => {
-                  const Icon = date.icon;
-                  const styles = toneStyles[date.tone];
-                  return (
-                    <article key={date.label} className="rounded-lg border border-slate-200 bg-slate-50/50 p-2.5 shadow-2xs">
-                      <div className="flex items-center gap-2">
-                        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-md', styles.icon)}>
-                          <Icon className="h-3.5 w-3.5" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 truncate">{date.label}</p>
-                          <p className="mt-0.5 break-words text-xs font-black text-slate-900 leading-tight">{date.value}</p>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
+            <TimelineRibbon
+              dates={[
+                { label: 'Published', value: publishedDateFormatted, icon: Calendar, tone: 'emerald' },
+                { label: 'Clarification', value: clarificationDateFormatted, icon: Info, tone: 'sky' },
+                { label: 'Submission', value: closingDateFormatted, icon: Clock, tone: 'rose' },
+                { label: 'Technical Opening', value: technicalDateFormatted, icon: ClipboardCheck, tone: 'indigo' },
+                { label: 'Financial Opening', value: financialDateFormatted, icon: IndianRupee, tone: 'amber' },
+                { label: 'Award Status', value: awardDateFormatted, icon: ShieldCheck, tone: 'slate' },
+              ]}
+            />
 
-            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <FieldCard label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
-              <FieldCard label="Proposal Status" value={props.hasSubmittedProposal ? 'Submitted' : currentUser?.role === 'seller' ? 'Not submitted' : 'N/A'} />
-              <FieldCard label="Deadline Status" value={props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs ? 'Closed' : 'Open'} />
-              <FieldCard label="Source Record" value={procurementTypeLabel} />
-            </section>
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
+              <PropertyGrid columns={4}>
+                <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
+                <PropertyItem label="Proposal Status" value={props.hasSubmittedProposal ? 'Submitted' : currentUser?.role === 'seller' ? 'Not submitted' : 'N/A'} />
+                <PropertyItem label="Deadline Status" value={props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs ? 'Closed' : 'Open'} />
+                <PropertyItem label="Source Record" value={procurementTypeLabel} />
+              </PropertyGrid>
+            </div>
           </div>
         )}
 
         {/* Tab 2: Scope & Documents */}
         {activeTab === 'scope_docs' && (
-          <div className="space-y-4">
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-4">
+          <div className="space-y-5">
+            <DataCard title={`${procurementTypeLabel} Scope & Sourcing Summary`} icon={FileText}>
               <ScopeSummaryCard
                 scopeText={scopeText}
                 procurementTypeLabel={procurementTypeLabel}
@@ -2299,16 +2593,15 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               {hasDetailData(boqTable) && (
                 <BoqTableList data={boqTable} defaultSubject={resolvedSubject} defaultCategory={category} defaultEstimatedValue={props.estimatedValue} />
               )}
-            </section>
+            </DataCard>
 
             {(() => {
               const validDownloadableDocs = documents.filter(doc => doc && (doc.fileAssetId || doc.url));
 
               return (
-                <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-4">
-                  <SectionHeader title={`${procurementTypeLabel.toUpperCase()} DOCUMENTS`} icon={FileSpreadsheet} />
+                <DataCard title={`${procurementTypeLabel} Attached Documents`} icon={FileSpreadsheet}>
                   {validDownloadableDocs.length > 0 && (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
                       {validDownloadableDocs.map((doc, index) => {
                         const isGenericName = !doc.name || doc.name.toLowerCase().startsWith('attached_doc');
                         const docDisplayName = isGenericName
@@ -2316,14 +2609,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                           : doc.name;
 
                         return (
-                          <article key={doc.id ? `doc-${doc.id}-${index}` : `doc-idx-${index}`} className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 shadow-2xs flex flex-col justify-between">
-                            <div className="flex items-start gap-2.5">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
-                                <FileText className="h-4.5 w-4.5" />
+                          <article key={doc.id ? `doc-${doc.id}-${index}` : `doc-idx-${index}`} className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 shadow-xs flex flex-col justify-between hover:bg-slate-50 transition-colors">
+                            <div className="flex items-start gap-3">
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                <FileText className="h-5 w-5" />
                               </span>
                               <div className="min-w-0 flex-1">
-                                <p className="break-words text-xs font-black text-slate-950 leading-snug">{docDisplayName}</p>
-                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <p className="break-words text-xs font-bold text-slate-900 leading-snug">{docDisplayName}</p>
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                                   <span className={cn(
                                     'rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
                                     doc.required ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-600'
@@ -2343,9 +2636,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                                 }
                               }}
                               disabled={!doc.fileAssetId && !doc.url}
-                              className="mt-3 w-full text-xs h-8"
+                              className="mt-3.5 w-full text-xs h-8.5 rounded-lg border-slate-250 bg-white hover:bg-slate-100 font-bold"
                             >
-                              <ExternalLink className="h-3 w-3" />
+                              <ExternalLink className="h-3.5 w-3.5 mr-1" />
                               Open Document
                             </Button>
                           </article>
@@ -2354,10 +2647,10 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     </div>
                   )}
 
-                  <div>
+                  <div className="pt-2">
                     <RequiredDocumentsList data={requiredDocuments} />
                   </div>
-                </section>
+                </DataCard>
               );
             })()}
           </div>
@@ -2365,46 +2658,63 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
         {/* Tab 3: Terms & Schedule */}
         {activeTab === 'terms_schedule' && (
-          <div className="space-y-4">
-            <CompactSectionGrid
-              title={`${procurementTypeLabel.toUpperCase()} SCHEDULE & RULES`}
-              icon={CalendarDays}
-              data={compactObject({
-                publishDate: firstPresent(schedule.publishDate, schedule.publishedDate, publishedDateFormatted, props.publishedDate),
-                submissionStartDate: firstPresent(schedule.submissionStartDate, schedule.startDate, publishedDateFormatted),
-                submissionDate: firstPresent(schedule.submissionDate, closingDateFormatted, props.closingDate),
-                financialOpeningDate: firstPresent(schedule.financialOpeningDate, tender.financialEvaluationDate, props.financialOpeningDate, financialDateFormatted),
-                technicalOpeningDate: firstPresent(schedule.technicalOpeningDate, tender.technicalEvaluationDate, props.technicalOpeningDate, technicalDateFormatted),
-                validityDays: firstPresent(schedule.validityDays, tender.validityDays, rules.validityDays, '90'),
-                bidValidityDate: firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline),
-                autoClose: firstPresent(rules.autoClose, schedule.autoClose, 'Yes'),
-                allowRevision: firstPresent(rules.allowRevision, schedule.allowRevision, 'Yes'),
-                // rebidsAllowed: firstPresent(rules.rebidsAllowed, schedule.rebidsAllowed, 'Yes'),
-                showSellerRank: firstPresent(rules.showSellerRank, schedule.showSellerRank, 'Yes'),
-                allowWithdrawal: firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal, 'Yes'),
-                showLowestPrice: firstPresent(rules.showLowestPrice, schedule.showLowestPrice, 'Yes'),
-                clarificationAllowed: firstPresent(schedule.clarificationAllowed, rules.clarificationAllowed, 'Yes'),
-                minimumBidders: firstPresent(rules.minimumBidders, schedule.minimumBidders, '3'),
-                preBidMeeting: firstPresent(schedule.preBidMeeting, schedule.preBidMeetingDate, 'No'),
-                limitedTenderJustification: payload.limitedTenderJustification || rules.limitedTenderJustification,
-              })}
-              defaultOpen={true}
-            />
+          <div className="space-y-5">
+            <DataCard title={`${procurementTypeLabel} Schedule & Rules`} icon={CalendarDays}>
+              <div className="space-y-5">
+                <div className="space-y-2.5">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <Calendar className="h-4 w-4 text-indigo-600" />
+                    Milestones &amp; Critical Dates
+                  </h3>
+                  <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+                    <PropertyGrid columns={3}>
+                      <PropertyItem label="Publish Date" value={firstPresent(schedule.publishDate, schedule.publishedDate, publishedDateFormatted, props.publishedDate)} />
+                      <PropertyItem label="Submission Start Date" value={firstPresent(schedule.submissionStartDate, schedule.startDate, publishedDateFormatted)} />
+                      <PropertyItem label="Submission Deadline" value={firstPresent(schedule.submissionDate, closingDateFormatted, props.closingDate)} highlight />
+                      <PropertyItem label="Financial Opening Date" value={firstPresent(schedule.financialOpeningDate, tender.financialEvaluationDate, props.financialOpeningDate, financialDateFormatted)} />
+                      <PropertyItem label="Technical Opening Date" value={firstPresent(schedule.technicalOpeningDate, tender.technicalEvaluationDate, props.technicalOpeningDate, technicalDateFormatted)} />
+                      <PropertyItem label="Validity Days" value={firstPresent(schedule.validityDays, tender.validityDays, rules.validityDays, '90 Days')} />
+                      <PropertyItem label="Bid Validity Date" value={firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline)} />
+                    </PropertyGrid>
+                  </div>
+                </div>
 
-            <CompactSectionGrid
-              title="COMMERCIAL TERMS"
-              icon={IndianRupee}
-              data={compactObject({
-                paymentTerms: paymentTerms,
-                deliveryTerms: deliveryTerms,
-                contractPeriod: firstPresent(terms.contractPeriod, terms.projectDuration, projectDuration),
-                // emdRequired: emdDisplay,
-                // documentFee: firstPresent(rules.documentFee, terms.documentFee),
-                termsAndConditions: terms.termsAndConditions || terms.terms || payload.terms,
-                eligibilityCriteria: terms.eligibilityCriteria || basics.eligibilityCriteria || payload.eligibility,
-              })}
-              defaultOpen={true}
-            />
+                <div className="space-y-2.5 pt-2">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                    Bidding Rules &amp; Policy Matrix
+                  </h3>
+                  <PolicyRulesMatrix
+                    rules={[
+                      { label: 'Auto Close', value: firstPresent(rules.autoClose, schedule.autoClose, 'Yes') },
+                      { label: 'Allow Revision', value: firstPresent(rules.allowRevision, schedule.allowRevision, 'Yes') },
+                      { label: 'Show Seller Rank', value: firstPresent(rules.showSellerRank, schedule.showSellerRank, 'Yes') },
+                      { label: 'Allow Withdrawal', value: firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal, 'Yes') },
+                      { label: 'Show Lowest Price', value: firstPresent(rules.showLowestPrice, schedule.showLowestPrice, 'Yes') },
+                      { label: 'Clarification Allowed', value: firstPresent(schedule.clarificationAllowed, rules.clarificationAllowed, 'Yes') },
+                      { label: 'Minimum Bidders', value: firstPresent(rules.minimumBidders, schedule.minimumBidders, '3') },
+                      { label: 'Pre-Bid Meeting', value: firstPresent(schedule.preBidMeeting, schedule.preBidMeetingDate, 'No') },
+                    ]}
+                  />
+                  {(payload.limitedTenderJustification || rules.limitedTenderJustification) && (
+                    <div className="rounded-xl border-l-4 border-amber-500 bg-amber-50/60 p-3.5 border border-amber-200/80 text-xs font-semibold text-amber-900">
+                      <span className="font-black uppercase tracking-wider block text-[10px] text-amber-700 mb-0.5">Tender Justification:</span>
+                      {payload.limitedTenderJustification || rules.limitedTenderJustification}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </DataCard>
+
+            <DataCard title="Commercial & Payment Terms" icon={IndianRupee}>
+              <PropertyGrid columns={3}>
+                <PropertyItem label="Payment Terms" value={paymentTerms} />
+                <PropertyItem label="Delivery Terms" value={deliveryTerms} />
+                <PropertyItem label="Contract Period" value={firstPresent(terms.contractPeriod, terms.projectDuration, projectDuration)} />
+                <PropertyItem label="Terms & Conditions" value={terms.termsAndConditions || terms.terms || payload.terms} fullWidth />
+                <PropertyItem label="Eligibility Criteria" value={terms.eligibilityCriteria || basics.eligibilityCriteria || payload.eligibility} fullWidth />
+              </PropertyGrid>
+            </DataCard>
 
             <ConsigneeTableList
               data={consigneeDetails}
@@ -2416,16 +2726,17 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
         {/* Tab 4: Evaluation & Controls */}
         {activeTab === 'evaluation' && (
-          <div className="space-y-4">
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-              <SectionHeader title="Evaluation Overview & Method" icon={ClipboardCheck} />
-              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-                <FieldCard label="Evaluation Method" value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')} />
-                <FieldCard label="Require Demo" value={formatPrimitiveValue(requireDemo)} />
-                {hasDetailData(qcbsRatio) && <FieldCard label="QCBS Ratio" value={qcbsRatio} />}
-                {hasDetailData(passingScore) && <FieldCard label="Passing Score" value={passingScore} />}
+          <div className="space-y-5">
+            <DataCard title="Evaluation Overview & Method" icon={ClipboardCheck}>
+              <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+                <PropertyGrid columns={4}>
+                  <PropertyItem label="Evaluation Method" value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')} highlight />
+                  <PropertyItem label="Require Demo" value={formatPrimitiveValue(requireDemo)} />
+                  {hasDetailData(qcbsRatio) && <PropertyItem label="QCBS Ratio" value={qcbsRatio} />}
+                  {hasDetailData(passingScore) && <PropertyItem label="Passing Score" value={passingScore} />}
+                </PropertyGrid>
               </div>
-            </section>
+            </DataCard>
 
             {hasExplicitTechCriteria && (
               <TechnicalCriteriaTableList data={technicalCriteria} />
@@ -2440,12 +2751,38 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               />
             )}
 
-            <CompactSectionGrid
-              title="Supplier & Approval Controls"
-              icon={Users}
-              data={supplierControlsData}
-              defaultOpen={true}
-            />
+            <DataCard title="Supplier & Approval Controls" icon={Users}>
+              <div className="space-y-5">
+                <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+                  <PropertyGrid columns={3}>
+                    <PropertyItem label="Selection Mode" value={payload.selectionMode || rules.selectionMode || 'Open'} />
+                    <PropertyItem label="Invite Count" value={payload.inviteCount !== undefined ? payload.inviteCount : '0'} />
+                    <PropertyItem label="Workflow" value={payload.workflow || 'Finance + Procurement'} />
+                  </PropertyGrid>
+                </div>
+
+                <div className="space-y-2.5 pt-1">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                    Vendor Preferences &amp; Eligibility Controls
+                  </h3>
+                  <PolicyRulesMatrix
+                    rules={[
+                      { label: 'MSME Preference', value: payload.msmePreference !== undefined ? (payload.msmePreference ? 'Yes' : 'No') : 'Yes' },
+                      { label: 'Exclude Blacklisted', value: payload.excludeBlacklisted !== undefined ? (payload.excludeBlacklisted ? 'Yes' : 'No') : 'Yes' },
+                      { label: 'Local Vendor Preference', value: payload.localVendorPreference !== undefined ? (payload.localVendorPreference ? 'Yes' : 'No') : 'Yes' },
+                    ]}
+                  />
+                </div>
+
+                {payload.approvalNotes && (
+                  <div className="rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Approval Notes:</span>
+                    <p className="text-xs font-semibold text-slate-700">{payload.approvalNotes}</p>
+                  </div>
+                )}
+              </div>
+            </DataCard>
           </div>
         )}
 

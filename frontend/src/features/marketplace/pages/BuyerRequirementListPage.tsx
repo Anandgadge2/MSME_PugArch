@@ -21,9 +21,6 @@ export default function BuyerRequirementListPage() {
                         <span className="font-bold text-slate-800">Public Procurement &amp; Bids</span>
                     </div>
                     <div>
-                        <span className="mb-2.5 inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50/80 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-800 shadow-2xs">
-                            🏛️ Public Procurement Portal
-                        </span>
                         <h1 className="text-2xl sm:text-3xl font-black text-[#0b2447] tracking-tight">Latest Buyer Requirements &amp; Bids</h1>
                         <p className="mt-1.5 text-sm text-slate-500 font-medium">
                             Open public procurement opportunities, government e-tenders, and verified buyer requisitions.

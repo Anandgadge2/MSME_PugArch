@@ -229,15 +229,10 @@ export default function RoleReportsPage() {
 
     return (
         <div className="space-y-5">
-            <div className="brand-tricolor-strip rounded-full" />
             <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                     <div>
-                        {/* <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Reports and Analytics</p> */}
-                        <h1 className="mt-1 text-2xl font-black text-slate-950">{user?.role === 'seller' ? 'Seller Performance Reports' : 'Buyer Procurement Reports'}</h1>
-                        {/* <p className="mt-1 max-w-3xl text-sm font-semibold text-slate-600">
-                            Track procurement value, order lifecycle, delivery movement, invoice readiness, and pending actions from one analytical report.
-                        </p> */}
+                        <h1 className="text-2xl font-black text-slate-950">{user?.role === 'seller' ? 'Seller Performance Reports' : 'Buyer Procurement Reports'}</h1>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <Button type="button" variant="outline" onClick={() => handleExport('excel')} className="h-10 gap-2 text-xs font-black uppercase bg-[#12335f] text-white hover:bg-[#0b2447] hover:text-white border-transparent">

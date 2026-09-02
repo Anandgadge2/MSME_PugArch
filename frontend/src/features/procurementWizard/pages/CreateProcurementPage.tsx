@@ -58,7 +58,7 @@ import {
   saveProcurementDraft,
   submitProcurementDraft
 } from '../api';
-import { api, BASE_URL } from '../../../lib/api';
+import { api, BASE_URL, readJsonResponse, unwrapApiData } from '../../../lib/api';
 import { authHeaders, unwrap } from '../../shared/apiClient';
 import { downloadCsv } from '../../shared/exportUtils';
 import { fetchDeliveryAddresses, createDeliveryAddress, type DeliveryAddressDto } from '../../directPurchase/api';
@@ -99,7 +99,7 @@ import {
   type EvalCriteria
 } from '../components/SourcingWizardComponents';
 
-type StepKind = 'basics' | 'internal' | 'items' | 'vendors' | 'schedule' | 'terms' | 'documents' | 'evaluation' | 'publish';
+type StepKind = 'selection' | 'basics' | 'internal' | 'items' | 'vendors' | 'schedule' | 'terms' | 'documents' | 'evaluation' | 'publish';
 
 type ItemAttachment = {
   id: string;
@@ -464,7 +464,7 @@ const importedCsvRowToItem = (headers: string[], row: string[], index: number): 
 };
 
 const defaultAuctionConfig = (method: ProcurementMethodId): AuctionConfig => ({
-  auctionNumber: `RA-${Date.now()}`,
+  auctionNumber: `RA-${Math.floor(10000 + Math.random() * 90000)}`,
   auctionTitle: '',
   auctionDescription: '',
   procurementMethod: 'REVERSE_AUCTION',
@@ -525,7 +525,7 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
     },
     auctionConfig: {
       ...base,
-  procurementMethod: 'REVERSE_AUCTION',
+      procurementMethod: 'REVERSE_AUCTION',
       auctionTitle: base.auctionTitle || draft.basics.title,
       auctionDescription: base.auctionDescription || draft.basics.justification,
       auctionCategory: base.auctionCategory || draft.basics.category,
@@ -535,14 +535,14 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
       startingBidPrice: base.startingBidPrice || draft.basics.estimatedValue || 0,
       triggerConfiguration: {
         ...base.triggerConfiguration,
-    preBidStageRequired: false,
+        preBidStageRequired: false,
       },
     },
   };
 };
 
 const defaultRateContractConfig = (): RateContractConfig => ({
-  rateContractNumber: `RC-${Date.now()}`,
+  rateContractNumber: `RC-${Math.floor(10000 + Math.random() * 90000)}`,
   contractTitle: '',
   contractDescription: '',
   contractCategory: '',
@@ -672,64 +672,78 @@ const syncRateContractDefaults = (draft: Draft): Draft => {
   };
 };
 
-const applyMethodDefaults = (draft: Draft, method: ProcurementMethodId): Draft => {
-  if (isReverseAuctionMethod(method)) return syncAuctionDefaults(draft, method);
-  if (isRateContractMethod(method)) return syncRateContractDefaults(draft);
-  return { ...draft, type: method };
+const BUYING_OPTIONS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: string; label: string }>> = {
+  RFQ: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'Catalogue item', label: 'Catalogue Standard Item' },
+    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' }
+  ],
+  RFP: [
+    { value: 'Service', label: 'Service Contract' },
+    { value: 'Works', label: 'Works Contract' }
+  ],
+  OPEN_TENDER: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' },
+    { value: 'Works', label: 'Works Contract' },
+    { value: 'Service', label: 'Service Contract' }
+  ],
+  LIMITED_TENDER: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'Service', label: 'Service Contract' },
+    { value: 'Works', label: 'Works Contract' },
+    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' }
+  ],
+  REVERSE_AUCTION: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'Catalogue item', label: 'Catalogue Standard Item' }
+  ],
+  RATE_CONTRACT: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'Catalogue item', label: 'Catalogue Standard Item' },
+    { value: 'Service', label: 'Service Contract' }
+  ],
+  REPEAT_ORDER: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'Catalogue item', label: 'Catalogue Standard Item' }
+  ]
 };
 
-const CATEGORY_OPTIONS = [
-  'Raw Materials',
-  'Steel, Plates & Structural Materials',
-  'Cement, Sand & Civil Materials',
-  'Pipes, Hume Pipes & Fittings',
-  'Mechanical Spares',
-  'Bearings & Industrial Components',
-  'Electrical Equipment',
-  'Automobile & HEMM Spares',
-  'Lubricants, Oils & Filters',
-  'Refractory & Furnace Materials',
-  'Hardware, Fasteners & Consumables',
-  'Lab Chemicals & Reagents',
-  'IT Hardware, Printers & Toners',
-  'Office Supplies & Stationery',
-  'Safety, Medical & Ambulance Supplies',
-  'Transport, Cab & Vehicle Hiring',
-  'Facility Management & Canteen Services',
-  'Repair, AMC & Overhauling Services',
-  'Mining, Material Handling & Crane Services',
-  'Construction & Works Contract',
-  'Other',
-];
+const applyMethodDefaults = (draft: Draft, method: ProcurementMethodId): Draft => {
+  let updated = { ...draft, type: method };
+  if (isReverseAuctionMethod(method)) updated = syncAuctionDefaults(updated, method);
+  else if (isRateContractMethod(method)) updated = syncRateContractDefaults(updated);
 
-const SUBCATEGORY_OPTIONS = [
-  'Hardware Sourcing',
-  'Software Sourcing',
-  'Maintenance Services',
-  'Structural Steel',
-  'Piping Equipment',
-  'Safety Gear',
-  'Office Furniture',
-  'Electrical Cables',
-  'Other',
-];
+  const allowed = BUYING_OPTIONS_BY_METHOD[method] || [];
+  if (allowed.length > 0 && !allowed.some(o => o.value === updated.basics.whatAreYouBuying)) {
+    updated = {
+      ...updated,
+      basics: {
+        ...updated.basics,
+        whatAreYouBuying: allowed[0].value
+      }
+    };
+  }
+  return updated;
+};
 
 const stepLibrary = {
-  basics: { id: 'basics', label: 'Procurement Intent', description: 'Buyer type, title, value & method', icon: ClipboardCheck },
+  selection: { id: 'selection', label: 'Select Sourcing Method', description: 'Select the sourcing method', icon: ClipboardCheck },
+  basics: { id: 'basics', label: 'Procurement Intent', description: 'Buyer type, title, value', icon: FileText },
   internal: { id: 'internal', label: 'Internal Details', description: 'Cost center, CFA & justifications', icon: ShieldCheck },
   items: { id: 'items', label: 'Item / Service / BOQ', description: 'Quantities, specs and BOQ items', icon: Package },
   vendors: { id: 'vendors', label: 'Suppliers', description: 'MSME reach, invite selection pool', icon: Users },
   schedule: { id: 'schedule', label: 'Timeline & Rules', description: 'Envelope bids & deadline schedules', icon: CalendarClock },
-  terms: { id: 'terms', label: 'Commercial Terms', description: 'Payment, delivery and EM/PBG fees', icon: FileText },
+  terms: { id: 'terms', label: 'Commercial Terms', description: 'Payment, delivery and EM/PBG fees', icon: BadgeCheck },
   documents: { id: 'documents', label: 'Required Documents', description: 'Checklists and validation requests', icon: Upload },
   evaluation: { id: 'evaluation', label: 'Evaluation Basis', description: 'QCBS weights and technical scores', icon: BarChart3 },
   publish: { id: 'publish', label: 'Approval & Publish', description: 'Summary review & workflow release', icon: BadgeCheck },
 } as const;
 
-const ALL_STEPS: StepKind[] = ['basics', 'internal', 'items', 'vendors', 'schedule', 'terms', 'documents', 'evaluation', 'publish'];
+const ALL_STEPS: StepKind[] = ['selection', 'basics', 'internal', 'items', 'vendors', 'schedule', 'terms', 'documents', 'evaluation', 'publish'];
 
-const defaultRequiredDocs = (buyerType: BuyerType, method: ProcurementMethodId): DocumentRow[] => {
-  const isGov = buyerType === 'GOVERNMENT_BUYER';
+const defaultRequiredDocs = (_buyerType: BuyerType, _method: ProcurementMethodId): DocumentRow[] => {
+  // const isGov = buyerType === 'GOVERNMENT_BUYER';
   const docs: DocumentRow[] = [
     { id: 'gst', name: 'GST Certificate', required: true, fileType: 'pdf', maxSize: 5, instructions: 'Upload verified GST registration document.' },
     { id: 'pan', name: 'PAN Card', required: true, fileType: 'pdf', maxSize: 2, instructions: 'Upload official PAN card.' },
@@ -738,6 +752,7 @@ const defaultRequiredDocs = (buyerType: BuyerType, method: ProcurementMethodId):
     { id: 'financial_quote', name: 'Detailed Price Breakup', required: true, fileType: 'pdf,xlsx', maxSize: 5, instructions: 'Itemized cost schedule.' },
   ];
 
+  /* Government Buyer specific documents commented out as requested
   if (isGov) {
     docs.push(
       { id: 'experience', name: 'Experience Certificate', required: true, fileType: 'pdf', maxSize: 10, instructions: 'Proof of similar supply in past 3 years.' },
@@ -745,6 +760,7 @@ const defaultRequiredDocs = (buyerType: BuyerType, method: ProcurementMethodId):
       { id: 'no_deviation', name: 'No-Deviation Certificate', required: true, fileType: 'pdf', maxSize: 2, instructions: 'Declaration confirming no specs deviation.' }
     );
   }
+  */
 
   return docs;
 };
@@ -897,17 +913,18 @@ export default function CreateProcurementPage() {
     [searchParams]
   );
 
-  // Determine initial buyer type from profile
+  // Determine initial buyer type from profile (Government Buyer option removed, defaulting to PRIVATE_BUYER)
   const initialBuyerType = useMemo<BuyerType>(() => {
-    const u = user as any;
-    const orgType = u?.buyerProfile?.organizationType || u?.organization?.organizationType || u?.organizationType || '';
-    const isGov = String(orgType).toUpperCase().includes('GOVT') ||
-      String(orgType).toUpperCase().includes('GOVERNMENT') ||
-      String(orgType).toUpperCase().includes('MINISTRY') ||
-      String(orgType).toUpperCase().includes('DEPT') ||
-      String(orgType).toUpperCase().includes('PSU');
-    return isGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER';
-  }, [user]);
+    // const u = user as any;
+    // const orgType = u?.buyerProfile?.organizationType || u?.organization?.organizationType || u?.organizationType || '';
+    // const isGov = String(orgType).toUpperCase().includes('GOVT') ||
+    //   String(orgType).toUpperCase().includes('GOVERNMENT') ||
+    //   String(orgType).toUpperCase().includes('MINISTRY') ||
+    //   String(orgType).toUpperCase().includes('DEPT') ||
+    //   String(orgType).toUpperCase().includes('PSU');
+    // return isGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER';
+    return 'PRIVATE_BUYER';
+  }, []);
 
   const [draft, setDraft] = useState<Draft>(() => {
     if (typeof window !== 'undefined') {
@@ -1176,11 +1193,14 @@ export default function CreateProcurementPage() {
   const getReadiness = (d: Draft) => {
     const list: Array<{ label: string; ok: boolean; severity: 'error' | 'warning' | 'info'; stepIdx?: number }> = [];
     
+    // Step 0 Selection - Errors
+    list.push({ label: 'Sourcing Method is selected', ok: Boolean(d.type), severity: 'error', stepIdx: 0 });
+
     // Step 1 Basics - Errors
-    list.push({ label: 'Title is required (min 3 chars)', ok: d.basics.title.trim().length >= 3, severity: 'error', stepIdx: 0 });
-    list.push({ label: 'Estimated budget must be set (> 0)', ok: d.basics.estimatedValue > 0, severity: 'error', stepIdx: 0 });
-    list.push({ label: 'Required by date is required', ok: Boolean(d.basics.requiredByDate), severity: 'error', stepIdx: 0 });
-    list.push({ label: 'Delivery location is required', ok: d.basics.deliveryLocation.trim().length > 0, severity: 'error', stepIdx: 0 });
+    list.push({ label: 'Title is required (min 3 chars)', ok: d.basics.title.trim().length >= 3, severity: 'error', stepIdx: 1 });
+    list.push({ label: 'Estimated budget must be set (> 0)', ok: d.basics.estimatedValue > 0, severity: 'error', stepIdx: 1 });
+    list.push({ label: 'Required by date is required', ok: Boolean(d.basics.requiredByDate), severity: 'error', stepIdx: 1 });
+    list.push({ label: 'Delivery location is required', ok: d.basics.deliveryLocation.trim().length > 0, severity: 'error', stepIdx: 1 });
     const isLimitedSourcing = d.type === 'LIMITED_TENDER' || (d.type === 'RFQ' && d.rfqType === 'LIMITED');
     if (isLimitedSourcing) {
       const just = (d.limitedTenderJustification || d.basics.justification || '').trim();
@@ -1188,21 +1208,23 @@ export default function CreateProcurementPage() {
         label: 'Limited Tender / RFQ requires a written justification (min 15 chars)',
         ok: just.length >= 15,
         severity: 'error',
-        stepIdx: 0
+        stepIdx: 1
       });
     }
 
     // Step 2 Internal Details - Errors
-    list.push({ label: 'Internal Org Name is required', ok: d.internal.orgName.trim().length > 0, severity: 'error', stepIdx: 1 });
+    list.push({ label: 'Internal Org Name is required', ok: d.internal.orgName.trim().length > 0, severity: 'error', stepIdx: 2 });
+    /* Government buyer checks commented out as requested
     if (d.basics.buyerType === 'GOVERNMENT_BUYER') {
-      list.push({ label: 'Competent Authority (CFA) is required', ok: d.internal.competentAuthority.trim().length > 0, severity: 'error', stepIdx: 1 });
-      list.push({ label: 'Department File / Case Number is required', ok: d.internal.internalFileNumber.trim().length > 0, severity: 'error', stepIdx: 1 });
-      list.push({ label: 'Sanction Approval Authority is required', ok: d.internal.approvalAuthority.trim().length > 0, severity: 'error', stepIdx: 1 });
+      list.push({ label: 'Competent Authority (CFA) is required', ok: d.internal.competentAuthority.trim().length > 0, severity: 'error', stepIdx: 2 });
+      list.push({ label: 'Department File / Case Number is required', ok: d.internal.internalFileNumber.trim().length > 0, severity: 'error', stepIdx: 2 });
+      list.push({ label: 'Sanction Approval Authority is required', ok: d.internal.approvalAuthority.trim().length > 0, severity: 'error', stepIdx: 2 });
     } else {
       // Buying Department and Cost Center checks commented out as requested
-      // list.push({ label: 'Cost Center code is required', ok: d.internal.costCenter.trim().length > 0, severity: 'error', stepIdx: 1 });
-      // list.push({ label: 'Buying Department name is required', ok: d.internal.department.trim().length > 0, severity: 'error', stepIdx: 1 });
+      // list.push({ label: 'Cost Center code is required', ok: d.internal.costCenter.trim().length > 0, severity: 'error', stepIdx: 2 });
+      // list.push({ label: 'Buying Department name is required', ok: d.internal.department.trim().length > 0, severity: 'error', stepIdx: 2 });
     }
+    */
 
     // Step 3 Sourcing specification items - Errors
     // Total procurement quantity drives the auto-generated consignee. If it is 0, the backend
@@ -1210,71 +1232,71 @@ export default function CreateProcurementPage() {
     // gate it here on the Items step where the user can actually fix it.
     const totalProcurementQty = getTotalProcurementQty(d);
     if (d.basics.whatAreYouBuying === 'BOQ') {
-      list.push({ label: 'At least one BOQ item is required', ok: d.boqTable.length > 0 && d.boqTable.some(r => r.description.trim()), severity: 'error', stepIdx: 2 });
+      list.push({ label: 'At least one BOQ item is required', ok: d.boqTable.length > 0 && d.boqTable.some(r => r.description.trim()), severity: 'error', stepIdx: 3 });
       if (d.boqTable.length > 0) {
-        list.push({ label: 'All BOQ rows must have positive quantities & rates', ok: d.boqTable.every(r => r.quantity > 0 && r.estimatedRate >= 0), severity: 'error', stepIdx: 2 });
+        list.push({ label: 'All BOQ rows must have positive quantities & rates', ok: d.boqTable.every(r => r.quantity > 0 && r.estimatedRate >= 0), severity: 'error', stepIdx: 3 });
       }
-      list.push({ label: 'Total BOQ quantity must be greater than 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 2 });
+      list.push({ label: 'Total BOQ quantity must be greater than 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     } else if (d.basics.whatAreYouBuying === 'Service') {
-      list.push({ label: 'Service Contract SOW is required (min 10 chars)', ok: d.serviceDetails.scopeOfWork.trim().length >= 10, severity: 'error', stepIdx: 2 });
-      list.push({ label: 'Service Deliverables list is required (min 5 chars)', ok: d.serviceDetails.deliverables.trim().length >= 5, severity: 'error', stepIdx: 2 });
-      list.push({ label: 'Service Duration is required', ok: d.serviceDetails.duration.trim().length > 0, severity: 'error', stepIdx: 2 });
-      list.push({ label: 'Add at least one service line with quantity > 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 2 });
+      list.push({ label: 'Service Contract SOW is required (min 10 chars)', ok: d.serviceDetails.scopeOfWork.trim().length >= 10, severity: 'error', stepIdx: 3 });
+      list.push({ label: 'Service Deliverables list is required (min 5 chars)', ok: d.serviceDetails.deliverables.trim().length >= 5, severity: 'error', stepIdx: 3 });
+      list.push({ label: 'Service Duration is required', ok: d.serviceDetails.duration.trim().length > 0, severity: 'error', stepIdx: 3 });
+      list.push({ label: 'Add at least one service line with quantity > 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     } else {
-      list.push({ label: 'At least one product item is required', ok: d.items.length > 0, severity: 'error', stepIdx: 2 });
+      list.push({ label: 'At least one product item is required', ok: d.items.length > 0, severity: 'error', stepIdx: 3 });
       if (d.items.length > 0) {
-        list.push({ label: 'All product items must have valid name & quantity > 0', ok: d.items.every(i => i.name.trim().length > 0 && i.quantity > 0), severity: 'error', stepIdx: 2 });
+        list.push({ label: 'All product items must have valid name & quantity > 0', ok: d.items.every(i => i.name.trim().length > 0 && i.quantity > 0), severity: 'error', stepIdx: 3 });
       }
-      list.push({ label: 'Total item quantity must be greater than 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 2 });
+      list.push({ label: 'Total item quantity must be greater than 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     }
 
     // Step 4 Sourcing reach - Errors
     if (d.vendors.selection !== 'Open' || isLimitedSourcing) {
-      list.push({ label: 'At least one invited supplier is required for non-open / limited sourcing', ok: (d.vendors.invitedSellers || []).length > 0, severity: 'error', stepIdx: 3 });
+      list.push({ label: 'At least one invited supplier is required for non-open / limited sourcing', ok: (d.vendors.invitedSellers || []).length > 0, severity: 'error', stepIdx: 4 });
     }
 
     // Step 5 Event timeline - Errors
-    list.push({ label: 'Submission deadline date is required', ok: Boolean(d.schedule.submissionDate), severity: 'error', stepIdx: 4 });
+    list.push({ label: 'Submission deadline date is required', ok: Boolean(d.schedule.submissionDate), severity: 'error', stepIdx: 5 });
     if (d.schedule.submissionDate && d.schedule.submissionStartDate) {
-      list.push({ label: 'Submission deadline must be after submission start date', ok: new Date(d.schedule.submissionDate) > new Date(d.schedule.submissionStartDate), severity: 'error', stepIdx: 4 });
+      list.push({ label: 'Submission deadline must be after submission start date', ok: new Date(d.schedule.submissionDate) > new Date(d.schedule.submissionStartDate), severity: 'error', stepIdx: 5 });
     }
     if (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two') {
-      list.push({ label: 'Technical opening date is required', ok: Boolean(d.schedule.technicalOpeningDate), severity: 'error', stepIdx: 4 });
+      list.push({ label: 'Technical opening date is required', ok: Boolean(d.schedule.technicalOpeningDate), severity: 'error', stepIdx: 5 });
       if (d.schedule.technicalOpeningDate && d.schedule.submissionDate) {
-        list.push({ label: 'Technical opening date must be after submission deadline', ok: new Date(d.schedule.technicalOpeningDate) > new Date(d.schedule.submissionDate), severity: 'error', stepIdx: 4 });
+        list.push({ label: 'Technical opening date must be after submission deadline', ok: new Date(d.schedule.technicalOpeningDate) > new Date(d.schedule.submissionDate), severity: 'error', stepIdx: 5 });
       }
     }
     if (d.schedule.packetType === 'Two') {
-      list.push({ label: 'Financial opening date is required for two packet flows', ok: Boolean(d.schedule.financialOpeningDate), severity: 'error', stepIdx: 4 });
+      list.push({ label: 'Financial opening date is required for two packet flows', ok: Boolean(d.schedule.financialOpeningDate), severity: 'error', stepIdx: 5 });
       if (d.schedule.financialOpeningDate && d.schedule.technicalOpeningDate) {
-        list.push({ label: 'Financial opening date must be after technical envelope opening', ok: new Date(d.schedule.financialOpeningDate) > new Date(d.schedule.technicalOpeningDate), severity: 'error', stepIdx: 4 });
+        list.push({ label: 'Financial opening date must be after technical envelope opening', ok: new Date(d.schedule.financialOpeningDate) > new Date(d.schedule.technicalOpeningDate), severity: 'error', stepIdx: 5 });
       }
     }
     if (isReverseAuctionMethod(d.type)) {
-      list.push({ label: 'Auction category is required', ok: Boolean(d.auctionConfig.auctionCategory.trim()) && d.auctionConfig.auctionCategory !== 'Other', severity: 'error', stepIdx: 4 });
-      list.push({ label: 'Auction subcategory is required', ok: Boolean(d.auctionConfig.auctionSubCategory.trim()) && d.auctionConfig.auctionSubCategory !== 'Other', severity: 'error', stepIdx: 4 });
-      list.push({ label: 'Auction currency is required', ok: Boolean(d.auctionConfig.currency.trim()) && d.auctionConfig.currency !== 'Other', severity: 'error', stepIdx: 4 });
-      list.push({ label: 'Starting bid price must be greater than 0', ok: d.auctionConfig.startingBidPrice > 0, severity: 'error', stepIdx: 4 });
-      list.push({ label: 'Minimum bid decrement must be greater than 0', ok: d.auctionConfig.minimumBidDecrement > 0, severity: 'error', stepIdx: 4 });
+      list.push({ label: 'Auction category is required', ok: Boolean(d.auctionConfig.auctionCategory.trim()) && d.auctionConfig.auctionCategory !== 'Other', severity: 'error', stepIdx: 5 });
+      list.push({ label: 'Auction subcategory is required', ok: Boolean(d.auctionConfig.auctionSubCategory.trim()) && d.auctionConfig.auctionSubCategory !== 'Other', severity: 'error', stepIdx: 5 });
+      list.push({ label: 'Auction currency is required', ok: Boolean(d.auctionConfig.currency.trim()) && d.auctionConfig.currency !== 'Other', severity: 'error', stepIdx: 5 });
+      list.push({ label: 'Starting bid price must be greater than 0', ok: d.auctionConfig.startingBidPrice > 0, severity: 'error', stepIdx: 5 });
+      list.push({ label: 'Minimum bid decrement must be greater than 0', ok: d.auctionConfig.minimumBidDecrement > 0, severity: 'error', stepIdx: 5 });
     }
 
     // Step 6 Commercial Terms - Errors
-    list.push({ label: 'Payment terms are required', ok: Boolean(d.terms.paymentTerms), severity: 'error', stepIdx: 5 });
-    list.push({ label: 'Delivery terms location is required', ok: Boolean(d.terms.deliveryTerms), severity: 'error', stepIdx: 5 });
+    list.push({ label: 'Payment terms are required', ok: Boolean(d.terms.paymentTerms), severity: 'error', stepIdx: 6 });
+    list.push({ label: 'Delivery terms location is required', ok: Boolean(d.terms.deliveryTerms), severity: 'error', stepIdx: 6 });
     // EMD check commented out as requested
     // if (d.terms.emdRequired) {
-    //   list.push({ label: 'EMD amount must be greater than 0 if EMD is required', ok: d.terms.emdAmount > 0, severity: 'error', stepIdx: 5 });
+    //   list.push({ label: 'EMD amount must be greater than 0 if EMD is required', ok: d.terms.emdAmount > 0, severity: 'error', stepIdx: 6 });
     // }
     // PBG check commented out as requested
     // if (d.terms.pbgRequired) {
-    //   list.push({ label: 'ePBG / Performance security amount must be greater than 0 if required', ok: d.terms.securityDeposit > 0, severity: 'error', stepIdx: 5 });
+    //   list.push({ label: 'ePBG / Performance security amount must be greater than 0 if required', ok: d.terms.securityDeposit > 0, severity: 'error', stepIdx: 6 });
     // }
 
     // Step 7 Documents - Errors
-    list.push({ label: 'At least one required document must be checklist', ok: d.requiredDocs.length > 0, severity: 'error', stepIdx: 6 });
+    list.push({ label: 'At least one required document must be checklist', ok: d.requiredDocs.length > 0, severity: 'error', stepIdx: 7 });
     
     // Step 8 Evaluation criteria - Errors
-    list.push({ label: 'Evaluation method is required', ok: Boolean(d.evaluation.method), severity: 'error', stepIdx: 7 });
+    list.push({ label: 'Evaluation method is required', ok: Boolean(d.evaluation.method), severity: 'error', stepIdx: 8 });
     // QCBS weightage check commented out as requested
     // if (d.evaluation.method === 'QCBS / weighted technical-commercial score') {
     //   const qcbsTotal = d.evaluation.technicalCriteria.reduce((sum, c) => sum + Number(c.weightage || 0), 0);
@@ -1282,6 +1304,7 @@ export default function CreateProcurementPage() {
     // }
 
     // Warnings / Advisories
+    /* Government buyer GFR rule advisory commented out as requested
     if (d.basics.buyerType === 'GOVERNMENT_BUYER' && d.basics.estimatedValue > 250000 && d.vendors.selection !== 'Open') {
       const isExempt = d.basics.isOnlyOneVendor || d.basics.priority === 'Emergency';
       list.push({
@@ -1290,6 +1313,7 @@ export default function CreateProcurementPage() {
         severity: 'warning'
       });
     }
+    */
     if (d.basics.isOnlyOneVendor) {
       list.push({
         label: 'Only one vendor justification note is short (recommend min 15 chars)',
@@ -1331,15 +1355,20 @@ export default function CreateProcurementPage() {
   
   const isStepValid = (d: Draft, stepIdx: number): boolean => {
     if (stepIdx === 0) {
+      return Boolean(d.type);
+    } else if (stepIdx === 1) {
       if (d.basics.title.trim().length < 3) return false;
       if (d.basics.estimatedValue <= 0) return false;
       if (!d.basics.requiredByDate) return false;
       if (!d.basics.deliveryLocation.trim()) return false;
-    } else if (stepIdx === 1) {
+      const isLimited = d.type === 'LIMITED_TENDER' || (d.type === 'RFQ' && d.rfqType === 'LIMITED');
+      if (isLimited && (d.limitedTenderJustification || d.basics.justification || '').trim().length < 15) return false;
+    } else if (stepIdx === 2) {
       if (!d.internal.orgName.trim()) return false;
       if (!d.internal.contactPerson.trim()) return false;
       if (!d.internal.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.internal.email.trim())) return false;
       if (!d.internal.mobile.trim() || !/^\d{10}$/.test(d.internal.mobile.trim())) return false;
+      /* Government buyer validation checks commented out as requested
       if (d.basics.buyerType === 'GOVERNMENT_BUYER') {
         if (!d.internal.internalFileNumber.trim()) return false;
         if (!d.internal.competentAuthority.trim()) return false;
@@ -1349,7 +1378,8 @@ export default function CreateProcurementPage() {
         // if (!d.internal.department.trim()) return false;
         // if (!d.internal.costCenter.trim()) return false;
       }
-    } else if (stepIdx === 2) {
+      */
+    } else if (stepIdx === 3) {
       if (d.basics.whatAreYouBuying === 'BOQ') {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) return false;
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) return false;
@@ -1361,11 +1391,11 @@ export default function CreateProcurementPage() {
       } else {
         if (d.items.length === 0 || d.items.some(i => !i.name.trim() || i.quantity <= 0)) return false;
       }
-    } else if (stepIdx === 3) {
+    } else if (stepIdx === 4) {
       if (d.vendors.selection !== 'Open' && (!d.vendors.invitedSellers || d.vendors.invitedSellers.length === 0)) return false;
       if (isReverseAuctionMethod(d.type) && d.vendors.selection !== 'Open' && d.vendors.invitedSellers.length < d.auctionConfig.minimumQualifiedBidders) return false;
       if (isRateContractMethod(d.type) && d.rateContractConfig.selectedSuppliers.length === 0 && d.vendors.invitedSellers.length === 0) return false;
-    } else if (stepIdx === 4) {
+    } else if (stepIdx === 5) {
       if (!d.schedule.submissionDate) return false;
       const nowTime = new Date(d.schedule.submissionStartDate).getTime();
       const endTime = new Date(d.schedule.submissionDate).getTime();
@@ -1413,16 +1443,16 @@ export default function CreateProcurementPage() {
         if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) return false;
         if (contract.pbgRequired && contract.pbgAmount <= 0) return false;
       }
-    } else if (stepIdx === 5) {
+    } else if (stepIdx === 6) {
       if (!d.terms.paymentTerms) return false;
       if (!d.terms.deliveryTerms) return false;
       // EMD check commented out as requested
       // if (d.terms.emdRequired && d.terms.emdAmount <= 0) return false;
       // PBG check commented out as requested
       // if (d.terms.pbgRequired && d.terms.securityDeposit <= 0) return false;
-    } else if (stepIdx === 6) {
-      if (d.requiredDocs.length === 0) return false;
     } else if (stepIdx === 7) {
+      if (d.requiredDocs.length === 0) return false;
+    } else if (stepIdx === 8) {
       if (!d.evaluation.method) return false;
       // QCBS weightage check commented out as requested
       // if (d.evaluation.method === 'QCBS / weighted technical-commercial score') {
@@ -1473,6 +1503,12 @@ export default function CreateProcurementPage() {
   const validateStep = (stepIdx: number): boolean => {
     const d = draft;
     if (stepIdx === 0) {
+      // Step 0 Selection
+      if (!d.type) {
+        toast.error('Please select a sourcing method.');
+        return false;
+      }
+    } else if (stepIdx === 1) {
       // Step 1 Basics
       if (d.basics.title.trim().length < 3) {
         toast.error('Procurement title is required (min 3 chars).');
@@ -1498,7 +1534,7 @@ export default function CreateProcurementPage() {
           return false;
         }
       }
-    } else if (stepIdx === 1) {
+    } else if (stepIdx === 2) {
       // Step 2 Internal details
       if (!d.internal.orgName.trim()) {
         toast.error('Organization name is required.');
@@ -1516,6 +1552,7 @@ export default function CreateProcurementPage() {
         toast.error('A valid 10-digit Contact Mobile Number is required (e.g. 9876543210).');
         return false;
       }
+      /* Government buyer validation toasts commented out as requested
       if (d.basics.buyerType === 'GOVERNMENT_BUYER') {
         if (!d.internal.internalFileNumber.trim()) {
           toast.error('Department File/Case Number is required for government buyers.');
@@ -1540,7 +1577,8 @@ export default function CreateProcurementPage() {
         //   return false;
         // }
       }
-    } else if (stepIdx === 2) {
+      */
+    } else if (stepIdx === 3) {
       // Step 3 Items details
       if (d.basics.whatAreYouBuying === 'BOQ') {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) {
@@ -1574,7 +1612,7 @@ export default function CreateProcurementPage() {
           return false;
         }
       }
-    } else if (stepIdx === 3) {
+    } else if (stepIdx === 4) {
       // Step 4 Suppliers
       if (d.vendors.selection !== 'Open' && (!d.vendors.invitedSellers || d.vendors.invitedSellers.length === 0)) {
         toast.error('Please invite at least 1 supplier or change sourcing scope to Open.');
@@ -1588,7 +1626,7 @@ export default function CreateProcurementPage() {
         toast.error('Rate Contract requires at least one selected supplier.');
         return false;
       }
-    } else if (stepIdx === 4) {
+    } else if (stepIdx === 5) {
       // Step 5 Event timeline
       if (!d.schedule.submissionDate) {
         toast.error('Submission deadline date is required.');
@@ -1718,7 +1756,7 @@ export default function CreateProcurementPage() {
           return false;
         }
       }
-    } else if (stepIdx === 5) {
+    } else if (stepIdx === 6) {
       // Step 6 Terms
       if (!d.terms.paymentTerms) {
         toast.error('Payment terms are required.');
@@ -1738,13 +1776,13 @@ export default function CreateProcurementPage() {
       //   toast.error('PBG Amount / Performance Security amount is required when enabled.');
       //   return false;
       // }
-    } else if (stepIdx === 6) {
+    } else if (stepIdx === 7) {
       // Step 7 Documents
       if (d.requiredDocs.length === 0) {
         toast.error('Please specify at least 1 required verification document.');
         return false;
       }
-    } else if (stepIdx === 7) {
+    } else if (stepIdx === 8) {
       // Step 8 Evaluation criteria
       if (!d.evaluation.method) {
         toast.error('Evaluation method is required.');
@@ -1843,10 +1881,7 @@ export default function CreateProcurementPage() {
         <div className="mb-6 flex flex-col gap-4 rounded-[24px] bg-white/95 p-4 shadow-[0_12px_36px_rgba(15,23,42,0.07)] ring-1 ring-slate-200/70 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-wider">
-              <span>Guided Procurement Wizard</span>
-              <span>&middot;</span>
-              <BuyerTypeBadge buyerType={draft.basics.buyerType} />
-              <span>&middot;</span>
+      
               <MethodBadge method={draft.type} />
             </div>
             <h1 className="text-lg font-black text-slate-900 tracking-tight mt-1 truncate">
@@ -1972,9 +2007,19 @@ export default function CreateProcurementPage() {
           {/* Form Step Body Wrapper */}
           <div className="space-y-4 sm:space-y-6 w-full min-w-0 max-w-full">
             
+            {/* Step 0 Sourcing Method Selection */}
+            {currentStepKind === 'selection' && (
+              <SectionCard title="Select Sourcing Method" description="Choose the appropriate sourcing method based on your procurement requirements" icon={stepLibrary.selection.icon}>
+                <SelectionsStepForm
+                  draft={draft}
+                  updateDraft={updateDraft}
+                />
+              </SectionCard>
+            )}
+
             {/* Step 1 Sourcing Intent */}
             {currentStepKind === 'basics' && (
-              <SectionCard title="Procurement Intent & Strategy" description="Specify buyer profile, sourcing title, categories, priority and method selections" icon={stepLibrary.basics.icon}>
+              <SectionCard title="Procurement Intent & Strategy" description="Specify sourcing title, categories, priority and delivery location" icon={stepLibrary.basics.icon}>
                 <BasicsStepForm
                   draft={draft}
                   updateDraft={updateDraft}
@@ -2091,10 +2136,10 @@ export default function CreateProcurementPage() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 1 Form components: Sourcing Intent
-// ─────────────────────────────────────────────────────────────────────────────
-function BasicsStepForm({
+
+
+
+function SelectionsStepForm({
   draft,
   updateDraft
 }: {
@@ -2106,10 +2151,73 @@ function BasicsStepForm({
     return METHOD_DEFINITIONS.filter(m => allowed.includes(m.id) && m.buyerTypes.includes(draft.basics.buyerType));
   }, [draft.basics.buyerType]);
 
+  return (
+    <div className="space-y-4 sm:space-y-6">
+      <div className="space-y-3.5">
+        <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide pl-0.5">Select Sourcing Method</h3>
+        <div className="grid gap-2.5 sm:gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+          {availableMethods.map(method => (
+            <ProcurementMethodCard
+              key={method.id}
+              title={method.title}
+              subtitle={method.subtitle}
+              icon={method.icon}
+              complexity={method.complexity}
+              estimatedTime={method.estimatedTime}
+              isSelected={draft.type === method.id}
+              onSelect={() => {
+                updateDraft(current => ({
+                  ...applyMethodDefaults(current, method.id),
+                  requiredDocs: defaultRequiredDocs(current.basics.buyerType, method.id)
+                }));
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 1 Form components: Sourcing Intent
+// ─────────────────────────────────────────────────────────────────────────────
+function BasicsStepForm({
+  draft,
+  updateDraft
+}: {
+  draft: Draft;
+  updateDraft: (updater: (current: Draft) => Draft) => void;
+}) {
   // Delivery address dropdown and modal states
   const [deliveryAddressesList, setDeliveryAddressesList] = useState<DeliveryAddressDto[]>([]);
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+
+  // Filter allowed buying options strictly by selected procurement method
+  const allowedBuyingOptions = useMemo(() => {
+    return BUYING_OPTIONS_BY_METHOD[draft.type] || [
+      { value: 'Product', label: 'Product / Goods' },
+      { value: 'Service', label: 'Service Contract' },
+      { value: 'Works', label: 'Works Contract' },
+      { value: 'BOQ', label: 'BOQ Sourced (Multi line)' },
+      { value: 'Catalogue item', label: 'Catalogue Standard Item' }
+    ];
+  }, [draft.type]);
+
+  useEffect(() => {
+    const isAllowed = allowedBuyingOptions.some(o => o.value === draft.basics.whatAreYouBuying);
+    if (!isAllowed && allowedBuyingOptions.length > 0) {
+      updateDraft(c => ({
+        ...c,
+        basics: { ...c.basics, whatAreYouBuying: allowedBuyingOptions[0].value }
+      }));
+    }
+  }, [allowedBuyingOptions, draft.basics.whatAreYouBuying, updateDraft]);
+
+  // Dynamic categories from database
+  const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
 
   // Address form fields state
   const [addressLabel, setAddressLabel] = useState('');
@@ -2133,7 +2241,10 @@ function BasicsStepForm({
   useEffect(() => {
     let active = true;
     queueMicrotask(() => {
-      if (active) setLoadingAddresses(true);
+      if (active) {
+        setLoadingAddresses(true);
+        setLoadingCategories(true);
+      }
     });
     fetchDeliveryAddresses()
       .then(res => {
@@ -2145,6 +2256,26 @@ function BasicsStepForm({
       .finally(() => {
         if (active) setLoadingAddresses(false);
       });
+
+    api.get('/api/categories')
+      .then(res => readJsonResponse(res))
+      .then(body => unwrapApiData<any>(body))
+      .then(cats => {
+        if (active && Array.isArray(cats)) {
+          setCategoriesList(
+            cats
+              .map((c: any) => ({ id: Number(c.id || 0), name: String(c.name || '').trim() }))
+              .filter(c => Boolean(c.name))
+          );
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load categories from database:', err);
+      })
+      .finally(() => {
+        if (active) setLoadingCategories(false);
+      });
+
     return () => {
       active = false;
     };
@@ -2331,11 +2462,11 @@ function BasicsStepForm({
             onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, whatAreYouBuying: e.target.value } }))}
             className={inputClass}
           >
-            <option value="Product">Product / Goods</option>
-            <option value="Service">Service Contract</option>
-            <option value="Works">Works Contract</option>
-            <option value="BOQ">BOQ Sourced (Multi line)</option>
-            <option value="Catalogue item">Catalogue Standard Item</option>
+            {allowedBuyingOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
           </select>
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
             Category of sourcing requirement (e.g. Products, Services, or Bill of Quantities).
@@ -2359,13 +2490,23 @@ function BasicsStepForm({
 
         <Field label="Procurement category" required>
           <select
-            value={CATEGORY_OPTIONS.includes(draft.basics.category) ? draft.basics.category : (draft.basics.category ? 'Other' : '')}
+            value={
+              categoriesList.some(c => c.name === draft.basics.category)
+                ? draft.basics.category
+                : (draft.basics.category ? 'Other' : '')
+            }
             onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, category: e.target.value } }))}
             className={inputClass}
           >
-            {CATEGORY_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            <option value="">{loadingCategories ? 'Loading categories...' : '-- Select Procurement Category --'}</option>
+            {categoriesList.map(opt => (
+              <option key={opt.id || opt.name} value={opt.name}>
+                {opt.name}
+              </option>
+            ))}
+            <option value="Other">Other / Custom Category</option>
           </select>
-          {(draft.basics.category === 'Other' || (draft.basics.category && !CATEGORY_OPTIONS.includes(draft.basics.category))) && (
+          {(draft.basics.category === 'Other' || (draft.basics.category && !categoriesList.some(c => c.name === draft.basics.category))) && (
             <input
               type="text"
               value={draft.basics.category === 'Other' ? '' : draft.basics.category}
@@ -2467,29 +2608,7 @@ function BasicsStepForm({
         </div>
       </div>
 
-      {/* Sourcing Method Selection Cards */}
-      <div className="space-y-3.5">
-        <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide pl-0.5">Select Sourcing Method</h3>
-        <div className="grid gap-2.5 sm:gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-          {availableMethods.map(method => (
-            <ProcurementMethodCard
-              key={method.id}
-              title={method.title}
-              subtitle={method.subtitle}
-              icon={method.icon}
-              complexity={method.complexity}
-              estimatedTime={method.estimatedTime}
-              isSelected={draft.type === method.id}
-              onSelect={() => {
-                updateDraft(current => ({
-                  ...applyMethodDefaults(current, method.id),
-                  requiredDocs: defaultRequiredDocs(current.basics.buyerType, method.id)
-                }));
-              }}
-            />
-          ))}
-        </div>
-      </div>
+    
 
       {isAddressModalOpen && typeof window !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200" onWheel={e => e.stopPropagation()}>
@@ -2779,7 +2898,7 @@ function InternalDetailsForm({
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
 }) {
-  const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
+  // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   const updateInternal = (key: keyof Draft['internal'], val: string | boolean) => {
     updateDraft(c => ({ ...c, internal: { ...c.internal, [key]: val } }));
   };
@@ -2834,82 +2953,43 @@ function InternalDetailsForm({
           />
         </Field>
 
-        {/* Private vs Government Specific Forms UI emphasis */}
-        {!isGov ? (
-          <>
-            {/* Cost Center, Budget Head, and Project Code reference fields commented out as requested */}
-            {/* <Field label="Cost Center" required>
-              <input
-                value={draft.internal.costCenter}
-                onChange={e => updateInternal('costCenter', e.target.value)}
-                className={inputClass}
-                placeholder="CC-MKTG-102"
-              />
-              <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                Internal corporate code for cost tracking and accounting allocation.
-              </p>
-            </Field>
+        <Field label="Internal Approval Authority" required>
+          <input
+            value={draft.internal.approvalAuthority}
+            onChange={e => updateInternal('approvalAuthority', e.target.value)}
+            className={inputClass}
+            placeholder="Chief Sourcing Officer"
+          />
+        </Field>
 
-            <Field label="Budget Head / Code">
-              <input
-                value={draft.internal.budgetHead}
-                onChange={e => updateInternal('budgetHead', e.target.value)}
-                className={inputClass}
-                placeholder="BH-CAPEX-IT"
-              />
-            </Field>
+        {/* Government specific fields commented out as requested
+        <Field label="Department File / Case Number" required>
+          <input
+            value={draft.internal.internalFileNumber}
+            onChange={e => updateInternal('internalFileNumber', e.target.value)}
+            className={inputClass}
+            placeholder="DEPT/2026/RFQ/8801"
+          />
+        </Field>
 
-            <Field label="Project Code reference">
-              <input
-                value={draft.internal.projectCode}
-                onChange={e => updateInternal('projectCode', e.target.value)}
-                className={inputClass}
-                placeholder="PROJ-2026-CLOUD"
-              />
-            </Field> */}
+        <Field label="Competent Financial Authority (CFA)" required>
+          <input
+            value={draft.internal.competentAuthority}
+            onChange={e => updateInternal('competentAuthority', e.target.value)}
+            className={inputClass}
+            placeholder="Director of Finance (DF)"
+          />
+        </Field>
 
-            <Field label="Internal Approval Authority" required>
-              <input
-                value={draft.internal.approvalAuthority}
-                onChange={e => updateInternal('approvalAuthority', e.target.value)}
-                className={inputClass}
-                placeholder="Chief Sourcing Officer"
-              />
-            </Field>
-          </>
-        ) : (
-          <>
-            <Field label="Department File / Case Number" required>
-              <input
-                value={draft.internal.internalFileNumber}
-                onChange={e => updateInternal('internalFileNumber', e.target.value)}
-                className={inputClass}
-                placeholder="DEPT/2026/RFQ/8801"
-              />
-            </Field>
-
-            <Field label="Competent Financial Authority (CFA)" required>
-              <input
-                value={draft.internal.competentAuthority}
-                onChange={e => updateInternal('competentAuthority', e.target.value)}
-                className={inputClass}
-                placeholder="Director of Finance (DF)"
-              />
-              <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                Financial authority who possesses delegation of power to sanction.
-              </p>
-            </Field>
-
-            <Field label="Sanction Approval Authority" required>
-              <input
-                value={draft.internal.approvalAuthority}
-                onChange={e => updateInternal('approvalAuthority', e.target.value)}
-                className={inputClass}
-                placeholder="Joint Secretary Sourcing"
-              />
-            </Field>
-          </>
-        )}
+        <Field label="Sanction Approval Authority" required>
+          <input
+            value={draft.internal.approvalAuthority}
+            onChange={e => updateInternal('approvalAuthority', e.target.value)}
+            className={inputClass}
+            placeholder="Joint Secretary Sourcing"
+          />
+        </Field>
+        */}
 
         <Field label="Purchase justification & compliance reason" className="sm:col-span-2" required>
           <textarea
@@ -4956,7 +5036,7 @@ function ScheduleStepForm({
   updateDraft: (updater: (current: Draft) => Draft) => void;
   showErrors?: boolean;
 }) {
-  const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
+  // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   const isTwoPacket = draft.schedule.packetType === 'Two';
   const isAuction = isReverseAuctionMethod(draft.type);
   const isRateContract = isRateContractMethod(draft.type);
@@ -5769,7 +5849,7 @@ function CommercialTermsForm({
   updateDraft: (updater: (current: Draft) => Draft) => void;
   showErrors?: boolean;
 }) {
-  const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
+  // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   const updateTerms = (key: keyof Draft['terms'], val: any) => {
     updateDraft(c => ({ ...c, terms: { ...c.terms, [key]: val } }));
   };

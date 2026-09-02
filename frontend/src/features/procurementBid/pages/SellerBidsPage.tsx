@@ -17,14 +17,25 @@ import {
   Filter,
   IndianRupee,
   AlertTriangle,
+  AlertCircle,
   XCircle,
-  FileEdit
+  FileEdit,
+  TrendingUp,
+  Target,
+  Award,
+  Scale,
+  Receipt,
+  ClipboardList,
+  ChevronDown,
+  SlidersHorizontal,
+  X
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
 import { toast } from 'sonner';
 import { api } from '../../../lib/api';
+import { sellerRoutes } from '@/lib/routes';
 import { useAuth } from '../../../hooks/useAuth';
 import { procurementBidApi } from '../api';
 import { formatDate } from '../../shared/format';
@@ -33,15 +44,103 @@ import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
 import { EmptyState, LoadingState } from '../../shared/FeatureStates';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 type BidTypeFilter = 'all' | 'submitted' | 'draft' | 'awarded';
+
+const getKpiFilterLabel = (kpi: string) => {
+  switch (kpi) {
+    case 'active_pipeline': return 'Active Pipeline';
+    case 'submitted': return 'Submitted Bids';
+    case 'technical_financial': return 'Under Tech/Fin Eval';
+    case 'technical': return 'Technical Eval';
+    case 'financial': return 'Financial Eval';
+    case 'awarded': return 'Awarded Contracts';
+    case 'draft': return 'Draft Bids';
+    case 'dueSoon': return 'Closing in ≤ 7 Days';
+    case 'ready': return 'Docs / Quote Staged';
+    case 'early': return 'Early Setup Stage';
+    case 'pendingInvoice': return 'Pending Invoicing';
+    case 'invoiced': return 'Billing Initiated';
+    default: return kpi;
+  }
+};
+
+const getDateFilterLabel = (date: string) => {
+  if (date === '7') return '≤ 7 Days';
+  if (date === '15') return '≤ 15 Days';
+  if (date === '30') return '≤ 30 Days';
+  if (date === 'closed') return 'Closed / Expired';
+  return date;
+};
+
+const getValueFilterLabel = (val: string) => {
+  if (val === '5l') return '< ₹5 Lakhs';
+  if (val === '25l') return '₹5L – ₹25 Lakhs';
+  if (val === '1cr') return '₹25L – ₹1 Crore';
+  if (val === 'above1cr') return '> ₹1 Crore';
+  return val;
+};
 
 const formatCurrency = (value: number | string | null | undefined) => {
   const num = Number(value || 0);
   if (num >= 10000000) return `₹${(num / 10000000).toFixed(2)} Cr`;
   if (num >= 100000) return `₹${(num / 100000).toFixed(2)} L`;
   return `₹${num.toLocaleString('en-IN')}`;
+};
+
+// Formats messy or raw IDs into clean, official procurement reference codes
+const formatBidDisplayId = (item: any): string => {
+  const raw = String(item?.bid?.bidNumber || item?.bid?.bidNo || item?.bid?.id || item?.bidId || item?.requirementId || '').trim();
+  if (!raw) return 'BID-000';
+  
+  // If already formatted with standard prefix
+  if (/^(RFQ|RFP|TND|BID|REQ|LT|RA|RC)-/i.test(raw)) {
+    return raw.toUpperCase();
+  }
+  
+  // If requirement formatted like req-39 or req_39
+  const reqMatch = raw.match(/^req[-_]?(\d+)$/i);
+  if (reqMatch) {
+    const num = reqMatch[1].padStart(3, '0');
+    const typeStr = String(item?.bid?.procurementType || item?.bid?.bidType || item?.bid?.category || '').toUpperCase();
+    if (typeStr.includes('RFP') || typeStr.includes('PROPOSAL')) return `RFP-${num}`;
+    return `RFQ-${num}`;
+  }
+  
+  // If numeric ID like 25, 17, 16
+  const numMatch = raw.match(/^(\d+)$/);
+  if (numMatch) {
+    const num = numMatch[1].padStart(3, '0');
+    const typeStr = String(item?.bid?.procurementType || item?.bid?.bidType || item?.bid?.category || '').toUpperCase();
+    if (typeStr.includes('RFP') || typeStr.includes('PROPOSAL')) return `RFP-${num}`;
+    if (typeStr.includes('RFQ') || typeStr.includes('QUOTATION')) return `RFQ-${num}`;
+    if (typeStr.includes('LIMITED')) return `LT-${num}`;
+    if (typeStr.includes('AUCTION') || typeStr.includes('REVERSE')) return `RA-${num}`;
+    if (typeStr.includes('RATE')) return `RC-${num}`;
+    if (typeStr.includes('OPEN') || typeStr.includes('TENDER')) return `TND-${num}`;
+    return `BID-${num}`;
+  }
+
+  if (raw.length > 10) {
+    return `BID-${raw.slice(-6).toUpperCase()}`;
+  }
+
+  return raw.toUpperCase().replace(/^#+/, '');
+};
+
+const getParticipationType = (item: any): string => {
+  if (item?.isMarketplaceResponse) {
+    const isRfp = String(item.bid?.category || item.bid?.title || '').toLowerCase().includes('proposal') || String(item.bid?.category || '').toLowerCase().includes('rfp');
+    return isRfp ? 'RFP' : 'RFQ';
+  }
+  const raw = String(item?.bid?.procurementType || item?.bid?.bidType || item?.bid?.category || '').toLowerCase();
+  if (raw.includes('limited')) return 'Limited Tender';
+  if (raw.includes('reverse') || raw.includes('auction')) return 'Reverse Auction';
+  if (raw.includes('rate') || raw.includes('contract')) return 'Rate Contract';
+  if (raw.includes('rfp') || raw.includes('proposal')) return 'RFP';
+  if (raw.includes('rfq') || raw.includes('quotation')) return 'RFQ';
+  if (raw.includes('open') || raw.includes('tender')) return 'Open Tender';
+  return 'Open Tender';
 };
 
 // Seller participations progress through a 6-state submission machine
@@ -74,7 +173,7 @@ const isDraft = (p: any) => {
 const isSubmitted = (p: any) => {
   if (isAwarded(p)) return true;
   const s = statusOf(p);
-  return s === 'SUBMITTED';
+  return s === 'SUBMITTED' || s === 'ACCEPTED';
 };
 
 // Fast in-memory cache for seller participations
@@ -94,16 +193,57 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
   const [convertingInvoiceId, setConvertingInvoiceId] = useState<string | null>(null);
 
   // Filters
+  const [kpiFilter, setKpiFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [stageFilter, setStageFilter] = useState('');
+  const [buyerFilter, setBuyerFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [valueFilter, setValueFilter] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [viewMode, setViewMode] = useResponsiveViewMode('seller-bids:view-mode');
+  const [showFilters, setShowFilters] = useState(false);
 
   // Debounce search
   useEffect(() => {
     const handler = setTimeout(() => setDebouncedSearch(searchTerm), 400);
     return () => clearTimeout(handler);
   }, [searchTerm]);
+
+  const resetAllFilters = useCallback(() => {
+    setSearchTerm('');
+    setSortBy('newest');
+    setKpiFilter('all');
+    setTypeFilter('');
+    setStatusFilter('');
+    setStageFilter('');
+    setBuyerFilter('');
+    setDateFilter('');
+    setValueFilter('');
+    setPage(1);
+  }, []);
+
+  const activeDetailedFilterCount = useMemo(() => {
+    return (
+      (typeFilter ? 1 : 0) +
+      (statusFilter ? 1 : 0) +
+      (stageFilter ? 1 : 0) +
+      (buyerFilter ? 1 : 0) +
+      (dateFilter ? 1 : 0) +
+      (valueFilter ? 1 : 0)
+    );
+  }, [typeFilter, statusFilter, stageFilter, buyerFilter, dateFilter, valueFilter]);
+
+  const hasAnyActiveFilters = useMemo(() => {
+    return (
+      activeDetailedFilterCount > 0 ||
+      Boolean(debouncedSearch) ||
+      kpiFilter !== 'all' ||
+      sortBy !== 'newest'
+    );
+  }, [activeDetailedFilterCount, debouncedSearch, kpiFilter, sortBy]);
 
   const loadData = useCallback(async (isRefresh = false) => {
     try {
@@ -183,25 +323,21 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     switch (subRouteType) {
       case 'submitted':
         return {
-          eyebrow: 'Bids Participation',
           title: 'My Submitted Bids',
           desc: 'Monitor status, clarifications, and evaluation stages of all bids you have submitted.'
         };
       case 'draft':
         return {
-          eyebrow: 'In-Progress Bids',
           title: 'Draft Bids',
           desc: 'Resume and complete your unfinished bid participations before the closing dates.'
         };
       case 'awarded':
         return {
-          eyebrow: 'Contracts & Awards',
           title: 'Awarded Contracts',
           desc: 'Review procurement opportunities and tenders awarded to your organization.'
         };
       default:
         return {
-          eyebrow: 'My Workspace',
           title: 'All Bid Participations',
           desc: 'Overview of all your drafted, submitted, and awarded bid activities.'
         };
@@ -215,9 +351,14 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     const drafts = all.filter(isDraft);
     const awarded = all.filter(isAwarded);
 
-    const underTech = submitted.filter(p => p.bid?.lifecycleStage === 'TECHNICAL_EVALUATION').length;
-    const underFin = submitted.filter(p => p.bid?.lifecycleStage === 'FINANCIAL_EVALUATION').length;
+    const activeSubmitted = submitted.filter(p => !isAwarded(p));
+    const activeQuotedValue = activeSubmitted.reduce((sum, p) => sum + (Number(p.quotedAmount) || Number(p.bid?.estimatedValue) || 0), 0);
+    const totalPipelineValue = all.reduce((sum, p) => sum + (Number(p.quotedAmount) || Number(p.bid?.estimatedValue) || 0), 0);
+
+    const underTech = submitted.filter(p => p.bid?.lifecycleStage === 'TECHNICAL_EVALUATION' || p.bid?.status === 'TECHNICAL_EVALUATION').length;
+    const underFin = submitted.filter(p => p.bid?.lifecycleStage === 'FINANCIAL_EVALUATION' || p.bid?.status === 'FINANCIAL_EVALUATION').length;
     const totalAwardedValue = awarded.reduce((sum, p) => sum + (Number(p.quotedAmount) || Number(p.bid?.estimatedValue) || 0), 0);
+    const draftsTotalValue = drafts.reduce((sum, p) => sum + (Number(p.bid?.estimatedValue) || 0), 0);
 
     const draftsDueSoon = drafts.filter(p => {
       if (!p.bid?.endDate) return false;
@@ -225,16 +366,61 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       return diff >= 0 && diff <= 7;
     }).length;
 
+    const draftsReady = drafts.filter(p => {
+      const s = statusOf(p);
+      return s === 'TECHNICAL_DOCUMENTS_UPLOADED' || s === 'FINANCIAL_QUOTE_UPLOADED';
+    }).length;
+
+    const earlyDrafts = drafts.filter(p => {
+      const s = statusOf(p);
+      return s !== 'TECHNICAL_DOCUMENTS_UPLOADED' && s !== 'FINANCIAL_QUOTE_UPLOADED';
+    }).length;
+
+    const pendingInvoiceCount = awarded.filter(p => !p.invoiceId && !p.hasInvoice).length;
+    const invoicedCount = awarded.filter(p => Boolean(p.invoiceId || p.hasInvoice)).length;
+
+    // Win rate calculations based on decided bids
+    const decidedBids = all.filter(p =>
+      isAwarded(p) ||
+      ['REJECTED', 'DISQUALIFIED', 'LOST', 'WITHDRAWN', 'CLOSED'].includes(statusOf(p)) ||
+      p.bid?.status === 'AWARDED' ||
+      p.bid?.status === 'CLOSED'
+    );
+    const decidedCount = decidedBids.length;
+    const winRate = decidedCount > 0
+      ? `${((awarded.length / decidedCount) * 100).toFixed(1)}%`
+      : (awarded.length > 0 ? '100%' : '0.0%');
+
     return {
       totalAll: all.length,
       totalSubmitted: submitted.length,
+      activeSubmittedCount: activeSubmitted.length,
+      activeQuotedValue,
+      totalPipelineValue,
       totalDrafts: drafts.length,
       totalAwarded: awarded.length,
       underTech,
       underFin,
       totalAwardedValue,
-      draftsDueSoon
+      draftsTotalValue,
+      draftsDueSoon,
+      draftsReady,
+      earlyDrafts,
+      pendingInvoiceCount,
+      invoicedCount,
+      winRate,
+      decidedCount
     };
+  }, [participations]);
+
+  // Extract dynamic list of unique buyer organizations
+  const buyerOptions = useMemo(() => {
+    const set = new Set<string>();
+    participations.forEach(p => {
+      const bName = p.bid?.buyerName;
+      if (bName && bName !== 'Private Buyer') set.add(bName);
+    });
+    return Array.from(set).sort();
   }, [participations]);
 
   // Filter and Sort participations
@@ -250,33 +436,153 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       list = list.filter(isAwarded);
     }
 
+    // Apply KPI filter
+    if (kpiFilter !== 'all') {
+      if (kpiFilter === 'submitted') {
+        list = list.filter(isSubmitted);
+      } else if (kpiFilter === 'active_pipeline') {
+        list = list.filter(p => isSubmitted(p) && !isAwarded(p));
+      } else if (kpiFilter === 'technical_financial') {
+        list = list.filter(p =>
+          p.bid?.lifecycleStage === 'TECHNICAL_EVALUATION' ||
+          p.bid?.lifecycleStage === 'FINANCIAL_EVALUATION' ||
+          p.bid?.status === 'TECHNICAL_EVALUATION' ||
+          p.bid?.status === 'FINANCIAL_EVALUATION'
+        );
+      } else if (kpiFilter === 'technical') {
+        list = list.filter(p => p.bid?.lifecycleStage === 'TECHNICAL_EVALUATION' || p.bid?.status === 'TECHNICAL_EVALUATION');
+      } else if (kpiFilter === 'financial') {
+        list = list.filter(p => p.bid?.lifecycleStage === 'FINANCIAL_EVALUATION' || p.bid?.status === 'FINANCIAL_EVALUATION');
+      } else if (kpiFilter === 'awarded') {
+        list = list.filter(isAwarded);
+      } else if (kpiFilter === 'draft') {
+        list = list.filter(isDraft);
+      } else if (kpiFilter === 'dueSoon') {
+        list = list.filter(p => {
+          if (!p.bid?.endDate) return false;
+          const diff = (new Date(p.bid.endDate).getTime() - Date.now()) / 86400000;
+          return diff >= 0 && diff <= 7;
+        });
+      } else if (kpiFilter === 'ready') {
+        list = list.filter(p => {
+          const s = statusOf(p);
+          return s === 'TECHNICAL_DOCUMENTS_UPLOADED' || s === 'FINANCIAL_QUOTE_UPLOADED';
+        });
+      } else if (kpiFilter === 'early') {
+        list = list.filter(p => {
+          const s = statusOf(p);
+          return isDraft(p) && s !== 'TECHNICAL_DOCUMENTS_UPLOADED' && s !== 'FINANCIAL_QUOTE_UPLOADED';
+        });
+      } else if (kpiFilter === 'pendingInvoice') {
+        list = list.filter(p => isAwarded(p) && !p.invoiceId && !p.hasInvoice);
+      } else if (kpiFilter === 'invoiced') {
+        list = list.filter(p => isAwarded(p) && Boolean(p.invoiceId || p.hasInvoice));
+      }
+    }
+
+    // Filter by Opportunity / Sourcing Type
+    if (typeFilter) {
+      list = list.filter(item => getParticipationType(item) === typeFilter);
+    }
+
+    // Filter by Submission Status
+    if (statusFilter) {
+      list = list.filter(item => {
+        const s = String(item.status || '').toUpperCase();
+        if (statusFilter === 'AWARDED') return isAwarded(item) || s === 'ACCEPTED' || s === 'AWARDED';
+        if (statusFilter === 'SUBMITTED') return isSubmitted(item);
+        if (statusFilter === 'DRAFT') return isDraft(item);
+        return s === statusFilter;
+      });
+    }
+
+    // Filter by Bid Lifecycle Stage
+    if (stageFilter) {
+      list = list.filter(item => {
+        const s = String(item.bid?.status || '').toUpperCase();
+        const ls = String(item.bid?.lifecycleStage || '').toUpperCase();
+        if (stageFilter === 'OPEN') return s === 'OPEN' || s === 'PUBLISHED';
+        if (stageFilter === 'TECHNICAL_EVALUATION') return s === 'TECHNICAL_EVALUATION' || ls === 'TECHNICAL_EVALUATION';
+        if (stageFilter === 'FINANCIAL_EVALUATION') return s === 'FINANCIAL_EVALUATION' || ls === 'FINANCIAL_EVALUATION';
+        if (stageFilter === 'AWARDED') return s === 'AWARDED' || isAwarded(item);
+        if (stageFilter === 'PO_GENERATED') return s === 'PO_GENERATED';
+        if (stageFilter === 'CLOSED') return s === 'CLOSED';
+        return s === stageFilter || ls === stageFilter;
+      });
+    }
+
+    // Filter by Buyer Organization
+    if (buyerFilter) {
+      list = list.filter(item => (item.bid?.buyerName || 'Private Buyer') === buyerFilter);
+    }
+
+    // Filter by Closing Date
+    if (dateFilter) {
+      const now = Date.now();
+      list = list.filter(item => {
+        if (!item.bid?.endDate) return false;
+        const diff = (new Date(item.bid.endDate).getTime() - now) / 86400000;
+        if (dateFilter === '7') return diff >= 0 && diff <= 7;
+        if (dateFilter === '15') return diff >= 0 && diff <= 15;
+        if (dateFilter === '30') return diff >= 0 && diff <= 30;
+        if (dateFilter === 'closed') return diff < 0;
+        return true;
+      });
+    }
+
+    // Filter by Value Range
+    if (valueFilter) {
+      list = list.filter(item => {
+        const val = Number(item.quotedAmount) || Number(item.bid?.estimatedValue) || 0;
+        if (valueFilter === '5l') return val < 500000;
+        if (valueFilter === '25l') return val >= 500000 && val < 2500000;
+        if (valueFilter === '1cr') return val >= 2500000 && val < 10000000;
+        if (valueFilter === 'above1cr') return val >= 10000000;
+        return true;
+      });
+    }
+
     // Filter by search query
-    const text = debouncedSearch.toLowerCase();
+    const text = debouncedSearch.toLowerCase().trim();
     if (text) {
       list = list.filter(p => {
         const bid = p.bid || {};
-        const haystack = [
-          bid.id,
-          bid.title,
-          bid.itemName,
-          bid.buyerName,
-          bid.category,
-          p.id,
-          p.status
-        ].join(' ').toLowerCase();
-        return haystack.includes(text);
+        const displayId = formatBidDisplayId(p).toLowerCase();
+        const rawId = String(bid.id || p.bidId || p.requirementId || '').toLowerCase();
+        const title = String(bid.title || bid.itemName || '').toLowerCase();
+        const buyer = String(bid.buyerName || '').toLowerCase();
+        const cat = String(bid.category || '').toLowerCase();
+        const st = String(p.status || '').toLowerCase();
+        const bst = String(bid.status || '').toLowerCase();
+        const ptype = getParticipationType(p).toLowerCase();
+
+        return (
+          displayId.includes(text) ||
+          rawId.includes(text) ||
+          title.includes(text) ||
+          buyer.includes(text) ||
+          cat.includes(text) ||
+          st.includes(text) ||
+          bst.includes(text) ||
+          ptype.includes(text)
+        );
       });
     }
 
     // Sort
-    list.sort((a, b) => {
-      const dateA = new Date(a.updatedAt || a.createdAt).getTime();
-      const dateB = new Date(b.updatedAt || b.createdAt).getTime();
+    list = [...list].sort((a, b) => {
+      const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
       const valA = Number(a.quotedAmount) || Number(a.bid?.estimatedValue) || 0;
       const valB = Number(b.quotedAmount) || Number(b.bid?.estimatedValue) || 0;
 
       if (sortBy === 'newest') return dateB - dateA;
       if (sortBy === 'oldest') return dateA - dateB;
+      if (sortBy === 'closing_soon') {
+        const closeA = a.bid?.endDate ? new Date(a.bid.endDate).getTime() : Infinity;
+        const closeB = b.bid?.endDate ? new Date(b.bid.endDate).getTime() : Infinity;
+        return closeA - closeB;
+      }
       if (sortBy === 'value_high') return valB - valA;
       if (sortBy === 'value_low') return valA - valB;
       if (sortBy === 'title_asc') return (a.bid?.title || '').localeCompare(b.bid?.title || '');
@@ -297,7 +603,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     });
 
     return list;
-  }, [participations, subRouteType, debouncedSearch, sortBy]);
+  }, [participations, subRouteType, kpiFilter, typeFilter, statusFilter, stageFilter, buyerFilter, dateFilter, valueFilter, debouncedSearch, sortBy]);
 
   const { page, pageSize, pageItems: pagedItems, total, setPage, setPageSize } = usePagination(filteredItems, 10);
 
@@ -336,25 +642,27 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
   const participationStatusColor = (status: string) => {
     const s = String(status).toUpperCase();
     if (s === 'SUBMITTED') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    if (s === 'ACCEPTED' || s === 'AWARDED') return 'border-emerald-300 bg-emerald-100/80 text-emerald-800';
     if (s === 'DRAFT') return 'border-amber-200 bg-amber-50 text-amber-700';
+    if (s === 'REJECTED' || s === 'DISQUALIFIED' || s === 'LOST') return 'border-rose-200 bg-rose-50 text-rose-700';
     if (s === 'WITHDRAWN') return 'border-red-200 bg-red-50 text-red-700';
     return 'border-slate-200 bg-slate-50 text-slate-600';
   };
 
   const bidStatusColor = (status: string) => {
     const s = String(status).toUpperCase();
-    if (s === 'OPEN' || s === 'LIVE') return 'bg-blue-100 text-blue-800';
-    if (s === 'TECHNICAL_EVALUATION' || s === 'FINANCIAL_EVALUATION') return 'bg-purple-100 text-purple-800';
-    if (s === 'AWARDED') return 'bg-green-100 text-green-800';
+    if (s === 'OPEN' || s === 'LIVE' || s === 'PUBLISHED') return 'bg-blue-100 text-blue-800';
+    if (s === 'TECHNICAL_EVALUATION' || s === 'FINANCIAL_EVALUATION' || s === 'EVALUATION') return 'bg-purple-100 text-purple-800';
+    if (s === 'AWARDED') return 'bg-emerald-100 text-emerald-800';
+    if (s === 'PO_GENERATED' || s === 'PO GENERATED') return 'bg-indigo-100 text-indigo-800';
+    if (s === 'CLOSED' || s === 'EXPIRED') return 'bg-slate-100 text-slate-700';
     return 'bg-slate-100 text-slate-700';
   };
 
   const handleAction = (item: any) => {
     if (item.isMarketplaceResponse) {
-      const targetPath = item.bid?.category?.toLowerCase().includes('proposal') || item.bid?.category?.toLowerCase().includes('rfp') 
-        ? '/seller/rfp' 
-        : '/seller/rfq';
-      router.push(`${targetPath}?requirementId=${item.requirementId}`);
+      const isRfp = item.bid?.category?.toLowerCase().includes('proposal') || item.bid?.category?.toLowerCase().includes('rfp');
+      router.push(sellerRoutes.detail(isRfp ? 'RFP' : 'RFQ', item.requirementId));
       return;
     }
     const bidId = item.bid?.id || item.bidId;
@@ -369,9 +677,9 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       router.push(`/bids/${bidId}/participate`);
     } else {
       if (isRfp) {
-        router.push(`/seller/rfp?requestId=${bidId}`);
+        router.push(sellerRoutes.detail('RFP', bidId));
       } else if (isRfq) {
-        router.push(`/seller/rfq?requestId=${bidId}`);
+        router.push(sellerRoutes.detail('RFQ', bidId));
       } else {
         router.push(`/bids/${bidId}`);
       }
@@ -408,8 +716,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       {/* Transparent Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
-          <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">{headerContent.eyebrow}</span>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">{headerContent.title}</h1>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">{headerContent.title}</h1>
           <p className="text-xs font-semibold text-slate-500 mt-1">{headerContent.desc}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -422,37 +729,211 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       {/* Dynamic KPI Metrics based on tab */}
       {subRouteType === 'submitted' && (
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard label="Submitted Bids" value={kpiData.totalSubmitted} subtext="Responses delivered" icon={CheckCircle2} active={true} tone="green" />
-          <KpiCard label="Under Technical Eval" value={kpiData.underTech} subtext="Technical audit stage" icon={Clock} active={false} tone="purple" />
-          <KpiCard label="Under Financial Eval" value={kpiData.underFin} subtext="Commercial comparison" icon={Gavel} active={false} tone="amber" />
-          <KpiCard label="Awarded Bids" value={kpiData.totalAwarded} subtext="Contracts secured" icon={Trophy} active={false} tone="indigo" />
+          <KpiCard
+            label="Active Quoted Pipeline"
+            value={formatCurrency(kpiData.activeQuotedValue)}
+            subtext={`${kpiData.activeSubmittedCount} bids currently under review`}
+            icon={IndianRupee}
+            active={kpiFilter === 'active_pipeline'}
+            tone="blue"
+            onClick={() => { setKpiFilter(kpiFilter === 'active_pipeline' ? 'all' : 'active_pipeline'); setPage(1); }}
+          />
+          <KpiCard
+            label="Bid Win Rate"
+            value={kpiData.winRate}
+            subtext={`${kpiData.totalAwarded} won of ${kpiData.decidedCount || kpiData.totalSubmitted} evaluated`}
+            icon={Trophy}
+            active={kpiFilter === 'awarded'}
+            tone="green"
+            onClick={() => { setKpiFilter(kpiFilter === 'awarded' ? 'all' : 'awarded'); setPage(1); }}
+          />
+          <KpiCard
+            label="Under Evaluation"
+            value={kpiData.underTech + kpiData.underFin}
+            subtext={`${kpiData.underTech} Technical • ${kpiData.underFin} Financial`}
+            icon={Scale}
+            active={kpiFilter === 'technical_financial'}
+            tone="purple"
+            onClick={() => { setKpiFilter(kpiFilter === 'technical_financial' ? 'all' : 'technical_financial'); setPage(1); }}
+          />
+          <KpiCard
+            label="Submitted Bids"
+            value={kpiData.totalSubmitted}
+            subtext="Responses delivered to buyers"
+            icon={FileText}
+            active={kpiFilter === 'submitted'}
+            tone="indigo"
+            onClick={() => { setKpiFilter(kpiFilter === 'submitted' ? 'all' : 'submitted'); setPage(1); }}
+          />
         </div>
       )}
 
       {subRouteType === 'draft' && (
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <KpiCard label="Total Draft Bids" value={kpiData.totalDrafts} subtext="Unsubmitted responses" icon={FileEdit} active={true} tone="amber" />
-          <KpiCard label="Closing in 7 Days" value={kpiData.draftsDueSoon} subtext="Expiring soon" icon={Clock} active={false} tone="red" />
-          <KpiCard label="All Drafts Value" value={formatCurrency(filteredItems.reduce((s, p) => s + (p.bid?.estimatedValue || 0), 0))} subtext="Potential pipeline" icon={IndianRupee} active={false} tone="blue" />
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            label="Draft Pipeline Exposure"
+            value={formatCurrency(kpiData.draftsTotalValue)}
+            subtext={`Across ${kpiData.totalDrafts} in-progress opportunities`}
+            icon={IndianRupee}
+            active={kpiFilter === 'draft'}
+            tone="blue"
+            onClick={() => { setKpiFilter(kpiFilter === 'draft' ? 'all' : 'draft'); setPage(1); }}
+          />
+          <KpiCard
+            label="Closing in ≤7 Days"
+            value={kpiData.draftsDueSoon}
+            subtext="Imminent submission deadline"
+            icon={Clock}
+            active={kpiFilter === 'dueSoon'}
+            tone="red"
+            onClick={() => { setKpiFilter(kpiFilter === 'dueSoon' ? 'all' : 'dueSoon'); setPage(1); }}
+          />
+          <KpiCard
+            label="Docs / Quote Staged"
+            value={kpiData.draftsReady}
+            subtext="Tech & commercial docs uploaded"
+            icon={CheckCircle2}
+            active={kpiFilter === 'ready'}
+            tone="green"
+            onClick={() => { setKpiFilter(kpiFilter === 'ready' ? 'all' : 'ready'); setPage(1); }}
+          />
+          <KpiCard
+            label="Early Setup Stage"
+            value={kpiData.earlyDrafts}
+            subtext="Forms awaiting initial uploads"
+            icon={FileEdit}
+            active={kpiFilter === 'early'}
+            tone="amber"
+            onClick={() => { setKpiFilter(kpiFilter === 'early' ? 'all' : 'early'); setPage(1); }}
+          />
         </div>
       )}
 
       {subRouteType === 'awarded' && (
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <KpiCard label="Awarded Contracts" value={kpiData.totalAwarded} subtext="Finalized agreements" icon={Trophy} active={true} tone="indigo" />
-          <KpiCard label="Total Awarded Value" value={formatCurrency(kpiData.totalAwardedValue)} subtext="Cumulative win value" icon={IndianRupee} active={false} tone="green" />
-          <KpiCard label="Active Bid Value" value={formatCurrency(filteredItems.reduce((s, p) => s + (p.quotedAmount || 0), 0))} subtext="In-progress awards" icon={CheckCircle2} active={false} tone="blue" />
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            label="Total Won Order Book"
+            value={formatCurrency(kpiData.totalAwardedValue)}
+            subtext="Cumulative volume won"
+            icon={IndianRupee}
+            active={kpiFilter === 'all'}
+            tone="green"
+            onClick={() => { setKpiFilter('all'); setPage(1); }}
+          />
+          <KpiCard
+            label="Awarded Contracts"
+            value={kpiData.totalAwarded}
+            subtext="Finalized binding agreements"
+            icon={Trophy}
+            active={kpiFilter === 'awarded'}
+            tone="indigo"
+            onClick={() => { setKpiFilter(kpiFilter === 'awarded' ? 'all' : 'awarded'); setPage(1); }}
+          />
+          <KpiCard
+            label="Pending Invoicing"
+            value={kpiData.pendingInvoiceCount}
+            subtext="Ready for invoice generation"
+            icon={Receipt}
+            active={kpiFilter === 'pendingInvoice'}
+            tone="amber"
+            onClick={() => { setKpiFilter(kpiFilter === 'pendingInvoice' ? 'all' : 'pendingInvoice'); setPage(1); }}
+          />
+          <KpiCard
+            label="Billing Initiated"
+            value={kpiData.invoicedCount}
+            subtext="Invoices submitted for payment"
+            icon={CheckCircle2}
+            active={kpiFilter === 'invoiced'}
+            tone="blue"
+            onClick={() => { setKpiFilter(kpiFilter === 'invoiced' ? 'all' : 'invoiced'); setPage(1); }}
+          />
         </div>
       )}
 
-      {subRouteType === 'all' && (
+      {(subRouteType === 'all' || !['submitted', 'draft', 'awarded'].includes(subRouteType)) && (
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard label="All Bids" value={kpiData.totalAll} subtext="Total participations" icon={FileText} active={true} tone="blue" />
-          <KpiCard label="Submitted" value={kpiData.totalSubmitted} subtext="Active in evaluation" icon={CheckCircle2} active={false} tone="green" />
-          <KpiCard label="Drafts" value={kpiData.totalDrafts} subtext="In-progress forms" icon={FileEdit} active={false} tone="amber" />
-          <KpiCard label="Awarded" value={kpiData.totalAwarded} subtext="Won contracts" icon={Trophy} active={false} tone="indigo" />
+          <KpiCard
+            label="Total Quoted Exposure"
+            value={formatCurrency(kpiData.totalPipelineValue)}
+            subtext="Active + secured contract pipeline"
+            icon={IndianRupee}
+            active={kpiFilter === 'all'}
+            tone="blue"
+            onClick={() => { setKpiFilter('all'); setPage(1); }}
+          />
+          <KpiCard
+            label="Bid Win Rate"
+            value={kpiData.winRate}
+            subtext={`${kpiData.totalAwarded} won of ${kpiData.decidedCount || kpiData.totalAll} evaluated`}
+            icon={Trophy}
+            active={kpiFilter === 'awarded'}
+            tone="green"
+            onClick={() => { setKpiFilter(kpiFilter === 'awarded' ? 'all' : 'awarded'); setPage(1); }}
+          />
+          <KpiCard
+            label="In Active Evaluation"
+            value={kpiData.underTech + kpiData.underFin}
+            subtext={`${kpiData.underTech} Technical • ${kpiData.underFin} Financial`}
+            icon={Scale}
+            active={kpiFilter === 'technical_financial'}
+            tone="purple"
+            onClick={() => { setKpiFilter(kpiFilter === 'technical_financial' ? 'all' : 'technical_financial'); setPage(1); }}
+          />
+          <KpiCard
+            label="Urgent Drafts (≤7d)"
+            value={kpiData.draftsDueSoon}
+            subtext={`${kpiData.totalDrafts} total in-progress forms`}
+            icon={Clock}
+            active={kpiFilter === 'dueSoon'}
+            tone="amber"
+            onClick={() => { setKpiFilter(kpiFilter === 'dueSoon' ? 'all' : 'dueSoon'); setPage(1); }}
+          />
         </div>
       )}
+
+      {/* ── Bid Category Navigation Pills ── */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mt-1 scrollbar-none" role="tablist" aria-label="Bid Categories">
+        {[
+          { label: 'All Bids', key: 'all', href: '/seller/bids', count: kpiData.totalAll, icon: ClipboardList },
+          { label: 'Submitted Bids', key: 'submitted', href: '/seller/bids/submitted', count: kpiData.totalSubmitted, icon: CheckCircle2 },
+          { label: 'Draft Bids', key: 'draft', href: '/seller/bids/draft', count: kpiData.totalDrafts, icon: FileEdit },
+          { label: 'Awarded Contracts', key: 'awarded', href: '/seller/bids/awarded', count: kpiData.totalAwarded, icon: Trophy },
+        ].map(tab => {
+          const isActive = subRouteType === tab.key;
+          const Icon = tab.icon;
+
+          return (
+            <button
+              key={tab.label}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => {
+                router.push(tab.href);
+              }}
+              className={cn(
+                "inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap border cursor-pointer",
+                isActive
+                  ? "bg-[#12335f] text-white border-[#12335f] shadow-sm shadow-[#12335f]/20 ring-2 ring-[#12335f]/15"
+                  : "bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50 hover:border-slate-300 shadow-2xs"
+              )}
+            >
+              <Icon className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-[#c8a45c]" : "text-slate-400")} />
+              <span>{tab.label}</span>
+              <span
+                className={cn(
+                  "px-1.5 py-0.5 rounded-full text-[10px] font-black min-w-[18px] text-center transition-colors",
+                  isActive
+                    ? "bg-white/20 text-white"
+                    : tab.count > 0 ? "bg-slate-100 text-slate-700" : "bg-slate-50 text-slate-400"
+                )}
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
       {error && (
         <div className="flex items-center gap-2.5 sm:gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700">
@@ -463,46 +944,338 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       )}
 
       {/* ── Search + Filter + View Toggle Toolbar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
-        <ResponsiveFilterBar
-          activeFilterCount={sortBy !== 'newest' ? 1 : 0}
-          searchInput={
-            <div className="relative w-full">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Search by title, buyer, bid number..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-              />
-            </div>
-          }
-          filters={
-            <div className="w-full sm:w-auto sm:min-w-[150px]">
-              <select
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-sm space-y-3">
+        {/* Tier 1: Search Input & Primary Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Spacious Search Bar */}
+          <div className="relative flex-1 min-w-0">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+            <input
+              id="bid-search-input"
+              type="text"
+              value={searchTerm}
+              onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
+              placeholder="Search by ID (e.g. RFQ-039, BID-025), title, buyer, category..."
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-10 pr-9 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs"
+              aria-label="Search bids by ID, title, buyer or category"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => { setSearchTerm(''); setPage(1); }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                aria-label="Clear search input"
               >
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="value_high">Value: High to Low</option>
-                <option value="value_low">Value: Low to High</option>
-                <option value="title_asc">Title A-Z</option>
+                <XCircle className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Actions & Filters Toggle */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Sort Select */}
+            <div className="min-w-[140px]">
+              <select
+                id="bid-sort-select"
+                value={sortBy}
+                onChange={e => { setSortBy(e.target.value); setPage(1); }}
+                aria-label="Sort bid participations"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer"
+              >
+                <option value="newest">Sort: Newest First</option>
+                <option value="oldest">Sort: Oldest First</option>
+                <option value="closing_soon">Closing: Soonest</option>
+                <option value="value_high">Quote: High to Low</option>
+                <option value="value_low">Quote: Low to High</option>
+                <option value="title_asc">Title: A to Z</option>
               </select>
             </div>
-          }
-          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
-        />
+
+            {/* Advanced Filters Button */}
+            <button
+              type="button"
+              onClick={() => setShowFilters(!showFilters)}
+              aria-expanded={showFilters}
+              aria-controls="advanced-filters-panel"
+              aria-label="Toggle filter options"
+              className={cn(
+                "inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 text-xs font-bold transition-all shadow-2xs cursor-pointer",
+                showFilters || activeDetailedFilterCount > 0
+                  ? "border-[#12335f] bg-[#12335f]/5 text-[#12335f] hover:bg-[#12335f]/10"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+              )}
+            >
+              <Filter className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
+              <span>Filters</span>
+              {activeDetailedFilterCount > 0 && (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#12335f] text-white text-[10px] font-black">
+                  {activeDetailedFilterCount}
+                </span>
+              )}
+              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200 text-slate-500", showFilters && "rotate-180")} aria-hidden="true" />
+            </button>
+
+            {/* View Mode Toggle */}
+            <div className="border-l border-slate-200 pl-2">
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
+            </div>
+          </div>
+        </div>
+
+        {/* Tier 2: Collapsible Secondary Filter Tray */}
+        {showFilters && (
+          <div
+            id="advanced-filters-panel"
+            role="region"
+            aria-label="Filter Options"
+            className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 sm:p-4 transition-all duration-200 space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">Filter By Specific Criteria</span>
+              </div>
+              {activeDetailedFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTypeFilter('');
+                    setStatusFilter('');
+                    setStageFilter('');
+                    setBuyerFilter('');
+                    setDateFilter('');
+                    setValueFilter('');
+                    setPage(1);
+                  }}
+                  className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                >
+                  Reset Filter Options
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+              {/* Sourcing Type */}
+              <div>
+                <label htmlFor="filter-sourcing-type" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                  Sourcing Type
+                </label>
+                <select
+                  id="filter-sourcing-type"
+                  value={typeFilter}
+                  onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                >
+                  <option value="">All Types</option>
+                  <option value="RFQ">RFQ (Quotations)</option>
+                  <option value="Open Tender">Open Tenders</option>
+                  <option value="RFP">RFP (Proposals)</option>
+                  <option value="Limited Tender">Limited Tenders</option>
+                  <option value="Reverse Auction">Reverse Auctions</option>
+                  <option value="Rate Contract">Rate Contracts</option>
+                </select>
+              </div>
+
+              {/* Submission Status */}
+              <div>
+                <label htmlFor="filter-submission-status" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                  Submission Status
+                </label>
+                <select
+                  id="filter-submission-status"
+                  value={statusFilter}
+                  onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="SUBMITTED">Submitted</option>
+                  <option value="DRAFT">Draft</option>
+                  <option value="AWARDED">Awarded / Accepted</option>
+                  <option value="REJECTED">Rejected / Lost</option>
+                  <option value="WITHDRAWN">Withdrawn</option>
+                </select>
+              </div>
+
+              {/* Bid Stage */}
+              <div>
+                <label htmlFor="filter-bid-stage" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                  Bid Stage
+                </label>
+                <select
+                  id="filter-bid-stage"
+                  value={stageFilter}
+                  onChange={e => { setStageFilter(e.target.value); setPage(1); }}
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                >
+                  <option value="">All Bid Stages</option>
+                  <option value="OPEN">Open / Live</option>
+                  <option value="TECHNICAL_EVALUATION">Technical Eval</option>
+                  <option value="FINANCIAL_EVALUATION">Financial Eval</option>
+                  <option value="AWARDED">Awarded</option>
+                  <option value="PO_GENERATED">PO Generated</option>
+                  <option value="CLOSED">Closed</option>
+                </select>
+              </div>
+
+              {/* Buyer Organization */}
+              <div>
+                <label htmlFor="filter-buyer" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                  Buyer
+                </label>
+                <select
+                  id="filter-buyer"
+                  value={buyerFilter}
+                  onChange={e => { setBuyerFilter(e.target.value); setPage(1); }}
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                >
+                  <option value="">All Buyers</option>
+                  {buyerOptions.map(buyer => (
+                    <option key={buyer} value={buyer}>{buyer}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Closing Deadline */}
+              <div>
+                <label htmlFor="filter-closing-date" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                  Closing Deadline
+                </label>
+                <select
+                  id="filter-closing-date"
+                  value={dateFilter}
+                  onChange={e => { setDateFilter(e.target.value); setPage(1); }}
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                >
+                  <option value="">All Deadlines</option>
+                  <option value="7">≤ 7 Days</option>
+                  <option value="15">≤ 15 Days</option>
+                  <option value="30">≤ 30 Days</option>
+                  <option value="closed">Closed / Expired</option>
+                </select>
+              </div>
+
+              {/* Budget Range */}
+              <div>
+                <label htmlFor="filter-budget" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                  Budget
+                </label>
+                <select
+                  id="filter-budget"
+                  value={valueFilter}
+                  onChange={e => { setValueFilter(e.target.value); setPage(1); }}
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                >
+                  <option value="">All Budgets</option>
+                  <option value="5l">&lt; ₹5 Lakhs</option>
+                  <option value="25l">₹5L – ₹25 Lakhs</option>
+                  <option value="1cr">₹25L – ₹1 Crore</option>
+                  <option value="above1cr">&gt; ₹1 Crore</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tier 3: Active Filters & Results Summary Strip */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
+          {/* Result Count Indicator */}
+          <div className="text-[11px] font-bold text-slate-500" aria-live="polite">
+            Showing <span className="font-extrabold text-slate-800">{filteredItems.length}</span> of <span className="font-extrabold text-slate-800">{participations.length}</span> bid participations
+          </div>
+
+          {/* Active Filter Chips */}
+          {hasAnyActiveFilters && (
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              {searchTerm && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-[#12335f]/10 border border-[#12335f]/20 px-2 py-0.5 text-[11px] font-bold text-[#12335f]">
+                  Search: "{searchTerm}"
+                  <button type="button" onClick={() => { setSearchTerm(''); setPage(1); }} className="hover:text-rose-600 cursor-pointer ml-0.5" aria-label="Remove search filter">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {typeFilter && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2 py-0.5 text-[11px] font-bold text-blue-700">
+                  Type: {typeFilter}
+                  <button type="button" onClick={() => { setTypeFilter(''); setPage(1); }} className="hover:text-rose-600 cursor-pointer ml-0.5" aria-label="Remove sourcing type filter">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {statusFilter && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                  Status: {statusFilter}
+                  <button type="button" onClick={() => { setStatusFilter(''); setPage(1); }} className="hover:text-rose-600 cursor-pointer ml-0.5" aria-label="Remove status filter">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {stageFilter && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-purple-50 border border-purple-200 px-2 py-0.5 text-[11px] font-bold text-purple-700">
+                  Stage: {stageFilter.replace(/_/g, ' ')}
+                  <button type="button" onClick={() => { setStageFilter(''); setPage(1); }} className="hover:text-rose-600 cursor-pointer ml-0.5" aria-label="Remove stage filter">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {buyerFilter && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2 py-0.5 text-[11px] font-bold text-amber-800">
+                  Buyer: {buyerFilter}
+                  <button type="button" onClick={() => { setBuyerFilter(''); setPage(1); }} className="hover:text-rose-600 cursor-pointer ml-0.5" aria-label="Remove buyer filter">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {dateFilter && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 border border-rose-200 px-2 py-0.5 text-[11px] font-bold text-rose-700">
+                  Deadline: {getDateFilterLabel(dateFilter)}
+                  <button type="button" onClick={() => { setDateFilter(''); setPage(1); }} className="hover:text-rose-600 cursor-pointer ml-0.5" aria-label="Remove deadline filter">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {valueFilter && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[11px] font-bold text-indigo-700">
+                  Budget: {getValueFilterLabel(valueFilter)}
+                  <button type="button" onClick={() => { setValueFilter(''); setPage(1); }} className="hover:text-rose-600 cursor-pointer ml-0.5" aria-label="Remove budget filter">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {kpiFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-cyan-50 border border-cyan-200 px-2 py-0.5 text-[11px] font-bold text-cyan-800">
+                  KPI: {getKpiFilterLabel(kpiFilter)}
+                  <button type="button" onClick={() => { setKpiFilter('all'); setPage(1); }} className="hover:text-rose-600 cursor-pointer ml-0.5" aria-label="Remove KPI filter">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={resetAllFilters}
+                className="text-[11px] font-extrabold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer ml-1"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Content representation */}
       {filteredItems.length === 0 ? (
         <EmptyState
           title={`No ${headerContent.title} Found`}
-          description={searchTerm
-            ? 'No entries match your search query.'
+          description={searchTerm || typeFilter || statusFilter || stageFilter || buyerFilter || dateFilter || valueFilter
+            ? 'No entries match your filter criteria.'
             : `You don't have any entries under ${headerContent.title.toLowerCase()} right now.`}
         />
       ) : (
@@ -512,6 +1285,9 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
               {pagedItems.map((item, index) => {
                 const bid = item.bid || {};
                 const rowIndex = (page - 1) * pageSize + index + 1;
+                const displayId = formatBidDisplayId(item);
+                const pType = getParticipationType(item);
+
                 return (
                   <div key={item.id} className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
                     <div className="w-full space-y-3">
@@ -521,7 +1297,12 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
                               {String(rowIndex).padStart(2, '0')}
                             </span>
-                            <p className="text-[10px] font-black uppercase tracking-wider text-[#c86413]">Bid ID #{bid.id || item.bidId}</p>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-black tracking-wide bg-slate-100 text-slate-800 border border-slate-200/80">
+                              {displayId}
+                            </span>
+                            <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-[#12335f]/10 text-[#12335f]">
+                              {pType}
+                            </span>
                           </div>
                           <h3 className="mt-2 text-sm font-black text-slate-900 group-hover:text-[#12335f] transition-colors line-clamp-2 leading-snug">{bid.title || 'Untitled Bid Sourcing'}</h3>
                         </div>
@@ -591,15 +1372,27 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                     {pagedItems.map((item, index) => {
                       const bid = item.bid || {};
                       const rowIndex = (page - 1) * pageSize + index + 1;
+                      const displayId = formatBidDisplayId(item);
+                      const pType = getParticipationType(item);
+
                       return (
                         <tr key={item.id} className="hover:bg-slate-50/50 transition cursor-pointer" onClick={() => handleAction(item)}>
                           <td className="p-3 font-mono text-xs text-slate-500">
                             {String(rowIndex).padStart(2, '0')}
                           </td>
-                          <td className="p-3 font-mono font-bold text-slate-900 whitespace-nowrap">#{bid.id || item.bidId}</td>
+                          <td className="p-3 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-black tracking-wide bg-slate-100 text-slate-800 border border-slate-200/80">
+                              {displayId}
+                            </span>
+                          </td>
                           <td className="p-3">
-                            <p className="font-bold text-slate-900 line-clamp-1 max-w-[220px]">{bid.title || 'Untitled Bid'}</p>
-                            <p className="text-[10px] text-slate-500">{bid.category}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-bold text-slate-900 line-clamp-1 max-w-[220px]">{bid.title || 'Untitled Bid'}</p>
+                              <span className="inline-block rounded px-1.5 py-0.2 text-[9px] font-bold uppercase bg-[#12335f]/10 text-[#12335f] shrink-0">
+                                {pType}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-0.5">{bid.category}</p>
                           </td>
                           <td className="p-3 text-slate-700">{bid.buyerName || 'Private Buyer'}</td>
                           <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{item.quotedAmount ? formatCurrency(item.quotedAmount) : 'Pending'}</td>

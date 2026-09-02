@@ -118,9 +118,6 @@ export default function Login() {
           LEFT PANEL — Brand showcase with prominent logo
           ═══════════════════════════════════════════════════════════════════ */}
       <div className="relative hidden lg:flex lg:w-[52%] xl:w-[55%] flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#07172e] via-[#0b2447] to-[#0a1e3d]">
-        {/* Tricolor accent strip at top */}
-        <div className="brand-tricolor-strip absolute top-0 left-0 w-full z-10" />
-
         {/* Animated background orbs */}
         <div className="absolute top-[10%] left-[5%] h-[45%] w-[45%] rounded-full bg-blue-500/[0.08] blur-[140px] animate-pulse pointer-events-none" style={{ animationDuration: '7s' }} />
         <div className="absolute bottom-[5%] right-[10%] h-[40%] w-[40%] rounded-full bg-[#c8a45c]/[0.06] blur-[120px] animate-pulse pointer-events-none" style={{ animationDuration: '5s' }} />
@@ -206,7 +203,6 @@ export default function Login() {
         {/* Mobile-only logo banner (visible on < lg) */}
         <div className="lg:hidden w-full max-w-md mb-6 animate-in fade-in zoom-in duration-500">
           <div className="relative rounded-3xl bg-gradient-to-br from-[#07172e] via-[#0b2447] to-[#0a1e3d] p-6 text-center overflow-hidden">
-            <div className="brand-tricolor-strip absolute top-0 left-0 w-full" />
             <div className="absolute top-0 right-0 p-4 opacity-5">
               <ShieldCheck className="h-24 w-24 text-white" />
             </div>
@@ -240,7 +236,7 @@ export default function Login() {
               </div>
             </div>
             <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-[#0b2447]">
-              Stakeholder Access
+              JSG SMiLE Gateway
             </h2>
             <p className="mt-1.5 text-sm font-medium text-slate-500">
               Sign in to your MSME procurement portal account

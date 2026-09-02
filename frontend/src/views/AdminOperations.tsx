@@ -41,19 +41,16 @@ interface AdminOperationsProps {
 const sectionConfig = {
   procurement: {
     label: 'Procurement & Compliance Desk',
-    eyebrow: 'Stakeholder Governance',
     description: 'Monitor procurement readiness, risks, reviews, and buyer-seller capacity in one place.',
     icon: ClipboardCheck
   },
   compliance: {
     label: 'Procurement & Compliance Desk',
-    eyebrow: 'Stakeholder Governance',
     description: 'Monitor procurement readiness, risks, reviews, and buyer-seller capacity in one place.',
     icon: ClipboardCheck
   },
   reports: {
     label: 'MIS Reports',
-    eyebrow: 'Administrative Reporting',
     description: 'Export stakeholder records and review network health indicators for procurement governance.',
     icon: BarChart3
   }
@@ -336,8 +333,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
     <div className="space-y-5 animate-in fade-in duration-500">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{config.eyebrow}</p>
-          <h1 className="mt-1 text-2xl font-extrabold uppercase tracking-tight text-[#12335f]">{config.label}</h1>
+          <h1 className="text-2xl font-extrabold uppercase tracking-tight text-[#12335f]">{config.label}</h1>
           <p className="mt-1 max-w-3xl text-sm font-medium text-slate-500">{config.description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

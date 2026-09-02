@@ -75,17 +75,6 @@ function formatDateString(dateVal?: string | Date | null, includeTime: boolean =
   }
 }
 
-function formatCurrency(val?: number | string | null) {
-  if (val === undefined || val === null || val === '') return null;
-  const num = typeof val === 'string' ? parseFloat(val) : val;
-  if (isNaN(num)) return null;
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(num);
-}
-
 function hasValue(val: unknown): boolean {
   if (val === null || val === undefined || val === '') return false;
   if (typeof val === 'string' && val.trim() === '') return false;
@@ -104,40 +93,6 @@ function formatDisplayValue(val: unknown): string {
   return str.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
-/* ─── Reusable Sub-Components ───────────────────────────── */
-
-const SectionHeading = ({ title }: { title: string }) => (
-  <h3 className="text-xs font-black text-[#0b2447] tracking-wider uppercase mb-3 flex items-center gap-2">
-    <span className="w-1.5 h-4 bg-[#0b2447] rounded-full inline-block" />
-    {title}
-  </h3>
-);
-
-/** Only renders a row if value is present */
-const InfoRow = ({ label, value }: { label: string; value: React.ReactNode }) => {
-  if (!hasValue(value)) return null;
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0 text-xs">
-      <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">{label}</span>
-      <span className="font-semibold text-slate-800 text-right">{value}</span>
-    </div>
-  );
-};
-
-/** Card that auto-hides when it has zero visible InfoRow children */
-function AutoHideCard({ title, children }: { title: string; children: React.ReactNode }) {
-  // We render and rely on InfoRow's null-return to naturally collapse empty cards.
-  // To avoid showing a card with only a heading, we wrap to inspect rendered output.
-  const childrenArray = React.Children.toArray(children);
-  if (childrenArray.length === 0) return null;
-  return (
-    <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
-      <SectionHeading title={title} />
-      <div className="space-y-0.5">{children}</div>
-    </div>
-  );
-}
-
 /* ─── Main Page ─────────────────────────────────────────── */
 
 export default function RateContractDetailPage({ initialData }: { initialData?: any } = {}) {
@@ -148,9 +103,13 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
   const [expandedDocs, setExpandedDocs] = useState(false);
 
+  const pathTokens = (pathname || '').split('/').filter(Boolean);
+  const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
+  const pathnameId = (rawPathId && !['rate-contract', 'rfp', 'rfq', 'limited-tender', 'open-tender', 'bids', 'opportunities', 'details'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
+
   const explicitReqId = searchParams?.get('requirementId') || '';
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || '';
-  const rawIdParam = searchParams?.get('id') || '';
+  const rawIdParam = searchParams?.get('id') || pathnameId || '';
 
   let requirementId = explicitReqId;
   let requestId = explicitRequestId;
@@ -162,10 +121,11 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       requestId = rawIdParam.replace(/^(bid|qr|rc)-/, '');
     } else {
       requirementId = rawIdParam;
+      requestId = rawIdParam;
     }
   }
 
-  const activeRcId = requestId || requirementId || rawIdParam;
+  const activeRcId = explicitReqId || explicitRequestId || rawIdParam || pathnameId;
   const isMatchingInitial = Boolean(
     initialData && activeRcId && (
       String(initialData.id).toLowerCase() === String(activeRcId).toLowerCase() ||
@@ -235,8 +195,8 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   } : null);
 
   // ── Normalize rcData from either bidData or reqData ──
-  const preferReq = Boolean(explicitReqId && reqObj);
   const bid: any = bidData;   // Runtime has more fields than the TS type; cast for extraction
+  const preferReq = Boolean((explicitReqId || !bid) && reqObj);
 
   const rcData: any = preferReq ? {
     id: reqObj.id,
@@ -376,7 +336,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
 
   /* ── Core Display Fields ── */
   const subject = rcData.subject || rateContractConfig.contractTitle || 'Rate Contract Opportunity';
-  const contractNumber = formatRefId('REQ', rcData.id, rcData.requirementNumber);
+  const contractNumber = formatRefId('RC', rcData.id, rcData.requirementNumber || (rcData as any).contractNumber || rateContractConfig.rateContractNumber);
 
   /* ── Buyer Info ── */
   const orgName = rcData.buyerOrganization?.organizationName
@@ -625,7 +585,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       return;
     }
     const targetId = rcData.id || requirementId || requestId;
-    router.push(`/seller/rate-contract/submit-quotation?requirementId=${targetId}`);
+    router.push(`/seller/procurement/rate-contract/${targetId}/respond`);
   };
 
   const handleViewDoc = (doc: typeof uploadedDocuments[0]) => {

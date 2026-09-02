@@ -63,8 +63,6 @@ export interface PageToolbarProps {
     /** Optional right-aligned button cluster (e.g. "+ New Rule"). */
     actions?: React.ReactNode;
     className?: string;
-    /** Optional eyebrow shown above the row, e.g. "Filters". */
-    eyebrow?: string;
     /** Disable the rounded card styling when embedding the toolbar inline. */
     embedded?: boolean;
     /** If true, the search and filters will be on a single row on desktop/tablet. */
@@ -122,7 +120,6 @@ export function PageToolbar({
     onReset,
     actions,
     className,
-    eyebrow,
     embedded,
     singleRowDesktop
 }: PageToolbarProps) {
@@ -142,13 +139,6 @@ export function PageToolbar({
                 className
             )}
         >
-            {eyebrow && (
-                <div className="flex items-center gap-2 text-[#12335f] mb-3">
-                    <Filter className="h-4 w-4" />
-                    <p className="text-[10px] font-black uppercase tracking-widest">{eyebrow}</p>
-                </div>
-            )}
-
             {/* Mobile layout: search + compact "Filters" toggle + actions/toggle on the SAME horizontal row */}
             <div className="space-y-2 sm:hidden">
                 <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-nowrap">

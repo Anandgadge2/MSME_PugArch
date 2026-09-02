@@ -34,13 +34,11 @@ const officialDocs = [
 export default function HelpPage() {
     return (
         <div className="min-h-dvh bg-slate-50">
-            <div className="brand-tricolor-strip w-full" />
             <main className="mx-auto max-w-7xl px-4 py-8">
                 <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">MSME Portal Helpdesk</p>
-                            <h1 className="mt-2 text-3xl font-black text-slate-950">Help, Standard Procedure and User Support</h1>
+                            <h1 className="text-3xl font-black text-slate-950">Help, Standard Procedure and User Support</h1>
                             <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600">
                                 Official guidance for buyers, sellers, administrators, and SHG users to complete portal workflows with proper documentation, traceability, and grievance support.
                             </p>

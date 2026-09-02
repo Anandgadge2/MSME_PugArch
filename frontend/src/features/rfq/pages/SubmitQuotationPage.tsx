@@ -1418,11 +1418,11 @@ export default function SubmitQuotationPage() {
       return;
     }
     if (isRfp) {
-      window.location.href = `/seller/rfp?requirementId=${requirementId}`;
+      window.location.href = `/seller/procurement/rfp/${requirementId}`;
     } else if (isRateContract) {
-      window.location.href = `/seller/rfq/rate-contract/detail?requirementId=${requirementId}`;
+      window.location.href = `/seller/procurement/rate-contract/${requirementId}`;
     } else {
-      window.location.href = `/seller/rfq?requirementId=${requirementId}`;
+      window.location.href = `/seller/procurement/rfq/${requirementId}`;
     }
   };
 

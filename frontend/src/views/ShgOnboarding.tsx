@@ -413,7 +413,6 @@ function SellerBackedShgPage({ section }: { section: string }) {
   if (section === 'members') {
     return (
       <ShgSectionLayout
-        eyebrow="Group Administration"
         title="SHG Members"
         description="Review the registered group strength and the member-list records submitted for verification."
         action={<Link href="/shg/documents" className={primaryActionClass}>Manage Member Documents <ArrowRight className="h-4 w-4" /></Link>}
@@ -460,7 +459,6 @@ function SellerBackedShgPage({ section }: { section: string }) {
   if (section === 'meetings') {
     return (
       <ShgSectionLayout
-        eyebrow="Governance"
         title="SHG Meetings"
         description="Keep meeting dates, decisions, signed minutes, and resolutions easy to find for compliance review."
         action={<Link href="/shg/documents" className={primaryActionClass}>Upload Minutes <ArrowRight className="h-4 w-4" /></Link>}
@@ -503,7 +501,7 @@ function SellerBackedShgPage({ section }: { section: string }) {
       ['SHG documentation support', 'Keep bank, member, authorization, and registration records ready for portal review.', '/shg/documents'],
     ];
     return (
-      <ShgSectionLayout eyebrow="Growth & Enablement" title="Schemes and Opportunities" description="Portal pathways that help verified SHGs participate in local procurement.">
+      <ShgSectionLayout title="Schemes and Opportunities" description="Portal pathways that help verified SHGs participate in local procurement.">
         <div className="grid gap-4 lg:grid-cols-3">
           {schemes.map(([title, text, href]) => (
             <Card key={title} className="h-full">
@@ -522,7 +520,7 @@ function SellerBackedShgPage({ section }: { section: string }) {
 
   if (section === 'support') {
     return (
-      <ShgSectionLayout eyebrow="Helpdesk" title="SHG Support" description="Get help with onboarding, documents, catalogue listings, orders, and payments.">
+      <ShgSectionLayout title="SHG Support" description="Get help with onboarding, documents, catalogue listings, orders, and payments.">
         <div className="grid gap-4 md:grid-cols-3">
           <SupportCard icon={Phone} title="Call Helpdesk" text="1800-123-4567" href="tel:18001234567" />
           <SupportCard icon={Mail} title="Email Support" text="support@jsgsmile.in" href="mailto:support@jsgsmile.in" />
@@ -541,7 +539,7 @@ function SellerBackedShgPage({ section }: { section: string }) {
   }
 
   return (
-    <ShgSectionLayout eyebrow="SHG Workspace" title={section === 'dashboard' ? 'SHG Dashboard' : readable(section)} description="Manage your SHG portal records and procurement activity.">
+    <ShgSectionLayout title={section === 'dashboard' ? 'SHG Dashboard' : readable(section)} description="Manage your SHG portal records and procurement activity.">
       {error && <InlineNotice tone="error">{error}</InlineNotice>}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricTile label="Profile Status" value={readable(currentUser?.onboardingStatus || 'Pending')} icon={ShieldCheck} compact />
@@ -563,12 +561,12 @@ function SellerBackedShgPage({ section }: { section: string }) {
 
 const primaryActionClass = 'inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#12335f] px-4 text-xs font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-[#0b2447]';
 
-function ShgSectionLayout({ eyebrow, title, description, action, children }: { eyebrow: string; title: string; description: string; action?: React.ReactNode; children: React.ReactNode }) {
+function ShgSectionLayout({ title, description, action, children }: { title: string; description: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="space-y-5">
       <Card>
         <CardContent className="flex flex-col gap-4 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
-          <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">{eyebrow}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{title}</h1><p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">{description}</p></div>
+          <div><h1 className="text-2xl font-black tracking-tight text-slate-950">{title}</h1><p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">{description}</p></div>
           {action}
         </CardContent>
       </Card>
@@ -617,7 +615,7 @@ function ShgDashboardSection({ section, profile, progress }: { section: string; 
 
   if (section === 'profile') {
     return (
-      <ShgSectionLayout eyebrow="Group Identity" title="SHG Profile" description="Registered group and authorized representative details used across the portal.">
+      <ShgSectionLayout title="SHG Profile" description="Registered group and authorized representative details used across the portal.">
         <Card><CardHeader><CardTitle>Group details</CardTitle></CardHeader><CardContent><ReadonlyGrid profile={profile} /></CardContent></Card>
         <Card><CardHeader><CardTitle>Authorized representative</CardTitle></CardHeader><CardContent><LeaderPanel profile={profile} /></CardContent></Card>
       </ShgSectionLayout>
@@ -627,7 +625,7 @@ function ShgDashboardSection({ section, profile, progress }: { section: string; 
   if (section === 'members') {
     const members = profile.members || [];
     return (
-      <ShgSectionLayout eyebrow="Group Administration" title="SHG Members" description="Members and office bearers registered against this SHG application." action={<Link href="/shg/onboarding" className={primaryActionClass}>Manage in Onboarding <ArrowRight className="h-4 w-4" /></Link>}>
+      <ShgSectionLayout title="SHG Members" description="Members and office bearers registered against this SHG application." action={<Link href="/shg/onboarding" className={primaryActionClass}>Manage in Onboarding <ArrowRight className="h-4 w-4" /></Link>}>
         <Card><CardHeader><CardTitle>Member register</CardTitle></CardHeader><CardContent>{members.length ? <SimpleTable rows={members} columns={['name', 'mobile', 'officeRole', 'gender', 'age', 'kycStatus']} /> : <EmptyWorkspaceState icon={Users} title="No members added" text="Add the SHG members and office bearers from the onboarding workflow." href="/shg/onboarding" action="Open Onboarding" />}</CardContent></Card>
       </ShgSectionLayout>
     );
@@ -636,7 +634,7 @@ function ShgDashboardSection({ section, profile, progress }: { section: string; 
   if (section === 'bank-details') {
     const accounts = profile.bankAccounts || [];
     return (
-      <ShgSectionLayout eyebrow="Payments & Verification" title="Bank Details" description="Owner-scoped SHG bank accounts used for verification and settlements." action={<Link href="/shg/onboarding" className={primaryActionClass}>Manage Bank Accounts <ArrowRight className="h-4 w-4" /></Link>}>
+      <ShgSectionLayout title="Bank Details" description="Owner-scoped SHG bank accounts used for verification and settlements." action={<Link href="/shg/onboarding" className={primaryActionClass}>Manage Bank Accounts <ArrowRight className="h-4 w-4" /></Link>}>
         <Card><CardHeader><CardTitle>Registered accounts</CardTitle></CardHeader><CardContent>{accounts.length ? <SimpleTable rows={accounts} columns={['bankName', 'accountHolderName', 'accountNumberMasked', 'ifsc', 'branchName', 'isPrimary', 'verificationStatus']} /> : <EmptyWorkspaceState icon={Landmark} title="No bank account registered" text="Add a primary SHG bank account before final submission." href="/shg/onboarding" action="Add Bank Account" />}</CardContent></Card>
       </ShgSectionLayout>
     );
@@ -644,7 +642,7 @@ function ShgDashboardSection({ section, profile, progress }: { section: string; 
 
   if (section === 'documents') {
     return (
-      <ShgSectionLayout eyebrow="Compliance" title="SHG Documents" description="Required and optional records uploaded for SHG verification." action={<Link href="/shg/onboarding" className={primaryActionClass}>Upload Documents <ArrowRight className="h-4 w-4" /></Link>}>
+      <ShgSectionLayout title="SHG Documents" description="Required and optional records uploaded for SHG verification." action={<Link href="/shg/onboarding" className={primaryActionClass}>Upload Documents <ArrowRight className="h-4 w-4" /></Link>}>
         <Card><CardHeader><CardTitle>Document checklist</CardTitle></CardHeader><CardContent><DocumentTable profile={profile} /></CardContent></Card>
       </ShgSectionLayout>
     );
@@ -653,7 +651,7 @@ function ShgDashboardSection({ section, profile, progress }: { section: string; 
   if (section === 'meetings') {
     const meetings = profile.meetings || [];
     return (
-      <ShgSectionLayout eyebrow="Governance" title="SHG Meetings" description="Meeting dates, agendas, decisions, and linked resolutions for the group.">
+      <ShgSectionLayout title="SHG Meetings" description="Meeting dates, agendas, decisions, and linked resolutions for the group.">
         <Card><CardHeader><CardTitle>Meeting register</CardTitle></CardHeader><CardContent>{meetings.length ? <SimpleTable rows={meetings} columns={['meetingDate', 'title', 'agenda', 'decisions']} /> : <EmptyWorkspaceState icon={CalendarDays} title="No meetings recorded" text="Meeting records will appear here when they are added to the SHG profile." href="/shg/onboarding" action="Open Onboarding" />}</CardContent></Card>
       </ShgSectionLayout>
     );
@@ -661,7 +659,7 @@ function ShgDashboardSection({ section, profile, progress }: { section: string; 
 
   if (section === 'schemes') {
     return (
-      <ShgSectionLayout eyebrow="Growth & Enablement" title="Schemes and Opportunities" description="Use the portal to prepare your SHG for catalogue discovery and procurement participation.">
+      <ShgSectionLayout title="Schemes and Opportunities" description="Use the portal to prepare your SHG for catalogue discovery and procurement participation.">
         <div className="grid gap-4 lg:grid-cols-3"><NativeQuickLink title="Complete onboarding" text="Finish group, bank, member, and document verification." href="/shg/onboarding" /><NativeQuickLink title="Publish products" text="Create catalogue items for institutional buyers." href="/shg/products" /><NativeQuickLink title="Find opportunities" text="Review procurement opportunities open to suppliers." href="/shg/opportunities" /></div>
       </ShgSectionLayout>
     );
@@ -669,14 +667,14 @@ function ShgDashboardSection({ section, profile, progress }: { section: string; 
 
   if (section === 'support') {
     return (
-      <ShgSectionLayout eyebrow="Helpdesk" title="SHG Support" description="Get help with onboarding, documents, catalogue listings, orders, and payments.">
+      <ShgSectionLayout title="SHG Support" description="Get help with onboarding, documents, catalogue listings, orders, and payments.">
         <div className="grid gap-4 md:grid-cols-3"><SupportCard icon={Phone} title="Call Helpdesk" text="1800-123-4567" href="tel:18001234567" /><SupportCard icon={Mail} title="Email Support" text="support@jsgsmile.in" href="mailto:support@jsgsmile.in" /><SupportCard icon={BookOpen} title="Portal Help" text="Procedures, policies, and documentation guidance" href="/help" /></div>
       </ShgSectionLayout>
     );
   }
 
   return (
-    <ShgSectionLayout eyebrow="SHG Workspace" title="SHG Dashboard" description={`Welcome back, ${profile.shgName}. Track onboarding readiness and open the next task directly from your dashboard.`} action={<StatusBadge value={status} />}>
+    <ShgSectionLayout title="SHG Dashboard" description={`Welcome back, ${profile.shgName}. Track onboarding readiness and open the next task directly from your dashboard.`} action={<StatusBadge value={status} />}>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricTile label="Onboarding Progress" value={`${progress}%`} icon={ClipboardList} />
         <MetricTile label="Members" value={profile.members?.length || profile.memberCount || 0} icon={Users} />

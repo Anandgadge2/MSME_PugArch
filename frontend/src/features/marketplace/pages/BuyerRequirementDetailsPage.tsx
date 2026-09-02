@@ -24,6 +24,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { BuyerRequirementDetailSkeleton } from '@/components/ui/skeleton';
 import { getApi, postApi, peekApi, authHeaders } from '../../shared/apiClient';
+import { sellerRoutes } from '@/lib/routes';
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 
@@ -131,7 +132,7 @@ const extractIdFromPath = (): string | null => {
 /** Map canonical method to appropriate detail page route */
 const getDetailRoute = (requirement: any): string | null => {
   if (!requirement) return null;
-  const sourceId = requirement.sourceId || Math.abs(requirement.id);
+  const sourceId = requirement.requirementNumber || requirement.sourceId || (typeof requirement.id === 'number' && requirement.id < 0 ? Math.abs(requirement.id) : requirement.id);
   const desc = String(requirement.description || '').toUpperCase();
   const title = String(requirement.title || '').toUpperCase();
   const payload = requirement.payload && typeof requirement.payload === 'object' ? requirement.payload : {};
@@ -154,28 +155,25 @@ const getDetailRoute = (requirement: any): string | null => {
 
   // Rate Contract method
   if (method === 'RATE_CONTRACT') {
-    return `/seller/rate-contract?requirementId=${sourceId}`;
+    return sellerRoutes.detail('RATE_CONTRACT', sourceId);
   }
   // RFQ-type methods
   if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER'].includes(method)) {
-    return `/seller/rfq?requirementId=${sourceId}`;
+    return sellerRoutes.detail('RFQ', sourceId);
   }
   // RFP-type methods
   if (['RFP', 'SINGLE_SOURCE', 'PAC'].includes(method)) {
-    return `/seller/rfp?requirementId=${sourceId}`;
+    return sellerRoutes.detail('RFP', sourceId);
   }
   // Tender-type methods
   if (['OPEN_TENDER', 'LIMITED_TENDER', 'TWO_STAGE_TENDER', 'EMERGENCY_PURCHASE'].includes(method)) {
-    if (requirement.requirementNumber && String(requirement.requirementNumber).startsWith('OT-')) {
-      return `/tenders?tender=${requirement.requirementNumber}`;
-    }
-    return `/seller/rfq?requirementId=${sourceId}`;
+    return method === 'LIMITED_TENDER' ? sellerRoutes.detail('LIMITED_TENDER', sourceId) : sellerRoutes.detail('OPEN_TENDER', sourceId);
   }
   // Reverse auction
   if (method === 'REVERSE_AUCTION') {
-    return `/reverse-auctions/${sourceId}`;
+    return sellerRoutes.detail('REVERSE_AUCTION', requirement.sourceId || sourceId);
   }
-  return `/seller/rfq?requirementId=${sourceId}`;
+  return sellerRoutes.detail('RFQ', sourceId);
 };
 
 /** Action label based on procurement method */
@@ -638,7 +636,7 @@ const BuyerRequirementDetailsPage = () => {
                 </a>
               ) : isSeller && !isClosed && !ownResponse ? (
                 <a
-                  href={detailRoute || `/seller/rfq?requirementId=${Math.abs(requirement.id)}`}
+                  href={detailRoute || sellerRoutes.detail('RFQ', Math.abs(requirement.id))}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0b2447] px-6 text-sm font-black text-white shadow-sm hover:bg-[#12335f] active:scale-95 transition"
                 >
                   <Send className="h-4 w-4" />

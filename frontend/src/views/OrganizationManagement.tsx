@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from '../hooks/useDebounce';
@@ -24,7 +25,8 @@ import {
   ArrowUpDown,
   LayoutGrid,
   List,
-  X
+  X,
+  MoreVertical
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -71,6 +73,8 @@ export default function OrganizationManagement() {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
   const authHeaders = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
   const queryClient = useQueryClient();
+
+  const [openActionMenuId, setOpenActionMenuId] = useState<number | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 400);
@@ -404,30 +408,19 @@ export default function OrganizationManagement() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Banner / Header */}
-      <div className="bg-[#0c2340] border-b-4 border-[#c5a556] rounded-xl shadow-xl overflow-hidden p-6 md:p-8 text-white relative">
+      <div className="bg-[#0c2340] border-b-4 border-[#c5a556] rounded-xl shadow-sm overflow-hidden p-4 md:p-5 text-white relative">
         <div className="absolute right-0 top-0 opacity-10 translate-x-1/4 -translate-y-1/4 select-none pointer-events-none">
-          <Building2 className="h-64 w-64 text-white" />
+          <Building2 className="h-48 w-48 text-white" />
         </div>
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="bg-[#c5a556]/20 border border-[#c5a556] text-[#c5a556] text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 rounded-full">
-                Administration Portal
-              </span>
-              <span className="text-[10px] text-slate-300 font-medium tracking-wider">Stakeholders Database</span>
-            </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Organization & Feature Management</h1>
-            <p className="mt-2 text-sm text-slate-300 max-w-2xl">
-              Inspect and verify registered government buyers and sellers. Apply custom operational features (Marketplace, Catalog, Products, Services) and handle compliance controls.
-            </p>
+            <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">Organization & Feature Management</h1>
           </div>
-          <div className="flex flex-wrap items-center gap-2 self-start md:self-center">
-            {/* Standardised list/grid view toggle (dark theme on navy banner) */}
-            <ViewModeToggle value={viewMode} onChange={setViewMode} theme="dark" />
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-end">
             <Button
               onClick={() => refetch()}
               variant="outline"
-              className="border-white/20 hover:border-white/50 hover:text-white text-black hover:bg-white/30 shrink-0 gap-2 text-xs font-bold uppercase tracking-wider h-10"
+              className="border-white/20 hover:border-white/50 hover:text-white text-black hover:bg-white/30 shrink-0 gap-2 text-xs font-bold uppercase tracking-wider h-9"
             >
               <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
               Sync Database
@@ -481,40 +474,43 @@ export default function OrganizationManagement() {
       </div>
 
       {/* Search & Filter Controls */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-3 sm:p-4 shadow-sm flex flex-col md:flex-row md:items-center gap-2.5 sm:gap-4 justify-between">
-        <form onSubmit={handleSearchSubmit} className="flex items-center gap-1.5 sm:gap-2 w-full md:max-w-md flex-nowrap">
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by company name, GSTIN, or PAN..."
-              className="w-full h-10 pl-10 pr-3 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0c2340]/10 focus:border-[#0c2340] bg-slate-50/50 focus:bg-white transition-all"
-            />
-          </div>
-          <Button type="submit" className="bg-[#0c2340] hover:bg-[#0c2340]/90 text-white px-3 sm:px-4 h-10 text-xs font-bold uppercase tracking-wider rounded-xl shrink-0">
-            Search
-          </Button>
-          <div className="md:hidden shrink-0 flex items-center">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-3 sm:p-4 shadow-sm flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center justify-between">
+        <div className="flex items-center gap-2 w-full lg:max-w-sm">
+          <form onSubmit={handleSearchSubmit} className="flex-1 min-w-0">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by company name, GSTIN, or PAN..."
+                className="w-full h-10 pl-10 pr-3 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0c2340]/10 focus:border-[#0c2340] bg-slate-50/50 focus:bg-white transition-all"
+              />
+            </div>
+          </form>
+          <div className="lg:hidden shrink-0">
             <ViewModeToggle value={viewMode} onChange={setViewMode} />
           </div>
-        </form>
+        </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wide mr-1 sm:mr-2">Verification:</span>
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:flex-1">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1 hidden sm:block">Verification:</span>
           {['all', 'PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED'].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase border transition-all ${statusFilter === status
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all ${statusFilter === status
                 ? 'bg-[#0c2340] border-[#0c2340] text-white shadow-sm'
-                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                 }`}
             >
               {status}
             </button>
           ))}
+        </div>
+
+        <div className="hidden lg:flex items-center gap-2 shrink-0 justify-end">
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
         </div>
       </div>
 
@@ -532,12 +528,12 @@ export default function OrganizationManagement() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      <th className="px-4 py-4 text-center w-12">Sr.</th>
-                      <th className="px-4 py-4"><SortHeader label="Company Details" columnKey="name" /></th>
-                      <th className="px-4 py-4"><SortHeader label="Tax IDs" columnKey="gst" /></th>
+                      <th className="px-4 py-4 w-12 text-center">Sr.</th>
+                      <th className="px-4 py-4 w-[28%]"><SortHeader label="Company Details" columnKey="name" /></th>
+                      <th className="px-4 py-4 w-[22%]"><SortHeader label="Tax IDs" columnKey="gst" /></th>
                       <th className="px-4 py-4 text-center"><SortHeader label="Scope" columnKey="scope" className="justify-center w-full" /></th>
                       <th className="px-4 py-4 text-center"><SortHeader label="Status" columnKey="status" className="justify-center w-full" /></th>
-                      <th className="px-4 py-4 text-right">Actions</th>
+                      <th className="px-4 py-4 text-right w-16">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -623,98 +619,14 @@ export default function OrganizationManagement() {
                           </div>
                         </td>
                         <td className="px-4 py-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenFeatureModal(org)}
-                              title="Manage Feature Flags"
-                              className="border-slate-200 hover:bg-slate-100 text-slate-600 px-2 py-1.5 h-8 text-[10px] font-bold uppercase tracking-wider gap-1"
-                            >
-                              <Sliders className="h-3 w-3 text-[#c5a556]" /> Features
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenVerifyModal(org)}
-                              title="Change Verification Status"
-                              className="border-slate-200 hover:bg-slate-100 text-slate-600 px-2 py-1.5 h-8 text-[10px] font-bold uppercase tracking-wider gap-1"
-                            >
-                              <Check className="h-3 w-3 text-emerald-600" /> Verify
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenBlacklistModal(org)}
-                              title={org.isBlacklisted ? "Clear platform restriction" : "Restrict platform access"}
-                              className={`px-2 py-1.5 h-8 text-[10px] font-bold uppercase tracking-wider gap-1 ${org.isBlacklisted
-                                ? 'bg-red-50 hover:bg-red-100 border-red-200 hover:border-red-300 text-red-700'
-                                : 'border-slate-200 hover:bg-slate-100 text-slate-600'
-                                }`}
-                            >
-                              <Ban className="h-3 w-3 text-red-600" /> {org.isBlacklisted ? "Unrestrict" : "Restrict"}
-                            </Button>
-
-                            {/* Organization Lifecycle & GST Reuse controls */}
-                            {org.verificationStatus !== 'CLOSED' && org.verificationStatus !== 'ARCHIVED' && (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleOpenLifecycleModal(org, 'close')}
-                                  title="Close Organization"
-                                  className="border-slate-200 hover:bg-slate-100 text-red-600 px-2 py-1.5 h-8 text-[10px] font-bold uppercase tracking-wider gap-1"
-                                >
-                                  <Ban className="h-3 w-3 text-red-600" /> Close
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleOpenLifecycleModal(org, 'archive')}
-                                  title="Archive Organization"
-                                  className="border-slate-200 hover:bg-slate-100 text-slate-600 px-2 py-1.5 h-8 text-[10px] font-bold uppercase tracking-wider gap-1"
-                                >
-                                  <AlertTriangle className="h-3 w-3 text-amber-500" /> Archive
-                                </Button>
-                              </>
-                            )}
-
-                            {(org.verificationStatus === 'CLOSED' || org.verificationStatus === 'ARCHIVED') && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleOpenLifecycleModal(org, 'restore')}
-                                title="Restore Organization"
-                                className="border-slate-200 hover:bg-slate-100 text-emerald-600 px-2 py-1.5 h-8 text-[10px] font-bold uppercase tracking-wider gap-1"
-                              >
-                                <RefreshCw className="h-3 w-3 text-emerald-600" /> Restore
-                              </Button>
-                            )}
-
-                            {(org.verificationStatus === 'CLOSED' || org.verificationStatus === 'ARCHIVED') && (
-                              org.gstReuseAllowed ? (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleOpenLifecycleModal(org, 'revoke-gst-reuse')}
-                                  title="Revoke GST Reuse"
-                                  className="bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-700 px-2 py-1.5 h-8 text-[10px] font-bold uppercase tracking-wider gap-1"
-                                >
-                                  <AlertTriangle className="h-3 w-3 text-amber-600" /> Revoke GST
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleOpenLifecycleModal(org, 'allow-gst-reuse')}
-                                  title="Allow GST Reuse"
-                                  className="bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700 px-2 py-1.5 h-8 text-[10px] font-bold uppercase tracking-wider gap-1"
-                                >
-                                  <Check className="h-3 w-3 text-blue-600" /> Allow GST
-                                </Button>
-                              )
-                            )}
-                          </div>
+                          <button
+                            id={`org-action-btn-${org.id}`}
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === org.id ? null : org.id); }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-[#0c2340]/20 shadow-sm"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -725,69 +637,74 @@ export default function OrganizationManagement() {
             </>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {sortedOrgs.map((org, index) => (
-                  <div key={org.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-all">
-                    <div className="flex items-start justify-between gap-2">
+                  <div key={org.id} className="rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all flex flex-col h-full overflow-hidden">
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] font-black text-[#12335f] uppercase tracking-widest">
+                          ORG-{org.id}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${statusTone(org.verificationStatus)}`}>
+                          {org.verificationStatus}
+                        </span>
+                      </div>
                       <button
+                        id={`org-grid-btn-${org.id}`}
                         type="button"
-                        onClick={() => setDetailOrg(org)}
-                        className="flex items-start gap-3 text-left min-w-0 flex-1 group"
+                        onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === org.id ? null : org.id); }}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200/50 hover:text-slate-900 transition-colors focus:outline-none"
                       >
-                        <div className="h-10 w-10 rounded-lg bg-[#0c2340]/5 flex items-center justify-center text-[#0c2340] shrink-0 border border-slate-100 group-hover:bg-[#0c2340] group-hover:text-white transition-colors">
-                          <Building2 className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-mono text-[10px] font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')} · ORG-{org.id}</p>
-                          <h4 className="font-extrabold text-neutral-900 text-sm group-hover:text-[#0c2340] group-hover:underline decoration-[#c5a556] underline-offset-2 transition-colors text-wrap-anywhere">
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-4 flex-1 flex flex-col space-y-4">
+                      <div>
+                        <button type="button" onClick={() => setDetailOrg(org)} className="text-left group w-full text-wrap-anywhere">
+                          <h4 className="font-extrabold text-slate-900 text-sm group-hover:text-[#0c2340] group-hover:underline decoration-[#c5a556] underline-offset-2 transition-colors">
                             {org.organizationName}
                           </h4>
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs text-slate-600 font-medium">
+                        <div className="flex items-center gap-2 truncate text-wrap-anywhere">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-12 shrink-0">GSTIN</span>
+                          <span className="truncate font-bold">{org.gstin || '—'}</span>
                         </div>
-                      </button>
-                      <span className={`shrink-0 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${statusTone(org.verificationStatus)}`}>
-                        {org.verificationStatus}
-                      </span>
-                    </div>
-                    <div className="mt-2">
-                      <AadhaarBadge org={org} />
-                    </div>
-                    <div className="mt-3 space-y-1 text-[11px] font-mono">
-                      <div className="text-wrap-anywhere">
-                        <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-widest mr-1">GSTIN:</span>
-                        <span className="text-slate-800 font-bold">{org.gstin || 'N/A'}</span>
+                        <div className="flex items-center gap-2 truncate text-wrap-anywhere">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-12 shrink-0">PAN</span>
+                          <span className="truncate font-bold">{org.panNumber || '—'}</span>
+                        </div>
                       </div>
-                      <div className="text-wrap-anywhere">
-                        <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-widest mr-2">PAN:</span>
-                        <span className="text-slate-800 font-bold">{org.panNumber || 'N/A'}</span>
+
+                      <div className="space-y-2 pt-3 border-t border-slate-100 mt-auto">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Compliance</span>
+                          <AadhaarBadge org={org} />
+                        </div>
                       </div>
-                    </div>
-                    <div className="mt-3 grid grid-cols-3 gap-1">
-                      <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('users'); }} className="inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 hover:text-[#0c2340] transition-colors">
-                        <Users className="h-3.5 w-3.5" />
-                        <span className="font-bold">{org._count?.users ?? 0}</span>
-                      </button>
-                      <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('products'); }} className="inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 hover:text-[#0c2340] transition-colors">
-                        <Package className="h-3.5 w-3.5" />
-                        <span className="font-bold">{org._count?.products ?? 0}</span>
-                      </button>
-                      <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('services'); }} className="inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 hover:text-[#0c2340] transition-colors">
-                        <Wrench className="h-3.5 w-3.5" />
-                        <span className="font-bold">{org._count?.services ?? 0}</span>
-                      </button>
-                    </div>
-                    <div className="mt-3 grid grid-cols-3 gap-1">
-                      <Button variant="outline" size="sm" onClick={() => handleOpenFeatureModal(org)} className="border-slate-200 text-slate-600 h-8 text-[9px] font-bold uppercase tracking-wider gap-1">
-                        <Sliders className="h-3 w-3 text-[#c5a556]" /> Features
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleOpenVerifyModal(org)} className="border-slate-200 text-slate-600 h-8 text-[9px] font-bold uppercase tracking-wider gap-1">
-                        <Check className="h-3 w-3 text-emerald-600" /> Verify
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleOpenBlacklistModal(org)} className={cn(
-                        "h-8 text-[9px] font-bold uppercase tracking-wider gap-1",
-                        org.isBlacklisted ? 'bg-red-50 hover:bg-red-100 border-red-200 text-red-700' : 'border-slate-200 text-slate-600'
-                      )}>
-                        <Ban className="h-3 w-3 text-red-600" /> {org.isBlacklisted ? "Free" : "Block"}
-                      </Button>
+
+                      <div className="space-y-2 pt-3 border-t border-slate-100">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Scope</span>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('users'); }} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 transition-colors truncate">
+                            <Users className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{org._count?.users ?? 0}</span>
+                          </button>
+                          <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('products'); }} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 transition-colors truncate">
+                            <Package className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{org._count?.products ?? 0}</span>
+                          </button>
+                          <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('services'); }} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 transition-colors truncate">
+                            <Wrench className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{org._count?.services ?? 0}</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1340,6 +1257,19 @@ export default function OrganizationManagement() {
         </div>
       )}
 
+      {/* Action Menu Portal */}
+      {openActionMenuId && orgs.find(o => o.id === openActionMenuId) && (
+        <OrganizationActionsMenu
+          org={orgs.find(o => o.id === openActionMenuId)!}
+          buttonId={viewMode === 'list' ? `org-action-btn-${openActionMenuId}` : `org-grid-btn-${openActionMenuId}`}
+          onClose={() => setOpenActionMenuId(null)}
+          onOpenFeatures={handleOpenFeatureModal}
+          onOpenVerify={handleOpenVerifyModal}
+          onOpenBlacklist={handleOpenBlacklistModal}
+          onOpenLifecycle={handleOpenLifecycleModal}
+          onOpenDetails={setDetailOrg}
+        />
+      )}
     </div>
   );
 }
@@ -1447,5 +1377,181 @@ function ScopeListPanel({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function OrganizationActionsMenu({
+  org,
+  buttonId,
+  onClose,
+  onOpenFeatures,
+  onOpenVerify,
+  onOpenBlacklist,
+  onOpenLifecycle,
+  onOpenDetails
+}: any) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [style, setStyle] = useState<any>({ visibility: 'hidden', position: 'fixed', top: 0, left: 0, zIndex: 99999 });
+
+  useEffect(() => {
+    const btn = document.getElementById(buttonId);
+    const menu = menuRef.current;
+    if (!btn || !menu) return;
+
+    const updatePosition = () => {
+      const btnRect = btn.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+
+      let top = btnRect.bottom + 6;
+      let left = btnRect.right - menuRect.width;
+
+      if (top + menuRect.height > window.innerHeight) {
+        top = btnRect.top - menuRect.height - 6;
+      }
+      if (top < 0) top = 6;
+      if (left < 0) left = 6;
+
+      setStyle({
+        position: 'fixed',
+        top: `${top}px`,
+        left: `${left}px`,
+        zIndex: 99999,
+        visibility: 'visible'
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [buttonId]);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      // Do not close if clicking the button itself
+      const btn = document.getElementById(buttonId);
+      if (btn && btn.contains(target)) return;
+      if (menuRef.current && !menuRef.current.contains(target)) {
+        onClose();
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [buttonId, onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div 
+      ref={menuRef}
+      style={style} 
+      onClick={e => e.stopPropagation()} 
+      className="w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+    >
+      <button
+        type="button"
+        onClick={() => { onClose(); onOpenDetails(org); }}
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left"
+      >
+        <Eye className="h-3.5 w-3.5 text-slate-500" />
+        <span>Details</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => { onClose(); onOpenFeatures(org); }}
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#0c2340] hover:bg-[#0c2340]/5 transition-colors text-left"
+      >
+        <Sliders className="h-3.5 w-3.5 text-[#c5a556]" />
+        <span>Features</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => { onClose(); onOpenVerify(org); }}
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+      >
+        <Check className="h-3.5 w-3.5 text-emerald-600" />
+        <span>Verify</span>
+      </button>
+
+      <div className="h-px bg-slate-100 my-1 mx-2" />
+
+      <button
+        type="button"
+        onClick={() => { onClose(); onOpenBlacklist(org); }}
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-red-700 hover:bg-red-50 transition-colors text-left"
+      >
+        <Ban className="h-3.5 w-3.5 text-red-600" />
+        <span>{org.isBlacklisted ? "Unrestrict" : "Restrict"}</span>
+      </button>
+
+      {org.verificationStatus !== 'CLOSED' && org.verificationStatus !== 'ARCHIVED' && (
+        <>
+          <button
+            type="button"
+            onClick={() => { onClose(); onOpenLifecycle(org, 'close'); }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-red-700 hover:bg-red-50 transition-colors text-left"
+          >
+            <XCircle className="h-3.5 w-3.5 text-red-600" />
+            <span>Close</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { onClose(); onOpenLifecycle(org, 'archive'); }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-700 hover:bg-amber-50 transition-colors text-left"
+          >
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+            <span>Archive</span>
+          </button>
+        </>
+      )}
+
+      {(org.verificationStatus === 'CLOSED' || org.verificationStatus === 'ARCHIVED') && (
+        <button
+          type="button"
+          onClick={() => { onClose(); onOpenLifecycle(org, 'restore'); }}
+          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+        >
+          <RefreshCw className="h-3.5 w-3.5 text-emerald-600" />
+          <span>Restore</span>
+        </button>
+      )}
+
+      {(org.verificationStatus === 'CLOSED' || org.verificationStatus === 'ARCHIVED') && (
+        org.gstReuseAllowed ? (
+          <button
+            type="button"
+            onClick={() => { onClose(); onOpenLifecycle(org, 'revoke-gst-reuse'); }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-700 hover:bg-amber-50 transition-colors text-left"
+          >
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+            <span>Revoke GST</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => { onClose(); onOpenLifecycle(org, 'allow-gst-reuse'); }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+          >
+            <Check className="h-3.5 w-3.5 text-blue-600" />
+            <span>Allow GST</span>
+          </button>
+        )
+      )}
+    </div>,
+    document.body
   );
 }

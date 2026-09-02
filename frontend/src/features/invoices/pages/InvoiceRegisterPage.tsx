@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Clock, FileText, IndianRupee, RefreshCw, Search, Building2, CreditCard, Lock, ShieldCheck, Sparkles, Terminal, ArrowRight, AlertCircle, X, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown, Filter, LayoutGrid, List, Upload, Eye, Maximize2, Minimize2, MoreVertical } from 'lucide-react';
-import { Loader2 } from '@/components/ui/loader';
+import { CheckCircle2, Clock, FileText, IndianRupee, RefreshCw, Search, Building2, CreditCard, Lock, ShieldCheck, Sparkles, Terminal, ArrowRight, AlertCircle, X, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown, Filter, LayoutGrid, List, Upload, Eye, Maximize2, Minimize2, MoreVertical, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -24,6 +23,7 @@ import { PaymentReceiptUploadModal } from '../../payments/components/PaymentRece
 import { PaymentReceiptViewModal } from '../../payments/components/PaymentReceiptViewModal';
 import { TaxInvoiceCard } from '../components/TaxInvoiceCard';
 import { SignatureStampUploadModal } from '../components/SignatureStampUploadModal';
+import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
 import { Stamp, Printer, Download, ChevronDown } from 'lucide-react';
 
@@ -62,7 +62,9 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [acceptedPoOnly, setAcceptedPoOnly] = useState(false);
+  const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'last_month' | 'this_quarter' | 'this_fy'>('all');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<'all' | 'pending' | 'overdue' | 'due_soon' | 'paid'>('all');
+  const [amountRangeFilter, setAmountRangeFilter] = useState<'all' | 'under_50k' | '50k_to_2L' | '2L_to_10L' | 'above_10L'>('all');
   const [invoiceScope, setInvoiceScope] = useState<'all' | 'interstate' | 'domestic'>('all');
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -133,7 +135,9 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     {
       search: debouncedSearch,
       status: statusFilter,
-      acceptedPo: acceptedPoOnly ? 'true' : undefined,
+      dateRange: dateRangeFilter !== 'all' ? dateRangeFilter : undefined,
+      paymentStatus: paymentStatusFilter !== 'all' ? paymentStatusFilter : undefined,
+      amountRange: amountRangeFilter !== 'all' ? amountRangeFilter : undefined,
       scope: invoiceScope,
       sortBy: sortField,
       sortOrder
@@ -169,6 +173,27 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       { overdue: 0, dueSoon: 0, tax: 0, tds: 0, submitted: 0 }
     );
   }, [pagedInvoices]);
+
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setDebouncedSearch('');
+    setStatusFilter('');
+    setDateRangeFilter('all');
+    setPaymentStatusFilter('all');
+    setAmountRangeFilter('all');
+    setInvoiceScope('all');
+    setPage(1);
+  };
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (statusFilter) count++;
+    if (dateRangeFilter !== 'all') count++;
+    if (paymentStatusFilter !== 'all') count++;
+    if (amountRangeFilter !== 'all') count++;
+    if (invoiceScope !== 'all') count++;
+    return count;
+  }, [statusFilter, dateRangeFilter, paymentStatusFilter, amountRangeFilter, invoiceScope]);
 
   useEffect(() => {
     if (!selectedInvoice) {
@@ -756,13 +781,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       {/* Transparent Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
-          {/* <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">
-            {role === 'seller' ? 'Seller Finance' : role === 'admin' ? 'Admin Finance' : 'Buyer Finance'}
-          </span> */}
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Invoices</h1>
-          {/* <p className="text-xs font-semibold text-slate-500 mt-1">
-            Invoice register with PO linkage, GST/TDS values, due dates, and payment workflows.
-          </p> */}
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">Invoices</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -795,7 +814,9 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           value={total}
           subtext="All invoices"
           icon={FileText}
-          active={true}
+          active={!statusFilter && dateRangeFilter === 'all' && paymentStatusFilter === 'all' && amountRangeFilter === 'all' && invoiceScope === 'all'}
+          onClick={handleResetFilters}
+          ariaLabel="Filter all invoices"
           color="blue"
         />
         <KpiCard
@@ -803,6 +824,9 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           value={pendingCount}
           subtext="Pending approval"
           icon={Clock}
+          active={statusFilter === 'submitted' || paymentStatusFilter === 'pending'}
+          onClick={() => { setPaymentStatusFilter('pending'); setStatusFilter(''); setPage(1); }}
+          ariaLabel="Filter pending invoices"
           color="amber"
         />
         <KpiCard
@@ -810,6 +834,9 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           value={approvedCount}
           subtext="Paid invoices"
           icon={CheckCircle2}
+          active={paymentStatusFilter === 'paid' || statusFilter === 'approved'}
+          onClick={() => { setPaymentStatusFilter('paid'); setStatusFilter(''); setPage(1); }}
+          ariaLabel="Filter paid invoices"
           color="green"
         />
         <KpiCard
@@ -824,6 +851,9 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           value={invoiceHealth.overdue}
           subtext="Overdue invoices"
           icon={AlertCircle}
+          active={paymentStatusFilter === 'overdue'}
+          onClick={() => { setPaymentStatusFilter('overdue'); setStatusFilter(''); setPage(1); }}
+          ariaLabel="Filter overdue invoices"
           color="red"
         />
         <KpiCard
@@ -840,57 +870,128 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       {/* ── Search + Filter + View Toggle Toolbar ── */}
       <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
         <ResponsiveFilterBar
-          activeFilterCount={(statusFilter ? 1 : 0) + (acceptedPoOnly ? 1 : 0) + (invoiceScope !== 'all' ? 1 : 0)}
+          singleRowDesktop={false}
+          activeFilterCount={activeFilterCount + (searchTerm ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
+                id="invoice-search-input"
                 value={searchTerm}
-                onChange={event => setSearchTerm(event.target.value)}
+                onChange={event => { setSearchTerm(event.target.value); setPage(1); }}
                 placeholder="Search invoice, PO, buyer, seller..."
                 className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                aria-label="Search invoice, PO, buyer, seller"
               />
             </div>
           }
           filters={
             <>
-              <div className="w-full sm:w-auto sm:min-w-[140px]">
+              {/* Status Filter */}
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <label htmlFor="filter-invoice-status" className="sr-only">Invoice Status</label>
                 <select
+                  id="filter-invoice-status"
                   value={statusFilter}
-                  onChange={event => setStatusFilter(event.target.value)}
+                  onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
                   className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  aria-label="Filter by invoice status"
                 >
-                  <option value="">All statuses</option>
+                  <option value="">Status: All</option>
                   {statuses.map(status => (
                     <option key={status} value={status}>
-                      {status.replace(/_/g, ' ')}
+                      {status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')}
                     </option>
                   ))}
                 </select>
               </div>
 
-              <label className="flex items-center justify-center gap-2 h-10 w-full sm:w-auto px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:border-slate-300 shadow-xs cursor-pointer select-none transition-colors">
-                <input
-                  type="checkbox"
-                  checked={acceptedPoOnly}
-                  onChange={event => setAcceptedPoOnly(event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/50"
-                />
-                Accepted PO only
-              </label>
-
-              <div className="w-full sm:w-auto sm:min-w-[140px]">
+              {/* Date Period Filter */}
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <label htmlFor="filter-date-range" className="sr-only">Date Period</label>
                 <select
-                  value={invoiceScope}
-                  onChange={event => setInvoiceScope(event.target.value as 'all' | 'interstate' | 'domestic')}
+                  id="filter-date-range"
+                  value={dateRangeFilter}
+                  onChange={event => { setDateRangeFilter(event.target.value as any); setPage(1); }}
                   className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  aria-label="Filter by date period"
                 >
-                  <option value="all">All invoices</option>
-                  <option value="interstate">Interstate only</option>
-                  <option value="domestic">Domestic only</option>
+                  <option value="all">Period: All Time</option>
+                  <option value="today">Today</option>
+                  <option value="this_week">This Week</option>
+                  <option value="this_month">This Month</option>
+                  <option value="last_month">Last Month</option>
+                  <option value="this_quarter">This Quarter</option>
+                  <option value="this_fy">Current FY (26-27)</option>
                 </select>
               </div>
+
+              {/* Payment / Due Status Filter */}
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <label htmlFor="filter-payment-status" className="sr-only">Payment Status</label>
+                <select
+                  id="filter-payment-status"
+                  value={paymentStatusFilter}
+                  onChange={event => { setPaymentStatusFilter(event.target.value as any); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  aria-label="Filter by payment status"
+                >
+                  <option value="all">Payment: All</option>
+                  <option value="pending">Pending Payment</option>
+                  <option value="overdue">Overdue (&gt; 45 Days)</option>
+                  <option value="due_soon">Due Soon (&le; 7 Days)</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
+
+              {/* Amount Range Filter */}
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <label htmlFor="filter-amount-range" className="sr-only">Amount Range</label>
+                <select
+                  id="filter-amount-range"
+                  value={amountRangeFilter}
+                  onChange={event => { setAmountRangeFilter(event.target.value as any); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  aria-label="Filter by amount range"
+                >
+                  <option value="all">Amount: All</option>
+                  <option value="under_50k">&lt; ₹50,000</option>
+                  <option value="50k_to_2L">₹50K – ₹2 Lakhs</option>
+                  <option value="2L_to_10L">₹2L – ₹10 Lakhs</option>
+                  <option value="above_10L">&gt; ₹10 Lakhs</option>
+                </select>
+              </div>
+
+              {/* Tax Scope Filter */}
+              <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <label htmlFor="filter-tax-scope" className="sr-only">Tax Scope</label>
+                <select
+                  id="filter-tax-scope"
+                  value={invoiceScope}
+                  onChange={event => { setInvoiceScope(event.target.value as 'all' | 'interstate' | 'domestic'); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  aria-label="Filter by tax scope"
+                >
+                  <option value="all">Tax: All Scopes</option>
+                  <option value="domestic">Intra-State (CGST+SGST)</option>
+                  <option value="interstate">Inter-State (IGST)</option>
+                </select>
+              </div>
+
+              {/* Reset Filters Button */}
+              {(activeFilterCount > 0 || searchTerm) && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100/80 text-rose-700 text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  title="Reset all filters"
+                  aria-label="Reset all active filters"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span>Reset ({activeFilterCount + (searchTerm ? 1 : 0)})</span>
+                </button>
+              )}
             </>
           }
           endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
@@ -901,8 +1002,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         <EmptyState
           title="No invoices found"
           description={
-            searchTerm || statusFilter || acceptedPoOnly || invoiceScope !== 'all'
-              ? 'No invoice records match the selected search, status, PO, or tax-scope filters.'
+            searchTerm || statusFilter || dateRangeFilter !== 'all' || paymentStatusFilter !== 'all' || amountRangeFilter !== 'all' || invoiceScope !== 'all'
+              ? 'No invoice records match the selected search and filter criteria.'
               :
             role === 'seller'
               ? 'Create invoices for accepted purchase orders using the button above. Once an invoice is added, buyers can approve and pay it.'
@@ -1185,255 +1286,54 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         </>
       )}
 
-      {createInvoiceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5 md:items-center">
-          <div className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-2.5rem)]">
-            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Create Invoice</p>
-                <h2 className="mt-1 text-lg font-black text-slate-950 sm:text-xl">New invoice for PO or Quotation</h2>
-                <p className="mt-1 text-xs leading-5 text-slate-500">Choose an accepted purchase order or submitted quotation, then enter amount and tax details.</p>
-              </div>
-              <button
-                type="button"
-                onClick={closeCreateInvoiceModal}
-                className="shrink-0 rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
-              {/* Source Type Selector Tabs */}
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCreateInvoiceSourceType('po');
-                    setSelectedQuotationId(null);
-                  }}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer",
-                    createInvoiceSourceType === 'po'
-                      ? "bg-[#12335f] text-white shadow-xs"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  )}
-                >
-                  Accepted Purchase Orders ({acceptedPurchaseOrders.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCreateInvoiceSourceType('quotation');
-                    setSelectedPurchaseOrderId(null);
-                  }}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1",
-                    createInvoiceSourceType === 'quotation'
-                      ? "bg-[#12335f] text-white shadow-xs"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  )}
-                >
-                  Submitted Quotations ({submittedQuotations.length})
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                  {createInvoiceSourceType === 'po' ? 'Search Purchase Order' : 'Search Submitted Quotation'}
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={purchaseOrderSearch}
-                    onChange={event => setPurchaseOrderSearch(event.target.value)}
-                    placeholder={createInvoiceSourceType === 'po' ? "Search PO #, title, or ID" : "Search Quotation ID, requirement title..."}
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                  />
-                </div>
-
-                <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs sm:max-h-44">
-                  {createInvoiceSourceType === 'po' ? (
-                    purchaseOrdersLoading ? (
-                      <div className="flex items-center justify-center py-8 text-slate-500">Loading purchase orders…</div>
-                    ) : filteredPurchaseOrders.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-slate-500">
-                        No accepted purchase orders found. Confirm the buyer has accepted the PO before creating an invoice.
-                      </div>
-                    ) : (
-                      filteredPurchaseOrders.map(po => (
-                        <button
-                          key={po.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedPurchaseOrderId(po.id);
-                            const poAmt = po.totalValue || po.amount || 0;
-                            if (poAmt) setInvoiceAmount(String(poAmt));
-                            setPurchaseOrderSearch('');
-                          }}
-                          className={`w-full rounded-lg px-3 py-2.5 text-left transition ${selectedPurchaseOrderId === po.id ? 'bg-[#12335f] text-white' : 'bg-white text-slate-800 hover:bg-slate-100'
-                            }`}
-                        >
-                          <p className="break-all text-sm font-black">{po.poNumber}</p>
-                          <p className={cn('mt-0.5 text-[11px]', selectedPurchaseOrderId === po.id ? 'text-slate-200' : 'text-slate-500')}>{po.title}</p>
-                          <p className={cn('mt-1 text-[11px]', selectedPurchaseOrderId === po.id ? 'text-slate-200' : 'text-slate-400')}>Amount: {formatCurrency(po.totalValue || po.amount || 0)}</p>
-                        </button>
-                      ))
-                    )
-                  ) : (
-                    quotationsLoading ? (
-                      <div className="flex items-center justify-center py-8 text-slate-500">Loading submitted quotations…</div>
-                    ) : filteredQuotations.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-slate-500">
-                        No submitted quotations found. Submit a quotation for a buyer requirement first.
-                      </div>
-                    ) : (
-                      filteredQuotations.map(q => {
-                        const totalVal = (Number(q.offeredPrice || 0) * Number(q.offeredQuantity || 1)) || Number(q.offeredPrice || 0);
-                        return (
-                          <button
-                            key={q.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedQuotationId(q.id);
-                              if (totalVal > 0) setInvoiceAmount(String(totalVal));
-                              setPurchaseOrderSearch('');
-                            }}
-                            className={`w-full rounded-lg px-3 py-2.5 text-left transition ${selectedQuotationId === q.id ? 'bg-[#12335f] text-white' : 'bg-white text-slate-800 hover:bg-slate-100'
-                              }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <p className="break-all text-sm font-black">Quote #Q-{q.id}</p>
-                              <span className={cn('text-[9px] font-black uppercase px-2 py-0.5 rounded', selectedQuotationId === q.id ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-700')}>
-                                {q.status || 'SUBMITTED'}
-                              </span>
-                            </div>
-                            <p className={cn('mt-0.5 text-[11px]', selectedQuotationId === q.id ? 'text-slate-200' : 'text-slate-500')}>
-                              Requirement: {q.requirement?.title || 'B2B Requirement'}
-                            </p>
-                            <p className={cn('mt-1 text-[11px]', selectedQuotationId === q.id ? 'text-slate-200' : 'text-slate-400')}>
-                              Offered Amount: {formatCurrency(totalVal)}
-                            </p>
-                          </button>
-                        );
-                      })
-                    )
-                  )}
-                </div>
-              </div>
-
-              {createInvoiceSourceType === 'po' && selectedPurchaseOrder && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                  <p className="font-black uppercase tracking-widest text-[10px] text-slate-500">Selected Purchase Order</p>
-                  <p className="mt-2 font-black text-slate-900">{selectedPurchaseOrder.poNumber} · {selectedPurchaseOrder.title}</p>
-                  <p className="mt-1 text-xs text-slate-500">Total value: {formatCurrency(selectedPurchaseOrder.totalValue || selectedPurchaseOrder.amount || 0)}</p>
-                </div>
-              )}
-
-              {createInvoiceSourceType === 'quotation' && selectedQuotation && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                  <p className="font-black uppercase tracking-widest text-[10px] text-slate-500">Selected Submitted Quotation</p>
-                  <p className="mt-2 font-black text-slate-900">Quote #Q-{selectedQuotation.id} · Requirement: {selectedQuotation.requirement?.title || 'B2B Requirement'}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Offered total: {formatCurrency((Number(selectedQuotation.offeredPrice || 0) * Number(selectedQuotation.offeredQuantity || 1)) || Number(selectedQuotation.offeredPrice || 0))}
-                  </p>
-                </div>
-              )}
-
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">Invoice Amount</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={invoiceAmount}
-                    onChange={event => setInvoiceAmount(event.target.value)}
-                    placeholder="Enter invoice amount"
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">GST Rate (%)</label>
-                  <select
-                    value={invoiceGstRate}
-                    onChange={event => setInvoiceGstRate(event.target.value)}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                  >
-                    <option value="">-Select-</option>
-                    {GST_STANDARD_RATES.map(rate => (
-                      <option key={`gst-${rate}`} value={String(rate)}>
-                        {formatTaxRate(rate)}%
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">Other Tax (%)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="0.01"
-                    placeholder="0"
-                    value={invoiceOtherTax}
-                    onChange={event => setInvoiceOtherTax(event.target.value)}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">TDS Rate (%)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={invoiceTdsRate}
-                    onChange={event => setInvoiceTdsRate(event.target.value)}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                  />
-                </div>
-                <div className="flex min-h-10 items-center gap-2.5 sm:gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <input
-                    id="interstate-checkbox"
-                    type="checkbox"
-                    checked={invoiceInterstate}
-                    onChange={event => setInvoiceInterstate(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/50"
-                  />
-                  <label htmlFor="interstate-checkbox" className="text-xs font-bold text-slate-700">
-                    Interstate invoice
-                  </label>
-                </div>
-              </div>
-
-              {createInvoiceError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-800">
-                  {createInvoiceError}
-                </div>
-              )}
-
-            </div>
-
-            <div className="flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-white px-5 py-3 sm:flex-row sm:justify-end sm:px-6">
-              <Button type="button" variant="secondary" onClick={closeCreateInvoiceModal} className="h-10 rounded-lg text-xs font-black uppercase">
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                onClick={handleSubmitCreateInvoice}
-                disabled={createInvoiceSubmitting || (createInvoiceSourceType === 'po' ? !selectedPurchaseOrderId : !selectedQuotationId)}
-                className="h-10 rounded-lg bg-[#12335f] text-xs font-black uppercase tracking-wider hover:bg-slate-800"
-              >
-                {createInvoiceSubmitting ? 'Creating...' : 'Create Invoice'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Enterprise Create Invoice Modal */}
+      <CreateInvoiceModal
+        open={createInvoiceModalOpen}
+        onClose={closeCreateInvoiceModal}
+        onSubmit={handleSubmitCreateInvoice}
+        submitting={createInvoiceSubmitting}
+        error={createInvoiceError}
+        sourceType={createInvoiceSourceType}
+        onSourceTypeChange={type => {
+          setCreateInvoiceSourceType(type);
+          if (type === 'po') setSelectedQuotationId(null);
+          else setSelectedPurchaseOrderId(null);
+        }}
+        search={purchaseOrderSearch}
+        onSearchChange={setPurchaseOrderSearch}
+        selectedPurchaseOrderId={selectedPurchaseOrderId}
+        onSelectPurchaseOrder={po => {
+          setSelectedPurchaseOrderId(po.id);
+          const poAmt = po.totalValue || po.amount || 0;
+          if (poAmt) setInvoiceAmount(String(poAmt));
+          setPurchaseOrderSearch('');
+        }}
+        selectedQuotationId={selectedQuotationId}
+        onSelectQuotation={q => {
+          setSelectedQuotationId(q.id);
+          const totalVal = (Number(q.offeredPrice || 0) * Number(q.offeredQuantity || 1)) || Number(q.offeredPrice || 0);
+          if (totalVal > 0) setInvoiceAmount(String(totalVal));
+          setPurchaseOrderSearch('');
+        }}
+        acceptedPurchaseOrders={acceptedPurchaseOrders}
+        filteredPurchaseOrders={filteredPurchaseOrders}
+        purchaseOrdersLoading={purchaseOrdersLoading}
+        selectedPurchaseOrder={selectedPurchaseOrder}
+        submittedQuotations={submittedQuotations}
+        filteredQuotations={filteredQuotations}
+        quotationsLoading={quotationsLoading}
+        selectedQuotation={selectedQuotation}
+        invoiceAmount={invoiceAmount}
+        onInvoiceAmountChange={setInvoiceAmount}
+        invoiceGstRate={invoiceGstRate}
+        onInvoiceGstRateChange={setInvoiceGstRate}
+        invoiceTdsRate={invoiceTdsRate}
+        onInvoiceTdsRateChange={setInvoiceTdsRate}
+        invoiceOtherTax={invoiceOtherTax}
+        onInvoiceOtherTaxChange={setInvoiceOtherTax}
+        invoiceInterstate={invoiceInterstate}
+        onInvoiceInterstateChange={setInvoiceInterstate}
+      />
 
       {selectedInvoice && (
         <div id="printable-invoice-overlay" className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-md">

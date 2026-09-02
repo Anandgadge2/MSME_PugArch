@@ -53,6 +53,7 @@ export interface MarketplaceOrganizationSummary {
     logoFile?: MarketplaceLogoFile | null;
     profile?: MarketplaceOrganizationProfile | null;
     buyerProfiles?: { id: number; logoUrl?: string | null; bannerUrl?: string | null; }[];
+    certifications?: MarketplaceCertification[];
 }
 
 export interface MarketplaceProduct {
@@ -403,6 +404,48 @@ export const getGuestCartToken = () => {
     return token;
 };
 
+export interface MarketplaceSearchResult {
+    products: Array<{
+        id: number;
+        name: string;
+        price?: number | null;
+        discountPrice?: number | null;
+        currency?: string;
+        brand?: string | null;
+        unitOfMeasure?: string | null;
+        category?: { id: number; name: string } | null;
+        organization?: { id: number; organizationName: string; verificationStatus?: string; city?: string; district?: string } | null;
+        images?: Array<{ fileAsset?: { id: number; url: string } }>;
+    }>;
+    services: Array<{
+        id: number;
+        name: string;
+        pricingModel?: string;
+        basePrice?: number | null;
+        currency?: string;
+        category?: { id: number; name: string } | null;
+        organization?: { id: number; organizationName: string; verificationStatus?: string; city?: string; district?: string } | null;
+        images?: Array<{ fileAsset?: { id: number; url: string } }>;
+    }>;
+    sellers: Array<{
+        id: number;
+        organizationName: string;
+        organizationType?: string;
+        city?: string;
+        district?: string;
+        state?: string;
+        verificationStatus?: string;
+        logoFile?: { id: number; url: string } | null;
+        profile?: { logoUrl?: string | null } | null;
+    }>;
+    categories: Array<{
+        id: number;
+        name: string;
+        slug: string;
+        type: string;
+    }>;
+}
+
 export const marketplaceApi = {
     getHomeData: async (): Promise<MarketplaceHomeData> => {
         const res = await api.get('/api/marketplace/home', { headers: headers() });
@@ -444,6 +487,12 @@ export const marketplaceApi = {
     },
 
     getServiceDetail: async (id: number) => {
+        const res = await api.get(`/api/marketplace/services/${id}`, { headers: headers() });
+        const body = await readJsonResponse(res);
+        return unwrapApiData(body);
+    },
+
+    getService: async (id: number) => {
         const res = await api.get(`/api/marketplace/services/${id}`, { headers: headers() });
         const body = await readJsonResponse(res);
         return unwrapApiData(body);
@@ -500,7 +549,7 @@ export const marketplaceApi = {
         return unwrapApiData(body);
     },
 
-    search: async (q: string) => {
+    search: async (q: string): Promise<MarketplaceSearchResult> => {
         const res = await api.get(`/api/marketplace/search?q=${encodeURIComponent(q)}`, { headers: headers() });
         const body = await readJsonResponse(res);
         return unwrapApiData(body);

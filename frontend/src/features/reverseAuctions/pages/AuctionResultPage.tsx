@@ -23,7 +23,6 @@ export default function AuctionResultPage({ id }: { id: number }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Reverse Auction Result</p>
           <h1 className="text-2xl font-black text-slate-950">{query.data?.auction?.title || `Auction #${id}`}</h1>
           <p className="mt-1 text-xs font-bold text-slate-500">
             {query.data?.auction?.procurementMethod || 'REVERSE_AUCTION'} · Rank visibility: {query.data?.auction?.rankVisibility || 'SHOW_RANK_ONLY'} · Award basis: final L1 auction rank

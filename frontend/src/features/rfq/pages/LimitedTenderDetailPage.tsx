@@ -39,14 +39,19 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
   const { user } = useAuth();
   const currentUser: any = user;
 
+  const explicitReqId = searchParams?.get('requirementId') || '';
+  const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || '';
+  const rawIdParam = searchParams?.get('id') || '';
+
   const pathTokens = pathname.split('/').filter(Boolean);
   const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
   const pathnameId = (rawPathId && !['limited-tender', 'bids', 'tenders', 'details'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
 
-  const requestId = searchParams.get('requestId') || searchParams.get('id') || pathnameId;
-  const requirementId = searchParams.get('requirementId') || (!requestId ? pathnameId : '');
+  const activeLimitedId = explicitReqId || explicitRequestId || rawIdParam || pathnameId;
+  const requestId = explicitRequestId || (activeLimitedId.startsWith('REQ-') ? '' : activeLimitedId);
+  const requirementId = explicitReqId || (activeLimitedId.startsWith('REQ-') ? activeLimitedId : '');
+  const fallbackReqId = activeLimitedId;
 
-  const activeLimitedId = requestId || requirementId || pathnameId;
   const isMatchingInitial = Boolean(
     initialData && activeLimitedId && (
       String(initialData.id).toLowerCase() === String(activeLimitedId).toLowerCase() ||
@@ -57,25 +62,25 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
   );
 
   const { data: bidData, isLoading: isBidLoading, error: bidError } = useQuery({
-    queryKey: ['limited-tender-bid-detail', requestId],
-    queryFn: () => procurementBidApi.detail(requestId!),
-    enabled: !!requestId,
+    queryKey: ['limited-tender-bid-detail', requestId || activeLimitedId],
+    queryFn: () => procurementBidApi.detail((requestId || activeLimitedId)!),
+    enabled: !!(requestId || activeLimitedId),
     initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
   });
 
-  const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId;
+  const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || fallbackReqId;
 
   const { data: reqData, isLoading: isReqLoading, error: reqError } = useQuery({
     queryKey: ['limited-tender-req-detail', targetReqId],
     queryFn: async () => {
       try {
-        const res = await getApi<any>(`/api/requirements/${targetReqId}`);
-        if (res) return res.data || res;
-      } catch {}
-      try {
         const res2 = await getApi<any>(`/api/marketplace/requirements/${targetReqId}`);
         if (res2) return res2.data || res2;
+      } catch {}
+      try {
+        const res = await getApi<any>(`/api/requirements/${targetReqId}`);
+        if (res) return res.data || res;
       } catch {}
       return null;
     },
@@ -84,7 +89,7 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
     staleTime: 60_000,
   });
 
-  const isLoading = !initialData && (isBidLoading || (!!targetReqId && isReqLoading && !bidData));
+  const isLoading = !initialData && !bidData && !reqData && (isBidLoading || isReqLoading);
   const bid: any = bidData || {};
   const reqObj: any = reqData || {};
   const payload = bid.technicalPacket || bid.payload || reqObj.payload || {};

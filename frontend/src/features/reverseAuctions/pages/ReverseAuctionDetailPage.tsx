@@ -47,6 +47,22 @@ import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
 import { KpiCard } from '../../shared/KpiCard';
 
+function formatEnumLabel(val?: string | null): string {
+  if (!val) return 'N/A';
+  const str = String(val).trim();
+  if (str === 'ENGLISH_REVERSE') return 'English Reverse Auction';
+  if (str === 'ONLINE') return 'Online E-Auction';
+  if (str === 'SHOW_RANK_ONLY') return 'Show Rank Only';
+  if (str === 'SHOW_LOWEST_PRICE') return 'Show Lowest Price';
+  if (str === 'SHOW_PRICE_AND_RANK') return 'Show Price & Rank';
+  if (str === 'TECHNICAL_QUALIFICATION') return 'Technical Qualification';
+  if (str === 'DIRECT_AUCTION') return 'Direct Auction';
+  if (str === 'BID_WITH_REVERSE_AUCTION') return 'Bid with Reverse Auction';
+  return str
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase());
+}
+
 export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   const qc = useQueryClient();
   const router = useRouter();
@@ -174,14 +190,14 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   const durationMin = Math.round((endMs - startMs) / 60000);
 
   const RowItem = ({ icon: Icon, label, value, highlight }: { icon: React.ElementType; label: string; value: string; highlight?: boolean }) => (
-    <div className="flex items-center gap-3.5 py-1.5 group">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 border border-slate-200/80 text-[#0b2447] shadow-xs group-hover:scale-105 group-hover:border-blue-300 transition-all duration-200">
-        <Icon className="h-4 w-4" />
+    <div className="flex items-center justify-between py-2 px-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors rounded-lg">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <Icon className="h-4 w-4 text-slate-400 shrink-0" />
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate">{label}</span>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{label}</p>
-        <p title={value} className={cn("mt-0.5 text-xs sm:text-[13px] font-black truncate", highlight ? "text-blue-600" : "text-slate-800")}>{value}</p>
-      </div>
+      <span title={value} className={cn("text-xs font-black truncate text-right max-w-[55%]", highlight ? "text-blue-600 font-extrabold" : "text-slate-900")}>
+        {value}
+      </span>
     </div>
   );
 
@@ -237,7 +253,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
 
             {user && user.role === 'seller' && (
               hasJoined ? (
-                <Link href={`/reverse-auctions/${id}/live`} className="shrink-0">
+                <Link href={`/seller/procurement/reverse-auction/${id}/live`} className="shrink-0">
                   <Button type="button" className="h-11 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:via-indigo-500 hover:to-blue-600 px-6 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-blue-500/25 transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2">
                     <Play className="h-4 w-4 fill-white" /> Live Bid Console
                   </Button>
@@ -326,14 +342,14 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
               </h2>
             </div>
             <div className="mt-4 space-y-3">
-              <RowItem icon={Scale} label="Procurement Method" value={auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'Bid with Reverse Auction' : 'Reverse Auction'} />
+              <RowItem icon={Scale} label="Procurement Method" value={formatEnumLabel(auction.data.procurementMethod)} />
               <RowItem icon={Tag} label="Category" value={auction.data.category || 'Not specified'} />
               <RowItem icon={Clock} label="Start Time" value={formatDateTime(auction.data.startTime)} />
               <RowItem icon={Hourglass} label="End Time" value={formatDateTime(auction.data.endTime)} />
               <RowItem icon={Clock} label="Duration" value={`${durationMin} minutes`} />
               <RowItem icon={Award} label="Status" value={status} highlight />
-              <RowItem icon={Gavel} label="Auction Type" value={auction.data.auctionType || 'ENGLISH_REVERSE'} />
-              <RowItem icon={Laptop} label="Auction Mode" value={auction.data.auctionMode || 'ONLINE'} />
+              <RowItem icon={Gavel} label="Auction Type" value={formatEnumLabel(auction.data.auctionType || 'ENGLISH_REVERSE')} />
+              <RowItem icon={Laptop} label="Auction Mode" value={formatEnumLabel(auction.data.auctionMode || 'ONLINE')} />
             </div>
           </section>
 
@@ -348,7 +364,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
             <div className="mt-4 space-y-3">
               <RowItem icon={IndianRupee} label="Opening Price" value={formatCurrency(auction.data.startPrice)} />
               <RowItem icon={TrendingDown} label="Min Decrement" value={auction.data.minDecrementAmount ? formatCurrency(auction.data.minDecrementAmount) : `${auction.data.minDecrementPercent}%`} />
-              <RowItem icon={Eye} label="Rank Visibility" value={auction.data.rankVisibility || 'SHOW_RANK_ONLY'} />
+              <RowItem icon={Eye} label="Rank Visibility" value={formatEnumLabel(auction.data.rankVisibility || 'SHOW_RANK_ONLY')} />
               <RowItem icon={Users} label="Minimum Qualified Bidders" value={String(auction.data.minimumQualifiedBidders || 2)} />
               <RowItem icon={Settings} label="Auto-Extension" value={autoExtensionEnabled ? 'Enabled' : 'Disabled'} />
               <RowItem icon={IndianRupee} label="Currency" value={auction.data.currency || 'INR'} />
@@ -445,7 +461,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/reverse-auctions/${id}/live`} className="w-full sm:w-auto">
+          <Link href={`/seller/procurement/reverse-auction/${id}/live`} className="w-full sm:w-auto">
             <Button type="button" className="w-full h-10 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold shadow-md shadow-blue-500/20">
               <Activity className="mr-2 h-4 w-4" /> Open Full Live Board
             </Button>
@@ -495,11 +511,11 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
                 <FileText className="h-4 w-4 text-blue-600" /> 1. Auction Overview
               </h2>
               <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3">
-                <KpiCard label="Procurement Method" value={auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'Bid with Reverse Auction' : 'Reverse Auction'} subtext="Auction procedure" icon={Scale} tone="blue" />
+                <KpiCard label="Procurement Method" value={formatEnumLabel(auction.data.procurementMethod)} subtext="Auction procedure" icon={Scale} tone="blue" />
                 <KpiCard label="Buyer Organization" value={auction.data.buyerOrganizationName || (auction.data.buyerOrgId ? `Buyer Org #${auction.data.buyerOrgId}` : 'Verified Buyer')} subtext="Host organization" icon={Building2} tone="indigo" />
                 <KpiCard label="Category" value={auction.data.category || 'Not specified'} subtext="Product classification" icon={Tag} tone="amber" />
-                <KpiCard label="Auction Type" value={auction.data.auctionType || 'ENGLISH_REVERSE'} subtext="Bidding mechanism" icon={Settings} tone="slate" />
-                <KpiCard label="Auction Mode" value={auction.data.auctionMode || 'ONLINE'} subtext="Execution channel" icon={Activity} tone="emerald" />
+                <KpiCard label="Auction Type" value={formatEnumLabel(auction.data.auctionType || 'ENGLISH_REVERSE')} subtext="Bidding mechanism" icon={Settings} tone="slate" />
+                <KpiCard label="Auction Mode" value={formatEnumLabel(auction.data.auctionMode || 'ONLINE')} subtext="Execution channel" icon={Activity} tone="emerald" />
                 <KpiCard label="Minimum Qualified Bidders" value={String(auction.data.minimumQualifiedBidders || 2)} subtext="Bidder threshold" icon={Users} tone="purple" />
                 <KpiCard label="Start Time" value={formatDateTime(auction.data.startTime)} subtext="Bidding window opens" icon={Clock} tone="blue" />
                 <KpiCard label="End Time" value={formatDateTime(auction.data.endTime)} subtext="Bidding window closes" icon={Clock} tone="red" />
@@ -525,14 +541,14 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
                 <InfoRow label="Opening Price" value={formatCurrency(auction.data.startPrice)} />
                 <InfoRow label="Reserve Price" value={auction.data.reservePrice ? formatCurrency(auction.data.reservePrice) : 'Not configured'} />
                 <InfoRow label="Minimum Decrement" value={auction.data.minDecrementAmount ? formatCurrency(auction.data.minDecrementAmount) : `${auction.data.minDecrementPercent}%`} />
-                <InfoRow label="Rank Visibility" value={auction.data.rankVisibility || (auction.data.allowCompetitorNames ? 'SHOW_LOWEST_PRICE' : 'SHOW_RANK_ONLY')} />
+                <InfoRow label="Rank Visibility" value={formatEnumLabel(auction.data.rankVisibility || (auction.data.allowCompetitorNames ? 'SHOW_LOWEST_PRICE' : 'SHOW_RANK_ONLY'))} />
                 <InfoRow label="Auto Extension" value={autoExtensionEnabled ? `Trigger window: ${auction.data.autoExtensionWindowMinutes}m` : 'Disabled'} />
                 <InfoRow label="Extension Length" value={autoExtensionEnabled ? `${auction.data.autoExtensionByMinutes} mins` : 'N/A'} />
                 <InfoRow label="Max Auto-Extensions" value={autoExtensionEnabled ? String(auction.data.maxAutoExtensions) : 'N/A'} />
                 <InfoRow label="Extension Count" value={String(extensionCount)} />
                 <InfoRow label="Currency" value={auction.data.currency || 'INR'} />
                 <InfoRow label="Terms Document" value={auction.data.termsDocumentName || 'Not attached'} />
-                <InfoRow label="Auction Trigger" value={auction.data.auctionTrigger || (auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'TECHNICAL_QUALIFICATION' : 'DIRECT_AUCTION')} />
+                <InfoRow label="Auction Trigger" value={formatEnumLabel(auction.data.auctionTrigger || (auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'TECHNICAL_QUALIFICATION' : 'DIRECT_AUCTION'))} />
                 <InfoRow label="Taxes Rule" value="Excluded from bid values" />
               </div>
             </CardContent>
@@ -590,9 +606,9 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 hover:bg-slate-50 hover:border-slate-200 transition">
-      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-1 text-xs sm:text-[13px] font-bold text-slate-800 text-wrap-anywhere leading-relaxed">{value}</p>
+    <div className="py-2.5 px-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors rounded-lg flex flex-col justify-center">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">{label}</p>
+      <p className="mt-0.5 text-xs sm:text-[13px] font-bold text-slate-900 text-wrap-anywhere leading-snug">{value}</p>
     </div>
   );
 }

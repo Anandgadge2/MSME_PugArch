@@ -242,16 +242,8 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     const counts: Record<string, number> = {};
 
     const rawSql = async (label: string, sql: string) => {
-      try {
-        const result = await tx.$executeRawUnsafe(sql);
-        counts[label] = (counts[label] || 0) + (typeof result === 'number' ? result : 0);
-      } catch (err: any) {
-        const msg = err?.message || '';
-        if (msg.includes('Transaction already closed') || msg.includes('expired transaction')) {
-          throw err;
-        }
-        if (req?.log) req.log.warn?.({ label, err: msg }, '[UserDelete] rawSql failed');
-      }
+      const result = await tx.$executeRawUnsafe(sql);
+      counts[label] = (counts[label] || 0) + (typeof result === 'number' ? result : 0);
     };
 
     const uIn = `IN (${id})`;
@@ -263,6 +255,7 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
       } catch { return []; }
     };
 
+    // Pre-resolve subqueries & IDs
     const procBidSub = `SELECT id FROM "ProcurementBid" WHERE "buyerId" ${uIn}`;
     const procBidClarSub = `SELECT id FROM "ProcurementBidClarification" WHERE "bidId" IN (${procBidSub})`;
     const procBidPartSub = `SELECT id FROM "ProcurementBidParticipation" WHERE "bidId" IN (${procBidSub})`;
@@ -289,8 +282,14 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     const auctionSub = `SELECT id FROM "Auction" WHERE "currentWinnerId" ${uIn} OR "winnerSellerId" ${uIn} OR "createdByUserId" ${uIn}`;
     const catBatchSub = `SELECT id FROM "CatalogueImportBatch" WHERE "sellerId" ${uIn}`;
     const sellerProfileSub = `SELECT id FROM "SellerProfile" WHERE "userId" ${uIn}`;
+    const userProductSub = `SELECT id FROM "Product" WHERE "sellerId" ${uIn}`;
+    const userServiceSub = `SELECT id FROM "Service" WHERE "sellerId" ${uIn}`;
+    const userFileAssetSub = `SELECT id FROM "FileAsset" WHERE "ownerId" ${uIn}`;
 
+    // 1. Marketplace & Interactions
     await rawSql('MarketplaceInteraction', `DELETE FROM "MarketplaceInteraction" WHERE "userId" ${uIn}`);
+
+    // 2. Procurement
     await rawSql('ProcurementBidClarificationFile', `DELETE FROM "ProcurementBidClarificationFile" WHERE "clarificationId" IN (${procBidClarSub}) OR "uploadedById" ${uIn}`);
     await rawSql('ProcurementBidClarification', `DELETE FROM "ProcurementBidClarification" WHERE "bidId" IN (${procBidSub}) OR "requestedById" ${uIn} OR "respondedById" ${uIn} OR "sellerId" ${uIn} OR "buyerId" ${uIn}`);
     await rawSql('ProcurementBidParticipationDocument', `DELETE FROM "ProcurementBidParticipationDocument" WHERE "participationId" IN (${procBidPartSub}) OR "sellerId" ${uIn}`);
@@ -305,21 +304,43 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     await rawSql('ProcurementBid', `DELETE FROM "ProcurementBid" WHERE "buyerId" ${uIn}`);
     await rawSql('ProcurementApproval', `DELETE FROM "ProcurementApproval" WHERE "approverId" ${uIn}`);
     await rawSql('ProcurementRequest', `DELETE FROM "ProcurementRequest" WHERE "buyerId" ${uIn}`);
+    await rawSql('L1Comparison', `DELETE FROM "L1Comparison" WHERE "buyerId" ${uIn}`);
 
+    // 3. Buyer Requirements & Clarifications
     await rawSql('BuyerRequirement', `DELETE FROM "BuyerRequirement" WHERE "createdById" ${uIn} OR "approvedById" ${uIn}`);
     await rawSql('RequirementResponse', `DELETE FROM "RequirementResponse" WHERE "sellerUserId" ${uIn}`);
+    await rawSql('RequirementClarification', `DELETE FROM "RequirementClarification" WHERE "askedById" ${uIn} OR "answeredById" ${uIn}`);
 
-    await rawSql('CartItem_user', `DELETE FROM "CartItem" WHERE "sellerId" ${uIn}`);
+    // 4. Products & Services & Carts cleanup (before deleting products)
+    await rawSql('CartItem_user', `DELETE FROM "CartItem" WHERE "sellerId" ${uIn} OR "productId" IN (${userProductSub}) OR "serviceId" IN (${userServiceSub})`);
     await rawSql('Cart_nullify_approved', `UPDATE "Cart" SET "approvedById" = NULL WHERE "approvedById" ${uIn}`);
     await rawSql('Cart_nullify_rejected', `UPDATE "Cart" SET "rejectedById" = NULL WHERE "rejectedById" ${uIn}`);
     await rawSql('CartItem_nullify', `UPDATE "CartItem" SET "technicalApprovedById" = NULL WHERE "technicalApprovedById" ${uIn}`);
     await rawSql('Cart_user', `DELETE FROM "Cart" WHERE "createdById" ${uIn}`);
+    await rawSql('GuestCartItem_user', `DELETE FROM "GuestCartItem" WHERE "productId" IN (${userProductSub}) OR "serviceId" IN (${userServiceSub})`);
 
+    await rawSql('RequirementItem_nullify_prod', `UPDATE "RequirementItem" SET "productId" = NULL WHERE "productId" IN (${userProductSub})`);
+    await rawSql('TenderItem_nullify_prod', `UPDATE "TenderItem" SET "productId" = NULL WHERE "productId" IN (${userProductSub})`);
+    await rawSql('BidItem_nullify_prod', `UPDATE "BidItem" SET "productId" = NULL WHERE "productId" IN (${userProductSub})`);
+    await rawSql('PurchaseOrderItem_nullify_prod', `UPDATE "PurchaseOrderItem" SET "productId" = NULL WHERE "productId" IN (${userProductSub})`);
+    await rawSql('InvoiceItem_nullify_prod', `UPDATE "InvoiceItem" SET "productId" = NULL WHERE "productId" IN (${userProductSub})`);
+
+    await rawSql('ProductImage_u', `DELETE FROM "ProductImage" WHERE "productId" IN (${userProductSub})`);
+    await rawSql('ProductSpecification_u', `DELETE FROM "ProductSpecification" WHERE "productId" IN (${userProductSub})`);
+    await rawSql('ServiceSpecification_u', `DELETE FROM "ServiceSpecification" WHERE "serviceId" IN (${userServiceSub})`);
+    await rawSql('Certification_u', `DELETE FROM "Certification" WHERE "productId" IN (${userProductSub}) OR "serviceId" IN (${userServiceSub}) OR "sellerProfileId" IN (${sellerProfileSub})`);
+
+    await rawSql('Product_user', `DELETE FROM "Product" WHERE "sellerId" ${uIn}`);
+    await rawSql('Service_user', `DELETE FROM "Service" WHERE "sellerId" ${uIn}`);
+    await rawSql('Requirement_user', `DELETE FROM "Requirement" WHERE "buyerId" ${uIn}`);
+
+    // 5. GRN
     await rawSql('GRN_nullify_approved', `UPDATE "GoodsReceiptNote" SET "approvedById" = NULL WHERE "approvedById" ${uIn}`);
     await rawSql('GRN_nullify_rejected', `UPDATE "GoodsReceiptNote" SET "rejectedById" = NULL WHERE "rejectedById" ${uIn}`);
     await rawSql('GrnDocument', `DELETE FROM "GrnDocument" WHERE "uploadedById" ${uIn}`);
     await rawSql('GoodsReceiptNote', `DELETE FROM "GoodsReceiptNote" WHERE "receivedById" ${uIn}`);
 
+    // 6. Org Membership & Access
     await rawSql('OrgMembership_nullify_transferred', `UPDATE "OrgMembership" SET "accessTransferredFromUserId" = NULL WHERE "accessTransferredFromUserId" ${uIn}`);
     await rawSql('OrgMembership_nullify_deactivated', `UPDATE "OrgMembership" SET "deactivatedByUserId" = NULL WHERE "deactivatedByUserId" ${uIn}`);
     await rawSql('OrgMembership_nullify_invited', `UPDATE "OrgMembership" SET "invitedById" = NULL WHERE "invitedById" ${uIn}`);
@@ -328,22 +349,27 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     await rawSql('OrgMembership', `DELETE FROM "OrgMembership" WHERE "userId" ${uIn}`);
     await rawSql('AccessTransferLog', `DELETE FROM "AccessTransferLog" WHERE "fromUserId" ${uIn} OR "toUserId" ${uIn} OR "performedByUserId" ${uIn}`);
 
+    // 7. Delivery Address & Group
     await rawSql('DeliveryAddress', `DELETE FROM "DeliveryAddress" WHERE "buyerId" ${uIn}`);
     await rawSql('AddressGroup', `DELETE FROM "AddressGroup" WHERE "buyerId" ${uIn}`);
 
+    // 8. Quotes & Direct Purchases
     await rawSql('QuoteRequestClarification', `DELETE FROM "QuoteRequestClarification" WHERE "askedById" ${uIn} OR "answeredById" ${uIn}`);
     await rawSql('QuoteResponse', `DELETE FROM "QuoteResponse" WHERE "sellerId" ${uIn}`);
     await rawSql('QuoteRequest', `DELETE FROM "QuoteRequest" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
-    await rawSql('RequirementClarification', `DELETE FROM "RequirementClarification" WHERE "askedById" ${uIn} OR "answeredById" ${uIn}`);
     await rawSql('DirectPurchase', `DELETE FROM "DirectPurchase" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
 
+    // 9. Tenders & Bids
     await rawSql('BidItem', `DELETE FROM "BidItem" WHERE "bidId" IN (${bidSub})`);
     await rawSql('TechnicalEvaluationResult', `DELETE FROM "TechnicalEvaluationResult" WHERE "tenderId" IN (${tenderSub}) OR "evaluatorId" ${uIn}`);
     await rawSql('TechnicalEvaluationCriteria', `DELETE FROM "TechnicalEvaluationCriteria" WHERE "tenderId" IN (${tenderSub})`);
     await rawSql('FinancialEvaluation', `DELETE FROM "FinancialEvaluation" WHERE "tenderId" IN (${tenderSub}) OR "evaluatorId" ${uIn}`);
     await rawSql('TenderDocument', `DELETE FROM "TenderDocument" WHERE "tenderId" IN (${tenderSub})`);
     await rawSql('TenderItem', `DELETE FROM "TenderItem" WHERE "tenderId" IN (${tenderSub})`);
-    await rawSql('TenderParticipant', `DELETE FROM "TenderParticipant" WHERE "tenderId" IN (${tenderSub})`);
+    await rawSql('TenderParticipant', `DELETE FROM "TenderParticipant" WHERE "tenderId" IN (${tenderSub}) OR "sellerId" ${uIn}`);
+
+    // 10. Delivery & Invoices & Payments & Escrow
+    await rawSql('DeliveryDpExtension', `DELETE FROM "DeliveryDpExtension" WHERE "requestedById" ${uIn} OR "respondedById" ${uIn}`);
 
     if (deliveryIds.length > 0) {
       await rawSql('DeliveryTrackingEvent', `DELETE FROM "DeliveryTrackingEvent" WHERE "deliveryTrackingId" ${sqlIn(deliveryIds)}`);
@@ -354,6 +380,10 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
       await rawSql('PaymentSettlement_nullify_d', `UPDATE "PaymentSettlement" SET "invoiceVerifiedById" = NULL, "approvedById" = NULL, "releasedById" = NULL, "rejectedById" = NULL WHERE "deliveryTrackingId" ${sqlIn(deliveryIds)}`);
       await rawSql('PaymentSettlement_delivery', `DELETE FROM "PaymentSettlement" WHERE "deliveryTrackingId" ${sqlIn(deliveryIds)}`);
     }
+    await rawSql('DeliveryStatusLog_u', `DELETE FROM "DeliveryStatusLog" WHERE "changedById" ${uIn}`);
+    await rawSql('DeliveryDocument_u', `DELETE FROM "DeliveryDocument" WHERE "uploadedById" ${uIn}`);
+    await rawSql('DeliveryParticipant_u', `DELETE FROM "DeliveryParticipant" WHERE "userId" ${uIn} OR "assignedById" ${uIn}`);
+
     if (poIds.length > 0) {
       await rawSql('DeliveryTracking', `DELETE FROM "DeliveryTracking" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
       await rawSql('DeliveryWorkflow', `DELETE FROM "DeliveryWorkflow" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
@@ -367,6 +397,8 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
       await rawSql('PaymentTransaction_nullify_inv', `UPDATE "PaymentTransaction" SET "invoiceId" = NULL WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
     }
     if (poIds.length > 0) await rawSql('Invoice', `DELETE FROM "Invoice" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
+    await rawSql('Invoice_u', `DELETE FROM "Invoice" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
+
     if (poIds.length > 0) {
       await rawSql('InspectionReport', `DELETE FROM "InspectionReport" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
       await rawSql('InspectionRecord', `DELETE FROM "InspectionRecord" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
@@ -403,6 +435,8 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
       await rawSql('MilestonePayment_u', `DELETE FROM "MilestonePayment" WHERE "milestoneId" ${sqlIn(uMilestoneIds)}`);
       await rawSql('EscrowTransaction_ms_u', `DELETE FROM "EscrowTransaction" WHERE "milestoneId" ${sqlIn(uMilestoneIds)}`);
     }
+    await rawSql('MilestoneApproval_approver', `DELETE FROM "MilestoneApproval" WHERE "approverId" ${uIn}`);
+
     if (uEscrowIds.length > 0) {
       await rawSql('Milestone_u', `DELETE FROM "Milestone" WHERE "escrowAccountId" ${sqlIn(uEscrowIds)}`);
       await rawSql('EscrowTransaction_esc_u', `DELETE FROM "EscrowTransaction" WHERE "escrowAccountId" ${sqlIn(uEscrowIds)}`);
@@ -413,11 +447,13 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
       await rawSql('OfflinePaymentProof_u', `DELETE FROM "OfflinePaymentProof" WHERE "paymentTransactionId" ${sqlIn(userPaymentIds)}`);
       await rawSql('PaymentSettlement_u', `DELETE FROM "PaymentSettlement" WHERE "paymentTransactionId" ${sqlIn(userPaymentIds)}`);
     }
+    await rawSql('PaymentSettlement_nullify_u', `UPDATE "PaymentSettlement" SET "invoiceVerifiedById" = NULL, "approvedById" = NULL, "releasedById" = NULL, "rejectedById" = NULL WHERE "invoiceVerifiedById" ${uIn} OR "approvedById" ${uIn} OR "releasedById" ${uIn} OR "rejectedById" ${uIn}`);
     await rawSql('PaymentTransaction_u', `DELETE FROM "PaymentTransaction" WHERE "payerId" ${uIn} OR "payeeId" ${uIn}`);
 
+    // 11. Disputes, Messages, Grievances, Auctions
     await rawSql('DisputeAttachment', `DELETE FROM "DisputeAttachment" WHERE "disputeId" IN (${disputeSub}) OR "uploadedByUserId" ${uIn}`);
     await rawSql('DisputeEvidence', `DELETE FROM "DisputeEvidence" WHERE "disputeId" IN (${disputeSub}) OR "uploadedById" ${uIn}`);
-    await rawSql('DisputeMessage_d', `DELETE FROM "DisputeMessage" WHERE "disputeId" IN (${disputeSub})`);
+    await rawSql('DisputeMessage_d', `DELETE FROM "DisputeMessage" WHERE "disputeId" IN (${disputeSub}) OR "senderId" ${uIn}`);
     await rawSql('Dispute_nullify_assigned', `UPDATE "Dispute" SET "assignedAdminId" = NULL WHERE "assignedAdminId" ${uIn}`);
     await rawSql('Dispute_nullify_resolved', `UPDATE "Dispute" SET "resolvedById" = NULL WHERE "resolvedById" ${uIn}`);
     await rawSql('Dispute', `DELETE FROM "Dispute" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn} OR "raisedById" ${uIn}`);
@@ -436,15 +472,18 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     await rawSql('AuctionBid', `DELETE FROM "AuctionBid" WHERE "auctionId" IN (${auctionSub}) OR "sellerId" ${uIn}`);
     await rawSql('Auction_nullify_winner', `UPDATE "Auction" SET "currentWinnerId" = NULL WHERE "currentWinnerId" ${uIn}`);
     await rawSql('Auction_nullify_winnerSeller', `UPDATE "Auction" SET "winnerSellerId" = NULL WHERE "winnerSellerId" ${uIn}`);
+    await rawSql('Auction_user', `DELETE FROM "Auction" WHERE "createdByUserId" ${uIn}`);
 
     await rawSql('Contract', `DELETE FROM "Contract" WHERE "bidId" IN (${bidSub}) OR "tenderId" IN (${tenderSub})`);
     await rawSql('ComparativeStatement_t', `DELETE FROM "ComparativeStatement" WHERE "tenderId" IN (${tenderSub})`);
     await rawSql('Bid', `DELETE FROM "Bid" WHERE "sellerId" ${uIn}`);
     await rawSql('Tender', `DELETE FROM "Tender" WHERE "buyerId" ${uIn}`);
 
+    // 12. Ratings, Violations, Fraud, Misc
     await rawSql('SupplierRating', `DELETE FROM "SupplierRating" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
     await rawSql('BuyerRating', `DELETE FROM "BuyerRating" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
     await rawSql('ComplianceViolation', `DELETE FROM "ComplianceViolation" WHERE "userId" ${uIn}`);
+    await rawSql('FraudAlert', `DELETE FROM "FraudAlert" WHERE "userId" ${uIn} OR "reviewedById" ${uIn}`);
     await rawSql('InvoiceFactoring_u', `DELETE FROM "InvoiceFactoring" WHERE "sellerId" ${uIn} OR "financierId" ${uIn}`);
 
     await rawSql('CatalogueImportError', `DELETE FROM "CatalogueImportError" WHERE "batchId" IN (${catBatchSub})`);
@@ -455,6 +494,7 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     await rawSql('BidWizardDraft', `DELETE FROM "BidWizardDraft" WHERE "buyerId" ${uIn}`);
     await rawSql('Approval', `DELETE FROM "Approval" WHERE "userId" ${uIn}`);
     await rawSql('PasswordHistory', `DELETE FROM "PasswordHistory" WHERE "userId" ${uIn}`);
+    await rawSql('PlatformFeature_nullify', `UPDATE "PlatformFeature" SET "updatedById" = NULL WHERE "updatedById" ${uIn}`);
     await rawSql('ScopedInvitation', `DELETE FROM "ScopedInvitation" WHERE "invitedById" ${uIn}`);
     await rawSql('BuyerAcceptance', `DELETE FROM "BuyerAcceptance" WHERE "acceptedById" ${uIn}`);
 
@@ -473,6 +513,7 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     await rawSql('ProvisionalReceiptCertificate_u', `DELETE FROM "ProvisionalReceiptCertificate" WHERE "generatedById" ${uIn}`);
     await rawSql('ConsigneeReceiptAcceptanceCertificate_u', `DELETE FROM "ConsigneeReceiptAcceptanceCertificate" WHERE "generatedById" ${uIn}`);
 
+    // 13. Roles, Sessions, Logs, Verification
     await rawSql('UserRole', `DELETE FROM "UserRole" WHERE "userId" ${uIn}`);
     await rawSql('UserRole_nullify', `UPDATE "UserRole" SET "assignedById" = NULL WHERE "assignedById" ${uIn}`);
     await rawSql('UserSession', `DELETE FROM "UserSession" WHERE "userId" ${uIn}`);
@@ -483,19 +524,33 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     await rawSql('ApiLog', `DELETE FROM "ApiLog" WHERE "userId" ${uIn}`);
     await rawSql('ApiVerificationLog', `DELETE FROM "ApiVerificationLog" WHERE "userId" ${uIn}`);
     await rawSql('AuditLog', `DELETE FROM "AuditLog" WHERE "userId" ${uIn}`);
-    await rawSql('FileAsset', `DELETE FROM "FileAsset" WHERE "ownerId" ${uIn}`);
     await rawSql('KycAuditLog', `DELETE FROM "KycAuditLog" WHERE "userId" ${uIn}`);
     await rawSql('KycAuthSession', `DELETE FROM "KycAuthSession" WHERE "userId" ${uIn}`);
     await rawSql('UserKycVerification', `DELETE FROM "UserKycVerification" WHERE "userId" ${uIn}`);
 
+    // 14. FileAsset cleanup (nullify all external references before deleting FileAsset)
+    await rawSql('OrgLogo_nullify_file', `UPDATE "Organization" SET "organizationLogoFileId" = NULL WHERE "organizationLogoFileId" IN (${userFileAssetSub})`);
+    await rawSql('SellerDoc_nullify_file', `UPDATE "SellerDocument" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+    await rawSql('TenderDoc_nullify_file', `UPDATE "TenderDocument" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+    await rawSql('PO_nullify_file', `UPDATE "PurchaseOrder" SET "pdfFileId" = NULL WHERE "pdfFileId" IN (${userFileAssetSub})`);
+    await rawSql('Invoice_nullify_file', `UPDATE "Invoice" SET "invoiceFileId" = NULL WHERE "invoiceFileId" IN (${userFileAssetSub})`);
+    await rawSql('GrnDoc_nullify_file', `UPDATE "GrnDocument" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+    await rawSql('DeliveryDoc_nullify_file', `UPDATE "DeliveryDocument" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+    await rawSql('DeliveryStatusLog_nullify_file', `UPDATE "DeliveryStatusLog" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+    await rawSql('ShgMeeting_nullify_file', `UPDATE "ShgMeeting" SET "minutesFileAssetId" = NULL WHERE "minutesFileAssetId" IN (${userFileAssetSub})`);
+    await rawSql('ShgDoc_nullify_file', `UPDATE "ShgDocument" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+    await rawSql('ShgResolution_nullify_file', `UPDATE "ShgResolution" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+    await rawSql('Cert_nullify_file', `UPDATE "Certification" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+    await rawSql('FileAsset_nullify_parent', `UPDATE "FileAsset" SET "parentId" = NULL WHERE "parentId" IN (${userFileAssetSub})`);
+    await rawSql('FileAsset', `DELETE FROM "FileAsset" WHERE "ownerId" ${uIn}`);
+
+    // 15. Finally delete User
     await rawSql('User', `DELETE FROM "User" WHERE "id" = ${id}`);
 
     return counts;
   }, { timeout: 180_000, maxWait: 30_000 }).catch((txErr: any) => {
     throw new ApiError(500, txErr.message || 'User atomic delete transaction failed', 'USER_DELETE_ATOMIC_FAILURE');
   });
-
-  // ORGANIZATION_DELETE_ATOMIC_FAILURE
 
   if (req) {
     await createAuditLog(req, {
@@ -1094,7 +1149,8 @@ router.delete('/master-admin/companies/:id/cascade', ...masterOnly, requirePermi
     metadata: { reason, companyName: company.name, deletedCounts: summary }
   });
 
-  await invalidateByPattern('master-admin:*');
+  await invalidateByPattern('cache:admin:*').catch(() => undefined);
+  await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
 
   jsonOk(res, { deleted: summary, companyName: company.name }, `Company "${company.name}" and all related data permanently deleted.`);
 }));
@@ -2112,57 +2168,17 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
   // Perform cascade deletion in a transaction
   const summary = await prisma.$transaction(async (tx: any) => {
     const counts: Record<string, number> = {};
-    let spIdx = 0;
 
     // ─── Raw SQL helper: bypasses Prisma middleware ───
     const rawSql = async (label: string, sql: string) => {
-      try {
-        const result = await tx.$executeRawUnsafe(sql);
-        counts[label] = (counts[label] || 0) + (typeof result === 'number' ? result : 0);
-      } catch (err: any) {
-        const msg = err?.message || '';
-        if (msg.includes('Transaction already closed') || msg.includes('expired transaction')) {
-          throw err;
-        }
-        if (req?.log) req.log.warn?.({ label, err: msg }, '[CascadeDelete] rawSql failed');
-      }
+      const result = await tx.$executeRawUnsafe(sql);
+      counts[label] = (counts[label] || 0) + (typeof result === 'number' ? result : 0);
     };
 
     // ─── SQL helpers ───
-    const U = userIds.join(','); // user IDs list
-    const uIn = `IN (${U})`;    // "IN (3,2)"
-
-    // Reusable subqueries
-    const procBidSub = `SELECT id FROM "ProcurementBid" WHERE "buyerOrganizationId" = ${id} OR "buyerId" ${uIn}`;
-    const procBidClarSub = `SELECT id FROM "ProcurementBidClarification" WHERE "bidId" IN (${procBidSub})`;
-    const procBidPartSub = `SELECT id FROM "ProcurementBidParticipation" WHERE "bidId" IN (${procBidSub})`;
-    const productSub = `SELECT id FROM "Product" WHERE "organizationId" = ${id}`;
-    const serviceSub = `SELECT id FROM "Service" WHERE "organizationId" = ${id}`;
-    const cartSub = `SELECT id FROM "Cart" WHERE "organizationId" = ${id}`;
-    const grnSub = `SELECT id FROM "GoodsReceiptNote" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "receivedById" ${uIn}` : ''}`;
-    const customRoleSub = `SELECT id FROM "OrgCustomRole" WHERE "organizationId" = ${id}`;
-    const tenderSub = `SELECT id FROM "Tender" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "buyerId" ${uIn}` : ''}`;
-    const bidSub = `SELECT id FROM "Bid" WHERE "tenderId" IN (${tenderSub})${userIds.length > 0 ? ` OR "sellerId" ${uIn}` : ''}`;
-    const poSub = `SELECT id FROM "PurchaseOrder" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`;
-    const deliverySub = `SELECT id FROM "DeliveryTracking" WHERE "purchaseOrderId" IN (${poSub})`;
-    const invoiceSub = `SELECT id FROM "Invoice" WHERE "purchaseOrderId" IN (${poSub})`;
-    const poPaymentSub = `SELECT id FROM "PaymentTransaction" WHERE "purchaseOrderId" IN (${poSub})`;
-    const poEscrowSub = `SELECT id FROM "EscrowAccount" WHERE "paymentTransactionId" IN (${poPaymentSub})`;
-    const poMilestoneSub = `SELECT id FROM "Milestone" WHERE "escrowAccountId" IN (${poEscrowSub})`;
-    const poItemSub = `SELECT id FROM "PurchaseOrderItem" WHERE "purchaseOrderId" IN (${poSub})`;
-    const userPaymentSub = `SELECT id FROM "PaymentTransaction" WHERE "payerId" ${uIn} OR "payeeId" ${uIn}`;
-    const uEscrowSub = `SELECT id FROM "EscrowAccount" WHERE "paymentTransactionId" IN (${userPaymentSub})`;
-    const uMilestoneSub = `SELECT id FROM "Milestone" WHERE "escrowAccountId" IN (${uEscrowSub})`;
-    const disputeSub = `SELECT id FROM "Dispute" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn} OR "raisedById" ${uIn} OR "buyerOrgId" = ${id} OR "sellerOrgId" = ${id} OR "raisedByOrgId" = ${id} OR "againstOrgId" = ${id}`;
-    const convSub = `SELECT id FROM "Conversation" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`;
-    const msgSub = `SELECT id FROM "Message" WHERE "conversationId" IN (${convSub})`;
-    const grievanceSub = `SELECT id FROM "GrievanceTicket" WHERE "userId" ${uIn} OR "assignedAdminId" ${uIn}`;
-    const auctionSub = `SELECT id FROM "Auction" WHERE "currentWinnerId" ${uIn} OR "winnerSellerId" ${uIn} OR "createdByUserId" ${uIn} OR "buyerOrgId" = ${id}`;
-    const catBatchSub = `SELECT id FROM "CatalogueImportBatch" WHERE "sellerId" ${uIn}`;
-    const sellerProfileSub = `SELECT id FROM "SellerProfile" WHERE "userId" ${uIn}`;
-
-    // ─── Pre-resolve deeply nested relation IDs to avoid 3-5 level subquery nesting ───
     const sqlIn = (ids: number[]) => ids.length > 0 ? `IN (${ids.join(',')})` : 'IN (NULL)';
+    const uIn = sqlIn(userIds);
+
     const resolveIds = async (sql: string): Promise<number[]> => {
       try {
         const rows: any[] = await tx.$queryRawUnsafe(sql);
@@ -2170,7 +2186,29 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       } catch { return []; }
     };
 
-    // PO chain (was 4-level deep nesting: PO → PaymentTx → EscrowAccount → Milestone)
+    // Reusable subqueries
+    const procBidSub = `SELECT id FROM "ProcurementBid" WHERE "buyerOrganizationId" = ${id} OR "buyerId" ${uIn}`;
+    const procBidClarSub = `SELECT id FROM "ProcurementBidClarification" WHERE "bidId" IN (${procBidSub})`;
+    const procBidPartSub = `SELECT id FROM "ProcurementBidParticipation" WHERE "bidId" IN (${procBidSub})`;
+    const productSub = `SELECT id FROM "Product" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "sellerId" ${uIn}` : ''}`;
+    const serviceSub = `SELECT id FROM "Service" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "sellerId" ${uIn}` : ''}`;
+    const categorySub = `SELECT id FROM "Category" WHERE "organizationId" = ${id}`;
+    const cartSub = `SELECT id FROM "Cart" WHERE "organizationId" = ${id}`;
+    const grnSub = `SELECT id FROM "GoodsReceiptNote" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "receivedById" ${uIn}` : ''}`;
+    const customRoleSub = `SELECT id FROM "OrgCustomRole" WHERE "organizationId" = ${id}`;
+    const tenderSub = `SELECT id FROM "Tender" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "buyerId" ${uIn}` : ''}`;
+    const bidSub = `SELECT id FROM "Bid" WHERE "tenderId" IN (${tenderSub})${userIds.length > 0 ? ` OR "sellerId" ${uIn}` : ''}`;
+    const poSub = `SELECT id FROM "PurchaseOrder" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`;
+    const disputeSub = `SELECT id FROM "Dispute" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn} OR "raisedById" ${uIn} OR "buyerOrgId" = ${id} OR "sellerOrgId" = ${id} OR "raisedByOrgId" = ${id} OR "againstOrgId" = ${id}`;
+    const convSub = `SELECT id FROM "Conversation" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`;
+    const msgSub = `SELECT id FROM "Message" WHERE "conversationId" IN (${convSub})`;
+    const grievanceSub = `SELECT id FROM "GrievanceTicket" WHERE "userId" ${uIn} OR "assignedAdminId" ${uIn}`;
+    const auctionSub = `SELECT id FROM "Auction" WHERE "currentWinnerId" ${uIn} OR "winnerSellerId" ${uIn} OR "createdByUserId" ${uIn} OR "buyerOrgId" = ${id}`;
+    const catBatchSub = `SELECT id FROM "CatalogueImportBatch" WHERE "sellerId" ${uIn}`;
+    const sellerProfileSub = `SELECT id FROM "SellerProfile" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "userId" ${uIn}` : ''}`;
+    const userFileAssetSub = `SELECT id FROM "FileAsset" WHERE "ownerId" ${uIn}`;
+
+    // ─── Pre-resolve deeply nested relation IDs to avoid 3-5 level subquery nesting ───
     const poIds = userIds.length > 0
       ? await resolveIds(`SELECT id FROM "PurchaseOrder" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`)
       : [];
@@ -2193,7 +2231,6 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       ? await resolveIds(`SELECT id FROM "PurchaseOrderItem" WHERE "purchaseOrderId" ${sqlIn(poIds)}`)
       : [];
 
-    // User payment chain (was 3-level deep nesting: PaymentTx → EscrowAccount → Milestone)
     const userPaymentIds = userIds.length > 0
       ? await resolveIds(`SELECT id FROM "PaymentTransaction" WHERE "payerId" ${uIn} OR "payeeId" ${uIn}`)
       : [];
@@ -2207,9 +2244,9 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     // ═══════════════════════════════════════════════════════════
     // 1. KYC
     // ═══════════════════════════════════════════════════════════
-    await rawSql('KycAuditLog', `DELETE FROM "KycAuditLog" WHERE "organizationId" = ${id}`);
-    await rawSql('KycAuthSession', `DELETE FROM "KycAuthSession" WHERE "organizationId" = ${id}`);
-    await rawSql('UserKycVerification', `DELETE FROM "UserKycVerification" WHERE "organizationId" = ${id}`);
+    await rawSql('KycAuditLog', `DELETE FROM "KycAuditLog" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "userId" ${uIn}` : ''}`);
+    await rawSql('KycAuthSession', `DELETE FROM "KycAuthSession" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "userId" ${uIn}` : ''}`);
+    await rawSql('UserKycVerification', `DELETE FROM "UserKycVerification" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "userId" ${uIn}` : ''}`);
 
     // ═══════════════════════════════════════════════════════════
     // 2. Marketplace interactions
@@ -2217,50 +2254,66 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     await rawSql('MarketplaceInteraction', `DELETE FROM "MarketplaceInteraction" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "userId" ${uIn}` : ''}`);
 
     // ═══════════════════════════════════════════════════════════
-    // 3. Procurement (subquery-based — no intermediate findMany)
+    // 3. Procurement
     // ═══════════════════════════════════════════════════════════
+    await rawSql('ProcurementBidClarificationFile', `DELETE FROM "ProcurementBidClarificationFile" WHERE "clarificationId" IN (${procBidClarSub})${userIds.length > 0 ? ` OR "uploadedById" ${uIn}` : ''}`);
+    await rawSql('ProcurementBidClarification', `DELETE FROM "ProcurementBidClarification" WHERE "bidId" IN (${procBidSub})${userIds.length > 0 ? ` OR "requestedById" ${uIn} OR "respondedById" ${uIn} OR "sellerId" ${uIn} OR "buyerId" ${uIn}` : ''}`);
+    await rawSql('ProcurementBidParticipationDocument', `DELETE FROM "ProcurementBidParticipationDocument" WHERE "participationId" IN (${procBidPartSub})${userIds.length > 0 ? ` OR "sellerId" ${uIn}` : ''}`);
+    await rawSql('ProcurementBidEvaluation', `DELETE FROM "ProcurementBidEvaluation" WHERE "bidId" IN (${procBidSub})${userIds.length > 0 ? ` OR "evaluatorId" ${uIn}` : ''}`);
+    await rawSql('ProcurementBidAward', `DELETE FROM "ProcurementBidAward" WHERE "bidId" IN (${procBidSub})${userIds.length > 0 ? ` OR "sellerId" ${uIn} OR "awardedById" ${uIn}` : ''}`);
+    await rawSql('ProcurementBidParticipation', `DELETE FROM "ProcurementBidParticipation" WHERE "bidId" IN (${procBidSub})${userIds.length > 0 ? ` OR "sellerId" ${uIn}` : ''}`);
+    await rawSql('ProcurementBidDocument', `DELETE FROM "ProcurementBidDocument" WHERE "bidId" IN (${procBidSub})${userIds.length > 0 ? ` OR "uploadedById" ${uIn}` : ''}`);
     if (userIds.length > 0) {
-      await rawSql('ProcurementBidClarificationFile', `DELETE FROM "ProcurementBidClarificationFile" WHERE "clarificationId" IN (${procBidClarSub}) OR "uploadedById" ${uIn}`);
-      await rawSql('ProcurementBidClarification', `DELETE FROM "ProcurementBidClarification" WHERE "bidId" IN (${procBidSub}) OR "requestedById" ${uIn} OR "respondedById" ${uIn} OR "sellerId" ${uIn} OR "buyerId" ${uIn}`);
-      await rawSql('ProcurementBidParticipationDocument', `DELETE FROM "ProcurementBidParticipationDocument" WHERE "participationId" IN (${procBidPartSub}) OR "sellerId" ${uIn}`);
-      await rawSql('ProcurementBidEvaluation', `DELETE FROM "ProcurementBidEvaluation" WHERE "bidId" IN (${procBidSub}) OR "evaluatorId" ${uIn}`);
-      await rawSql('ProcurementBidAward', `DELETE FROM "ProcurementBidAward" WHERE "bidId" IN (${procBidSub}) OR "sellerId" ${uIn} OR "awardedById" ${uIn}`);
-      await rawSql('ProcurementBidParticipation', `DELETE FROM "ProcurementBidParticipation" WHERE "bidId" IN (${procBidSub}) OR "sellerId" ${uIn}`);
-      await rawSql('ProcurementBidDocument', `DELETE FROM "ProcurementBidDocument" WHERE "bidId" IN (${procBidSub}) OR "uploadedById" ${uIn}`);
       await rawSql('ProcurementAuditLog', `DELETE FROM "ProcurementAuditLog" WHERE "userId" ${uIn}`);
-      await rawSql('ComparativeStatement', `DELETE FROM "ComparativeStatement" WHERE "bidId" IN (${procBidSub})`);
-      await rawSql('L1Comparison', `DELETE FROM "L1Comparison" WHERE "organizationId" = ${id}`);
-      // Nullify approvedById on bids (nullable)
+    }
+    await rawSql('ComparativeStatement', `DELETE FROM "ComparativeStatement" WHERE "bidId" IN (${procBidSub})`);
+    await rawSql('L1Comparison', `DELETE FROM "L1Comparison" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "buyerId" ${uIn}` : ''}`);
+    if (userIds.length > 0) {
       await rawSql('ProcurementBid_nullify', `UPDATE "ProcurementBid" SET "approvedById" = NULL WHERE "approvedById" ${uIn}`);
       await rawSql('ProcurementBidInvitation', `DELETE FROM "ProcurementBidInvitation" WHERE "sellerUserId" ${uIn}`);
-      await rawSql('ProcurementBid', `DELETE FROM "ProcurementBid" WHERE "buyerOrganizationId" = ${id} OR "buyerId" ${uIn}`);
-      await rawSql('ProcurementApproval', `DELETE FROM "ProcurementApproval" WHERE "organizationId" = ${id} OR "approverId" ${uIn}`);
-      await rawSql('ProcurementRequest', `DELETE FROM "ProcurementRequest" WHERE "organizationId" = ${id} OR "buyerId" ${uIn}`);
-      await rawSql('ProcurementModeSetting', `DELETE FROM "ProcurementModeSetting" WHERE "organizationId" = ${id}`);
     }
+    await rawSql('ProcurementBid', `DELETE FROM "ProcurementBid" WHERE "buyerOrganizationId" = ${id}${userIds.length > 0 ? ` OR "buyerId" ${uIn}` : ''}`);
+    await rawSql('ProcurementApproval', `DELETE FROM "ProcurementApproval" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "approverId" ${uIn}` : ''}`);
+    await rawSql('ProcurementRequest', `DELETE FROM "ProcurementRequest" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "buyerId" ${uIn}` : ''}`);
+    await rawSql('ProcurementModeSetting', `DELETE FROM "ProcurementModeSetting" WHERE "organizationId" = ${id}`);
 
     // ═══════════════════════════════════════════════════════════
-    // 4. Products/Services and their children (subquery-based)
+    // 4. Products/Services and their children
     // ═══════════════════════════════════════════════════════════
+    await rawSql('PurchaseOrderItem_nullify_prod', `UPDATE "PurchaseOrderItem" SET "productId" = NULL WHERE "productId" IN (${productSub})`);
+    await rawSql('InvoiceItem_nullify_prod', `UPDATE "InvoiceItem" SET "productId" = NULL WHERE "productId" IN (${productSub})`);
+    await rawSql('RequirementItem_nullify_prod', `UPDATE "RequirementItem" SET "productId" = NULL WHERE "productId" IN (${productSub})`);
+    await rawSql('TenderItem_nullify_prod', `UPDATE "TenderItem" SET "productId" = NULL WHERE "productId" IN (${productSub})`);
+    await rawSql('BidItem_nullify_prod', `UPDATE "BidItem" SET "productId" = NULL WHERE "productId" IN (${productSub})`);
+
     await rawSql('CartItem_prod', `DELETE FROM "CartItem" WHERE "productId" IN (${productSub}) OR "serviceId" IN (${serviceSub})`);
-    await rawSql('GuestCartItem_prod', `DELETE FROM "GuestCartItem" WHERE "productId" IN (${productSub}) OR "serviceId" IN (${serviceSub})`);
+    await rawSql('GuestCartItem_prod', `DELETE FROM "GuestCartItem" WHERE "productId" IN (${productSub}) OR "serviceId" IN (${serviceSub}) OR "sellerOrganizationId" = ${id}`);
     await rawSql('ProductImage', `DELETE FROM "ProductImage" WHERE "productId" IN (${productSub})`);
     await rawSql('ProductSpecification', `DELETE FROM "ProductSpecification" WHERE "productId" IN (${productSub})`);
     await rawSql('ServiceSpecification', `DELETE FROM "ServiceSpecification" WHERE "serviceId" IN (${serviceSub})`);
-    await rawSql('Certification', `DELETE FROM "Certification" WHERE "productId" IN (${productSub}) OR "serviceId" IN (${serviceSub})`);
+    await rawSql('Certification', `DELETE FROM "Certification" WHERE "productId" IN (${productSub}) OR "serviceId" IN (${serviceSub}) OR "sellerProfileId" IN (${sellerProfileSub})`);
 
-    // 5. Marketplace products/services/requirements
-    await rawSql('Product', `DELETE FROM "Product" WHERE "organizationId" = ${id}`);
-    await rawSql('Service', `DELETE FROM "Service" WHERE "organizationId" = ${id}`);
-    await rawSql('Requirement', `DELETE FROM "Requirement" WHERE "organizationId" = ${id}`);
+    // 5. Category unlinking before category deletion
+    await rawSql('Product_nullify_cat', `UPDATE "Product" SET "categoryId" = NULL WHERE "organizationId" = ${id} OR "categoryId" IN (${categorySub})`);
+    await rawSql('Service_nullify_cat', `UPDATE "Service" SET "categoryId" = NULL WHERE "organizationId" = ${id} OR "categoryId" IN (${categorySub})`);
+    await rawSql('Requirement_nullify_cat', `UPDATE "Requirement" SET "categoryId" = NULL WHERE "organizationId" = ${id} OR "categoryId" IN (${categorySub})`);
+    await rawSql('Tender_nullify_cat', `UPDATE "Tender" SET "categoryId" = NULL WHERE "organizationId" = ${id} OR "categoryId" IN (${categorySub})`);
+    await rawSql('BuyerRequirement_nullify_cat', `UPDATE "BuyerRequirement" SET "categoryId" = NULL WHERE "buyerOrganizationId" = ${id} OR "categoryId" IN (${categorySub})`);
+    await rawSql('MarketplaceInteraction_nullify_cat', `UPDATE "MarketplaceInteraction" SET "categoryId" = NULL WHERE "organizationId" = ${id} OR "categoryId" IN (${categorySub})`);
+    await rawSql('Category_nullify_parent', `UPDATE "Category" SET "parentId" = NULL WHERE "organizationId" = ${id} OR "parentId" IN (${categorySub})`);
     await rawSql('Category', `DELETE FROM "Category" WHERE "organizationId" = ${id}`);
 
-    // 6. Buyer/seller data
+    // Delete products, services, requirements
+    await rawSql('Product', `DELETE FROM "Product" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "sellerId" ${uIn}` : ''}`);
+    await rawSql('Service', `DELETE FROM "Service" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "sellerId" ${uIn}` : ''}`);
+    await rawSql('Requirement', `DELETE FROM "Requirement" WHERE "organizationId" = ${id}${userIds.length > 0 ? ` OR "buyerId" ${uIn}` : ''}`);
+
+    // 6. Buyer/seller requirements & responses
     await rawSql('BuyerRequirement', `DELETE FROM "BuyerRequirement" WHERE "buyerOrganizationId" = ${id}${userIds.length > 0 ? ` OR "createdById" ${uIn} OR "approvedById" ${uIn}` : ''}`);
     await rawSql('RequirementResponse', `DELETE FROM "RequirementResponse" WHERE "sellerOrganizationId" = ${id}${userIds.length > 0 ? ` OR "sellerUserId" ${uIn}` : ''}`);
 
     // ═══════════════════════════════════════════════════════════
-    // 7. Carts (subquery-based)
+    // 7. Carts
     // ═══════════════════════════════════════════════════════════
     await rawSql('CartItem_cart', `DELETE FROM "CartItem" WHERE "cartId" IN (${cartSub})${userIds.length > 0 ? ` OR "sellerId" ${uIn}` : ''}`);
     if (userIds.length > 0) {
@@ -2270,10 +2323,9 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await rawSql('Cart_user', `DELETE FROM "Cart" WHERE "createdById" ${uIn}`);
     }
     await rawSql('Cart_org', `DELETE FROM "Cart" WHERE "organizationId" = ${id}`);
-    await rawSql('GuestCartItem_org', `DELETE FROM "GuestCartItem" WHERE "sellerOrganizationId" = ${id}`);
 
     // ═══════════════════════════════════════════════════════════
-    // 8. GRNs (subquery-based)
+    // 8. GRNs
     // ═══════════════════════════════════════════════════════════
     if (userIds.length > 0) {
       await rawSql('GRN_nullify_approved', `UPDATE "GoodsReceiptNote" SET "approvedById" = NULL WHERE "approvedById" ${uIn}`);
@@ -2315,7 +2367,7 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     await rawSql('OrganizationProfile', `DELETE FROM "OrganizationProfile" WHERE "organizationId" = ${id}`);
 
     // ═══════════════════════════════════════════════════════════
-    // 14. User-level cleanup (subquery-based chains)
+    // 14. User-level cleanup
     // ═══════════════════════════════════════════════════════════
     if (userIds.length > 0) {
       // --- Quotes / Direct Purchase ---
@@ -2325,45 +2377,47 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await rawSql('RequirementClarification', `DELETE FROM "RequirementClarification" WHERE "askedById" ${uIn} OR "answeredById" ${uIn}`);
       await rawSql('DirectPurchase', `DELETE FROM "DirectPurchase" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
 
-      // --- Tender / Bid chain (subquery-based) ---
+      // --- Tender / Bid chain ---
       await rawSql('BidItem', `DELETE FROM "BidItem" WHERE "bidId" IN (${bidSub})`);
       await rawSql('TechnicalEvaluationResult', `DELETE FROM "TechnicalEvaluationResult" WHERE "tenderId" IN (${tenderSub}) OR "evaluatorId" ${uIn}`);
       await rawSql('TechnicalEvaluationCriteria', `DELETE FROM "TechnicalEvaluationCriteria" WHERE "tenderId" IN (${tenderSub})`);
       await rawSql('FinancialEvaluation', `DELETE FROM "FinancialEvaluation" WHERE "tenderId" IN (${tenderSub}) OR "evaluatorId" ${uIn}`);
       await rawSql('TenderDocument', `DELETE FROM "TenderDocument" WHERE "tenderId" IN (${tenderSub})`);
       await rawSql('TenderItem', `DELETE FROM "TenderItem" WHERE "tenderId" IN (${tenderSub})`);
-      await rawSql('TenderParticipant', `DELETE FROM "TenderParticipant" WHERE "tenderId" IN (${tenderSub})`);
+      await rawSql('TenderParticipant', `DELETE FROM "TenderParticipant" WHERE "tenderId" IN (${tenderSub}) OR "sellerId" ${uIn}`);
 
-      // ─── PurchaseOrder chain (pre-resolved IDs — was 4-level deep nesting) ───
-      // Delivery tracking children
+      // --- PurchaseOrder chain ---
+      await rawSql('DeliveryDpExtension', `DELETE FROM "DeliveryDpExtension" WHERE "requestedById" ${uIn} OR "respondedById" ${uIn}`);
+
       if (deliveryIds.length > 0) {
         await rawSql('DeliveryTrackingEvent', `DELETE FROM "DeliveryTrackingEvent" WHERE "deliveryTrackingId" ${sqlIn(deliveryIds)}`);
         await rawSql('DeliveryStatusLog', `DELETE FROM "DeliveryStatusLog" WHERE "deliveryTrackingId" ${sqlIn(deliveryIds)}`);
         await rawSql('DeliveryDocument', `DELETE FROM "DeliveryDocument" WHERE "deliveryTrackingId" ${sqlIn(deliveryIds)}`);
         await rawSql('DeliveryParticipant', `DELETE FROM "DeliveryParticipant" WHERE "deliveryTrackingId" ${sqlIn(deliveryIds)}`);
         await rawSql('BuyerAcceptance_delivery', `DELETE FROM "BuyerAcceptance" WHERE "deliveryTrackingId" ${sqlIn(deliveryIds)}`);
-        // Nullify settlement user FKs then delete
         await rawSql('PaymentSettlement_nullify_d', `UPDATE "PaymentSettlement" SET "invoiceVerifiedById" = NULL, "approvedById" = NULL, "releasedById" = NULL, "rejectedById" = NULL WHERE "deliveryTrackingId" ${sqlIn(deliveryIds)}`);
         await rawSql('PaymentSettlement_delivery', `DELETE FROM "PaymentSettlement" WHERE "deliveryTrackingId" ${sqlIn(deliveryIds)}`);
       }
+      await rawSql('DeliveryStatusLog_u', `DELETE FROM "DeliveryStatusLog" WHERE "changedById" ${uIn}`);
+      await rawSql('DeliveryDocument_u', `DELETE FROM "DeliveryDocument" WHERE "uploadedById" ${uIn}`);
+      await rawSql('DeliveryParticipant_u', `DELETE FROM "DeliveryParticipant" WHERE "userId" ${uIn} OR "assignedById" ${uIn}`);
+
       if (poIds.length > 0) {
         await rawSql('DeliveryTracking', `DELETE FROM "DeliveryTracking" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
         await rawSql('DeliveryWorkflow', `DELETE FROM "DeliveryWorkflow" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
       }
 
-      // Invoice children
       if (invoiceIds.length > 0) {
         await rawSql('MilestonePayment_inv', `DELETE FROM "MilestonePayment" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
         await rawSql('InvoiceItem', `DELETE FROM "InvoiceItem" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
         await rawSql('InvoiceFactoring_inv', `DELETE FROM "InvoiceFactoring" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
         await rawSql('PaymentSettlement_nullify_i', `UPDATE "PaymentSettlement" SET "invoiceVerifiedById" = NULL, "approvedById" = NULL, "releasedById" = NULL, "rejectedById" = NULL WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
         await rawSql('PaymentSettlement_inv', `DELETE FROM "PaymentSettlement" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
-        // Nullify PaymentTransaction.invoiceId before deleting invoices
         await rawSql('PaymentTransaction_nullify_inv', `UPDATE "PaymentTransaction" SET "invoiceId" = NULL WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
       }
       if (poIds.length > 0) await rawSql('Invoice', `DELETE FROM "Invoice" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
+      await rawSql('Invoice_u', `DELETE FROM "Invoice" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
 
-      // Inspection
       if (poIds.length > 0) {
         await rawSql('InspectionReport', `DELETE FROM "InspectionReport" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
         await rawSql('InspectionRecord', `DELETE FROM "InspectionRecord" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
@@ -2371,7 +2425,6 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
         await rawSql('ConsigneeReceiptAcceptanceCertificate_po', `DELETE FROM "ConsigneeReceiptAcceptanceCertificate" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
       }
 
-      // Payment transactions & escrow (PO-linked) — pre-resolved milestone/escrow IDs
       if (poMilestoneIds.length > 0) {
         await rawSql('MilestoneApproval_po', `DELETE FROM "MilestoneApproval" WHERE "milestoneId" ${sqlIn(poMilestoneIds)}`);
         await rawSql('MilestonePayment_po', `DELETE FROM "MilestonePayment" WHERE "milestoneId" ${sqlIn(poMilestoneIds)}`);
@@ -2389,7 +2442,6 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       }
       if (poIds.length > 0) await rawSql('PaymentTransaction_po', `DELETE FROM "PaymentTransaction" WHERE "purchaseOrderId" ${sqlIn(poIds)}`);
 
-      // PO items — nullify InvoiceItem FK, delete GrnItem, then PO items
       if (poItemIds.length > 0) {
         await rawSql('InvoiceItem_nullify_poi', `UPDATE "InvoiceItem" SET "purchaseOrderItemId" = NULL WHERE "purchaseOrderItemId" ${sqlIn(poItemIds)}`);
         await rawSql('GrnItem_poi', `DELETE FROM "GrnItem" WHERE "purchaseOrderItemId" ${sqlIn(poItemIds)}`);
@@ -2399,12 +2451,13 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
         await rawSql('PurchaseOrder', `DELETE FROM "PurchaseOrder" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
       }
 
-      // ─── Remaining payment transactions (user-linked) — pre-resolved IDs ───
       if (uMilestoneIds.length > 0) {
         await rawSql('MilestoneApproval_u', `DELETE FROM "MilestoneApproval" WHERE "milestoneId" ${sqlIn(uMilestoneIds)}`);
         await rawSql('MilestonePayment_u', `DELETE FROM "MilestonePayment" WHERE "milestoneId" ${sqlIn(uMilestoneIds)}`);
         await rawSql('EscrowTransaction_ms_u', `DELETE FROM "EscrowTransaction" WHERE "milestoneId" ${sqlIn(uMilestoneIds)}`);
       }
+      await rawSql('MilestoneApproval_approver', `DELETE FROM "MilestoneApproval" WHERE "approverId" ${uIn}`);
+
       if (uEscrowIds.length > 0) {
         await rawSql('Milestone_u', `DELETE FROM "Milestone" WHERE "escrowAccountId" ${sqlIn(uEscrowIds)}`);
         await rawSql('EscrowTransaction_esc_u', `DELETE FROM "EscrowTransaction" WHERE "escrowAccountId" ${sqlIn(uEscrowIds)}`);
@@ -2415,79 +2468,82 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
         await rawSql('OfflinePaymentProof_u', `DELETE FROM "OfflinePaymentProof" WHERE "paymentTransactionId" ${sqlIn(userPaymentIds)}`);
         await rawSql('PaymentSettlement_u', `DELETE FROM "PaymentSettlement" WHERE "paymentTransactionId" ${sqlIn(userPaymentIds)}`);
       }
+      await rawSql('PaymentSettlement_nullify_u', `UPDATE "PaymentSettlement" SET "invoiceVerifiedById" = NULL, "approvedById" = NULL, "releasedById" = NULL, "rejectedById" = NULL WHERE "invoiceVerifiedById" ${uIn} OR "approvedById" ${uIn} OR "releasedById" ${uIn} OR "rejectedById" ${uIn}`);
       await rawSql('PaymentTransaction_u', `DELETE FROM "PaymentTransaction" WHERE "payerId" ${uIn} OR "payeeId" ${uIn}`);
 
-      // ─── Disputes (subquery-based) ───
-      await rawSql('DisputeAttachment', `DELETE FROM "DisputeAttachment" WHERE "disputeId" IN (${disputeSub}) OR "uploadedByUserId" ${uIn}`);
-      await rawSql('DisputeEvidence', `DELETE FROM "DisputeEvidence" WHERE "disputeId" IN (${disputeSub}) OR "uploadedById" ${uIn}`);
-      await rawSql('DisputeMessage_d', `DELETE FROM "DisputeMessage" WHERE "disputeId" IN (${disputeSub})`);
+      // --- Disputes ---
+      await rawSql('DisputeAttachment', `DELETE FROM "DisputeAttachment" WHERE "disputeId" IN (${disputeSub})${userIds.length > 0 ? ` OR "uploadedByUserId" ${uIn}` : ''}`);
+      await rawSql('DisputeEvidence', `DELETE FROM "DisputeEvidence" WHERE "disputeId" IN (${disputeSub})${userIds.length > 0 ? ` OR "uploadedById" ${uIn}` : ''}`);
+      await rawSql('DisputeMessage_d', `DELETE FROM "DisputeMessage" WHERE "disputeId" IN (${disputeSub})${userIds.length > 0 ? ` OR "senderId" ${uIn}` : ''}`);
       await rawSql('Dispute_nullify_assigned', `UPDATE "Dispute" SET "assignedAdminId" = NULL WHERE "assignedAdminId" ${uIn}`);
       await rawSql('Dispute_nullify_resolved', `UPDATE "Dispute" SET "resolvedById" = NULL WHERE "resolvedById" ${uIn}`);
       await rawSql('Dispute', `DELETE FROM "Dispute" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn} OR "raisedById" ${uIn} OR "buyerOrgId" = ${id} OR "sellerOrgId" = ${id} OR "raisedByOrgId" = ${id} OR "againstOrgId" = ${id}`);
 
-      // ─── Conversations / Messages (subquery-based) ───
+      // --- Conversations / Messages ---
       await rawSql('MessageAttachment', `DELETE FROM "MessageAttachment" WHERE "messageId" IN (${msgSub})`);
-      await rawSql('Message', `DELETE FROM "Message" WHERE "conversationId" IN (${convSub}) OR "senderId" ${uIn}`);
+      await rawSql('Message', `DELETE FROM "Message" WHERE "conversationId" IN (${convSub})${userIds.length > 0 ? ` OR "senderId" ${uIn}` : ''}`);
       await rawSql('Conversation', `DELETE FROM "Conversation" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
 
-      // ─── Grievances (subquery-based) ───
-      await rawSql('GrievanceAttachment', `DELETE FROM "GrievanceAttachment" WHERE "grievanceId" IN (${grievanceSub}) OR "uploadedById" ${uIn}`);
-      await rawSql('GrievanceComment', `DELETE FROM "GrievanceComment" WHERE "grievanceId" IN (${grievanceSub}) OR "authorId" ${uIn}`);
+      // --- Grievances ---
+      await rawSql('GrievanceAttachment', `DELETE FROM "GrievanceAttachment" WHERE "grievanceId" IN (${grievanceSub})${userIds.length > 0 ? ` OR "uploadedById" ${uIn}` : ''}`);
+      await rawSql('GrievanceComment', `DELETE FROM "GrievanceComment" WHERE "grievanceId" IN (${grievanceSub})${userIds.length > 0 ? ` OR "authorId" ${uIn}` : ''}`);
       await rawSql('GrievanceTicket', `DELETE FROM "GrievanceTicket" WHERE "userId" ${uIn} OR "assignedAdminId" ${uIn}`);
 
-      // ─── Auction chain (subquery-based) ───
+      // --- Auction chain ---
       await rawSql('AuctionEventLog', `DELETE FROM "AuctionEventLog" WHERE "auctionId" IN (${auctionSub})`);
       await rawSql('AuctionQualificationDocument', `DELETE FROM "AuctionQualificationDocument" WHERE "auctionId" IN (${auctionSub})`);
       await rawSql('AuctionParticipant', `DELETE FROM "AuctionParticipant" WHERE "auctionId" IN (${auctionSub})`);
       await rawSql('AuctionBid', `DELETE FROM "AuctionBid" WHERE "auctionId" IN (${auctionSub}) OR "sellerId" ${uIn} OR "sellerOrgId" = ${id}`);
       await rawSql('Auction_nullify_winner', `UPDATE "Auction" SET "currentWinnerId" = NULL WHERE "currentWinnerId" ${uIn}`);
       await rawSql('Auction_nullify_winnerSeller', `UPDATE "Auction" SET "winnerSellerId" = NULL WHERE "winnerSellerId" ${uIn}`);
+      await rawSql('Auction_user', `DELETE FROM "Auction" WHERE "createdByUserId" ${uIn}`);
 
-      // ─── Contracts ───
+      // --- Contracts ---
       await rawSql('Contract', `DELETE FROM "Contract" WHERE "bidId" IN (${bidSub}) OR "tenderId" IN (${tenderSub})`);
       await rawSql('ComparativeStatement_t', `DELETE FROM "ComparativeStatement" WHERE "tenderId" IN (${tenderSub})`);
       await rawSql('Bid', `DELETE FROM "Bid" WHERE "sellerId" ${uIn}`);
       await rawSql('Tender', `DELETE FROM "Tender" WHERE "buyerId" ${uIn} OR "organizationId" = ${id}`);
 
-      // ─── Ratings / Compliance ───
+      // --- Ratings / Compliance ---
       await rawSql('SupplierRating', `DELETE FROM "SupplierRating" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
       await rawSql('BuyerRating', `DELETE FROM "BuyerRating" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
       await rawSql('ComplianceViolation', `DELETE FROM "ComplianceViolation" WHERE "userId" ${uIn}`);
       await rawSql('InvoiceFactoring_u', `DELETE FROM "InvoiceFactoring" WHERE "sellerId" ${uIn} OR "financierId" ${uIn}`);
 
-      // ─── Catalogue imports (subquery-based) ───
+      // --- Catalogue imports ---
       await rawSql('CatalogueImportError', `DELETE FROM "CatalogueImportError" WHERE "batchId" IN (${catBatchSub})`);
       await rawSql('CatalogueImportBatch', `DELETE FROM "CatalogueImportBatch" WHERE "sellerId" ${uIn}`);
       await rawSql('BuyerItemUploadBatch', `DELETE FROM "BuyerItemUploadBatch" WHERE "buyerId" ${uIn}`);
       await rawSql('BuyerFrequentlyBoughtItem', `DELETE FROM "BuyerFrequentlyBoughtItem" WHERE "buyerId" ${uIn}`);
 
-      // ─── Misc user data ───
+      // --- Misc user data ---
       await rawSql('BidWizardDraft', `DELETE FROM "BidWizardDraft" WHERE "buyerId" ${uIn}`);
       await rawSql('Approval', `DELETE FROM "Approval" WHERE "userId" ${uIn}`);
       await rawSql('PasswordHistory', `DELETE FROM "PasswordHistory" WHERE "userId" ${uIn}`);
+      await rawSql('PlatformFeature_nullify', `UPDATE "PlatformFeature" SET "updatedById" = NULL WHERE "updatedById" ${uIn}`);
       await rawSql('ScopedInvitation', `DELETE FROM "ScopedInvitation" WHERE "invitedById" ${uIn}`);
       await rawSql('BuyerAcceptance', `DELETE FROM "BuyerAcceptance" WHERE "acceptedById" ${uIn}`);
 
-      // ─── User profiles ───
-      await rawSql('BuyerProfile', `DELETE FROM "BuyerProfile" WHERE "userId" ${uIn}`);
+      // --- User profiles ---
+      await rawSql('BuyerProfile', `DELETE FROM "BuyerProfile" WHERE "organizationId" = ${id} OR "userId" ${uIn}`);
       await rawSql('SellerDocument', `DELETE FROM "SellerDocument" WHERE "sellerProfileId" IN (${sellerProfileSub})`);
       await rawSql('SellerBankAccount', `DELETE FROM "SellerBankAccount" WHERE "sellerProfileId" IN (${sellerProfileSub})`);
       await rawSql('SellerOffice', `DELETE FROM "SellerOffice" WHERE "sellerProfileId" IN (${sellerProfileSub})`);
       await rawSql('SellerDocument_nullify', `UPDATE "SellerDocument" SET "verifiedById" = NULL WHERE "verifiedById" ${uIn}`);
-      await rawSql('SellerProfile', `DELETE FROM "SellerProfile" WHERE "userId" ${uIn}`);
-      await rawSql('ShgProfile', `DELETE FROM "ShgProfile" WHERE "userId" ${uIn}`);
+      await rawSql('SellerProfile', `DELETE FROM "SellerProfile" WHERE "organizationId" = ${id} OR "userId" ${uIn}`);
+      await rawSql('ShgProfile', `DELETE FROM "ShgProfile" WHERE "organizationId" = ${id} OR "userId" ${uIn}`);
       await rawSql('ShgApplicationAuditLog', `DELETE FROM "ShgApplicationAuditLog" WHERE "actorUserId" ${uIn}`);
 
-      // ─── Marketplace Banner & Eligibility ───
+      // --- Marketplace Banner & Eligibility ---
       await rawSql('MarketplaceBanner_nullify', `UPDATE "MarketplaceBanner" SET "uploadedByUserId" = NULL, "approvedByUserId" = NULL WHERE "uploadedByUserId" ${uIn} OR "approvedByUserId" ${uIn}`);
       await rawSql('BannerEligibility_nullify', `UPDATE "BannerEligibility" SET "grantedByUserId" = NULL, "revokedByUserId" = NULL WHERE "grantedByUserId" ${uIn} OR "revokedByUserId" ${uIn}`);
 
-      // ─── Certificates ───
+      // --- Certificates ---
       await rawSql('ProvisionalReceiptCertificate_u', `DELETE FROM "ProvisionalReceiptCertificate" WHERE "generatedById" ${uIn}`);
       await rawSql('ConsigneeReceiptAcceptanceCertificate_u', `DELETE FROM "ConsigneeReceiptAcceptanceCertificate" WHERE "generatedById" ${uIn}`);
 
-      // ─── User roles, sessions, logs ───
-      await rawSql('UserRole', `DELETE FROM "UserRole" WHERE "userId" ${uIn}`);
+      // --- User roles, sessions, logs ---
+      await rawSql('UserRole', `DELETE FROM "UserRole" WHERE "organizationId" = ${id} OR "userId" ${uIn}`);
       await rawSql('UserRole_nullify', `UPDATE "UserRole" SET "assignedById" = NULL WHERE "assignedById" ${uIn}`);
       await rawSql('UserSession', `DELETE FROM "UserSession" WHERE "userId" ${uIn}`);
       await rawSql('LoginEvent', `DELETE FROM "LoginEvent" WHERE "userId" ${uIn}`);
@@ -2497,6 +2553,21 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await rawSql('ApiLog', `DELETE FROM "ApiLog" WHERE "userId" ${uIn}`);
       await rawSql('ApiVerificationLog', `DELETE FROM "ApiVerificationLog" WHERE "userId" ${uIn}`);
       await rawSql('AuditLog', `DELETE FROM "AuditLog" WHERE "userId" ${uIn}`);
+
+      // --- FileAsset cleanup for users ---
+      await rawSql('OrgLogo_nullify_file', `UPDATE "Organization" SET "organizationLogoFileId" = NULL WHERE "organizationLogoFileId" IN (${userFileAssetSub})`);
+      await rawSql('SellerDoc_nullify_file', `UPDATE "SellerDocument" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+      await rawSql('TenderDoc_nullify_file', `UPDATE "TenderDocument" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+      await rawSql('PO_nullify_file', `UPDATE "PurchaseOrder" SET "pdfFileId" = NULL WHERE "pdfFileId" IN (${userFileAssetSub})`);
+      await rawSql('Invoice_nullify_file', `UPDATE "Invoice" SET "invoiceFileId" = NULL WHERE "invoiceFileId" IN (${userFileAssetSub})`);
+      await rawSql('GrnDoc_nullify_file', `UPDATE "GrnDocument" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+      await rawSql('DeliveryDoc_nullify_file', `UPDATE "DeliveryDocument" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+      await rawSql('DeliveryStatusLog_nullify_file', `UPDATE "DeliveryStatusLog" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+      await rawSql('ShgMeeting_nullify_file', `UPDATE "ShgMeeting" SET "minutesFileAssetId" = NULL WHERE "minutesFileAssetId" IN (${userFileAssetSub})`);
+      await rawSql('ShgDoc_nullify_file', `UPDATE "ShgDocument" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+      await rawSql('ShgResolution_nullify_file', `UPDATE "ShgResolution" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+      await rawSql('Cert_nullify_file', `UPDATE "Certification" SET "fileAssetId" = NULL WHERE "fileAssetId" IN (${userFileAssetSub})`);
+      await rawSql('FileAsset_nullify_parent', `UPDATE "FileAsset" SET "parentId" = NULL WHERE "parentId" IN (${userFileAssetSub})`);
       await rawSql('FileAsset', `DELETE FROM "FileAsset" WHERE "ownerId" ${uIn}`);
 
       // ─── Finally delete users ───
@@ -2504,8 +2575,9 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 14.5 Monthly ranks and banner eligibility
+    // 14.5 Monthly ranks, banner eligibility, organization logo
     // ═══════════════════════════════════════════════════════════
+    await rawSql('OrgLogo_clear', `UPDATE "Organization" SET "organizationLogoFileId" = NULL WHERE "id" = ${id}`);
     await rawSql('OrganizationMonthlyRank', `DELETE FROM "OrganizationMonthlyRank" WHERE "organizationId" = ${id}`);
     await rawSql('BannerEligibility', `DELETE FROM "BannerEligibility" WHERE "organizationId" = ${id}`);
 
@@ -2524,7 +2596,8 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     metadata: { reason, organizationName: organization.organizationName, deletedCounts: summary }
   });
 
-  await invalidateByPattern('master-admin:*');
+  await invalidateByPattern('cache:admin:*').catch(() => undefined);
+  await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
 
   jsonOk(res, { deleted: summary, organizationName: organization.organizationName }, `Organization "${organization.organizationName}" and all related data permanently deleted.`);
 }));

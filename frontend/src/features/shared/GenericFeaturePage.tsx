@@ -52,7 +52,7 @@ const getCleanFileName = (url?: string, defaultName = 'Specifications') => {
   }
 };
 
-export default function GenericFeaturePage({ title, eyebrow, description, endpoint, emptyTitle = 'No records found' }: { title: string; eyebrow: string; description: string; endpoint: string; emptyTitle?: string }) {
+export default function GenericFeaturePage({ title, description, endpoint, emptyTitle = 'No records found' }: { title: string; description: string; endpoint: string; emptyTitle?: string }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [valueFilter, setValueFilter] = useState('');
@@ -175,7 +175,6 @@ export default function GenericFeaturePage({ title, eyebrow, description, endpoi
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">{eyebrow}</p>
           <h1 className="text-2xl font-black tracking-tight text-slate-950">{title}</h1>
           <p className="mt-1 max-w-2xl text-xs font-semibold text-slate-500">{description}</p>
         </div>

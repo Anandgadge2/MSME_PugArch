@@ -337,11 +337,7 @@ const Vendors = () => {
       {/* Transparent Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
-          {/* <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">Partners</span> */}
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Supplier Registry</h1>
-          {/* <p className="text-xs font-semibold text-slate-500 mt-1">
-            Locate and engage verified MSME vendors across nationwide sectors.
-          </p> */}
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">Supplier Registry</h1>
         </div>
       </div>
 

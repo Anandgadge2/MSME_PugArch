@@ -127,7 +127,6 @@ export default function MarketplaceComparePage() {
             <Link href="/marketplace/products" className="mb-2 inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-[#12335f]">
               <ArrowLeft className="h-3.5 w-3.5" /> Marketplace
             </Link>
-            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Marketplace Compare</p>
             <h1 className="text-2xl font-black text-slate-950">Compare Items</h1>
             <p className="mt-1 text-xs font-semibold text-slate-500">{items.length}/4 selected for side-by-side review</p>
           </div>

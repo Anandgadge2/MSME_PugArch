@@ -9,9 +9,15 @@
  *   READY_FOR_PICKUP   → Save Dispatch Details
  *   Delivery Tracking  → Picked Up → In Transit → Out for Delivery → Delivered
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, CheckCircle2, ChevronDown, Clock, Download, ExternalLink, Eye, FileText, Grid3x3, List, MoreVertical, Package, Paperclip, Printer, RefreshCw, Search, Send, ShieldCheck, Sparkles, Stamp, Truck, Upload, UploadCloud, X, XCircle } from 'lucide-react';
+import {
+    AlertCircle, ArrowRight, Calendar, Check, CheckCircle2, ChevronDown, ChevronUp,
+    Clock, Copy, Download, ExternalLink, Eye, FileText, Grid3x3, History, Info,
+    List, MapPin, MoreVertical, Package, Paperclip, Printer, RefreshCw, Search,
+    Send, ShieldCheck, Sparkles, Stamp, Truck, Upload, UploadCloud, X, XCircle
+} from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
@@ -33,9 +39,9 @@ import { SortableHeader, type SortDirection } from '../../shared/SortableHeader'
 import { formatCurrency, formatDate, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import {
-    useAddDeliveryDocument, useDeliveries, useDelivery, useManualStatusUpdate,
-    useMarkPacked, useMarkReadyForPickup, useSellerAccept, useSellerReject,
-    useUpdateDispatchDetails
+    useAddDeliveryDocument, useDeliveries, useDelivery, useDeliveryTimeline,
+    useManualStatusUpdate, useMarkPacked, useMarkReadyForPickup, useSellerAccept,
+    useSellerReject, useUpdateDispatchDetails
 } from '../hooks';
 import type { DeliveryDto } from '../api';
 
@@ -90,14 +96,71 @@ const readableStatus = (status: string) => status.replace(/_/g, ' ');
 function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction: (kind: string) => void }) {
     const router = useRouter();
     const [open, setOpen] = useState(false);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
     const status = String(delivery.status);
+
+    const updatePosition = useCallback(() => {
+        if (!buttonRef.current) return;
+        const rect = buttonRef.current.getBoundingClientRect();
+        const menuWidth = 192; // 12rem / w-48
+        const menuEstimatedHeight = 220;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const shouldOpenUp = spaceBelow < menuEstimatedHeight && rect.top > menuEstimatedHeight;
+
+        let left = rect.right - menuWidth;
+        if (left < 8) left = 8;
+        if (left + menuWidth > window.innerWidth - 8) {
+            left = window.innerWidth - menuWidth - 8;
+        }
+
+        setCoords({
+            top: shouldOpenUp ? undefined : rect.bottom + 4,
+            bottom: shouldOpenUp ? window.innerHeight - rect.top + 4 : undefined,
+            left,
+        });
+    }, []);
 
     useEffect(() => {
         if (!open) return;
-        const handleClickOutside = () => setOpen(false);
-        window.addEventListener('click', handleClickOutside);
-        return () => window.removeEventListener('click', handleClickOutside);
-    }, [open]);
+        updatePosition();
+
+        const handleScroll = (e: Event) => {
+            if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+            updatePosition();
+        };
+
+        const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+            if (
+                menuRef.current && !menuRef.current.contains(e.target as Node) &&
+                buttonRef.current && !buttonRef.current.contains(e.target as Node)
+            ) {
+                setOpen(false);
+            }
+        };
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setOpen(false);
+                buttonRef.current?.focus();
+            }
+        };
+
+        window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+        window.addEventListener('resize', updatePosition);
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('touchstart', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            window.removeEventListener('scroll', handleScroll, { capture: true });
+            window.removeEventListener('resize', updatePosition);
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('touchstart', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [open, updatePosition]);
 
     const poId = delivery.purchaseOrder?.id || delivery.purchaseOrderId;
     const amount = delivery.purchaseOrder?.amount;
@@ -105,23 +168,57 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
     return (
         <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
             <button
+                ref={buttonRef}
                 type="button"
+                aria-label={`Actions for delivery DLV-${delivery.id}`}
+                aria-haspopup="menu"
+                aria-expanded={open}
                 onClick={(e) => {
                     e.stopPropagation();
                     setOpen(!open);
                 }}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+                className={cn(
+                    "h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#12335f]/20",
+                    open && "bg-slate-100 border-slate-300 text-slate-900"
+                )}
                 title="Actions"
             >
                 <MoreVertical className="h-4 w-4" />
             </button>
 
-            {open && (
-                <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+            {open && coords && typeof document !== 'undefined' && createPortal(
+                <div
+                    ref={menuRef}
+                    style={{
+                        position: 'fixed',
+                        top: coords.top !== undefined ? `${coords.top}px` : undefined,
+                        bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+                        left: `${coords.left}px`,
+                        zIndex: 99999,
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+                    role="menu"
+                    aria-label="Delivery actions"
+                >
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                            setOpen(false);
+                            router.push(`/delivery/${delivery.id}`);
+                        }}
+                        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                    >
+                        <Eye className="h-3.5 w-3.5 text-slate-500" />
+                        <span>View Details</span>
+                    </button>
+
                     {(status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && (
                         <>
                             <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => { setOpen(false); onAction('accept'); }}
                                 className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
                             >
@@ -130,6 +227,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             </button>
                             <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => { setOpen(false); onAction('reject'); }}
                                 className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
                             >
@@ -142,6 +240,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                     {status === 'SELLER_ACCEPTED' && (
                         <button
                             type="button"
+                            role="menuitem"
                             onClick={() => { setOpen(false); onAction('packed'); }}
                             className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
                         >
@@ -153,6 +252,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                     {status === 'PACKED' && (
                         <button
                             type="button"
+                            role="menuitem"
                             onClick={() => { setOpen(false); onAction('ready'); }}
                             className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left"
                         >
@@ -166,6 +266,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             {status === 'READY_FOR_PICKUP' && (
                                 <button
                                     type="button"
+                                    role="menuitem"
                                     onClick={() => { setOpen(false); onAction('dispatch-details'); }}
                                     className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
                                 >
@@ -175,6 +276,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             )}
                             <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => { setOpen(false); onAction('track-info'); }}
                                 className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
                             >
@@ -189,6 +291,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             {poId && (
                                 <button
                                     type="button"
+                                    role="menuitem"
                                     onClick={() => {
                                         setOpen(false);
                                         router.push(`/seller/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`);
@@ -201,6 +304,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             )}
                             <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => { setOpen(false); onAction('upload-pod'); }}
                                 className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
                             >
@@ -209,7 +313,8 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             </button>
                         </>
                     )}
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -350,8 +455,7 @@ export default function SellerDeliveryManagementPage() {
             {/* Transparent Header */}
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
                 <div className="min-w-0">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f] bg-[#12335f]/10 px-2.5 py-1 rounded-full">Fulfillment & Logistics</span>
-                    <h1 className="text-3xl font-black tracking-tight text-slate-900 mt-2">Delivery Management</h1>
+                    <h1 className="text-3xl font-black tracking-tight text-slate-900">Delivery Management</h1>
                     <p className="text-xs font-semibold text-slate-500 mt-1">Accept delivery commitments, generate packing labels, and broadcast dispatches.</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -711,6 +815,46 @@ function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: Del
                     </div>
                     <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6">
                         <DispatchDetailsForm delivery={delivery} onDone={onClose} />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (kind === 'track-info') {
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-3 sm:p-5 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="track-info-title">
+                <div className="w-full max-w-2xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xl flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#07172c] via-[#0f284e] to-[#183b6f] px-5 sm:px-6 py-4 text-white shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 border border-white/20 text-blue-200 shadow-inner">
+                                <Truck className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                                        Shipment Tracking
+                                    </span>
+                                    <span className="rounded bg-blue-400/25 px-2 py-0.5 text-[10px] font-mono font-bold text-blue-200">
+                                        DLV-{delivery.id}
+                                    </span>
+                                    {delivery.purchaseOrder?.poNumber && (
+                                        <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-mono text-slate-300">
+                                            {delivery.purchaseOrder.poNumber}
+                                        </span>
+                                    )}
+                                </div>
+                                <h2 id="track-info-title" className="mt-1 text-base sm:text-lg font-black tracking-tight text-white line-clamp-1">
+                                    {delivery.purchaseOrder?.title || 'Tracking & Status Details'}
+                                </h2>
+                            </div>
+                        </div>
+                        <button onClick={onClose} className="rounded-lg p-2 text-white/80 hover:bg-white/15 hover:text-white transition focus:outline-none focus:ring-2 focus:ring-white/50 cursor-pointer" aria-label="Close tracking details modal">
+                            <X className="h-5 w-5" />
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto bg-slate-50/70 p-4 sm:p-6">
+                        <TrackInfoForm delivery={delivery} onDone={onClose} />
                     </div>
                 </div>
             </div>
@@ -1913,65 +2057,475 @@ function ReadyForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => 
     );
 }
 
+const TRACKING_STEPS = [
+    { key: 'READY_FOR_PICKUP', label: 'Ready for Pickup', shortLabel: 'Ready', subtext: 'Package staged', icon: Package },
+    { key: 'PICKED_UP', label: 'Picked Up', shortLabel: 'Picked Up', subtext: 'Courier collected', icon: Truck },
+    { key: 'IN_TRANSIT', label: 'In Transit', shortLabel: 'In Transit', subtext: 'Hub to hub', icon: Clock },
+    { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', shortLabel: 'Out for Delivery', subtext: 'Final delivery run', icon: MapPin },
+    { key: 'DELIVERED', label: 'Delivered', shortLabel: 'Delivered', subtext: 'Received by buyer', icon: CheckCircle2 },
+] as const;
+
+function getStatusExplanation(status: string): string {
+    switch (status) {
+        case 'READY_FOR_PICKUP':
+            return 'Package is fully prepared, labeled, and staged for carrier pickup at origin facility.';
+        case 'PICKED_UP':
+            return 'Shipment has been collected by the courier partner and entered into the transit network.';
+        case 'DISPATCHED':
+        case 'IN_TRANSIT':
+            return 'Consignment is in active transit across distribution hubs toward the recipient destination.';
+        case 'OUT_FOR_DELIVERY':
+            return 'Package is with the local delivery agent on the final delivery route today.';
+        case 'DELIVERED':
+        case 'COMPLETED':
+            return 'Consignment has been successfully delivered and acknowledged by the buyer.';
+        case 'CANCELLED':
+            return 'Shipment tracking was cancelled.';
+        case 'RETURNED':
+            return 'Consignment is being returned to origin.';
+        case 'DISPUTED':
+            return 'Delivery milestone is under dispute review.';
+        default:
+            return `Order is currently in ${readableStatus(status)} stage.`;
+    }
+}
+
+function getNextStatusDescription(status: string): string {
+    switch (status) {
+        case 'PICKED_UP':
+            return 'Confirm that courier partner has collected the package from your facility.';
+        case 'IN_TRANSIT':
+            return 'Confirm that package has departed transit hub and is moving towards destination.';
+        case 'OUT_FOR_DELIVERY':
+            return 'Confirm that consignment is out with local courier for buyer handover.';
+        case 'DELIVERED':
+            return 'Confirm successful buyer delivery (POD document can be attached).';
+        default:
+            return `Advance delivery status to ${readableStatus(status)}.`;
+    }
+}
+
 function TrackInfoForm({ delivery: initialDelivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
     const { data: freshDelivery } = useDelivery(initialDelivery.id);
     const delivery = freshDelivery || initialDelivery;
     const nextStatus = nextManualStatusFor(String(delivery.status));
     const mut = useManualStatusUpdate();
+    const { data: timelineData } = useDeliveryTimeline(delivery.id);
+
+    const [copied, setCopied] = useState(false);
+    const [remarks, setRemarks] = useState('');
+    const [isAdvancing, setIsAdvancing] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
+
+    // Timeline normalization
+    const timelineEvents = useMemo(() => {
+        if (!timelineData) return [];
+        if (Array.isArray(timelineData)) return timelineData;
+        const events = Array.isArray((timelineData as any)?.events) ? (timelineData as any).events : [];
+        const logs = Array.isArray((timelineData as any)?.statusLogs) ? (timelineData as any).statusLogs : [];
+
+        const items = [
+            ...events.map((e: any) => ({
+                id: `event-${e.id}`,
+                status: e.status,
+                location: e.location,
+                remarks: e.remarks,
+                time: e.occurredAt || e.createdAt,
+                type: 'event'
+            })),
+            ...logs
+                .filter((l: any) => !l.previousStatus || l.previousStatus !== l.newStatus)
+                .map((l: any) => ({
+                    id: `log-${l.id}`,
+                    status: l.newStatus,
+                    location: undefined,
+                    remarks: l.remarks,
+                    time: l.createdAt,
+                    type: 'log'
+                }))
+        ];
+
+        return items.sort((a, b) => new Date(b.time || 0).getTime() - new Date(a.time || 0).getTime());
+    }, [timelineData]);
+
+    const getStepIndex = (status: string): number => {
+        if (status === 'DISPATCHED') return 2; // In Transit
+        if (status === 'COMPLETED') return 4; // Delivered
+        return TRACKING_STEPS.findIndex(s => s.key === status);
+    };
+
+    const currentStepIdx = getStepIndex(String(delivery.status));
+
+    const handleCopy = (val: string) => {
+        if (!val) return;
+        void navigator.clipboard.writeText(val);
+        setCopied(true);
+        toast.success('Tracking number copied to clipboard');
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleAdvanceStatus = async () => {
+        if (!nextStatus) return;
+        setIsAdvancing(true);
+        await runWithToast(
+            () =>
+                mut.mutateAsync({
+                    id: delivery.id,
+                    data: {
+                        status: nextStatus,
+                        remarks: remarks.trim() || undefined,
+                        occurredAt: new Date().toISOString()
+                    }
+                }),
+            {
+                loading: `Advancing status to ${readableStatus(nextStatus)}...`,
+                success: `Status updated: ${readableStatus(nextStatus)}`,
+                error: (err: any) => err?.message || 'Status update failed'
+            }
+        );
+        setIsAdvancing(false);
+        setRemarks('');
+        onDone();
+    };
+
+    const trackingNum = delivery.trackingNumber || `DLV-${delivery.id}`;
 
     return (
-        <div className="space-y-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2.5">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                    <span className="text-[10px] font-black uppercase text-slate-400">Current Status</span>
-                    <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[String(delivery.status)] || ''}`}>
-                        {readableStatus(String(delivery.status))}
+        <div className="space-y-4 sm:space-y-5">
+            {/* Visual Step Stepper */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs">
+                <div className="flex items-center justify-between mb-4">
+                    <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-400">
+                        Shipment Milestones
+                    </span>
+                    <span className="text-[10px] sm:text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                        {currentStepIdx >= 0 ? `Stage ${currentStepIdx + 1} of ${TRACKING_STEPS.length}` : 'Pending Tracking Staging'}
                     </span>
                 </div>
-                <div className="grid grid-cols-1 gap-2 text-xs font-semibold text-slate-700 pt-1 sm:grid-cols-2">
-                    <div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 block">Tracking Number</span>
-                        <span className="font-mono text-slate-900">{delivery.trackingNumber || `DLV-${delivery.id}`}</span>
-                    </div>
-                    <div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 block">Carrier</span>
-                        <span className="font-bold text-slate-900">{delivery.carrierName || delivery.logisticsPartnerName || 'Pending'}</span>
-                    </div>
-                    <div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 block">Expected Delivery</span>
-                        <span className="text-slate-900">{delivery.expectedDelivery ? formatDate(delivery.expectedDelivery) : 'Pending'}</span>
-                    </div>
-                    <div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 block">Latest Manual Update</span>
-                        <span className="text-slate-900">{readableStatus(String(delivery.status))}</span>
-                        {delivery.updatedAt && <span className="ml-1 text-[10px] text-slate-400">({formatDate(delivery.updatedAt)})</span>}
+
+                <div className="relative pt-1 pb-1">
+                    {/* Background line */}
+                    <div className="absolute top-6 left-6 right-6 h-1 bg-slate-100 rounded-full" />
+                    {/* Animated Fill line */}
+                    <div
+                        className="absolute top-6 left-6 h-1 bg-gradient-to-r from-[#12335f] via-blue-600 to-emerald-500 rounded-full transition-all duration-500 ease-out"
+                        style={{
+                            width: `${
+                                currentStepIdx <= 0
+                                    ? 0
+                                    : Math.min(100, (currentStepIdx / (TRACKING_STEPS.length - 1)) * (100 - (100 / TRACKING_STEPS.length)))
+                            }%`
+                        }}
+                    />
+
+                    {/* Step Nodes */}
+                    <div className="relative grid grid-cols-5 gap-1">
+                        {TRACKING_STEPS.map((step, idx) => {
+                            const isCompleted = currentStepIdx > idx;
+                            const isCurrent = currentStepIdx === idx;
+                            const IconComponent = step.icon;
+
+                            return (
+                                <div key={step.key} className="flex flex-col items-center text-center">
+                                    <div
+                                        className={cn(
+                                            "flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl transition-all duration-300 relative z-10 shadow-xs",
+                                            isCompleted && "bg-emerald-600 text-white shadow-emerald-200",
+                                            isCurrent && "bg-[#12335f] text-white ring-4 ring-blue-500/20 shadow-md scale-105",
+                                            !isCompleted && !isCurrent && "bg-white border-2 border-slate-200 text-slate-400"
+                                        )}
+                                    >
+                                        {isCompleted ? (
+                                            <Check className="h-4 w-4 sm:h-5 sm:w-5 stroke-[2.5]" />
+                                        ) : (
+                                            <IconComponent className={cn("h-4 w-4", isCurrent && "animate-pulse")} />
+                                        )}
+                                    </div>
+                                    <span
+                                        className={cn(
+                                            "mt-2 text-[10px] sm:text-[11px] font-bold leading-tight line-clamp-1",
+                                            isCurrent ? "text-slate-900 font-extrabold" : isCompleted ? "text-slate-700" : "text-slate-400"
+                                        )}
+                                    >
+                                        {step.shortLabel}
+                                    </span>
+                                    <span className="hidden sm:block text-[9px] text-slate-400 mt-0.5 leading-tight">
+                                        {step.subtext}
+                                    </span>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
-                <span className="text-[10px] font-black uppercase text-slate-400 block">Next Status</span>
-                <div className="mt-1 font-black text-slate-900">
-                    {nextStatus ? readableStatus(nextStatus) : 'No further seller update available'}
+
+            {/* Bento Grid: Status, Carrier, ETA, Recipient */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 1. Current Status */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex flex-col justify-between">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
+                            </span>
+                            Current Status
+                        </span>
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[String(delivery.status)] || 'border-slate-200 bg-slate-50 text-slate-800'}`}>
+                            {readableStatus(String(delivery.status))}
+                        </span>
+                    </div>
+                    <div className="pt-2">
+                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                            {getStatusExplanation(String(delivery.status))}
+                        </p>
+                        {delivery.updatedAt && (
+                            <p className="mt-2 text-[10px] font-semibold text-slate-400 flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                Updated {formatRelative(delivery.updatedAt)} ({formatDate(delivery.updatedAt)})
+                            </p>
+                        )}
+                    </div>
+                </div>
+
+                {/* 2. Logistics & Tracking Number */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex flex-col justify-between">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                            Logistics & Courier
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-800">
+                            {delivery.carrierName || delivery.logisticsPartnerName || 'Standard Delivery'}
+                        </span>
+                    </div>
+                    <div className="pt-2 space-y-2">
+                        <div>
+                            <span className="text-[10px] font-bold text-slate-400 block">Tracking Number / AWB</span>
+                            <div className="flex items-center justify-between mt-0.5">
+                                <span className="font-mono text-xs font-bold text-slate-900 tracking-wider">
+                                    {trackingNum}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => handleCopy(trackingNum)}
+                                    className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[10px] font-bold transition shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-300"
+                                    title="Copy tracking number"
+                                    aria-label="Copy tracking number"
+                                >
+                                    {copied ? (
+                                        <>
+                                            <Check className="h-3 w-3 text-emerald-600" />
+                                            <span className="text-emerald-700 font-bold">Copied</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Copy className="h-3 w-3 text-slate-500" />
+                                            <span>Copy</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                        {delivery.ewayBillNumber && (
+                            <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-50">
+                                <span className="text-slate-400 font-medium">E-Way Bill:</span>
+                                <span className="font-mono font-bold text-slate-700">{delivery.ewayBillNumber}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* 3. Schedule & Delivery Date */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block pb-2 border-b border-slate-100">
+                        Schedule & Arrival
+                    </span>
+                    <div className="flex items-start gap-3 pt-2">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700 border border-blue-100 shrink-0">
+                            <Calendar className="h-4 w-4" />
+                        </div>
+                        <div>
+                            <span className="text-[10px] font-bold text-slate-400 block">Expected Delivery</span>
+                            <span className="text-xs font-extrabold text-slate-900">
+                                {delivery.expectedDelivery ? formatDate(delivery.expectedDelivery) : 'Pending Schedule'}
+                            </span>
+                            {delivery.deliveredAt ? (
+                                <p className="text-[10px] font-bold text-emerald-600 mt-0.5">
+                                    Delivered on {formatDate(delivery.deliveredAt)}
+                                </p>
+                            ) : delivery.dispatchedAt ? (
+                                <p className="text-[10px] font-semibold text-slate-500 mt-0.5">
+                                    Dispatched {formatDate(delivery.dispatchedAt)}
+                                </p>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4. Recipient & Consignment Specs */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block pb-2 border-b border-slate-100">
+                        Recipient & Package
+                    </span>
+                    <div className="flex items-start gap-3 pt-2">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-50 text-purple-700 border border-purple-100 shrink-0">
+                            <MapPin className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <span className="text-[10px] font-bold text-slate-400 block">Buyer Destination</span>
+                            <p className="text-xs font-bold text-slate-900 truncate" title={delivery.purchaseOrder?.buyer?.name || delivery.purchaseOrder?.deliveryAddress || 'Buyer Destination'}>
+                                {delivery.purchaseOrder?.buyer?.name || 'Authorized Buyer'}
+                            </p>
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                {delivery.packageWeightKg && (
+                                    <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+                                        {delivery.packageWeightKg} kg
+                                    </span>
+                                )}
+                                {delivery.packageCount && (
+                                    <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+                                        {delivery.packageCount} {delivery.packageCount === 1 ? 'Box' : 'Boxes'}
+                                    </span>
+                                )}
+                                {delivery.packageDimensions && (
+                                    <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+                                        {delivery.packageDimensions}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div className="flex justify-end gap-2 pt-1">
-                <Button variant="outline" onClick={onDone}>Close</Button>
-                <Button
-                    onClick={async () => {
-                        if (!nextStatus) return;
-                        await runWithToast(() => mut.mutateAsync({ id: delivery.id, data: { status: nextStatus } }), {
-                            loading: 'Updating status...',
-                            success: `Status updated: ${readableStatus(nextStatus)}`,
-                            error: (err: any) => err?.message || 'Status update failed'
-                        });
-                        onDone();
-                    }}
-                    disabled={!nextStatus || mut.isPending}
-                    className="bg-[#12335f] text-white"
+
+            {/* Next Status Action Card */}
+            {nextStatus ? (
+                <div className="rounded-2xl border-2 border-blue-200/90 bg-gradient-to-br from-blue-50/70 via-white to-slate-50 p-4 sm:p-5 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#12335f] text-white">
+                                <ArrowRight className="h-3.5 w-3.5" />
+                            </span>
+                            <span className="text-[11px] font-black uppercase tracking-wider text-[#12335f]">
+                                Next Status Action
+                            </span>
+                        </div>
+                        <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-black text-blue-800 uppercase tracking-wide">
+                            Ready to Advance
+                        </span>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-blue-100/80 shadow-2xs">
+                        <div className="flex-1">
+                            <span className="text-[10px] font-black uppercase text-slate-400 block">Milestone Target</span>
+                            <span className="text-sm font-black text-slate-900 flex items-center gap-1.5 mt-0.5">
+                                <span className="inline-block w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                                {readableStatus(nextStatus)}
+                            </span>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                                {getNextStatusDescription(nextStatus)}
+                            </p>
+                        </div>
+                        <div className="sm:w-60">
+                            <label htmlFor="status-remarks" className="text-[10px] font-bold text-slate-500 block mb-1">
+                                Checkpoint Note / Remarks <span className="text-slate-400 font-normal">(optional)</span>
+                            </label>
+                            <input
+                                id="status-remarks"
+                                type="text"
+                                value={remarks}
+                                onChange={e => setRemarks(e.target.value)}
+                                placeholder="e.g. Handed to carrier driver..."
+                                className="h-8 w-full rounded-lg border border-slate-200 px-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition"
+                            />
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-xs flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shrink-0">
+                        <CheckCircle2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                        <h4 className="text-xs font-black uppercase text-emerald-950">Shipment Milestones Complete</h4>
+                        <p className="text-xs font-medium text-emerald-800 mt-0.5">
+                            All tracking milestones for this consignment have been fulfilled.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Collapsible Activity Log */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+                <button
+                    type="button"
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="flex w-full items-center justify-between text-left focus:outline-none cursor-pointer"
+                    aria-expanded={showHistory}
                 >
-                    {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Truck className="mr-2 h-4 w-4" />}
-                    Update Status
+                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-2">
+                        <History className="h-3.5 w-3.5 text-slate-400" />
+                        Milestone Activity History {timelineEvents.length > 0 && `(${timelineEvents.length})`}
+                    </span>
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-blue-700">
+                        <span>{showHistory ? 'Hide history' : 'Show history'}</span>
+                        {showHistory ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    </div>
+                </button>
+
+                {showHistory && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 space-y-2.5 animate-in fade-in duration-200">
+                        {timelineEvents.length === 0 ? (
+                            <p className="text-xs text-slate-500 py-2 text-center">
+                                Initial tracking record created. Subsequent status updates will be logged here.
+                            </p>
+                        ) : (
+                            timelineEvents.map((evt, idx) => (
+                                <div key={evt.id || idx} className="flex items-start gap-3 text-xs pb-2 border-b border-slate-50 last:border-0 last:pb-0">
+                                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-600 shrink-0 mt-0.5">
+                                        <Clock className="h-3 w-3" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-bold text-slate-900">{readableStatus(String(evt.status))}</span>
+                                            <span className="text-[10px] text-slate-400 font-semibold">{evt.time ? formatDateTime(evt.time) : ''}</span>
+                                        </div>
+                                        {(evt.remarks || evt.location) && (
+                                            <p className="text-slate-600 text-[11px] mt-0.5">
+                                                {[evt.location, evt.remarks].filter(Boolean).join(' · ')}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-200/80">
+                <Button
+                    variant="outline"
+                    onClick={onDone}
+                    className="px-4 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                >
+                    Close
                 </Button>
+                {nextStatus && (
+                    <Button
+                        onClick={handleAdvanceStatus}
+                        disabled={mut.isPending || isAdvancing}
+                        className="bg-gradient-to-r from-[#0b1f3a] to-[#12335f] hover:from-[#08172c] hover:to-[#0d274c] text-white px-5 text-xs font-black shadow-md transition-all duration-200 hover:shadow-lg cursor-pointer"
+                    >
+                        {mut.isPending || isAdvancing ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Truck className="mr-2 h-4 w-4" />
+                        )}
+                        Update Status to {readableStatus(nextStatus)}
+                    </Button>
+                )}
             </div>
         </div>
     );

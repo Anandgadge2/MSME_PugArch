@@ -2,8 +2,36 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { sellerRoutes } from '@/lib/routes';
 import { useSearchParams } from 'next/navigation';
-import { Building2, CalendarDays, ChevronDown, ChevronUp, ClipboardList, Eye, FileText, Gavel, MapPin, RefreshCw, Search, ShieldCheck, X, IndianRupee, Clock, Users, CheckCircle2, type LucideIcon } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import {
+  Building2,
+  Calendar,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
+  ClipboardCheck,
+  ClipboardList,
+  Eye,
+  FileText,
+  Gavel,
+  Globe,
+  MapPin,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  X,
+  IndianRupee,
+  Clock,
+  Users,
+  CheckCircle2,
+  Layers,
+  RotateCcw,
+  TrendingUp,
+  type LucideIcon
+} from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
@@ -90,9 +118,68 @@ const toNumber = (value: unknown) => {
 };
 
 /**
- * Procurement descriptions are stored as "Sourcing Method: X\nValue: Y\nUrgency: Z" and render
- * as an unreadable run-on. Strip that machine blob so the cell shows only the human summary text
- * (the method/value/urgency already have their own columns). Returns '' when nothing is left.
+ * Helper to identify closed / dead / concluded opportunity status
+ */
+const isClosedStatus = (status?: string) => {
+  const s = String(status || '').toLowerCase();
+  return s.includes('closed') || s.includes('awarded') || s.includes('cancelled') || s.includes('expired') || s.includes('completed') || s.includes('rejected');
+};
+
+/**
+ * Helper to test if an opportunity is open and active for bidding
+ */
+const isOpenOpportunity = (item: SellerOpportunity, now: number) => {
+  if (isClosedStatus(item.status)) return false;
+  if (item.closingDate) {
+    const diff = (new Date(item.closingDate).getTime() - now) / 86400000;
+    if (diff < 0) return false;
+  }
+  return true;
+};
+
+/**
+ * Helper to test if an opportunity closes within the next 7 days
+ */
+const isClosingSoonOpportunity = (item: SellerOpportunity, now: number) => {
+  if (!isOpenOpportunity(item, now)) return false;
+  if (!item.closingDate) return false;
+  const diff = (new Date(item.closingDate).getTime() - now) / 86400000;
+  return diff >= 0 && diff <= 7;
+};
+
+/**
+ * Helper to test if this seller has participated / submitted a bid
+ */
+const isParticipatedOpportunity = (item: SellerOpportunity) => {
+  const elig = String(item.eligibility || '').toLowerCase();
+  const stat = String(item.status || '').toLowerCase();
+  const action = String(item.actionLabel || '').toLowerCase();
+  return (
+    elig.includes('participated') ||
+    stat.includes('submitted') ||
+    stat.includes('participated') ||
+    action.includes('track') ||
+    action.includes('view response')
+  );
+};
+
+/**
+ * Helper to test if opportunity is under evaluation
+ */
+const isUnderEvaluationOpportunity = (item: SellerOpportunity, now: number) => {
+  const stat = String(item.status || '').toLowerCase();
+  if (stat.includes('eval') || stat.includes('review') || stat.includes('shortlist') || stat.includes('technical')) return true;
+  if (item.closingDate) {
+    const diff = (new Date(item.closingDate).getTime() - now) / 86400000;
+    if (diff < 0 && !stat.includes('awarded') && !stat.includes('cancelled') && !stat.includes('completed')) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Clean procurement descriptions
  */
 const cleanOpportunitySummary = (desc?: string | null): string => {
   if (!desc) return '';
@@ -164,6 +251,13 @@ const isSameOpportunities = (a: SellerOpportunity[] | null, b: SellerOpportunity
   return true;
 };
 
+const formatCurrency = (value: number | string | null | undefined) => {
+  const num = Number(value || 0);
+  if (num >= 10000000) return `₹${(num / 10000000).toFixed(2)} Cr`;
+  if (num >= 100000) return `₹${(num / 100000).toFixed(2)} L`;
+  return `₹${num.toLocaleString('en-IN')}`;
+};
+
 const getDaysLeftText = (closingDate?: string) => {
   if (!closingDate) return '';
   const diff = (new Date(closingDate).getTime() - Date.now()) / 86400000;
@@ -202,8 +296,10 @@ function CountdownTimer({ endDate }: { endDate?: string }) {
 export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRouteType?: OpportunityType | '' }) {
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [items, setItems] = useState<SellerOpportunity[]>(() => globalOpportunitiesCache || []);
   const [loading, setLoading] = useState(() => !globalOpportunitiesCache);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [prevSubRouteType, setPrevSubRouteType] = useState(subRouteType);
@@ -215,19 +311,52 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   }
   const [status, setStatus] = useState('');
   const [location, setLocation] = useState('');
-  const [closingDate, setClosingDate] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<SellerOpportunity | null>(null);
   const [viewMode, setViewMode] = useResponsiveViewMode('seller:opportunities:view-mode');
-  const [kpiFilter, setKpiFilter] = useState<'all' | 'open' | 'dueSoon' | 'auctions' | 'invitations'>('all');
+  const [kpiFilter, setKpiFilter] = useState<'all' | 'live' | 'dueSoon' | 'highValue' | 'participated' | 'evaluation'>('all');
   const [category, setCategory] = useState('');
   const [valueRange, setValueRange] = useState('');
   const [buyerFilter, setBuyerFilter] = useState('');
   const [sortField, setSortField] = useState<'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue' | ''>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [nowMs] = useState(() => Date.now());
+
+  const todayStr = useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  const handleStartDateChange = (val: string) => {
+    if (val && val > todayStr) {
+      toast.warning('Future dates are not allowed');
+      return;
+    }
+    setStartDate(val);
+    if (endDate && val && val > endDate) {
+      setEndDate(val);
+    }
+    setPage(1);
+  };
+
+  const handleEndDateChange = (val: string) => {
+    if (val && val > todayStr) {
+      toast.warning('Future dates are not allowed');
+      return;
+    }
+    setEndDate(val);
+    if (startDate && val && val < startDate) {
+      setStartDate(val);
+    }
+    setPage(1);
+  };
 
   const handleSort = (field: 'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue') => {
     if (sortField === field) {
@@ -247,8 +376,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       : <ChevronDown className="ml-1 h-3.5 w-3.5 shrink-0 text-blue-600 font-extrabold" />;
   };
 
-  const load = React.useCallback(() => {
+  const load = React.useCallback((forceFresh = false) => {
     let alive = true;
+    if (forceFresh) {
+      setLoading(true);
+      globalOpportunitiesCache = null;
+      setItems([]);
+    }
 
     const dedupeAndSort = (opportunities: SellerOpportunity[]): SellerOpportunity[] => {
       const seenKeys = new Set<string>();
@@ -400,20 +534,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         let detailsHref = `/bids/${bid.id}`;
 
         if (opportunityType === 'Rate Contract') {
-          href = `/seller/rate-contract/submit-quotation?requestId=${bid.id}`;
-          detailsHref = `/seller/rate-contract?requestId=${bid.id}`;
+          href = sellerRoutes.respond('RATE_CONTRACT', bid.id);
+          detailsHref = sellerRoutes.detail('RATE_CONTRACT', bid.id);
           actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
         } else if (bid.sourceModel === 'TENDER' && bid.sourceId) {
           href = `/seller/tenders/${bid.sourceId}/bid`;
           detailsHref = `/tenders?tender=${bid.sourceId}`;
           actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
         } else if (method === 'RFP' || opportunityType === 'RFP') {
-          href = `/seller/rfp?requestId=${bid.id}`;
-          detailsHref = `/seller/rfp?requestId=${bid.id}`;
+          href = sellerRoutes.detail('RFP', bid.id);
+          detailsHref = sellerRoutes.detail('RFP', bid.id);
           actionLabel = 'Submit Proposal';
         } else {
-          href = `/seller/rfq?requestId=${bid.id}`;
-          detailsHref = `/seller/rfq?requestId=${bid.id}`;
+          href = sellerRoutes.detail('RFQ', bid.id);
+          detailsHref = sellerRoutes.detail('RFQ', bid.id);
           actionLabel = 'Submit Quote';
         }
 
@@ -509,18 +643,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const documents = asTextList(req.requiredDocuments);
         const linkedBidId = req.payload?.linkedProcurementBidId;
+        const canonicalReqId = req.requirementNumber || req.sourceId || (typeof req.id === 'number' && req.id < 0 ? Math.abs(req.id) : req.id);
         const buildDetailHref = () => {
-          if (opportunityType === 'Rate Contract') return `/seller/rate-contract?requirementId=${req.id}`;
-          if (opportunityType === 'RFQ') return `/seller/rfq?requirementId=${req.id}`;
-          if (opportunityType === 'RFP') return `/seller/rfp?requirementId=${req.id}`;
-          if (opportunityType === 'Open Tender' || opportunityType === 'Limited Tender') return `/seller/rfq?requirementId=${req.id}`;
-          if (opportunityType === 'Reverse Auction') return `/reverse-auctions/${req.sourceId || req.id}`;
-          return `/marketplace/requirements/${req.sourceId || req.id}`;
+          if (opportunityType === 'Rate Contract') return sellerRoutes.detail('RATE_CONTRACT', canonicalReqId);
+          if (opportunityType === 'RFQ') return sellerRoutes.detail('RFQ', canonicalReqId);
+          if (opportunityType === 'RFP') return sellerRoutes.detail('RFP', canonicalReqId);
+          if (opportunityType === 'Open Tender') return sellerRoutes.detail('OPEN_TENDER', canonicalReqId);
+          if (opportunityType === 'Limited Tender') return sellerRoutes.detail('LIMITED_TENDER', canonicalReqId);
+          if (opportunityType === 'Reverse Auction') return sellerRoutes.detail('REVERSE_AUCTION', req.sourceId || canonicalReqId);
+          return `/marketplace/requirements/${canonicalReqId}`;
         };
         const detailHref = buildDetailHref();
         const responseHref = linkedBidId 
-          ? (opportunityType === 'Rate Contract' ? `/seller/rate-contract/submit-quotation?requestId=${linkedBidId}` : `/bids/${linkedBidId}/participate`)
-          : (opportunityType === 'Rate Contract' ? `/seller/rate-contract/submit-quotation?requirementId=${req.id}` : detailHref);
+          ? (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', linkedBidId) : `/bids/${linkedBidId}/participate`)
+          : (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', canonicalReqId) : detailHref);
         const opportunity: SellerOpportunity = {
           id: `req-${req.id}`,
           type: opportunityType,
@@ -535,7 +671,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           actionLabel: req.responsesCount > 0 ? 'View Response' : (opportunityType === 'Rate Contract' ? 'Submit Rate' : 'Submit Quotation'),
           href: responseHref,
           detailsHref: detailHref,
-          sourceRef: formatRefId('REQ', req.sourceId || req.id, req.requirementNumber),
+          sourceRef: formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'REQ', req.sourceId || req.id, req.requirementNumber),
           publishedAt: req.approvedAt || req.createdAt,
           quantity: formatQuantity(req.quantity, req.unit),
           description: req.description,
@@ -600,8 +736,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           eligibility: isQrPrivate ? 'Invited Sellers Only' : 'Open Sourcing',
           status: qr.status || 'OPEN',
           actionLabel: 'Submit Quote',
-          href: `/seller/rfq?requestId=${qr.id}`,
-          detailsHref: `/seller/rfq?requestId=${qr.id}`,
+          href: sellerRoutes.detail('RFQ', qr.id),
+          detailsHref: sellerRoutes.detail('RFQ', qr.id),
           sourceRef: qr.quoteNumber || `RFQ-${qr.id}`,
           publishedAt: qr.createdAt,
           quantity: qr.quantity,
@@ -646,8 +782,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           eligibility: 'Check invitation',
           status: auction.statusEnum || auction.status || 'Scheduled',
           actionLabel: 'Join Auction',
-          href: `/reverse-auctions/${auction.id}/live`,
-          detailsHref: `/reverse-auctions/${auction.id}`,
+          href: sellerRoutes.auctionLive(auction.id),
+          detailsHref: sellerRoutes.detail('REVERSE_AUCTION', auction.id),
           sourceRef: auction.auctionCode || `RA-${auction.id}`,
           publishedAt: auction.startTime,
           description: auction.description,
@@ -682,8 +818,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         if (!rc) return;
         const meta = rc.metadata || {};
         const hasReqId = Boolean(meta.requirementId);
-        const reqId = meta.requirementId || rc.id;
-        const refNo = rc.contractNumber || meta.requirementNumber || `RC-${rc.id}`;
+        const rawRef = rc.contractNumber || meta.requirementNumber || `RC-${rc.id}`;
+        const refNo = formatRefId('RC', rc.id, rawRef);
 
         const reqTitle = meta.requirementTitle || meta.basics?.title || meta.contractTitle || meta.title || rc.title;
         const buyerName = meta.buyerOrganizationName || meta.buyerOrganization?.organizationName || meta.buyerName || meta.orgName || rc.buyerOrganizationName || 'Verified Buyer';
@@ -703,11 +839,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           status: rc.status || meta.activeState || 'ACTIVE',
           actionLabel: 'Submit Quote',
           href: hasReqId
-            ? `/seller/rate-contract/submit-quotation?requirementId=${meta.requirementId}`
-            : `/seller/rate-contract/submit-quotation?requestId=${rc.id}`,
+            ? sellerRoutes.respond('RATE_CONTRACT', meta.requirementId)
+            : sellerRoutes.respond('RATE_CONTRACT', rc.id),
           detailsHref: hasReqId
-            ? `/seller/rate-contract?requirementId=${meta.requirementId}`
-            : `/seller/rate-contract?requestId=${rc.id}`,
+            ? sellerRoutes.detail('RATE_CONTRACT', meta.requirementId)
+            : sellerRoutes.detail('RATE_CONTRACT', rc.id),
           sourceRef: refNo,
           publishedAt: rc.startDate || rc.createdAt,
           quantity: meta.minimumOrderQuantity ? `${meta.minimumOrderQuantity} min qty` : undefined,
@@ -734,16 +870,31 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       applyChunk(next);
     }).catch(() => {});
 
-    Promise.allSettled([p1, p2, p3, p4, p5]).finally(() => {
+    return Promise.allSettled([p1, p2, p3, p4, p5]).finally(() => {
       if (alive) setLoading(false);
     });
-
-    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    globalOpportunitiesCache = null;
+    try {
+      await load(true);
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ['navigation-counts'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'summary'] }),
+      ]);
+      toast.success('Opportunities refreshed successfully');
+    } catch {
+      toast.error('Failed to refresh opportunities');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const queryType = typeFromQuery(searchParams?.get('type'));
   const [prevQueryType, setPrevQueryType] = useState(queryType);
@@ -754,7 +905,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   }
 
   const typeOptions = useMemo(() => Array.from(new Set(items.map(item => item.type))).sort(), [items]);
-  const statusOptions = useMemo(() => Array.from(new Set(items.map(item => item.status).filter(Boolean))).sort(), [items]);
   const locationOptions = useMemo(() => Array.from(new Set(items.map(item => item.location).filter((value): value is string => Boolean(value)))).sort(), [items]);
   const categoryOptions = useMemo(() => Array.from(new Set(items.map(item => item.category).filter((value): value is string => Boolean(value)))).sort(), [items]);
   const buyerOptions = useMemo(() => Array.from(new Set(items.map(item => item.buyer).filter((value): value is string => Boolean(value)))).sort(), [items]);
@@ -762,19 +912,48 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const baseFiltered = useMemo(() => {
     const text = query.trim().toLowerCase();
     return items.filter(item => {
-      const haystack = [item.title, item.buyer, item.category, item.location, item.status, item.type, item.sourceRef, item.description].join(' ').toLowerCase();
+      const haystack = [
+        item.title,
+        item.buyer,
+        item.category,
+        item.location,
+        item.status,
+        item.type,
+        item.sourceRef,
+        item.description,
+        item.procurementType
+      ].join(' ').toLowerCase();
+
       if (text && !haystack.includes(text)) return false;
+
       if (type) {
         if (type === 'Limited Tender') {
-          if (!item.isInvitation) return false;
+          if (!item.isInvitation && item.type !== 'Limited Tender') return false;
         } else if (item.type !== type) {
           return false;
         }
       }
-      if (status && item.status !== status) return false;
+
+      if (status) {
+        if (status === 'LIVE') {
+          if (!isOpenOpportunity(item, nowMs)) return false;
+        } else if (status === 'CLOSING_SOON') {
+          if (!isClosingSoonOpportunity(item, nowMs)) return false;
+        } else if (status === 'PARTICIPATED') {
+          if (!isParticipatedOpportunity(item)) return false;
+        } else if (status === 'UNDER_EVALUATION') {
+          if (!isUnderEvaluationOpportunity(item, nowMs)) return false;
+        } else if (status === 'CLOSED') {
+          if (!isClosedStatus(item.status) && isOpenOpportunity(item, nowMs)) return false;
+        } else if (item.status !== status) {
+          return false;
+        }
+      }
+
       if (location && item.location !== location) return false;
       if (category && item.category !== category) return false;
       if (buyerFilter && item.buyer !== buyerFilter) return false;
+
       if (valueRange) {
         const val = item.estimatedValue || 0;
         if (valueRange === '5l' && val >= 500000) return false;
@@ -782,40 +961,84 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         if (valueRange === '1cr' && (val < 2500000 || val >= 10000000)) return false;
         if (valueRange === 'above1cr' && val < 10000000) return false;
       }
-      if (closingDate === '7' && item.closingDate) {
-        const diff = (new Date(item.closingDate).getTime() - nowMs) / 86400000;
-        if (diff > 7) return false;
+
+      if (startDate || endDate) {
+        const rawDate = item.publishedAt || item.closingDate;
+        if (!rawDate) return false;
+        const d = new Date(rawDate);
+        if (Number.isNaN(d.getTime())) return false;
+        const itemYear = d.getFullYear();
+        const itemMonth = String(d.getMonth() + 1).padStart(2, '0');
+        const itemDay = String(d.getDate()).padStart(2, '0');
+        const itemDateStr = `${itemYear}-${itemMonth}-${itemDay}`;
+
+        if (startDate && itemDateStr < startDate) return false;
+        if (endDate && itemDateStr > endDate) return false;
       }
+
       return true;
     });
-  }, [closingDate, items, location, query, status, type, category, buyerFilter, valueRange, nowMs]);
+  }, [startDate, endDate, items, location, query, status, type, category, buyerFilter, valueRange, nowMs]);
 
-  const summary = useMemo(() => {
-    const openStatuses = new Set(['open', 'scheduled', 'live', 'pending', 'closing soon', 'active', 'published', 'active contract']);
-    const dueSoon = baseFiltered.filter(item => {
-      if (!item.closingDate) return false;
-      const diff = (new Date(item.closingDate).getTime() - nowMs) / 86400000;
-      return diff >= 0 && diff <= 7;
-    }).length;
+  const kpis = useMemo(() => {
+    let live = 0;
+    let liveValue = 0;
+    let closingSoon = 0;
+    let closingSoonValue = 0;
+    let highValueCount = 0;
+    let highValueTotal = 0;
+    let participated = 0;
+    let evaluation = 0;
+
+    items.forEach(item => {
+      const isLive = isOpenOpportunity(item, nowMs);
+      const val = Number(item.estimatedValue) || 0;
+
+      if (isLive) {
+        live++;
+        liveValue += val;
+      }
+      if (isClosingSoonOpportunity(item, nowMs)) {
+        closingSoon++;
+        closingSoonValue += val;
+      }
+      if (isLive && val >= 2500000) {
+        highValueCount++;
+        highValueTotal += val;
+      }
+      if (isParticipatedOpportunity(item)) participated++;
+      if (isUnderEvaluationOpportunity(item, nowMs)) evaluation++;
+    });
+
     return {
-      total: baseFiltered.length,
-      open: baseFiltered.filter(item => openStatuses.has(String(item.status).toLowerCase())).length,
-      dueSoon,
-      auctions: baseFiltered.filter(item => item.type === 'Reverse Auction').length,
+      live,
+      liveValue,
+      closingSoon,
+      closingSoonValue,
+      highValueCount,
+      highValueTotal,
+      participated,
+      evaluation
     };
-  }, [baseFiltered, nowMs]);
+  }, [items, nowMs]);
 
   const filtered = useMemo(() => {
-    const openStatuses = new Set(['open', 'scheduled', 'live', 'pending', 'closing soon', 'active', 'published', 'active contract']);
     const list = baseFiltered.filter(item => {
-      if (kpiFilter === 'open' && !openStatuses.has(String(item.status).toLowerCase())) return false;
-      if (kpiFilter === 'dueSoon') {
-        if (!item.closingDate) return false;
-        const diff = (new Date(item.closingDate).getTime() - nowMs) / 86400000;
-        if (diff < 0 || diff > 7) return false;
+      if (kpiFilter === 'live') {
+        return isOpenOpportunity(item, nowMs);
       }
-      if (kpiFilter === 'auctions' && item.type !== 'Reverse Auction') return false;
-      if (kpiFilter === 'invitations' && !item.isInvitation) return false;
+      if (kpiFilter === 'dueSoon') {
+        return isClosingSoonOpportunity(item, nowMs);
+      }
+      if (kpiFilter === 'highValue') {
+        return (Number(item.estimatedValue) || 0) >= 2500000 && isOpenOpportunity(item, nowMs);
+      }
+      if (kpiFilter === 'participated') {
+        return isParticipatedOpportunity(item);
+      }
+      if (kpiFilter === 'evaluation') {
+        return isUnderEvaluationOpportunity(item, nowMs);
+      }
       return true;
     });
 
@@ -842,10 +1065,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     }
 
     return list;
-  }, [baseFiltered, kpiFilter, sortField, sortDirection]);
+  }, [baseFiltered, kpiFilter, sortField, sortDirection, nowMs]);
 
   // Reset KPI filter and pagination when filters change (render-pass adjustment, no cascading renders)
-  const filterKey = `${query}|${type}|${status}|${location}|${closingDate}|${category}|${buyerFilter}|${valueRange}`;
+  const filterKey = `${query}|${type}|${status}|${location}|${startDate}|${endDate}|${category}|${buyerFilter}|${valueRange}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   const pageFilterKey = `${filterKey}|${viewMode}|${kpiFilter}`;
   const [prevPageFilterKey, setPrevPageFilterKey] = useState(pageFilterKey);
@@ -861,14 +1084,15 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     setExpandedId(null);
   }
 
-  const pageRows = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page]);
+  const pageRows = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page, pageSize]);
 
   const reset = () => {
     setQuery('');
     setType('');
     setStatus('');
     setLocation('');
-    setClosingDate('');
+    setStartDate('');
+    setEndDate('');
     setCategory('');
     setBuyerFilter('');
     setValueRange('');
@@ -882,56 +1106,76 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     switch (subRouteType) {
       case 'RFQ':
         return {
-          eyebrow: 'RFQ Sourcing',
           title: 'Requests for Quotation (RFQs)',
           desc: 'Submit quick pricing quotes for standard goods and materials requested by buyers.'
         };
       case 'RFP':
         return {
-          eyebrow: 'Strategic RFPs',
           title: 'Requests for Proposal (RFPs)',
           desc: 'Review detailed requirements and submit proposals for complex services, projects, and custom solutions.'
         };
       case 'Open Tender':
         return {
-          eyebrow: 'Open Tenders',
           title: 'Open Competitive Tenders',
           desc: 'Participate in public procurement tenders and high-value competitive bidding opportunities.'
         };
       case 'Limited Tender':
         return {
-          eyebrow: 'Limited Tenders',
           title: 'Restricted Sourcing & Limited Tenders',
           desc: 'View limited tenders specifically restricted to authorized sellers.'
         };
       case 'Reverse Auction':
         return {
-          eyebrow: 'Reverse Auctions',
           title: 'Live Reverse Auctions',
           desc: 'Compete in real-time dynamic bidding events to secure contracts by offering competitive pricing.'
         };
+      case 'Rate Contract':
+        return {
+          title: 'Annual Rate Contracts',
+          desc: 'Supply goods and services at pre-negotiated rates across scheduled institutional procurement cycles.'
+        };
       default:
         return {
-          eyebrow: 'Bidding Opportunities',
           title: 'New Bidding Opportunities',
           desc: 'One place to review requests for quotations (RFQs), public tenders, auctions, and direct buyer requirements.'
         };
     }
   }, [subRouteType]);
 
-  const kpis = useMemo(() => {
-    const total = items.length;
-    const closingSoon = items.filter(item => {
-      if (!item.closingDate) return false;
-      const diff = (new Date(item.closingDate).getTime() - nowMs) / 86400000;
-      return diff >= 0 && diff <= 7;
-    }).length;
-    const auctionsLive = items.filter(item => item.type === 'Reverse Auction' && ['LIVE', 'OPEN', 'ACTIVE'].includes(String(item.status).toUpperCase())).length;
-    const invitations = items.filter(item => item.isInvitation).length;
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: 0,
+      RFQ: 0,
+      'Open Tender': 0,
+      RFP: 0,
+      'Limited Tender': 0,
+      'Reverse Auction': 0,
+      'Rate Contract': 0,
+    };
 
-    return { total, closingSoon, auctionsLive, invitations };
-  }, [items, nowMs]);
+    items.forEach(item => {
+      if (!isClosedStatus(item.status)) {
+        counts.all++;
+        if (item.type && counts[item.type] !== undefined) {
+          counts[item.type]++;
+        } else if (item.isInvitation) {
+          counts['Limited Tender']++;
+        }
+      }
+    });
 
+    return counts;
+  }, [items]);
+
+  const opportunityCategories: Array<{ label: string; typeVal: OpportunityType | ''; countKey: string; icon: any }> = useMemo(() => [
+    { label: 'All Opportunities', typeVal: '', countKey: 'all', icon: Globe },
+    { label: 'RFQs', typeVal: 'RFQ', countKey: 'RFQ', icon: FileText },
+    { label: 'Open Tenders', typeVal: 'Open Tender', countKey: 'Open Tender', icon: ClipboardList },
+    { label: 'RFPs', typeVal: 'RFP', countKey: 'RFP', icon: Layers },
+    { label: 'Limited Tenders', typeVal: 'Limited Tender', countKey: 'Limited Tender', icon: Users },
+    { label: 'Reverse Auctions', typeVal: 'Reverse Auction', countKey: 'Reverse Auction', icon: Gavel },
+    { label: 'Rate Contracts', typeVal: 'Rate Contract', countKey: 'Rate Contract', icon: RotateCcw }
+  ], []);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 pb-12 pt-4">
@@ -941,72 +1185,138 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           <h1 className="text-2xl font-black text-slate-950 tracking-tight">{headerContent.title}</h1>
           <p className="text-xs font-semibold text-slate-500 mt-0.5">{headerContent.desc}</p>
         </div>
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+            className="h-10 rounded-xl border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-900 transition-all flex items-center shrink-0 cursor-pointer"
+            aria-label="Refresh opportunities"
+          >
+            <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", (refreshing || loading) && "animate-spin")} />
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          label="Total Opportunities"
-          value={kpis.total}
-          subtext="Available for bidding"
-          icon={ClipboardList}
+          label="Live Opportunity Pool"
+          value={formatCurrency(kpis.liveValue)}
+          subtext={`${kpis.live} active sourcing events`}
+          icon={IndianRupee}
           tone="blue"
-          active={kpiFilter === 'all'}
-          onClick={() => setKpiFilter('all')}
+          active={kpiFilter === 'live'}
+          onClick={() => setKpiFilter(kpiFilter === 'live' ? 'all' : 'live')}
         />
         <KpiCard
-          label="Closing Soon"
+          label="Closing in ≤7 Days"
           value={kpis.closingSoon}
-          subtext="Within next 7 days"
+          subtext={`${formatCurrency(kpis.closingSoonValue)} expiring soon`}
           icon={Clock}
-          tone="amber"
+          tone="red"
           active={kpiFilter === 'dueSoon'}
           onClick={() => setKpiFilter(kpiFilter === 'dueSoon' ? 'all' : 'dueSoon')}
         />
         <KpiCard
-          label="Reverse Auctions Live"
-          value={kpis.auctionsLive}
-          subtext="Real-time bidding"
-          icon={CheckCircle2}
-          tone="green"
-          active={kpiFilter === 'auctions'}
-          onClick={() => setKpiFilter(kpiFilter === 'auctions' ? 'all' : 'auctions')}
+          label="High-Value Tenders (≥₹25L)"
+          value={kpis.highValueCount}
+          subtext={`${formatCurrency(kpis.highValueTotal)} strategic volume`}
+          icon={TrendingUp}
+          tone="purple"
+          active={kpiFilter === 'highValue'}
+          onClick={() => setKpiFilter(kpiFilter === 'highValue' ? 'all' : 'highValue')}
         />
         <KpiCard
-          label="Limited Tenders"
-          value={kpis.invitations}
-          subtext="Direct buyer invites"
-          icon={Users}
-          tone="purple"
-          active={kpiFilter === 'invitations'}
-          onClick={() => setKpiFilter(kpiFilter === 'invitations' ? 'all' : 'invitations')}
+          label="My Active Submissions"
+          value={kpis.participated}
+          subtext={`${kpis.evaluation} awaiting award decision`}
+          icon={CheckCircle2}
+          tone="indigo"
+          active={kpiFilter === 'participated'}
+          onClick={() => setKpiFilter(kpiFilter === 'participated' ? 'all' : 'participated')}
         />
+      </div>
+
+      {/* ── Opportunity Type Segmented Filter Pills ── */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mt-1 scrollbar-none" role="tablist" aria-label="Opportunity Types">
+        {opportunityCategories.map(tab => {
+          const isActive = (type === tab.typeVal) || (!type && !tab.typeVal);
+          const count = typeCounts[tab.countKey] || 0;
+          const Icon = tab.icon;
+
+          return (
+            <button
+              key={tab.label}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => {
+                setType(tab.typeVal);
+                setPage(1);
+              }}
+              className={cn(
+                "inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap border cursor-pointer",
+                isActive
+                  ? "bg-[#12335f] text-white border-[#12335f] shadow-sm shadow-[#12335f]/20 ring-2 ring-[#12335f]/15"
+                  : "bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50 hover:border-slate-300 shadow-2xs"
+              )}
+            >
+              <Icon className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-[#c8a45c]" : "text-slate-400")} />
+              <span>{tab.label}</span>
+              <span
+                className={cn(
+                  "px-1.5 py-0.5 rounded-full text-[10px] font-black min-w-[18px] text-center transition-colors",
+                  isActive
+                    ? "bg-white/20 text-white"
+                    : count > 0 ? "bg-slate-100 text-slate-700" : "bg-slate-50 text-slate-400"
+                )}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Search + Filter + View Toggle Toolbar ── */}
       <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
         <ResponsiveFilterBar
-          activeFilterCount={(query ? 1 : 0) + (type ? 1 : 0) + (category ? 1 : 0) + (buyerFilter ? 1 : 0) + (location ? 1 : 0) + (closingDate ? 1 : 0)}
+          singleRowDesktop={false}
+          activeFilterCount={(query ? 1 : 0) + (type ? 1 : 0) + (status ? 1 : 0) + (category ? 1 : 0) + (buyerFilter ? 1 : 0) + (location ? 1 : 0) + (startDate ? 1 : 0) + (endDate ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 value={query}
                 onChange={event => { setQuery(event.target.value); setPage(1); }}
-                placeholder="Search opportunities..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                placeholder="Search opportunities by title, ref no, buyer, category..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-9 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => { setQuery(''); setPage(1); }}
+                  aria-label="Clear search input"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full transition-colors cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           }
           filters={
             <>
               {/* Type Dropdown */}
               {!subRouteType && (
-                <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[130px]">
+                <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
                   <select
                     value={type}
                     onChange={e => { setType(e.target.value as OpportunityType | ''); setPage(1); }}
                     className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                    aria-label="Filter by type"
                   >
                     <option value="">All Types</option>
                     {typeOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
@@ -1014,12 +1324,30 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 </div>
               )}
 
-              {/* Category Dropdown */}
+              {/* Status Dropdown */}
               <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[145px]">
+                <select
+                  value={status}
+                  onChange={e => { setStatus(e.target.value); setPage(1); }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  aria-label="Filter by status"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="LIVE">Live / Open</option>
+                  <option value="CLOSING_SOON">Closing Soon (≤7d)</option>
+                  <option value="PARTICIPATED">My Submissions</option>
+                  <option value="UNDER_EVALUATION">Under Evaluation</option>
+                  <option value="CLOSED">Closed / Concluded</option>
+                </select>
+              </div>
+
+              {/* Category Dropdown */}
+              <div className="w-full sm:w-auto sm:min-w-[120px] sm:max-w-[150px]">
                 <select
                   value={category}
                   onChange={e => { setCategory(e.target.value); setPage(1); }}
                   className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  aria-label="Filter by category"
                 >
                   <option value="">All Categories</option>
                   {categoryOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
@@ -1027,11 +1355,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Buyer Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
+              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[140px]">
                 <select
                   value={buyerFilter}
                   onChange={e => { setBuyerFilter(e.target.value); setPage(1); }}
                   className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  aria-label="Filter by buyer"
                 >
                   <option value="">All Buyers</option>
                   {buyerOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
@@ -1039,38 +1368,58 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Location Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
+              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[140px]">
                 <select
                   value={location}
                   onChange={e => { setLocation(e.target.value); setPage(1); }}
                   className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  aria-label="Filter by location"
                 >
                   <option value="">All Locations</option>
                   {locationOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                 </select>
               </div>
 
-              {/* Closing Date Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[130px]">
-                <select
-                  value={closingDate}
-                  onChange={e => { setClosingDate(e.target.value); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
-                >
-                  <option value="">Closing Date</option>
-                  <option value="7">Next 7 days</option>
-                </select>
+              {/* Unified Date Range Group (From - To) */}
+              <div className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 hover:border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/10 transition-colors shadow-xs w-full sm:w-auto">
+                <Calendar className="h-3.5 w-3.5 text-slate-400 mr-1.5 shrink-0" />
+                <span className="text-[10px] font-bold text-slate-400 mr-1 uppercase select-none shrink-0">From</span>
+                <input
+                  id="filter-start-date"
+                  type="date"
+                  value={startDate}
+                  max={endDate && endDate <= todayStr ? endDate : todayStr}
+                  onChange={e => handleStartDateChange(e.target.value)}
+                  className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[110px]"
+                  aria-label="Start date (From)"
+                  title="Start Date (Published on or after)"
+                />
+                <span className="text-slate-300 mx-1.5 font-bold select-none">–</span>
+                <span className="text-[10px] font-bold text-slate-400 mr-1 uppercase select-none shrink-0">To</span>
+                <input
+                  id="filter-end-date"
+                  type="date"
+                  value={endDate}
+                  min={startDate || undefined}
+                  max={todayStr}
+                  onChange={e => handleEndDateChange(e.target.value)}
+                  className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[110px]"
+                  aria-label="End date (To)"
+                  title="End Date (Published on or before)"
+                />
               </div>
 
               {/* Reset Trigger */}
-              {(query || type || category || buyerFilter || location || closingDate) && (
+              {(query || type || status || category || buyerFilter || location || startDate || endDate || kpiFilter !== 'all') && (
                 <Button
                   type="button"
                   variant="outline"
                   onClick={reset}
-                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                  className="h-10 px-3.5 rounded-xl border-rose-200 bg-rose-50/70 text-xs font-extrabold text-rose-700 hover:bg-rose-100 flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
+                  aria-label="Reset all filters"
                 >
-                  Reset
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Reset</span>
                 </Button>
               )}
             </>

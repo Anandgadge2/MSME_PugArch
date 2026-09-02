@@ -46,7 +46,6 @@ export default function CheckoutWizardLayout({
   return (
     <div className="mx-auto max-w-7xl space-y-4">
       <div className="border-b border-slate-200 pb-4">
-        <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Marketplace · Cart · Procurement Checkout</p>
         <h1 className="text-xl font-black text-slate-950">Procurement Checkout Wizard</h1>
         <p className="text-xs text-slate-500">Select Direct Purchase, L1, Bid/RA, or PAC based on cart value and rules.</p>
       </div>

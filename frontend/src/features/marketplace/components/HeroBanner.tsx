@@ -35,6 +35,8 @@ export function HeroBanner({ banners }: Props) {
     const [current, setCurrent] = useState(0);
     const [fading, setFading] = useState(false);
     const [currentImg, setCurrentImg] = useState<string>(() => resolveImageSrc(slides[0]?.imageUrl, 0));
+    const [touchStart, setTouchStart] = useState<number | null>(null);
+    const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
     useEffect(() => {
         const url = slides[current]?.imageUrl;
@@ -53,6 +55,25 @@ export function HeroBanner({ banners }: Props) {
         const t = setInterval(next, 7000);
         return () => clearInterval(t);
     }, [next]);
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        setTouchEnd(null);
+        setTouchStart(e.targetTouches[0].clientX);
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        setTouchEnd(e.targetTouches[0].clientX);
+    };
+
+    const handleTouchEnd = () => {
+        if (!touchStart || !touchEnd) return;
+        const distance = touchStart - touchEnd;
+        if (distance > 50) {
+            next();
+        } else if (distance < -50) {
+            prev();
+        }
+    };
 
     const slide = slides[current] || slides[0] || (DEFAULT_MARKETPLACE_BANNERS[0] as unknown as MarketplaceBanner);
     const ctaLink = slide?.ctaLink || slide?.targetUrl;
@@ -84,11 +105,14 @@ export function HeroBanner({ banners }: Props) {
 
     return (
         <section
-            className="group/hero relative overflow-hidden bg-slate-950 min-h-[320px] sm:min-h-[500px] lg:min-h-[560px] flex items-center"
+            className="group/hero relative overflow-hidden bg-slate-950 w-full aspect-[16/10] xs:aspect-[16/9] sm:aspect-[2/1] md:aspect-[2.2/1] lg:aspect-[2.4/1] xl:aspect-[2.6/1] 2xl:aspect-[2.8/1] min-h-[300px] xs:min-h-[330px] sm:min-h-[380px] md:min-h-[440px] lg:min-h-[480px] xl:min-h-[520px] max-h-[640px] flex items-center"
             aria-label="Hero Banner"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
         >
-            {/* Background image — Vibrant, rich 100% full coverage */}
-            <div className="absolute inset-0 z-0 overflow-hidden bg-slate-900">
+            {/* Background image — Vibrant, rich 100% full coverage with natural proportions */}
+            <div className="absolute inset-0 z-0 overflow-hidden bg-slate-900 select-none pointer-events-none">
                 {activeImageSrc ? (
                     <img
                         key={`${slide?.id ?? 'slide'}-${current}`}
@@ -100,65 +124,66 @@ export function HeroBanner({ banners }: Props) {
                         onError={() => {
                             setCurrentImg(DEFAULT_IMAGES[current % DEFAULT_IMAGES.length]);
                         }}
-                        className={`w-full h-full object-cover object-center transition-all duration-500 ease-out brightness-[1.02] contrast-[1.05] ${fading ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}
+                        className={`w-full h-full object-cover object-center transition-all duration-700 ease-out brightness-[1.02] contrast-[1.04] ${fading ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}
                     />
                 ) : null}
 
-                {/* Focused contrast overlay: Soft dark gradient behind text for crisp readability while preserving photo clarity */}
-                <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/45 to-transparent sm:w-[75%] lg:w-[65%]" />
-                <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/40 to-transparent" />
+                {/* Multi-layered responsive contrast overlay: Keeps text readable on the left while leaving the center/right graphics & photos 100% visible */}
+                <div className="absolute inset-0 bg-slate-950/40 sm:bg-slate-950/20" />
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/75 via-45% to-transparent sm:w-[75%] lg:w-[58%]" />
+                <div className="absolute inset-x-0 bottom-0 h-16 sm:h-24 bg-gradient-to-t from-slate-950/70 to-transparent" />
             </div>
 
-            {/* Side Navigation Arrow - Left */}
+            {/* Side Navigation Arrow - Left (Desktop & Tablet only: prevented from covering text on mobile) */}
             <button
                 type="button"
                 onClick={prev}
-                className="absolute left-2.5 sm:left-5 lg:left-8 top-1/2 -translate-y-1/2 z-30 flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-white/60 hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-100 md:opacity-0 md:group-hover/hero:opacity-100 focus:opacity-100"
+                className="hidden md:flex absolute left-3 lg:left-6 top-1/2 -translate-y-1/2 z-30 h-9 w-9 lg:h-11 lg:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-white/60 hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-0 group-hover/hero:opacity-100 focus:opacity-100"
                 aria-label="Previous Banner Slide"
             >
-                <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6 transition-transform duration-200 group-hover/arrow:-translate-x-0.5" />
+                <ChevronLeft className="h-4 w-4 lg:h-5 lg:w-5 transition-transform duration-200 group-hover/arrow:-translate-x-0.5" />
             </button>
 
-            {/* Side Navigation Arrow - Right */}
+            {/* Side Navigation Arrow - Right (Desktop & Tablet only: prevented from covering text on mobile) */}
             <button
                 type="button"
                 onClick={next}
-                className="absolute right-2.5 sm:right-5 lg:right-8 top-1/2 -translate-y-1/2 z-30 flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-white/60 hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-100 md:opacity-0 md:group-hover/hero:opacity-100 focus:opacity-100"
+                className="hidden md:flex absolute right-3 lg:right-6 top-1/2 -translate-y-1/2 z-30 h-9 w-9 lg:h-11 lg:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-white/60 hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-0 group-hover/hero:opacity-100 focus:opacity-100"
                 aria-label="Next Banner Slide"
             >
-                <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6 transition-transform duration-200 group-hover/arrow:translate-x-0.5" />
+                <ChevronRight className="h-4 w-4 lg:h-5 lg:w-5 transition-transform duration-200 group-hover/arrow:translate-x-0.5" />
             </button>
 
             {/* Hero Main Content Container */}
-            <div className="relative z-10 mx-auto w-full max-w-[1680px] px-8 sm:px-16 lg:px-20 py-8 pb-12 sm:py-16 sm:pb-24 lg:py-20 lg:pb-28 2xl:px-24">
+            <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-6 sm:py-10 md:py-12 pb-10 sm:pb-14 lg:pb-16">
                 
-                {/* FLOATING CTA OVERLAY (Desktop Only) */}
-                <div className="hidden sm:flex absolute sm:top-6 sm:right-6 2xl:right-8 z-30 flex-row flex-nowrap justify-end gap-2.5 pointer-events-auto">
+                {/* FLOATING CTA OVERLAY (Top Right across Mobile & Desktop) */}
+                <div className="absolute top-3 right-3 sm:top-5 sm:right-6 lg:top-6 lg:right-8 z-30 flex flex-row items-center gap-2 sm:gap-2.5 pointer-events-auto">
                     <button 
                         onClick={handlePostRequirement} 
-                        className="h-9 sm:h-10 px-4 sm:px-5 rounded-full bg-white/15 hover:bg-white/100 hover:text-black/100 border border-white/30 backdrop-blur-md text-white text-[11px] sm:text-xs font-bold transition-all active:scale-95 shadow-md"
+                        className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full border border-white/40 bg-black/45 backdrop-blur-md text-white text-[11px] sm:text-xs lg:text-sm font-bold hover:bg-white/20 active:scale-95 transition-all shadow-lg"
                     >
                         Post Requirement
                     </button>
                     <button 
                         onClick={handleStartSelling} 
-                        className="h-9 sm:h-10 px-4 sm:px-5 rounded-full bg-white hover:bg-slate-50 text-[#0b2447] text-[11px] sm:text-xs font-black transition-all active:scale-95 shadow-xl shadow-black/30"
+                        className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] sm:text-xs lg:text-sm font-black active:scale-95 transition-all shadow-xl shadow-black/30"
                     >
                         Start Selling
                     </button>
                 </div>
 
-                <div className="w-full max-w-2xl">
+                <div className="w-full max-w-xl lg:max-w-2xl">
                     <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
                         {/* Official Trust Pill Badge */}
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-black/60 border border-emerald-400/60 text-[8.5px] sm:text-xs font-bold text-emerald-300 uppercase tracking-wider mb-2 sm:mb-4 backdrop-blur-md shadow-md">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-black/60 border border-emerald-400/50 text-[9px] sm:text-xs font-bold text-emerald-300 uppercase tracking-wider mb-2 sm:mb-3 backdrop-blur-md shadow-md">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                             <span className="sm:hidden">Official MSME Portal · Jharsuguda</span>
                             <span className="hidden sm:inline">Official MSME Marketplace · Jharsuguda District, Odisha</span>
                         </div>
 
                         {/* Title */}
-                        <h1 className="mb-2 sm:mb-3.5 text-xl sm:text-4xl md:text-5xl lg:text-[3.2rem] font-black leading-[1.15] tracking-tight text-white drop-shadow-[0_3px_8px_rgba(0,0,0,0.9)]">
+                        <h1 className="mb-2 sm:mb-3 text-lg xs:text-xl sm:text-3xl md:text-4xl lg:text-[2.75rem] 2xl:text-5xl font-black leading-tight sm:leading-[1.12] tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
                             {(slide?.title || 'MSME Marketplace').split('\n').map((line, i) => (
                                 <React.Fragment key={i}>
                                     {i > 0 && (
@@ -174,44 +199,27 @@ export function HeroBanner({ banners }: Props) {
 
                         {/* Subtitle */}
                         {slide.subtitle && (
-                            <p className="mb-4 sm:mb-6 text-[11px] sm:text-sm lg:text-base leading-relaxed text-white/95 font-medium drop-shadow-[0_2px_5px_rgba(0,0,0,0.9)] max-w-xl line-clamp-2 sm:line-clamp-none">
+                            <p className="mb-3.5 sm:mb-5 text-[11px] xs:text-xs sm:text-sm md:text-base leading-relaxed text-slate-100/90 font-medium drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] max-w-md sm:max-w-xl line-clamp-2 sm:line-clamp-3">
                                 {slide.subtitle}
                             </p>
                         )}
 
-                        {/* Mobile Actions */}
-                        <div className="flex sm:hidden items-center gap-2 w-auto">
-                            <Link
-                                href={ctaLink || '/marketplace/products'}
-                                onClick={(e) => ctaLink && handleCtaClick(e, ctaLink)}
-                                className="inline-flex h-8 px-3.5 rounded-full bg-white text-[#0b2447] text-[11px] font-black items-center justify-center gap-1 shadow-lg active:scale-95 transition-all shrink-0"
-                            >
-                                <span>{ctaText || 'Explore'}</span>
-                                <ArrowRight className="h-3 w-3" />
-                            </Link>
-                            <button
-                                onClick={handlePostRequirement}
-                                className="inline-flex h-8 px-3.5 rounded-full bg-black/50 hover:bg-black/70 border border-white/40 backdrop-blur-md text-white text-[11px] font-bold items-center justify-center active:scale-95 transition-all shrink-0"
-                            >
-                                Post Requirement
-                            </button>
-                        </div>
-
-                        {/* Desktop Actions */}
-                        <div className="hidden sm:flex flex-row flex-wrap gap-3">
+                        {/* Responsive Action Buttons (Primary CTA + Login to Portal) */}
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                             {ctaText && ctaLink && (
                                 <Link
                                     href={ctaLink}
                                     onClick={(e) => handleCtaClick(e, ctaLink)}
-                                    className="group inline-flex items-center justify-center gap-2.5 h-11 sm:h-12 px-6 sm:px-7 rounded-full bg-white text-[#0b2447] text-xs sm:text-sm font-extrabold hover:bg-slate-100 active:scale-95 transition-all shadow-xl shadow-black/40"
+                                    className="group inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-4 sm:px-6 rounded-full bg-white text-[#0b2447] text-[11px] sm:text-xs md:text-sm font-black hover:bg-slate-100 active:scale-95 transition-all shadow-xl shadow-black/40 shrink-0"
                                 >
                                     <span>{ctaText}</span>
-                                    <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                                    <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 group-hover:translate-x-1" />
                                 </Link>
                             )}
+
                             <Link
                                 href="/login"
-                                className="inline-flex items-center justify-center gap-2 h-11 sm:h-12 px-6 rounded-full border border-white/40 bg-black/30 backdrop-blur-md text-white text-xs sm:text-sm font-bold hover:bg-white/20 active:scale-95 transition-all shadow-lg"
+                                className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-3.5 sm:px-5 rounded-full border border-white/40 bg-black/35 backdrop-blur-md text-white text-[11px] sm:text-xs md:text-sm font-bold hover:bg-white/20 active:scale-95 transition-all shadow-lg shrink-0"
                             >
                                 Login to Portal
                             </Link>
@@ -221,16 +229,16 @@ export function HeroBanner({ banners }: Props) {
             </div>
 
             {/* Transparent Floating Carousel Dots Indicator */}
-            <div className="absolute bottom-5 sm:bottom-8 left-0 right-0 flex items-center justify-center z-20 pointer-events-auto">
-                <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="absolute bottom-2.5 sm:bottom-4 md:bottom-5 left-0 right-0 flex items-center justify-center z-20 pointer-events-auto">
+                <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:py-1 rounded-full bg-black/30 backdrop-blur-xs border border-white/15">
                     {slides.map((_, i) => (
                         <button
                             key={i}
                             onClick={() => goTo(i)}
                             className={`rounded-full transition-all duration-300 focus:outline-none ${
                                 i === current
-                                    ? 'w-7 sm:w-8 h-1.5 bg-white shadow-[0_0_10px_rgba(255,255,255,0.9),0_2px_4px_rgba(0,0,0,0.8)]'
-                                    : 'w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white/45 hover:bg-white/90 hover:scale-125 shadow-[0_1px_3px_rgba(0,0,0,0.8)]'
+                                    ? 'w-5 sm:w-7 h-1.5 bg-white shadow-[0_0_8px_rgba(255,255,255,0.9),0_2px_4px_rgba(0,0,0,0.8)]'
+                                    : 'w-1.5 h-1.5 bg-white/45 hover:bg-white/90 hover:scale-125 shadow-[0_1px_3px_rgba(0,0,0,0.8)]'
                             }`}
                             aria-label={`Go to slide ${i + 1}`}
                             aria-current={i === current ? 'true' : undefined}
@@ -242,7 +250,7 @@ export function HeroBanner({ banners }: Props) {
             {/* Multi-layered dynamic curvy wave divider at bottom */}
             <div className="absolute -bottom-0.5 left-0 right-0 overflow-hidden leading-none pointer-events-none z-10">
                 <svg
-                    className="relative block w-full h-6 sm:h-10 md:h-14 text-[#f6f8fb]"
+                    className="relative block w-full h-3 sm:h-5 md:h-7 text-[#f6f8fb]"
                     viewBox="0 0 1440 80"
                     preserveAspectRatio="none"
                 >

@@ -21,6 +21,7 @@ import { EmptyState, LoadingState } from '../../shared/FeatureStates';
 import { formatDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
+import { KpiCard } from '../../shared/KpiCard';
 import { api, BASE_URL, readJsonResponse, unwrapApiData, resolveMediaUrl } from '../../../lib/api';
 import { compressImage } from '../../../lib/compress';
 import { cn } from '../../../lib/utils';
@@ -252,13 +253,7 @@ export default function AdminBannerManagementPage() {
       {/* Top Header */}
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-6 items-center rounded-full bg-blue-50 px-2.5 text-[10px] font-black uppercase tracking-widest text-[#12335f] ring-1 ring-blue-700/10">
-              Admin Portal
-            </span>
-            <span className="text-xs font-semibold text-slate-400">• Cloud Storage Live</span>
-          </div>
-          <h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl">Banner Management</h1>
+          <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">Banner Management</h1>
           <p className="mt-1 text-xs font-semibold text-slate-500">
             Control, edit, and publish hero carousel banners hosted on Google Cloud Storage.
           </p>
@@ -288,10 +283,10 @@ export default function AdminBannerManagementPage() {
 
       {/* Metrics Row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <MetricCard label="Total Banners" value={managedCount} icon={Images} />
-        <MetricCard label="Active on Homepage" value={activeCount} tone="emerald" icon={Eye} />
-        <MetricCard label="Hidden / Draft" value={hiddenCount} tone="slate" icon={EyeOff} />
-        <MetricCard label="Storage Provider" value="GCP Bucket" subtitle="jsgsmile1" tone="blue" icon={UploadCloud} isText />
+        <KpiCard label="Total Banners" value={managedCount} icon={Images} tone="blue" />
+        <KpiCard label="Active on Homepage" value={activeCount} tone="emerald" icon={Eye} />
+        <KpiCard label="Hidden / Draft" value={hiddenCount} tone="slate" icon={EyeOff} />
+        <KpiCard label="Storage Provider" value="GCP Bucket" subtext="jsgsmile1" tone="blue" icon={UploadCloud} />
       </div>
 
       {/* Filters Bar */}
@@ -590,43 +585,6 @@ export default function AdminBannerManagementPage() {
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  subtitle,
-  tone = 'blue',
-  icon: Icon,
-  isText = false
-}: {
-  label: string;
-  value: number | string;
-  subtitle?: string;
-  tone?: 'blue' | 'emerald' | 'slate';
-  icon: any;
-  isText?: boolean;
-}) {
-  return (
-    <Card className="border-slate-200 bg-white shadow-xs">
-      <CardContent className="flex items-center justify-between p-4">
-        <div>
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-          <p className={cn("mt-1 font-black leading-none", isText ? "text-base text-blue-900" : "text-2xl text-slate-950")}>
-            {value}
-          </p>
-          {subtitle && <p className="mt-1 text-[10px] font-semibold text-slate-400">{subtitle}</p>}
-        </div>
-        <div className={cn(
-          "flex h-9 w-9 items-center justify-center rounded-xl ring-1",
-          tone === 'emerald' ? "bg-emerald-50 text-emerald-600 ring-emerald-200" :
-          tone === 'slate' ? "bg-slate-50 text-slate-600 ring-slate-200" :
-          "bg-blue-50 text-blue-600 ring-blue-200"
-        )}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 const FALLBACK_BANNER_IMAGES = [
   'https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?w=1920&q=90&auto=format&fit=crop',

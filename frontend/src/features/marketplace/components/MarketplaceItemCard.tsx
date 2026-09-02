@@ -57,28 +57,35 @@ export function MarketplaceItemCard({
     const detailHref = (item as any).detailUrl || `/marketplace/${type === 'service' ? 'services' : 'products'}/${item.id}`;
     const category = (item as any).category || ((item as any).categoryName ? { name: (item as any).categoryName, id: (item as any).categoryId } : undefined);
 
-    // Pricing calculation (keep for internal logic or offer calculation)
+    // Pricing calculation - authentic discounts only
     const baseItemPrice = Number(type === 'service' ? (item as any).basePrice || (item as any).price || 0 : (item as any).price || 0);
     const originalPrice = Number((item as any).originalPrice || 0);
     const discountPrice = Number((item as any).discountPrice || 0);
     const explicitPercent = Number((item as any).discountPercent || 0);
 
-    const effectivePrice = discountPrice > 0 ? discountPrice : baseItemPrice;
-    const displayOriginalPrice = originalPrice > effectivePrice
-        ? originalPrice
-        : (effectivePrice > 0 ? Math.round(effectivePrice * 1.35) : 0);
-    const discountPercent = explicitPercent > 0
-        ? explicitPercent
-        : (displayOriginalPrice > effectivePrice && effectivePrice > 0
-            ? Math.round(((displayOriginalPrice - effectivePrice) / displayOriginalPrice) * 100)
-            : 0);
+    let effectivePrice = baseItemPrice;
+    let displayOriginalPrice = originalPrice > 0 ? originalPrice : baseItemPrice;
+    let discountPercent = 0;
 
-    // Realistic stable star rating & reviews based on item ID
-    const ratingVal = Number((item as any).rating || (item as any).averageRating || 0) || (4.5 + (((Math.abs(item.id) || 1) * 3) % 5) / 10);
-    const ratingStr = ratingVal.toFixed(1);
-    const reviewCount = Number((item as any).reviewsCount || (item as any).reviewCount || 0) || (18 + (((Math.abs(item.id) || 1) * 7) % 240));
+    if (discountPrice > 0 && discountPrice < displayOriginalPrice) {
+        effectivePrice = discountPrice;
+        discountPercent = explicitPercent > 0 ? explicitPercent : Math.round(((displayOriginalPrice - discountPrice) / displayOriginalPrice) * 100);
+    } else if (originalPrice > 0 && baseItemPrice > 0 && originalPrice > baseItemPrice) {
+        effectivePrice = baseItemPrice;
+        displayOriginalPrice = originalPrice;
+        discountPercent = explicitPercent > 0 ? explicitPercent : Math.round(((originalPrice - baseItemPrice) / originalPrice) * 100);
+    } else if (explicitPercent > 0 && explicitPercent < 100 && baseItemPrice > 0) {
+        discountPercent = explicitPercent;
+        displayOriginalPrice = originalPrice > 0 ? originalPrice : Math.round(baseItemPrice / (1 - explicitPercent / 100));
+        effectivePrice = baseItemPrice;
+    }
 
-    const sellerName = (item as any).seller?.name || (item as any).organization?.name;
+    // Authentic star rating & reviews
+    const rawRating = (item as any).avgRating ?? (item as any).rating ?? (item as any).averageRating;
+    const ratingScore = rawRating && Number(rawRating) > 0 ? Number(rawRating).toFixed(1) : null;
+    const reviewCount = Number((item as any).reviewCount ?? (item as any).reviewsCount ?? 0);
+
+    const sellerName = (item as any).seller?.name || (item as any).organization?.name || (item as any).organization?.organizationName;
 
     const cacheDetail = () => {
         queryClient.setQueryData(
@@ -124,14 +131,22 @@ export function MarketplaceItemCard({
                 </Link>
 
                 {/* ── Star Rating & Discount Pill Row ── */}
-                <div className="mt-3 flex items-center justify-between gap-1.5">
+                <div className="mt-3 flex items-center justify-between gap-1.5 min-h-[22px]">
                     <div className="flex items-center gap-1">
-                        <span className="flex items-center text-xs font-black text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200/60">
-                            <span className="mr-0.5 text-xs leading-none">★</span> {ratingStr}
-                        </span>
-                        <span className="text-[10px] font-semibold text-slate-400">
-                            ({reviewCount})
-                        </span>
+                        {ratingScore && reviewCount > 0 ? (
+                            <>
+                                <span className="flex items-center text-xs font-black text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200/60">
+                                    <span className="mr-0.5 text-xs leading-none">★</span> {ratingScore}
+                                </span>
+                                <span className="text-[10px] font-semibold text-slate-400">
+                                    ({reviewCount})
+                                </span>
+                            </>
+                        ) : (
+                            <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">
+                                ★ New Listing
+                            </span>
+                        )}
                     </div>
 
                     {user && discountPercent > 0 && (

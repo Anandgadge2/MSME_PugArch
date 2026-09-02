@@ -198,7 +198,7 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
     marketResearchOnly = false
   } = criteria;
 
-  const isGov = buyerType === 'GOVERNMENT_BUYER';
+  // const isGov = buyerType === 'GOVERNMENT_BUYER';
   const requirementType = String(whatAreYouBuying || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   const priority = String(urgency || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   const isBoq = requirementType === 'BOQ';
@@ -259,9 +259,11 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
     result.reason = 'Rate Contract is recommended because you have a recurring demand for identical consumables throughout the fiscal year.';
     result.confidence = 'HIGH';
     result.alternativeMethods = ['RFQ'];
+    /* Government check commented out as requested
     if (isGov) {
       result.warnings.push('Ensure price variation clauses are added if the contract exceeds 12 months.');
     }
+    */
     return result;
   }
 
@@ -270,7 +272,7 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
     result.id = 'OPEN_TENDER';
     result.reason = 'Open Tender is recommended because you have multiple distinct line items best evaluated on a structured price schedule.';
     result.confidence = 'HIGH';
-    result.alternativeMethods = isGov ? ['RFQ'] : ['RFQ'];
+    result.alternativeMethods = ['RFQ'];
     return result;
   }
 
@@ -289,7 +291,7 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
     result.id = 'RFQ';
     result.reason = 'RFQ is recommended for low value procurement to get competitive quotes.';
     result.confidence = 'HIGH';
-    result.alternativeMethods = isGov ? ['LIMITED_TENDER'] : ['REPEAT_ORDER'];
+    result.alternativeMethods = ['REPEAT_ORDER'];
     return result;
   }
 
@@ -312,13 +314,7 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
   }
 
   // High estimated value
-  if (isGov && estimatedValue > 2500000) {
-    result.id = 'OPEN_TENDER';
-    result.reason = 'Open Tender is recommended to satisfy GFR guidelines for public procurement exceeding Rs. 25 Lakhs.';
-    result.confidence = 'HIGH';
-    result.alternativeMethods = ['LIMITED_TENDER'];
-    return result;
-  } else if (!isGov && estimatedValue > 5000000) {
+  if (estimatedValue > 5000000) {
     result.id = 'RFP';
     result.reason = 'RFP is recommended for high budget capital expenditures requiring structured evaluation.';
     result.confidence = 'HIGH';
@@ -327,26 +323,10 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
   }
 
   // General low-to-mid value clear specifications
-  if (isGov) {
-    if (estimatedValue <= 500000) {
-      result.id = 'LIMITED_TENDER';
-      result.reason = 'Limited Tender is recommended for lower-value government procurement.';
-      result.confidence = 'MEDIUM';
-      result.alternativeMethods = ['RFQ'];
-      return result;
-    } else {
-      result.id = 'LIMITED_TENDER';
-      result.reason = 'Limited Tender is recommended because the estimated value allows selective invites to registered vendors.';
-      result.confidence = 'HIGH';
-      result.alternativeMethods = ['OPEN_TENDER'];
-      return result;
-    }
-  } else {
-    result.id = 'RFQ';
-    result.reason = 'RFQ is recommended because your specifications are clear and you primarily need fast price collections from multiple suppliers.';
-    result.confidence = 'HIGH';
-    result.alternativeMethods = ['REPEAT_ORDER'];
-  }
+  result.id = 'RFQ';
+  result.reason = 'RFQ is recommended because your specifications are clear and you primarily need fast price collections from multiple suppliers.';
+  result.confidence = 'HIGH';
+  result.alternativeMethods = ['REPEAT_ORDER'];
 
   return result;
 };

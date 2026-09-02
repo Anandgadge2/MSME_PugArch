@@ -6,6 +6,8 @@
  * Changes to RFQ seller handling will NEVER affect RFP or Open Tender seller flows.
  */
 
+import { sellerRoutes } from '@/lib/routes';
+
 export interface SellerRfqOpportunity {
   id: string;
   type: 'RFQ';
@@ -32,7 +34,7 @@ export const rfqSellerOpportunityAdapter = {
   },
 
   getCtaHref(opportunity: SellerRfqOpportunity): string {
-    return `/seller/rfq/submit-quotation?id=${opportunity.id}`;
+    return sellerRoutes.respond('RFQ', opportunity.id);
   },
 
   validateQuotationSubmission(quotation: { unitPrice?: number; deliveryDays?: number }) {

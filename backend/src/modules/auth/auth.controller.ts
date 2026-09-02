@@ -37,7 +37,7 @@ import type { AuthRequest } from '../../middleware/auth.js';
 import { notificationService } from '../../services/notification.service.js';
 import { onUserLinkedToOrganization } from '../../services/org-membership.service.js';
 import { getDefaultCompanyId } from '../../services/default-company.service.js';
-import { invalidateUserAuthCache } from '../../services/rbac.service.js';
+import { invalidateUserAuthCache, getActivePermissionCodes, isMasterAdmin } from '../../services/rbac.service.js';
 
 // CreateNotificationSafe mock for backward compatibility if not globally service-ified yet
 
@@ -891,8 +891,9 @@ export const authController = {
       // must not retain access unless an authorised actor assigned a concrete
       // district scope. This also invalidates credentials from the old public
       // /admin/register flow.
+      let districtAssignment: { id: number; scopeId: string | null } | null = null;
       if (user.role === Role.admin) {
-        let districtAssignment = await prisma.userRole.findFirst({
+        districtAssignment = await prisma.userRole.findFirst({
           where: {
             userId: user.id,
             isActive: true,
@@ -1015,7 +1016,20 @@ export const authController = {
         userAgent: req.headers['user-agent']
       });
       await recordLoginEvent({ req, userId: user.id, success: true, reason: 'password_login' });
-      res.json({ ...tokens, user: toSafeUser(updatedUser) });
+      const loginScope = updatedUser.organizationId
+        ? { scopeType: 'ORGANIZATION' as const, scopeId: String(updatedUser.organizationId) }
+        : districtAssignment?.scopeId
+          ? { scopeType: 'DISTRICT' as const, scopeId: districtAssignment.scopeId }
+          : { scopeType: 'PLATFORM' as const, scopeId: null };
+      const permissions = isMasterAdmin(updatedUser) ? ['*'] : await getActivePermissionCodes(updatedUser.id, loginScope as any);
+      res.json({
+        ...tokens,
+        user: toSafeUser({
+          ...updatedUser,
+          permissions,
+          enabledFeatures: []
+        })
+      });
     } catch (err: any) {
       handleSecureRouteError(res, err, 'Unable to sign in right now. Please try again.');
     }
@@ -1066,7 +1080,18 @@ export const authController = {
         metadata: { purpose: 'two_factor_login', channel }
       });
       await recordLoginEvent({ req, userId: user.id, success: true, reason: 'two_factor_login' });
-      res.json({ ...tokens, user: toSafeUser(updatedUser) });
+      const twoFaScope = updatedUser.organizationId
+        ? { scopeType: 'ORGANIZATION' as const, scopeId: String(updatedUser.organizationId) }
+        : { scopeType: 'PLATFORM' as const, scopeId: null };
+      const twoFaPermissions = isMasterAdmin(updatedUser) ? ['*'] : await getActivePermissionCodes(updatedUser.id, twoFaScope as any);
+      res.json({
+        ...tokens,
+        user: toSafeUser({
+          ...updatedUser,
+          permissions: twoFaPermissions,
+          enabledFeatures: []
+        })
+      });
     } catch (err: any) {
       handleSecureRouteError(res, err, 'Unable to check mobile number right now. Please try again.');
     }
@@ -1776,11 +1801,20 @@ export const authController = {
         metadata: { fromRole: user.role, toRole: role }
       });
 
+      const switchScope = updatedUser.organizationId
+        ? { scopeType: 'ORGANIZATION' as const, scopeId: String(updatedUser.organizationId) }
+        : { scopeType: 'PLATFORM' as const, scopeId: null };
+      const permissions = isMasterAdmin(updatedUser) ? ['*'] : await getActivePermissionCodes(updatedUser.id, switchScope as any);
+
       res.json({
         success: true,
         ...tokens,
         redirectUrl: roleHome(role),
-        user: toSafeUser(safeUser || updatedUser)
+        user: toSafeUser({
+          ...(safeUser || updatedUser),
+          permissions,
+          enabledFeatures: []
+        })
       });
     } catch (err: any) {
       handleSecureRouteError(res, err);

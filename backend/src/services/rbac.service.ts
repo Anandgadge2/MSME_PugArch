@@ -42,12 +42,10 @@ import { ALL_ORG_PERMISSION_KEYS, FALLBACK_ORG_ROLE_PERMISSIONS, expandOrgPermis
 import { deleteCache, invalidateByPattern } from './cache.service.js';
 
 export const invalidateUserAuthCache = async (userId: number | string) => {
-  await invalidateByPattern(`*cache:auth:user:${userId}*`);
-  await invalidateByPattern(`*user:${userId}*`);
-  await invalidateByPattern(`*org:status*`);
-  await invalidateByPattern(`*org:members*`);
-  await invalidateByPattern(`*org:roles*`);
-  await invalidateByPattern(`*permissions*`);
+  await invalidateByPattern(`cache:auth:user:${userId}:*`).catch(() => undefined);
+  await invalidateByPattern(`cache:dashboard:summary:${userId}*`).catch(() => undefined);
+  await invalidateByPattern(`cache:navigation:summary:${userId}:*`).catch(() => undefined);
+  await invalidateByPattern(`cache:dashboard:admin-summary:${userId}:*`).catch(() => undefined);
   await deleteCache(`/api/auth/me`).catch(() => undefined);
   await deleteCache(`/api/auth/me/permissions`).catch(() => undefined);
   await deleteCache(`/api/org/status`).catch(() => undefined);

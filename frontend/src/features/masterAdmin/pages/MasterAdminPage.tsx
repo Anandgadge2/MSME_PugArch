@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
@@ -20,6 +21,7 @@ import {
   LayoutDashboard,
   List,
   Mail,
+  MoreVertical,
   Palette,
   Pencil,
   Plus,
@@ -1343,6 +1345,7 @@ export default function MasterAdminPage() {
           reactivate: () => masterAdminApi.reactivateUser(id, reason),
           archive: () => masterAdminApi.archiveUser(id, reason),
           delete: () => masterAdminApi.deleteUser(id, reason),
+          cascadeDelete: () => masterAdminApi.deleteUser(id, reason),
           invite: () => masterAdminApi.sendUserInvite(id, reason),
           resetPassword: () => masterAdminApi.resetUserPassword(id, reason),
           unlock: () => masterAdminApi.unlockUser(id, reason)
@@ -1783,6 +1786,7 @@ export default function MasterAdminPage() {
                   onEdit={() => setEditor({ type: 'user', mode: 'edit', record: row })}
                   onActivate={() => openAction({ entity: 'user', action: row.accountStatus === 'ACTIVE' ? 'inactivate' : 'reactivate', id: row.id, label: row.email || 'user' })}
                   onDelete={() => openAction({ entity: 'user', action: 'delete', id: row.id, label: row.email || 'user', danger: true })}
+                  onCascadeDelete={() => openAction({ entity: 'user', action: 'cascadeDelete', id: row.id, label: row.email || 'user', danger: true })}
                   onArchive={() => openAction({ entity: 'user', action: 'archive', id: row.id, label: row.email || 'user', danger: true })}
                   onInvite={() => openAction({ entity: 'user', action: 'invite', id: row.id, label: row.email || 'user' })}
                   onResetPassword={() => openAction({ entity: 'user', action: 'resetPassword', id: row.id, label: row.email || 'user', danger: true })}
@@ -2741,13 +2745,17 @@ function PaginatedTable<T extends Record<string, any>>({
       <Panel title={title} icon={Icon} loading={loading} error={error}>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {rows.map(row => (
-            <article key={row.id || JSON.stringify(row)} className="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <article key={row.id || JSON.stringify(row)} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
               <div className="space-y-2">
                 {columns.slice(0, 5).map(([field, label, renderer]) => (
                   <Detail key={field} label={label} value={renderer ? (renderer as any)(row) : formatCell(valueAt(row, field))} />
                 ))}
               </div>
-              {actions && <div className="mt-3 flex flex-wrap gap-2">{actions(row)}</div>}
+              {actions && (
+                <div className="mt-3 flex items-center justify-end border-t border-slate-100 pt-2.5">
+                  {actions(row)}
+                </div>
+              )}
             </article>
           ))}
           {rows.length === 0 && <EmptyState />}
@@ -2758,8 +2766,8 @@ function PaginatedTable<T extends Record<string, any>>({
   }
 
   return (
-    <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3 bg-slate-50/50">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-[#12335f]" />
           <h2 className="text-sm font-black text-slate-900">{title}</h2>
@@ -2769,32 +2777,36 @@ function PaginatedTable<T extends Record<string, any>>({
       {error ? <ErrorState message={error} /> : (
         <div ref={tableScrollRef} className="w-full overflow-x-auto">
           <table className="w-full text-left text-xs table-auto">
-            <thead className="bg-slate-50">
+            <thead className="bg-slate-50 border-b border-slate-200/80">
               <tr>
-                <th className="w-10 sm:w-12 px-2 py-2 text-center text-[10px] font-black uppercase tracking-wider text-slate-500">S.No.</th>
+                <th className="w-12 px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider text-slate-500">S.No.</th>
                 {columns.map(([field, label]) => (
-                  <th key={field} className="px-2 py-2 sm:px-3">
+                  <th key={field} className="px-3 py-3">
                     <SortableHeader label={label} field={field} activeField={sort.field} direction={sort.direction} onSort={onSort} />
                   </th>
                 ))}
-                {actions && <th className="px-2 py-2 sm:px-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>}
+                {actions && <th className="w-16 px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((row, index) => (
-                <tr key={row.id || index} className="hover:bg-slate-50">
-                  <td className="px-2 py-2 text-center text-xs font-black text-slate-400">{(page - 1) * pageSize + index + 1}</td>
+                <tr key={row.id || index} className="transition-colors hover:bg-slate-50/80">
+                  <td className="px-3 py-3 text-center text-xs font-bold text-slate-400">{(page - 1) * pageSize + index + 1}</td>
                   {columns.map(([field, , renderer]) => {
                     const rawVal = valueAt(row, field);
                     const formatted = formatCell(rawVal);
                     const titleText = typeof formatted === 'string' ? formatted : undefined;
                     return (
-                      <td key={field} className="px-2 py-2 sm:px-3 text-xs text-slate-700 max-w-[110px] sm:max-w-[140px] md:max-w-[180px] lg:max-w-[220px] truncate" title={titleText}>
+                      <td key={field} className="px-3 py-3 text-xs font-medium text-slate-700 max-w-[140px] sm:max-w-[180px] md:max-w-[220px] truncate" title={titleText}>
                         {renderer ? (renderer as any)(row) : formatted}
                       </td>
                     );
                   })}
-                  {actions && <td className="px-2 py-2 sm:px-3"><div className="flex justify-end flex-wrap gap-1">{actions(row)}</div></td>}
+                  {actions && (
+                    <td className="px-3 py-3 text-right whitespace-nowrap">
+                      <div className="flex justify-end items-center">{actions(row)}</div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {!loading && rows.length === 0 && <tr><td colSpan={columns.length + (actions ? 2 : 1)}><EmptyState /></td></tr>}
@@ -3059,6 +3071,163 @@ function CompanyDetailTabs({
   );
 }
 
+type ActionMenuItem = {
+  label: string;
+  icon?: any;
+  onClick: () => void;
+  variant?: 'default' | 'primary' | 'success' | 'warning' | 'info' | 'danger' | 'critical';
+  title?: string;
+  hidden?: boolean;
+} | { divider: true; hidden?: boolean };
+
+function ActionDropdownMenu({
+  label,
+  items,
+  triggerVariant = 'icon'
+}: {
+  label: string;
+  items: ActionMenuItem[];
+  triggerVariant?: 'icon' | 'button';
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const menuEstimatedHeight = 260;
+    const shouldOpenUp = rect.bottom + menuEstimatedHeight > window.innerHeight && rect.top > menuEstimatedHeight;
+
+    setCoords({
+      top: shouldOpenUp ? undefined : rect.bottom + 4,
+      bottom: shouldOpenUp ? window.innerHeight - rect.top + 4 : undefined,
+      right: Math.max(8, window.innerWidth - rect.right),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+
+    const handleScroll = (e: Event) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+      setIsOpen(false);
+    };
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        buttonRef.current && !buttonRef.current.contains(e.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    window.addEventListener('resize', updatePosition);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll, { capture: true });
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, updatePosition]);
+
+  const visibleItems = items.filter(item => !item.hidden);
+  if (visibleItems.length === 0) return null;
+
+  return (
+    <div className="relative inline-flex items-center">
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={`Actions for ${label}`}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        className={cn(
+          "inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-xs transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 active:bg-slate-100",
+          triggerVariant === 'button' ? "h-8 px-2.5 text-xs font-bold gap-1.5" : "h-8 w-8"
+        )}
+      >
+        <MoreVertical className="h-4 w-4" />
+        {triggerVariant === 'button' && <span>Actions</span>}
+      </button>
+
+      {isOpen && coords && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label={`Actions for ${label}`}
+          className="fixed z-[99999] min-w-[200px] max-w-[260px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+          style={{
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            right: `${coords.right}px`,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {visibleItems.map((item, idx) => {
+            if ('divider' in item) {
+              return <div key={`divider-${idx}`} className="my-1 border-t border-slate-100" />;
+            }
+
+            const IconComponent = item.icon;
+            const variantStyles = {
+              default: "text-slate-700 hover:bg-slate-100 hover:text-slate-950",
+              primary: "text-[#12335f] hover:bg-[#12335f]/10 font-bold",
+              success: "text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900 font-medium",
+              warning: "text-amber-700 hover:bg-amber-50 hover:text-amber-900 font-medium",
+              info: "text-blue-700 hover:bg-blue-50 hover:text-blue-900 font-medium",
+              danger: "text-red-600 hover:bg-red-50 hover:text-red-800 font-medium",
+              critical: "text-red-700 bg-red-50/70 hover:bg-red-100 hover:text-red-900 font-bold border border-red-200/50"
+            }[item.variant || 'default'];
+
+            return (
+              <button
+                key={`${item.label}-${idx}`}
+                type="button"
+                role="menuitem"
+                title={item.title || item.label}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsOpen(false);
+                  item.onClick();
+                }}
+                className={cn(
+                  "flex items-center gap-2.5 w-full px-3 py-2 text-xs rounded-lg transition-colors text-left",
+                  variantStyles
+                )}
+              >
+                {IconComponent && <IconComponent className="h-4 w-4 shrink-0" />}
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 const EntityActions = memo(function EntityActions({
   label,
   active,
@@ -3078,39 +3247,17 @@ const EntityActions = memo(function EntityActions({
   onArchive: () => void;
   onCascadeDelete?: () => void;
 }) {
-  return (
-    <>
-      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold" onClick={onEdit} title={`Edit ${label}`}>
-        <Eye className="mr-1 h-3 w-3" />
-        Edit
-      </Button>
-      <Button type="button" variant="outline" className={cn('h-7 rounded-md px-1.5 text-[9px] font-bold', active ? 'text-amber-700' : 'text-emerald-700')} onClick={onActivate} title={active ? `Deactivate ${label}` : `Restore ${label}`}>
-        <Power className="mr-1 h-3 w-3" />
-        {active ? 'Deactivate' : 'Restore'}
-      </Button>
-      {onDelete ? (
-        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-red-700" onClick={onDelete} title={`Delete ${label}`}>
-          <Trash2 className="mr-1 h-3 w-3" />
-          Delete
-        </Button>
-      ) : onSuspend ? (
-        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-amber-700" onClick={onSuspend} title={`Suspend ${label}`}>
-          <Archive className="mr-1 h-3 w-3" />
-          Suspend
-        </Button>
-      ) : null}
-      {onCascadeDelete && (
-        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-red-700 bg-red-50 hover:bg-red-100" onClick={onCascadeDelete} title={`Delete Permanently ${label}`}>
-          <Trash2 className="mr-1 h-3 w-3 text-red-700" />
-          Delete Permanently
-        </Button>
-      )}
-      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-slate-700" onClick={onArchive} title={`Archive ${label}`}>
-        <Archive className="mr-1 h-3 w-3" />
-        Archive
-      </Button>
-    </>
-  );
+  const items: ActionMenuItem[] = [
+    { label: 'Edit', icon: Eye, onClick: onEdit, variant: 'primary', title: `Edit ${label}` },
+    { label: active ? 'Deactivate' : 'Restore', icon: Power, onClick: onActivate, variant: active ? 'warning' : 'success', title: active ? `Deactivate ${label}` : `Restore ${label}` },
+    ...(onSuspend ? [{ label: 'Suspend', icon: Archive, onClick: onSuspend, variant: 'warning' as const, title: `Suspend ${label}` }] : []),
+    { divider: true },
+    { label: 'Archive', icon: Archive, onClick: onArchive, variant: 'default', title: `Archive ${label}` },
+    ...(onDelete ? [{ label: 'Delete', icon: Trash2, onClick: onDelete, variant: 'danger' as const, title: `Delete ${label}` }] : []),
+    ...(onCascadeDelete ? [{ label: 'Delete Permanently', icon: Trash2, onClick: onCascadeDelete, variant: 'critical' as const, title: `Delete Permanently ${label}` }] : [])
+  ];
+
+  return <ActionDropdownMenu label={label} items={items} />;
 });
 
 const OrganizationActions = memo(function OrganizationActions({
@@ -3138,88 +3285,65 @@ const OrganizationActions = memo(function OrganizationActions({
 }) {
   const status = org.verificationStatus;
   const isClosedOrArchived = status === 'CLOSED' || status === 'ARCHIVED';
+  const label = org.organizationName || 'organization';
 
-  return (
-    <>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black" onClick={onEdit} title={`Edit ${org.organizationName}`}>
-        <Eye className="mr-1 h-3 w-3" />
-        Edit
-      </Button>
+  const items: ActionMenuItem[] = [
+    { label: 'Edit Details', icon: Eye, onClick: onEdit, variant: 'primary', title: `Edit ${label}` },
+    ...(!isClosedOrArchived && status !== 'REJECTED' ? [
+      { label: 'Close Organization', icon: Power, onClick: onClose, variant: 'warning' as const, title: `Close ${label}` }
+    ] : []),
+    ...(!isClosedOrArchived ? [
+      { label: 'Suspend Organization', icon: Archive, onClick: onSuspend, variant: 'warning' as const, title: `Suspend ${label}` }
+    ] : []),
+    ...(isClosedOrArchived ? [
+      { label: 'Restore Organization', icon: RotateCcw, onClick: onRestore, variant: 'success' as const, title: `Restore ${label}` }
+    ] : []),
+    ...(isClosedOrArchived && !org.gstReuseAllowed ? [
+      { label: 'Allow GST Reuse', icon: CheckCircle2, onClick: onAllowGstReuse, variant: 'info' as const, title: `Allow GST Reuse for ${label}` }
+    ] : []),
+    ...(isClosedOrArchived && org.gstReuseAllowed ? [
+      { label: 'Revoke GST Reuse', icon: AlertTriangle, onClick: onRevokeGstReuse, variant: 'warning' as const, title: `Revoke GST Reuse for ${label}` }
+    ] : []),
+    { divider: true },
+    ...(status !== 'ARCHIVED' ? [
+      { label: 'Archive Organization', icon: Archive, onClick: onArchive, variant: 'default' as const, title: `Archive ${label}` }
+    ] : []),
+    { label: 'Delete Permanently', icon: Trash2, onClick: onCascadeDelete, variant: 'critical', title: `Permanently Delete ${label}` }
+  ];
 
-      {/* Close button (only if not already closed/archived/rejected) */}
-      {!isClosedOrArchived && status !== 'REJECTED' && (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-red-700" onClick={onClose} title={`Close ${org.organizationName}`}>
-          <Power className="mr-1 h-3 w-3" />
-          Close
-        </Button>
-      )}
-
-      {/* Archive button (only if not already archived) */}
-      {status !== 'ARCHIVED' && (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-slate-700" onClick={onArchive} title={`Archive ${org.organizationName}`}>
-          <Archive className="mr-1 h-3 w-3" />
-          Archive
-        </Button>
-      )}
-
-      {/* Restore button (only if closed or archived) */}
-      {isClosedOrArchived && (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-emerald-700" onClick={onRestore} title={`Restore ${org.organizationName}`}>
-          <RotateCcw className="mr-1 h-3 w-3" />
-          Restore
-        </Button>
-      )}
-
-      {/* GST Reuse Controls */}
-      {isClosedOrArchived && !org.gstReuseAllowed && (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-blue-700" onClick={onAllowGstReuse} title={`Allow GST Reuse for ${org.organizationName}`}>
-          <CheckCircle2 className="mr-1 h-3 w-3" />
-          Allow GST Reuse
-        </Button>
-      )}
-
-      {isClosedOrArchived && org.gstReuseAllowed && (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-amber-700" onClick={onRevokeGstReuse} title={`Revoke GST Reuse for ${org.organizationName}`}>
-          <AlertTriangle className="mr-1 h-3 w-3" />
-          Revoke GST Reuse
-        </Button>
-      )}
-
-      {!isClosedOrArchived && (
-        <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-amber-700" onClick={onSuspend} title={`Suspend ${org.organizationName}`}>
-          <Archive className="mr-1 h-3 w-3" />
-          Suspend
-        </Button>
-      )}
-
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-red-700 bg-red-50 hover:bg-red-100" onClick={onCascadeDelete} title={`Delete Permanently ${org.organizationName}`}>
-        <Trash2 className="mr-1 h-3 w-3 text-red-700" />
-        Delete Permanently
-      </Button>
-    </>
-  );
+  return <ActionDropdownMenu label={label} items={items} />;
 });
 
-const UserActions = memo(function UserActions(props: Parameters<typeof EntityActions>[0] & { onInvite: () => void; onResetPassword: () => void; isLocked?: boolean; onUnlock?: () => void }) {
-  return (
-    <>
-      <EntityActions {...props} />
-      {props.isLocked && props.onUnlock && (
-        <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200" onClick={props.onUnlock} title="Unlock User Account">
-          <Unlock className="mr-1 h-3 w-3" />
-          Unlock
-        </Button>
-      )}
-      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-[#12335f]" onClick={props.onInvite}>
-        <UserPlus className="mr-1 h-3 w-3" />
-        Invite
-      </Button>
-      <Button type="button" variant="outline" className="h-7 rounded-md px-1.5 text-[9px] font-bold text-[#12335f]" onClick={props.onResetPassword}>
-        <KeyRound className="mr-1 h-3 w-3" />
-        Reset
-      </Button>
-    </>
-  );
+const UserActions = memo(function UserActions(props: {
+  label: string;
+  active: boolean;
+  onEdit: () => void;
+  onActivate: () => void;
+  onDelete?: () => void;
+  onArchive: () => void;
+  onCascadeDelete?: () => void;
+  onInvite: () => void;
+  onResetPassword: () => void;
+  isLocked?: boolean;
+  onUnlock?: () => void;
+}) {
+  const { label, active, onEdit, onActivate, onArchive, onDelete, onCascadeDelete, onInvite, onResetPassword, isLocked, onUnlock } = props;
+
+  const items: ActionMenuItem[] = [
+    { label: 'Edit Profile', icon: Eye, onClick: onEdit, variant: 'primary', title: `Edit ${label}` },
+    { label: active ? 'Deactivate User' : 'Reactivate User', icon: Power, onClick: onActivate, variant: active ? 'warning' : 'success', title: active ? `Deactivate ${label}` : `Activate ${label}` },
+    ...(isLocked && onUnlock ? [
+      { label: 'Unlock Account', icon: Unlock, onClick: onUnlock, variant: 'success' as const, title: `Unlock Account for ${label}` }
+    ] : []),
+    { label: 'Send Invite', icon: UserPlus, onClick: onInvite, variant: 'info', title: `Send Email Invite to ${label}` },
+    { label: 'Reset Password', icon: KeyRound, onClick: onResetPassword, variant: 'warning', title: `Reset Password for ${label}` },
+    { divider: true },
+    { label: 'Archive User', icon: Archive, onClick: onArchive, variant: 'default', title: `Archive ${label}` },
+    ...(onDelete ? [{ label: 'Delete User', icon: Trash2, onClick: onDelete, variant: 'danger' as const, title: `Delete ${label}` }] : []),
+    ...(onCascadeDelete ? [{ label: 'Delete Permanently', icon: Trash2, onClick: onCascadeDelete, variant: 'critical' as const, title: `Permanently Delete ${label}` }] : [])
+  ];
+
+  return <ActionDropdownMenu label={label} items={items} />;
 });
 
 const MarketplaceStatusActions = memo(function MarketplaceStatusActions({
@@ -3233,37 +3357,15 @@ const MarketplaceStatusActions = memo(function MarketplaceStatusActions({
 }) {
   const label = row.name || 'listing';
   const isActive = row.status === 'ACTIVE';
-  return (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        className="h-8 rounded-md px-2 text-[10px] font-black text-emerald-700"
-        onClick={() => openAction({ entity, action: 'activate', id: row.id, label, status: 'ACTIVE' })}
-      >
-        <CheckCircle2 className="mr-1 h-3 w-3" />
-        Approve
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        className="h-8 rounded-md px-2 text-[10px] font-black text-amber-700"
-        onClick={() => openAction({ entity, action: isActive ? 'hide' : 'restore', id: row.id, label, status: isActive ? 'INACTIVE' : 'ACTIVE' })}
-      >
-        <Power className="mr-1 h-3 w-3" />
-        {isActive ? 'Hide' : 'Restore'}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        className="h-8 rounded-md px-2 text-[10px] font-black text-slate-700"
-        onClick={() => openAction({ entity, action: 'archive', id: row.id, label, status: 'ARCHIVED', danger: true })}
-      >
-        <Archive className="mr-1 h-3 w-3" />
-        Archive
-      </Button>
-    </>
-  );
+
+  const items: ActionMenuItem[] = [
+    { label: 'Approve Listing', icon: CheckCircle2, onClick: () => openAction({ entity, action: 'activate', id: row.id, label, status: 'ACTIVE' }), variant: 'success' },
+    { label: isActive ? 'Hide Listing' : 'Restore Listing', icon: Power, onClick: () => openAction({ entity, action: isActive ? 'hide' : 'restore', id: row.id, label, status: isActive ? 'INACTIVE' : 'ACTIVE' }), variant: isActive ? 'warning' : 'success' },
+    { divider: true },
+    { label: 'Archive Listing', icon: Archive, onClick: () => openAction({ entity, action: 'archive', id: row.id, label, status: 'ARCHIVED', danger: true }), variant: 'danger' }
+  ];
+
+  return <ActionDropdownMenu label={label} items={items} />;
 });
 
 const OrderStatusActions = memo(function OrderStatusActions({
@@ -3274,22 +3376,15 @@ const OrderStatusActions = memo(function OrderStatusActions({
   openAction: (dialog: NonNullable<ActionDialogState>) => void;
 }) {
   const label = row.poNumber || row.title || 'order';
-  return (
-    <>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-[#12335f]" onClick={() => openAction({ entity: 'order', action: 'markInFulfillment', id: row.id, label, status: 'in_fulfillment' })}>
-        <Truck className="mr-1 h-3 w-3" />
-        Fulfill
-      </Button>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-emerald-700" onClick={() => openAction({ entity: 'order', action: 'close', id: row.id, label, status: 'closed' })}>
-        <CheckCircle2 className="mr-1 h-3 w-3" />
-        Close
-      </Button>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-amber-700" onClick={() => openAction({ entity: 'order', action: 'cancel', id: row.id, label, status: 'cancelled', danger: true })}>
-        <Archive className="mr-1 h-3 w-3" />
-        Cancel
-      </Button>
-    </>
-  );
+
+  const items: ActionMenuItem[] = [
+    { label: 'Mark in Fulfillment', icon: Truck, onClick: () => openAction({ entity: 'order', action: 'markInFulfillment', id: row.id, label, status: 'in_fulfillment' }), variant: 'primary' },
+    { label: 'Close Order', icon: CheckCircle2, onClick: () => openAction({ entity: 'order', action: 'close', id: row.id, label, status: 'closed' }), variant: 'success' },
+    { divider: true },
+    { label: 'Cancel Order', icon: Archive, onClick: () => openAction({ entity: 'order', action: 'cancel', id: row.id, label, status: 'cancelled', danger: true }), variant: 'danger' }
+  ];
+
+  return <ActionDropdownMenu label={label} items={items} />;
 });
 
 const PaymentStatusActions = memo(function PaymentStatusActions({
@@ -3300,22 +3395,15 @@ const PaymentStatusActions = memo(function PaymentStatusActions({
   openAction: (dialog: NonNullable<ActionDialogState>) => void;
 }) {
   const label = row.referenceId || `payment ${row.id}`;
-  return (
-    <>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-emerald-700" onClick={() => openAction({ entity: 'payment', action: 'markSuccess', id: row.id, label, status: 'success', danger: true })}>
-        <CheckCircle2 className="mr-1 h-3 w-3" />
-        Success
-      </Button>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-amber-700" onClick={() => openAction({ entity: 'payment', action: 'hold', id: row.id, label, status: 'on_hold', danger: true })}>
-        <Power className="mr-1 h-3 w-3" />
-        Hold
-      </Button>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-red-700" onClick={() => openAction({ entity: 'payment', action: 'markFailed', id: row.id, label, status: 'failed', danger: true })}>
-        <AlertTriangle className="mr-1 h-3 w-3" />
-        Failed
-      </Button>
-    </>
-  );
+
+  const items: ActionMenuItem[] = [
+    { label: 'Mark as Success', icon: CheckCircle2, onClick: () => openAction({ entity: 'payment', action: 'markSuccess', id: row.id, label, status: 'success', danger: true }), variant: 'success' },
+    { label: 'Put on Hold', icon: Power, onClick: () => openAction({ entity: 'payment', action: 'hold', id: row.id, label, status: 'on_hold', danger: true }), variant: 'warning' },
+    { divider: true },
+    { label: 'Mark as Failed', icon: AlertTriangle, onClick: () => openAction({ entity: 'payment', action: 'markFailed', id: row.id, label, status: 'failed', danger: true }), variant: 'danger' }
+  ];
+
+  return <ActionDropdownMenu label={label} items={items} />;
 });
 
 const EscrowStatusActions = memo(function EscrowStatusActions({
@@ -3326,22 +3414,15 @@ const EscrowStatusActions = memo(function EscrowStatusActions({
   openAction: (dialog: NonNullable<ActionDialogState>) => void;
 }) {
   const label = row.paymentTransaction?.referenceId || row.purchaseOrder?.poNumber || `escrow ${row.id}`;
-  return (
-    <>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-amber-700" onClick={() => openAction({ entity: 'escrow', action: 'hold', id: row.id, label, status: 'frozen', danger: true })}>
-        <Power className="mr-1 h-3 w-3" />
-        Hold
-      </Button>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-red-700" onClick={() => openAction({ entity: 'escrow', action: 'markDispute', id: row.id, label, status: 'dispute', danger: true })}>
-        <AlertTriangle className="mr-1 h-3 w-3" />
-        Dispute
-      </Button>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-emerald-700" onClick={() => openAction({ entity: 'escrow', action: 'release', id: row.id, label, status: 'released', danger: true })}>
-        <CheckCircle2 className="mr-1 h-3 w-3" />
-        Release
-      </Button>
-    </>
-  );
+
+  const items: ActionMenuItem[] = [
+    { label: 'Release Escrow', icon: CheckCircle2, onClick: () => openAction({ entity: 'escrow', action: 'release', id: row.id, label, status: 'released', danger: true }), variant: 'success' },
+    { label: 'Hold Escrow', icon: Power, onClick: () => openAction({ entity: 'escrow', action: 'hold', id: row.id, label, status: 'frozen', danger: true }), variant: 'warning' },
+    { divider: true },
+    { label: 'Raise Dispute', icon: AlertTriangle, onClick: () => openAction({ entity: 'escrow', action: 'markDispute', id: row.id, label, status: 'dispute', danger: true }), variant: 'danger' }
+  ];
+
+  return <ActionDropdownMenu label={label} items={items} />;
 });
 
 const DocumentActions = memo(function DocumentActions({ row }: { row: DocumentRecord }) {
@@ -3353,8 +3434,8 @@ const DocumentActions = memo(function DocumentActions({ row }: { row: DocumentRe
     }
   };
   return (
-    <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black" onClick={openDocument}>
-      <Eye className="mr-1 h-3 w-3" />
+    <Button type="button" variant="outline" className="h-8 rounded-lg px-2.5 text-xs font-semibold" onClick={openDocument}>
+      <Eye className="mr-1.5 h-3.5 w-3.5" />
       Open
     </Button>
   );
@@ -3368,22 +3449,15 @@ const InvoiceStatusActions = memo(function InvoiceStatusActions({
   openAction: (dialog: NonNullable<ActionDialogState>) => void;
 }) {
   const label = row.invoiceNumber || `invoice ${row.id}`;
-  return (
-    <>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-[#12335f]" onClick={() => openAction({ entity: 'invoice', action: 'review', id: row.id, label, status: 'under_review' })}>
-        <Eye className="mr-1 h-3 w-3" />
-        Review
-      </Button>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-emerald-700" onClick={() => openAction({ entity: 'invoice', action: 'approve', id: row.id, label, status: 'approved', danger: true })}>
-        <CheckCircle2 className="mr-1 h-3 w-3" />
-        Approve
-      </Button>
-      <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-[10px] font-black text-red-700" onClick={() => openAction({ entity: 'invoice', action: 'reject', id: row.id, label, status: 'rejected', danger: true })}>
-        <AlertTriangle className="mr-1 h-3 w-3" />
-        Reject
-      </Button>
-    </>
-  );
+
+  const items: ActionMenuItem[] = [
+    { label: 'Review Invoice', icon: Eye, onClick: () => openAction({ entity: 'invoice', action: 'review', id: row.id, label, status: 'under_review' }), variant: 'primary' },
+    { label: 'Approve Invoice', icon: CheckCircle2, onClick: () => openAction({ entity: 'invoice', action: 'approve', id: row.id, label, status: 'approved', danger: true }), variant: 'success' },
+    { divider: true },
+    { label: 'Reject Invoice', icon: AlertTriangle, onClick: () => openAction({ entity: 'invoice', action: 'reject', id: row.id, label, status: 'rejected', danger: true }), variant: 'danger' }
+  ];
+
+  return <ActionDropdownMenu label={label} items={items} />;
 });
 
 function ActionDialog({

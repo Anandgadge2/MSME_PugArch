@@ -2040,13 +2040,6 @@ export default function AdminOnboarding() {
           }}
         >
           <div className="flex h-[95dvh] w-full max-w-[1300px] flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
-            {/* Government tricolor accent strip */}
-            <div className="flex h-1 w-full">
-              <div className="h-full flex-1 bg-[#ff9933]" aria-hidden />
-              <div className="h-full flex-1 bg-white" aria-hidden />
-              <div className="h-full flex-1 bg-[#138808]" aria-hidden />
-            </div>
-
             {/* Header - government-portal styling: deep navy, gold accent, embossed feel */}
             <div className="relative border-b-2 border-[#f9a825] bg-gradient-to-r from-[#0b1f3a] via-[#12335f] to-[#0b1f3a] px-6 py-5 text-white md:px-8">
               <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center md:justify-between">

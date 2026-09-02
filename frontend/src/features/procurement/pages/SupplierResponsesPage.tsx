@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { sellerRoutes } from '@/lib/routes';
 import {
   Search,
   RefreshCw,
@@ -316,7 +317,7 @@ export default function SupplierResponsesPage() {
     if (bid.isMarketplaceRequirement) {
       const method = String(bid.procurementType || '').toUpperCase();
       if (method === 'REVERSE_AUCTION' || method.includes('AUCTION')) {
-        router.push(`/reverse-auctions/${bid.requirementId}`);
+        router.push(sellerRoutes.detail('REVERSE_AUCTION', bid.requirementId));
       } else {
         router.push(`/marketplace/requirements/${bid.requirementId}`);
       }

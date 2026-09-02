@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type BuyerRequirement } from '../api';
 import { resolveMediaUrl } from '../../../lib/api';
+import { sellerRoutes } from '@/lib/routes';
 import { BidDetailModal } from './BidDetailModal';
 import {
     formatBudgetRange,
@@ -261,7 +262,7 @@ export function BuyerRequirementsList({
     }, [tab, query, sort, location, minBudget, maxBudget, buyerOrganizationId]);
 
     const getRequirementHref = (req: BuyerRequirement) => {
-        const sourceId = req?.sourceId || (req?.id ? Math.abs(req.id) : null);
+        const sourceId = (req as any)?.requirementNumber || req?.sourceId || (req?.id ? Math.abs(req.id) : null);
         if (!sourceId) return '/marketplace/requirements';
 
         if (!isSeller) {
@@ -274,15 +275,19 @@ export function BuyerRequirementsList({
         const isRate = method.includes('RATE') || title.includes('RATE CONTRACT') || desc.includes('RATE_CONTRACT');
 
         if (isRate || method === 'RATE_CONTRACT') {
-            return `/seller/rate-contract?requirementId=${sourceId}`;
+            return sellerRoutes.detail('RATE_CONTRACT', sourceId);
         } else if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER'].includes(method)) {
-            return `/seller/rfq?requirementId=${sourceId}`;
+            return sellerRoutes.detail('RFQ', sourceId);
         } else if (['RFP', 'SINGLE_SOURCE', 'PAC'].includes(method)) {
-            return `/seller/rfp?requirementId=${sourceId}`;
-        } else if (['OPEN_TENDER', 'LIMITED_TENDER', 'TWO_STAGE_TENDER', 'EMERGENCY_PURCHASE'].includes(method)) {
-            return `/seller/rfq?requirementId=${sourceId}`;
+            return sellerRoutes.detail('RFP', sourceId);
+        } else if (method === 'OPEN_TENDER' || method.includes('OPEN') || title.includes('OPEN TENDER')) {
+            return sellerRoutes.detail('OPEN_TENDER', sourceId);
+        } else if (method === 'LIMITED_TENDER' || method.includes('LIMITED') || title.includes('LIMITED TENDER')) {
+            return sellerRoutes.detail('LIMITED_TENDER', sourceId);
+        } else if (['TWO_STAGE_TENDER', 'EMERGENCY_PURCHASE'].includes(method)) {
+            return sellerRoutes.detail('OPEN_TENDER', sourceId);
         } else if (method === 'REVERSE_AUCTION') {
-            return `/seller/rfq?requirementId=${sourceId}`;
+            return sellerRoutes.detail('REVERSE_AUCTION', (req as any)?.sourceId || sourceId);
         }
         
         return `/marketplace/requirements/${sourceId}`;

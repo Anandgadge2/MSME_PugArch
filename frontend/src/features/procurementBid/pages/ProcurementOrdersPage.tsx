@@ -130,7 +130,6 @@ export default function ProcurementOrdersPage() {
 
   return (
     <PageShell>
-      <div className="brand-tricolor-strip w-full" />
       <main className="mx-auto w-full max-w-7xl px-4 py-5">
         <ProcurementHero
           title={order ? order.poNumber || `Order #${order.id}` : roleTitle(user?.role)}
