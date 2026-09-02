@@ -810,7 +810,7 @@ const safeServiceInclude = {
     }
 };
 
-const catalogueFileAssetSelect = { id: true, entityId: true, url: true, mimeType: true, originalName: true };
+const catalogueFileAssetSelect = { id: true, entityId: true, url: true, mimeType: true, originalName: true, size: true, entityType: true };
 const catalogueEntityType = (itemType: 'product' | 'service') => itemType === 'service' ? 'catalogue_service' : 'catalogue_product';
 
 const loadCatalogueFilesForItems = async (
@@ -821,9 +821,10 @@ const loadCatalogueFilesForItems = async (
     const ids = Array.from(new Set(itemIds.filter(id => Number.isFinite(id) && id > 0)));
     if (ids.length === 0) return new Map<number, any[]>();
 
+    const targetType = catalogueEntityType(itemType);
     const files = await db.fileAsset.findMany({
         where: {
-            entityType: { in: ['catalogue', catalogueEntityType(itemType)] },
+            entityType: { in: ['catalogue', targetType, itemType, `catalogue_${itemType}`, 'general'] },
             entityId: { in: ids },
             status: 'active',
             ...(options.imageOnly ? { mimeType: { startsWith: 'image/' } } : {})
@@ -853,21 +854,32 @@ const attachCatalogueFilesToItems = async (
     return items.map((item) => {
         const catalogueFiles = filesByItemId.get(Number(item.id)) || [];
         const catalogueImages = catalogueFiles
-            .filter(file => String(file.mimeType || '').toLowerCase().startsWith('image/'))
+            .filter(file => {
+                const mime = String(file.mimeType || '').toLowerCase();
+                const name = String(file.originalName || '').toLowerCase();
+                return mime.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg|avif)$/i.test(name);
+            })
             .map((file, index) => ({
                 id: file.id,
+                fileAssetId: file.id,
                 altText: file.originalName || `${item.name || 'Catalogue'} image ${index + 1}`,
                 displayOrder: index,
                 isPrimary: index === 0,
                 fileAsset: file
             }));
 
+        const existingImages = Array.isArray(item.images) ? item.images : [];
+        const seenAssetIds = new Set(
+            existingImages.map((img: any) => img.fileAssetId || img.fileAsset?.id || img.id).filter(Boolean)
+        );
+        const uniqueCatalogueImages = catalogueImages.filter((cImg: any) => !seenAssetIds.has(cImg.fileAssetId));
+
         return {
             ...item,
             catalogueFiles,
             images: itemType === 'service'
                 ? catalogueImages
-                : [...(item.images || []), ...catalogueImages.filter(image => !(item.images || []).some((existing: any) => existing.fileAsset?.id === image.fileAsset.id))]
+                : [...existingImages, ...uniqueCatalogueImages]
         };
     });
 };
@@ -877,6 +889,66 @@ const attachCatalogueFilesToItem = async (item: any, itemType: 'product' | 'serv
     const [withFiles] = await attachCatalogueFilesToItems([item], itemType);
     return withFiles || item;
 };
+
+// ─── Public: Product Detail ──────────────────────────────────────────────────
+router.get('/marketplace/products/:id', optionalAuthenticate, checkFeatureIfAuthenticated('product-marketplace'), async (req: AuthRequest, res: Response) => {
+    try {
+        const id = Number(req.params.id);
+        if (!id || id < 1) return apiResponse.error(res, 400, 'Invalid product ID', 'INVALID_ID');
+
+        const product = await db.product.findFirst({
+            where: { id, status: 'ACTIVE' },
+            include: {
+                category: { select: { id: true, name: true } },
+                seller: { select: { id: true, name: true, onboardingStatus: true } },
+                organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, gstin: true } },
+                images: { 
+                    include: { 
+                        fileAsset: { 
+                            select: { id: true, url: true, originalName: true, mimeType: true, size: true } 
+                        } 
+                    }, 
+                    orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }] 
+                },
+                specifications: { orderBy: { name: 'asc' } },
+                certifications: { 
+                    include: { 
+                        fileAsset: { 
+                            select: { id: true, url: true, originalName: true, mimeType: true, size: true } 
+                        } 
+                    } 
+                }
+            }
+        });
+
+        if (!product) return apiResponse.error(res, 404, 'Product not found', 'PRODUCT_NOT_FOUND');
+        const productWithFiles = await attachCatalogueFilesToItem(product, 'product');
+
+        // Related products from same category
+        const related = await db.product.findMany({
+            where: { status: 'ACTIVE', categoryId: product.categoryId, id: { not: id } },
+            take: 4,
+            include: {
+                category: { select: { id: true, name: true } },
+                organization: { select: { id: true, organizationName: true, city: true, state: true, verificationStatus: true } },
+                images: { 
+                    include: { 
+                        fileAsset: { 
+                            select: { id: true, url: true, originalName: true, mimeType: true } 
+                        } 
+                    }, 
+                    orderBy: [{ isPrimary: 'desc' }], 
+                    take: 1 
+                }
+            }
+        });
+
+        return ok(res, { product: productWithFiles, relatedProducts: related });
+    } catch (error) {
+        console.error('[Marketplace Product Detail]', error);
+        return apiResponse.error(res, 500, 'Failed to load product details', 'PRODUCT_DETAIL_ERROR');
+    }
+});
 
 const approvedSellerStatuses = ['approved_for_procurement'];
 const publicSellerApprovalWhere = {
@@ -995,8 +1067,89 @@ const normalizeMarketplaceItem = (item: any, itemType: 'PRODUCT' | 'SERVICE', me
         isOfferActive: offer.isOfferActive,
         offerLabel: item.offerLabel || null,
         bulkDealAvailable: Boolean(item.bulkDealAvailable),
+        avgRating: item.avgRating ?? item.rating ?? null,
+        reviewCount: item.reviewCount ?? 0,
+        sellerBadges: item.sellerBadges ?? [],
         detailUrl: `/marketplace/${itemType === 'SERVICE' ? 'services' : 'products'}/${item.id}`
     };
+};
+
+const enrichMarketplaceItemsWithTrustData = async (items: any[]) => {
+    if (!items || items.length === 0) return items;
+
+    try {
+        const sellerIds = [...new Set(items.map((it: any) => it.sellerId || it.seller?.id).filter(Boolean))];
+        const orgIds = [...new Set(items.map((it: any) => it.organizationId || it.organization?.id).filter(Boolean))];
+
+        const [ratingAggs, topRanks, sellerProfiles] = await Promise.all([
+            sellerIds.length
+                ? db.supplierRating.groupBy({
+                    by: ['sellerId'],
+                    where: { sellerId: { in: sellerIds } },
+                    _avg: { rating: true },
+                    _count: { rating: true }
+                }).catch(() => [])
+                : [],
+            orgIds.length
+                ? db.organizationMonthlyRank.findMany({
+                    where: {
+                        organizationId: { in: orgIds },
+                        month: new Date().getMonth() + 1,
+                        year: new Date().getFullYear(),
+                        rank: { lte: 10 }
+                    },
+                    select: { organizationId: true, rank: true }
+                }).catch(() => [])
+                : [],
+            orgIds.length
+                ? db.sellerProfile.findMany({
+                    where: { organizationId: { in: orgIds } },
+                    select: { organizationId: true, isUdyamCertified: true }
+                }).catch(() => [])
+                : []
+        ]);
+
+        const ratingMap = new Map<number, { avgRating: number | null; reviewCount: number }>(
+            (ratingAggs || []).map((r: any) => [
+                r.sellerId,
+                {
+                    avgRating: r._avg?.rating ? Number(Number(r._avg.rating).toFixed(1)) : null,
+                    reviewCount: r._count?.rating || 0
+                }
+            ])
+        );
+        const topRankSet = new Set((topRanks || []).map((r: any) => r.organizationId));
+        const udyamMap = new Map<number, boolean>((sellerProfiles || []).map((sp: any) => [sp.organizationId, sp.isUdyamCertified]));
+
+        return items.map((item: any) => {
+            const sellerId = item.sellerId || item.seller?.id;
+            const orgId = item.organizationId || item.organization?.id;
+            const ratingInfo = sellerId ? ratingMap.get(sellerId) : undefined;
+
+            const badges: string[] = [];
+            if (orgId && topRankSet.has(orgId)) {
+                badges.push('TOP_SELLER');
+            }
+            const isVerified = (item.organization?.verificationStatus || '') === 'VERIFIED';
+            const isUdyam = Boolean((orgId && udyamMap.get(orgId)) || item.isMsmeMade || item.organization?.udyamNumber);
+            if (isVerified && isUdyam) {
+                badges.push('ASSURED_MSME');
+            }
+            if (item.bulkDealAvailable) {
+                badges.push('BULK_DEAL');
+            }
+
+            return {
+                ...item,
+                avgRating: ratingInfo?.avgRating ?? (item.rating ? Number(item.rating) : null),
+                reviewCount: ratingInfo?.reviewCount ?? item.reviewCount ?? 0,
+                sellerBadges: badges
+            };
+        });
+    } catch (err) {
+        console.warn('[Marketplace Trust Enrichment Error]', err);
+        return items;
+    }
 };
 
 const ensureMarketplaceHomeSections = async () => {
@@ -1771,52 +1924,14 @@ router.get('/marketplace/products', optionalAuthenticate, checkFeatureIfAuthenti
         const sortedProducts = mostPurchasedIds.length
             ? [...products].sort((a: any, b: any) => mostPurchasedIds.indexOf(a.id) - mostPurchasedIds.indexOf(b.id))
             : products;
-        return ok(res, { products: sortedProducts, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+        const enrichedProducts = await enrichMarketplaceItemsWithTrustData(sortedProducts);
+        return ok(res, { products: enrichedProducts, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     } catch (error) {
         if (error instanceof z.ZodError) {
             return apiResponse.error(res, 400, error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '), 'VALIDATION_ERROR');
         }
         console.error('[Marketplace Products]', error);
         return apiResponse.error(res, 500, 'Failed to load products', 'MARKETPLACE_PRODUCTS_ERROR');
-    }
-});
-
-// ─── Public: Product Detail ──────────────────────────────────────────────────
-router.get('/marketplace/products/:id', optionalAuthenticate, checkFeatureIfAuthenticated('product-marketplace'), shortCache(60), async (req: AuthRequest, res: Response) => {
-    try {
-        const id = Number(req.params.id);
-        if (!id || id < 1) return apiResponse.error(res, 400, 'Invalid product ID', 'INVALID_ID');
-
-        const product = await db.product.findFirst({
-            where: { id, status: 'ACTIVE' },
-            include: {
-                category: { select: { id: true, name: true } },
-                seller: { select: { id: true, name: true, onboardingStatus: true } },
-                organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, gstin: true } },
-                images: { include: { fileAsset: { select: { id: true, url: true, originalName: true } } }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }] },
-                specifications: { orderBy: { name: 'asc' } },
-                certifications: { include: { fileAsset: { select: { id: true, url: true } } } }
-            }
-        });
-
-        if (!product) return apiResponse.error(res, 404, 'Product not found', 'PRODUCT_NOT_FOUND');
-        const productWithFiles = await attachCatalogueFilesToItem(product, 'product');
-
-        // Related products from same category
-        const related = await db.product.findMany({
-            where: { status: 'ACTIVE', categoryId: product.categoryId, id: { not: id } },
-            take: 4,
-            include: {
-                category: { select: { id: true, name: true } },
-                organization: { select: { id: true, organizationName: true, city: true, state: true, verificationStatus: true } },
-                images: { include: { fileAsset: { select: { id: true, url: true } } }, orderBy: [{ isPrimary: 'desc' }], take: 1 }
-            }
-        });
-
-        return ok(res, { product: productWithFiles, relatedProducts: related });
-    } catch (error) {
-        console.error('[Marketplace Product Detail]', error);
-        return apiResponse.error(res, 500, 'Failed to load product details', 'PRODUCT_DETAIL_ERROR');
     }
 });
 
@@ -1899,7 +2014,8 @@ router.get('/marketplace/services', optionalAuthenticate, checkFeatureIfAuthenti
         ]);
 
         const servicesWithFiles = await attachCatalogueFilesToItems(services, 'service', { imageOnly: true });
-        return ok(res, { services: servicesWithFiles, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+        const enrichedServices = await enrichMarketplaceItemsWithTrustData(servicesWithFiles);
+        return ok(res, { services: enrichedServices, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     } catch (error) {
         if (error instanceof z.ZodError) {
             return apiResponse.error(res, 400, error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '), 'VALIDATION_ERROR');
@@ -1910,7 +2026,7 @@ router.get('/marketplace/services', optionalAuthenticate, checkFeatureIfAuthenti
 });
 
 // ─── Public: Service Detail ──────────────────────────────────────────────────
-router.get('/marketplace/services/:id', optionalAuthenticate, checkFeatureIfAuthenticated('service-marketplace'), shortCache(60), async (req: AuthRequest, res: Response) => {
+router.get('/marketplace/services/:id', optionalAuthenticate, checkFeatureIfAuthenticated('service-marketplace'), async (req: AuthRequest, res: Response) => {
     try {
         const id = Number(req.params.id);
         if (!id || id < 1) return apiResponse.error(res, 400, 'Invalid service ID', 'INVALID_ID');
@@ -1921,7 +2037,14 @@ router.get('/marketplace/services/:id', optionalAuthenticate, checkFeatureIfAuth
                 category: { select: { id: true, name: true } },
                 seller: { select: { id: true, name: true, onboardingStatus: true } },
                 organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, gstin: true } },
-                certifications: { include: { fileAsset: { select: { id: true, url: true } } } }
+                specifications: { orderBy: { name: 'asc' } },
+                certifications: { 
+                    include: { 
+                        fileAsset: { 
+                            select: { id: true, url: true, originalName: true, mimeType: true, size: true } 
+                        } 
+                    } 
+                }
             }
         });
 
@@ -2043,10 +2166,12 @@ router.get('/marketplace/sellers', shortCache(60), async (req: Request, res: Res
 });
 
 
-router.get('/marketplace/sellers/:id', shortCache(60), async (req: Request, res: Response) => {
+router.get('/marketplace/sellers/:id', async (req: Request, res: Response) => {
     try {
         const id = Number(req.params.id);
-        const org = await db.organization.findUnique({
+        if (!id || id < 1) return apiResponse.error(res, 400, 'Invalid seller ID', 'INVALID_ID');
+
+        let org = await db.organization.findUnique({
             where: { id },
             include: {
                 logoFile: { select: organizationLogoSelect },
@@ -2058,7 +2183,7 @@ router.get('/marketplace/sellers/:id', shortCache(60), async (req: Request, res:
                     }
                 },
                 users: {
-                    where: { role: 'seller' },
+                    where: { role: { in: ['seller', 'shg'] } },
                     select: {
                         id: true,
                         name: true,
@@ -2068,6 +2193,35 @@ router.get('/marketplace/sellers/:id', shortCache(60), async (req: Request, res:
                 }
             }
         });
+
+        if (!org) {
+            const sellerUser = await db.user.findUnique({ where: { id }, select: { organizationId: true } });
+            if (sellerUser?.organizationId) {
+                org = await db.organization.findUnique({
+                    where: { id: sellerUser.organizationId },
+                    include: {
+                        logoFile: { select: organizationLogoSelect },
+                        profile: { select: { logoUrl: true, bannerUrl: true } },
+                        buyerProfiles: { select: { logoUrl: true, bannerUrl: true } },
+                        sellerProfiles: {
+                            include: {
+                                offices: true
+                            }
+                        },
+                        users: {
+                            where: { role: { in: ['seller', 'shg'] } },
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                                mobile: true
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
         if (!org) {
             return apiResponse.error(res, 404, 'Seller Organization not found', 'SELLER_NOT_FOUND');
         }
@@ -3726,28 +3880,100 @@ router.get('/marketplace/organizations/featured', shortCache(60), async (_req: R
 
 router.get('/marketplace/search', shortCache(15), async (req: Request, res: Response) => {
     try {
-        const q = String(req.query.q || '').trim();
-        if (!q || q.length < 2) return ok(res, { products: [], services: [], sellers: [] });
+        const q = String(req.query.q || '').replace(/\0/g, '').trim();
+        if (!q || q.length < 2) return ok(res, { products: [], services: [], sellers: [], categories: [] });
 
-        const [products, services, sellers] = await Promise.all([
+        const [products, services, sellers, categories] = await Promise.all([
             db.product.findMany({
-                where: { status: 'ACTIVE', OR: [{ name: { contains: q, mode: 'insensitive' } }, { description: { contains: q, mode: 'insensitive' } }] },
-                take: 5,
-                select: { id: true, name: true, price: true, currency: true }
+                where: productPublicWhere({
+                    OR: [
+                        { name: { contains: q, mode: 'insensitive' } },
+                        { description: { contains: q, mode: 'insensitive' } },
+                        { brand: { contains: q, mode: 'insensitive' } },
+                        { category: { name: { contains: q, mode: 'insensitive' } } },
+                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } }
+                    ]
+                }),
+                take: 6,
+                select: {
+                    id: true,
+                    name: true,
+                    price: true,
+                    discountPrice: true,
+                    currency: true,
+                    brand: true,
+                    unitOfMeasure: true,
+                    category: { select: { id: true, name: true } },
+                    organization: { select: { id: true, organizationName: true, verificationStatus: true, city: true, district: true } },
+                    images: {
+                        include: { fileAsset: { select: { id: true, url: true } } },
+                        orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
+                        take: 1
+                    }
+                }
             }),
             db.service.findMany({
-                where: { status: 'ACTIVE', OR: [{ name: { contains: q, mode: 'insensitive' } }, { description: { contains: q, mode: 'insensitive' } }] },
-                take: 5,
-                select: { id: true, name: true, pricingModel: true, basePrice: true }
+                where: servicePublicWhere({
+                    OR: [
+                        { name: { contains: q, mode: 'insensitive' } },
+                        { description: { contains: q, mode: 'insensitive' } },
+                        { category: { name: { contains: q, mode: 'insensitive' } } },
+                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } }
+                    ]
+                }),
+                take: 6,
+                select: {
+                    id: true,
+                    name: true,
+                    pricingModel: true,
+                    basePrice: true,
+                    currency: true,
+                    category: { select: { id: true, name: true } },
+                    organization: { select: { id: true, organizationName: true, verificationStatus: true, city: true, district: true } },
+                    images: {
+                        include: { fileAsset: { select: { id: true, url: true } } },
+                        take: 1
+                    }
+                }
             }),
             db.organization.findMany({
-                where: { verificationStatus: 'VERIFIED', isBlacklisted: false, organizationName: { contains: q, mode: 'insensitive' } },
+                where: {
+                    ...sellerOrganizationWhere,
+                    OR: [
+                        { organizationName: { contains: q, mode: 'insensitive' } },
+                        { city: { contains: q, mode: 'insensitive' } },
+                        { district: { contains: q, mode: 'insensitive' } }
+                    ]
+                },
                 take: 5,
-                select: { id: true, organizationName: true, city: true, state: true }
+                select: {
+                    id: true,
+                    organizationName: true,
+                    organizationType: true,
+                    city: true,
+                    district: true,
+                    state: true,
+                    verificationStatus: true,
+                    logoFile: { select: organizationLogoSelect },
+                    profile: { select: organizationProfileBrandSelect }
+                }
+            }),
+            db.category.findMany({
+                where: {
+                    isActive: true,
+                    name: { contains: q, mode: 'insensitive' }
+                },
+                take: 5,
+                select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    type: true
+                }
             })
         ]);
 
-        return ok(res, { products, services, sellers });
+        return ok(res, { products, services, sellers, categories });
     } catch (error) {
         console.error('[Marketplace Search]', error);
         return apiResponse.error(res, 500, 'Search failed', 'MARKETPLACE_SEARCH_ERROR');

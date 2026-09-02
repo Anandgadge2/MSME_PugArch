@@ -61,9 +61,12 @@ const extractUrlFromAsset = (asset: any) => {
     return '';
 };
 
+const nonImageExtensions = /\.(docx?|pdf|xlsx?|csv|zip|rar|tar|gz|txt|json|pptx?)$/i;
+
 const looksLikeImage = (entry: any) => {
     const mimeType = String(entry?.mimeType || entry?.fileAsset?.mimeType || '').toLowerCase();
     const name = String(entry?.originalName || entry?.fileName || entry?.name || entry?.fileAsset?.originalName || entry?.url || entry?.fileAsset?.url || '').toLowerCase();
+    if (nonImageExtensions.test(name)) return false;
     return mimeType.startsWith('image/') || imageExtensions.test(name);
 };
 
@@ -71,11 +74,12 @@ const readImageFromEntry = (entry: any, isKnownImageSource = false) => {
     if (!entry) return '';
 
     if (typeof entry === 'string') {
+        if (nonImageExtensions.test(entry)) return '';
         const norm = normalizeUrl(entry);
-        if (norm && (isKnownImageSource || imageExtensions.test(norm) || norm.startsWith('data:') || norm.startsWith('blob:') || norm.includes('/api/files/') || norm.includes('/uploads/'))) {
+        if (norm && !nonImageExtensions.test(norm) && (isKnownImageSource || imageExtensions.test(norm) || norm.startsWith('data:image/') || norm.startsWith('blob:') || norm.includes('/api/files/') || norm.includes('/uploads/'))) {
             return norm;
         }
-        return isKnownImageSource ? norm : '';
+        return isKnownImageSource && !nonImageExtensions.test(norm) ? norm : '';
     }
 
     const candidate = extractUrlFromAsset(entry.imageUrl)
@@ -88,9 +92,9 @@ const readImageFromEntry = (entry: any, isKnownImageSource = false) => {
         || extractUrlFromAsset(entry.file)
         || extractUrlFromAsset(entry);
 
-    if (!candidate) return '';
+    if (!candidate || nonImageExtensions.test(candidate)) return '';
 
-    if (isKnownImageSource || looksLikeImage(entry) || imageExtensions.test(candidate) || candidate.startsWith('data:') || candidate.startsWith('blob:') || candidate.includes('/api/files/') || candidate.includes('/uploads/')) {
+    if (isKnownImageSource || looksLikeImage(entry) || imageExtensions.test(candidate) || candidate.startsWith('data:image/') || candidate.startsWith('blob:')) {
         return candidate;
     }
 
@@ -122,6 +126,8 @@ export const getMarketplaceImageCandidates = (item: any): string[] => {
         item.productImages,
         item.serviceImages,
         item.catalogueImages,
+        item.photos,
+        item.gallery,
         item.media,
     ];
 
@@ -137,6 +143,8 @@ export const getMarketplaceImageCandidates = (item: any): string[] => {
         item.catalogueFiles,
         item.files,
         item.attachments,
+        item.documents,
+        item.certifications,
     ];
 
     for (const collection of secondaryCollections) {

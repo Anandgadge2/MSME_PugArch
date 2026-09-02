@@ -30,25 +30,20 @@ interface BiddingPerformanceProps {
   };
 }
 
-const BID_STATUS_DATA = [
-  { name: 'Won / Awarded', value: 5, color: '#10b981', textColor: 'text-emerald-700', bg: 'bg-emerald-50' },
-  { name: 'Under Evaluation', value: 4, color: '#6366f1', textColor: 'text-indigo-700', bg: 'bg-indigo-50' },
-  { name: 'Closed / Not Awarded', value: 3, color: '#94a3b8', textColor: 'text-slate-600', bg: 'bg-slate-100' },
-];
-
 export function BiddingPerformanceChart({ stats }: BiddingPerformanceProps) {
   const [period, setPeriod] = useState<'30d' | 'quarter'>('30d');
 
-  const totalBids = stats?.submitted ?? 12;
-  const wonBids = stats?.won ?? 5;
-  const winRate = Math.round((wonBids / (totalBids || 1)) * 100);
-  const pipelineVal = stats?.pipelineValue ?? 1845000;
-  const onTimeRate = stats?.onTimeDeliveryRate ?? 98.4;
+  const totalBids = stats?.submitted || 0;
+  const wonBids = stats?.won || 0;
+  const underEval = stats?.underEval || 0;
+  const winRate = totalBids > 0 ? Math.round((wonBids / totalBids) * 100) : 0;
+  const pipelineVal = stats?.pipelineValue || 0;
+  const onTimeRate = stats?.onTimeDeliveryRate || 100;
 
   const chartData = [
     { name: 'Won / Awarded', value: wonBids, color: '#10b981' },
-    { name: 'Under Evaluation', value: stats?.underEval ?? 4, color: '#6366f1' },
-    { name: 'Closed / Outbid', value: Math.max(0, totalBids - wonBids - (stats?.underEval ?? 4)), color: '#cbd5e1' },
+    { name: 'Under Evaluation', value: underEval, color: '#6366f1' },
+    { name: 'Closed / Outbid', value: Math.max(0, totalBids - wonBids - underEval), color: '#cbd5e1' },
   ];
 
   return (
@@ -95,93 +90,115 @@ export function BiddingPerformanceChart({ stats }: BiddingPerformanceProps) {
             <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Bid Win Rate</p>
             <div className="flex items-baseline gap-1.5 mt-0.5">
               <span className="text-lg font-black text-slate-950">{winRate}%</span>
-              <span className="text-[9px] font-bold text-emerald-600 flex items-center">
-                <TrendingUp className="h-2.5 w-2.5 mr-0.5" /> +4.2%
-              </span>
+              {totalBids > 0 && wonBids > 0 && (
+                <span className="text-[9px] font-bold text-emerald-600 flex items-center">
+                  <TrendingUp className="h-2.5 w-2.5 mr-0.5" /> +4.2%
+                </span>
+              )}
             </div>
-            <p className="text-[9px] font-medium text-slate-500 mt-0.5">{wonBids} of {totalBids} proposals awarded</p>
+            <p className="text-[9px] font-medium text-slate-500 mt-0.5">
+              {totalBids > 0 ? `${wonBids} of ${totalBids} proposals awarded` : '0 proposals submitted'}
+            </p>
           </div>
 
-          <div className="rounded-lg bg-indigo-50/40 p-2.5 border border-indigo-100/60">
-            <p className="text-[9px] font-bold uppercase tracking-wider text-indigo-900/60">Active Pipeline</p>
+          <div className="rounded-lg bg-slate-50/70 p-2.5 border border-slate-200/60">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Active Pipeline</p>
             <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-lg font-black text-[#12335f]">₹{(pipelineVal / 100000).toFixed(1)}L</span>
-              <span className="text-[9px] font-bold text-indigo-600 uppercase">Live</span>
+              <span className="text-lg font-black text-[#12335f]">
+                {pipelineVal > 0 ? `₹${(pipelineVal / 100000).toFixed(1)}L` : '₹0'}
+              </span>
+              {underEval > 0 && (
+                <span className="text-[8px] font-bold uppercase px-1 py-0.2 bg-blue-50 text-blue-700 rounded border border-blue-200">
+                  Live
+                </span>
+              )}
             </div>
-            <p className="text-[9px] font-medium text-indigo-700/70 mt-0.5">Under evaluation & bids</p>
+            <p className="text-[9px] font-medium text-slate-500 mt-0.5">
+              {underEval > 0 ? `${underEval} bids under evaluation` : 'Under evaluation & bids'}
+            </p>
           </div>
         </div>
 
         {/* ── Donut Chart & Legend ── */}
-        <div className="flex items-center gap-3 pt-1">
-          <div className="h-24 w-24 shrink-0 relative flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={28}
-                  outerRadius={42}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  formatter={(val: any, name: any) => [`${val} Proposals`, name]}
-                  contentStyle={{ fontSize: '11px', borderRadius: '8px', padding: '4px 8px' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-xs font-black text-slate-800">{totalBids}</span>
-              <span className="text-[7px] font-bold uppercase tracking-wider text-slate-400">Bids</span>
+        {totalBids > 0 ? (
+          <div className="grid grid-cols-12 items-center gap-3 pt-1">
+            <div className="col-span-5 h-[110px] w-full relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={30}
+                    outerRadius={45}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '8px', fontSize: '11px', fontWeight: 'bold' }}
+                    formatter={(val: any) => [`${val} Proposals`, 'Count']}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-xs font-black text-slate-900">{totalBids}</span>
+                <span className="text-[7px] font-bold uppercase text-slate-400">Total</span>
+              </div>
             </div>
-          </div>
 
-          {/* Legend Details */}
-          <div className="flex-1 space-y-1.5 min-w-0">
-            {BID_STATUS_DATA.map((item, idx) => (
-              <div key={item.name} className="flex items-center justify-between text-[10px]">
-                <div className="flex items-center gap-1.5 truncate">
-                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                  <span className="font-semibold text-slate-600 truncate">{item.name}</span>
+            {/* Micro Breakdown Legend */}
+            <div className="col-span-7 space-y-1.5 text-[10px]">
+              <div className="flex items-center justify-between p-1 rounded bg-emerald-50/60 border border-emerald-100">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <span className="font-bold text-slate-700">Won</span>
                 </div>
-                <span className="font-extrabold text-slate-900 ml-2">
-                  {chartData[idx]?.value ?? item.value}
+                <span className="font-extrabold text-emerald-800">{wonBids}</span>
+              </div>
+
+              <div className="flex items-center justify-between p-1 rounded bg-indigo-50/60 border border-indigo-100">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                  <span className="font-bold text-slate-700">Under Eval</span>
+                </div>
+                <span className="font-extrabold text-indigo-800">{underEval}</span>
+              </div>
+
+              <div className="flex items-center justify-between p-1 rounded bg-slate-50 border border-slate-100">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-slate-400" />
+                  <span className="font-bold text-slate-600">Closed / Other</span>
+                </div>
+                <span className="font-extrabold text-slate-700">
+                  {Math.max(0, totalBids - wonBids - underEval)}
                 </span>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Fulfillment Quality Indicator ── */}
-        <div className="rounded-lg bg-emerald-50/50 p-2.5 border border-emerald-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-md bg-emerald-600 text-white flex items-center justify-center">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-emerald-950">On-Time Fulfillment SLA</p>
-              <p className="text-[9px] font-medium text-emerald-700/80">Complies with MSME delivery standards</p>
             </div>
           </div>
-          <span className="text-xs font-black text-emerald-700">{onTimeRate}%</span>
-        </div>
-      </div>
+        ) : (
+          <div className="p-4 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+            <p className="text-xs font-bold text-slate-700">No proposals submitted yet.</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Submit quotations to start tracking your win rate and pipeline.</p>
+          </div>
+        )}
 
-      {/* ── Card Footer ── */}
-      <div className="bg-slate-50/80 px-3.5 py-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
-        <Link 
-          href="/seller/bids/submitted" 
-          className="font-bold uppercase tracking-wider text-[#12335f] hover:text-[#0b2445] inline-flex items-center gap-1 transition"
-        >
-          View Submitted Bids ({totalBids})
-          <ArrowUpRight className="h-3 w-3" />
-        </Link>
+        {/* ── Footer KPI ── */}
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-medium text-slate-600">
+          <span className="flex items-center gap-1">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            On-Time Fulfillment SLA: <strong className="text-slate-900">{onTimeRate}%</strong>
+          </span>
+          <Link 
+            href="/seller/bids/submitted" 
+            className="font-bold uppercase tracking-wider text-[#12335f] hover:underline"
+          >
+            My Bids →
+          </Link>
+        </div>
       </div>
     </div>
   );

@@ -1149,7 +1149,8 @@ router.delete('/master-admin/companies/:id/cascade', ...masterOnly, requirePermi
     metadata: { reason, companyName: company.name, deletedCounts: summary }
   });
 
-  await invalidateByPattern('master-admin:*');
+  await invalidateByPattern('cache:admin:*').catch(() => undefined);
+  await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
 
   jsonOk(res, { deleted: summary, companyName: company.name }, `Company "${company.name}" and all related data permanently deleted.`);
 }));
@@ -2595,7 +2596,8 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     metadata: { reason, organizationName: organization.organizationName, deletedCounts: summary }
   });
 
-  await invalidateByPattern('master-admin:*');
+  await invalidateByPattern('cache:admin:*').catch(() => undefined);
+  await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
 
   jsonOk(res, { deleted: summary, organizationName: organization.organizationName }, `Organization "${organization.organizationName}" and all related data permanently deleted.`);
 }));

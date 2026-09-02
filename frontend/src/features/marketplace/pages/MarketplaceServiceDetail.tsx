@@ -1,25 +1,24 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
     ChevronRight, FileText, MapPin, BadgeCheck, Wrench, ArrowLeft,
-    ShoppingCart, Building2, ShieldCheck, ClipboardList, BookmarkPlus,
-    CheckCircle2, Clock, Check, X, Award, ExternalLink, Sparkles, Layers, Share2, Info
+    ShoppingCart, ShieldCheck, ClipboardList, BookmarkPlus,
+    Clock, Check, X, Award, ExternalLink, Sparkles, Share2,
+    Eye, Download, Lock, CheckCircle, FileDown, Layers3, Send,
+    FileSpreadsheet, FileCode
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type MarketplaceService } from '../api';
-import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { toast } from 'sonner';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, unwrapApiData } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
-import { ServiceDetailSkeleton } from '../../../components/ui/skeleton';
-import { resolveMarketplaceImage } from '../utils/marketplaceImages';
+import { getMarketplaceImageCandidates, resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { saveSupplier } from '../utils/savedSuppliers';
-import { buildServiceDetailFields, formatCatalogueDate } from '../../catalogue/utils/catalogueDetailUtils';
+import { formatCatalogueDate } from '../../catalogue/utils/catalogueDetailUtils';
+import { useQuery as useTanstackQuery } from '@tanstack/react-query';
 
 const pricingLabels: Record<string, string> = {
     FIXED: 'Fixed Price',
@@ -30,122 +29,112 @@ const pricingLabels: Record<string, string> = {
     CUSTOM: 'Quote Based Service',
 };
 
-const isImageFile = (file: any) => String(file?.mimeType || '').toLowerCase().startsWith('image/');
+const isImageFile = (file: any) => {
+    const mime = String(file?.mimeType || file?.fileAsset?.mimeType || '').toLowerCase();
+    const name = String(file?.originalName || file?.name || file?.fileAsset?.originalName || file?.url || '').toLowerCase();
+    return mime.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i.test(name);
+};
+
+const getDocumentIcon = (fileName: string, mimeType?: string) => {
+    const name = String(fileName || '').toLowerCase();
+    const mime = String(mimeType || '').toLowerCase();
+    if (name.endsWith('.pdf') || mime.includes('pdf')) {
+        return <FileText className="h-4 w-4 text-red-500 shrink-0" />;
+    }
+    if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv') || mime.includes('spreadsheet') || mime.includes('excel')) {
+        return <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />;
+    }
+    if (name.endsWith('.docx') || name.endsWith('.doc') || mime.includes('word') || mime.includes('officedocument')) {
+        return <FileText className="h-4 w-4 text-blue-600 shrink-0" />;
+    }
+    return <FileCode className="h-4 w-4 text-slate-600 shrink-0" />;
+};
+
+const parseServiceSpecifications = (service: any): Array<{ name: string; value: string; unit?: string }> => {
+    const raw = service?.specifications || service?.specs || service?.attributes || service?.technicalSpecs || service?.parameters;
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+        return raw.map((item: any) => {
+            if (typeof item === 'object' && item !== null) {
+                const name = String(item.name || item.key || item.label || item.param || '').trim();
+                const value = String(item.value || item.val || '').trim();
+                const unit = item.unit ? String(item.unit).trim() : undefined;
+                if (name && value) return { name, value, unit };
+            }
+            return null;
+        }).filter(Boolean) as Array<{ name: string; value: string; unit?: string }>;
+    }
+    if (typeof raw === 'string') {
+        try {
+            const parsed = JSON.parse(raw);
+            return parseServiceSpecifications({ specifications: parsed });
+        } catch {
+            return [];
+        }
+    }
+    if (typeof raw === 'object' && raw !== null) {
+        return Object.entries(raw).map(([name, val]) => {
+            if (val === null || val === undefined || val === '') return null;
+            return { name: name.trim(), value: String(val).trim() };
+        }).filter(Boolean) as Array<{ name: string; value: string; unit?: string }>;
+    }
+    return [];
+};
 
 export default function MarketplaceServiceDetail() {
     const { user } = useAuth();
     const pathname = usePathname() || '';
     const router = useRouter();
-    const serviceId = Number(pathname.split('/').pop());
-    const queryClient = useQueryClient();
-    const useDashboardShell = Boolean(user);
+    const useDashboardShell = pathname.startsWith('/buyer') || pathname.startsWith('/seller');
+    const serviceIdParam = pathname.split('/').pop() || '0';
+    const serviceId = isNaN(Number(serviceIdParam)) ? 0 : Number(serviceIdParam);
 
-    const [activeTab, setActiveTab] = useState<'overview' | 'scope' | 'pricing' | 'provider'>('overview');
+    const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+    const [selectedImage, setSelectedImage] = useState(0);
+    const [failedImages, setFailedImages] = useState<string[]>([]);
 
-    const { data: detailData, isLoading: loading } = useQuery({
+    const { items: cartItems, add: addToCart } = useMarketplaceCart();
+
+    const { data: detailData, isLoading: loading } = useTanstackQuery({
         queryKey: ['marketplaceService', serviceId],
-        enabled: serviceId > 0,
-        staleTime: 30 * 1000,
         queryFn: async () => {
-            if (!serviceId) return undefined;
             const res = await marketplaceApi.getServiceDetail(serviceId);
-            if (res?.service) return res;
-            if (res?.id) return { service: res, relatedServices: [] };
-            try {
-                const legacyRes = await api.get(`/api/marketplace/services/${serviceId}`);
-                const data = unwrapApiData(legacyRes);
-                if (data?.service) return { service: data.service, relatedServices: data.relatedServices || [] };
-                if (data?.id) return { service: data, relatedServices: [] };
-            } catch {
-                // Ignore fallback error
-            }
-            return undefined;
+            return res as { service: MarketplaceService; relatedServices?: MarketplaceService[] };
         },
+        enabled: serviceId > 0,
+        staleTime: 5 * 1000,
+        refetchOnMount: true,
     });
 
-    const service = detailData?.service;
-    const related = detailData?.relatedServices || [];
-
-    const { add: addCartItem, update: updateCartQty, getQuantity } = useMarketplaceCart();
-    const [imageFailed, setImageFailed] = useState(false);
-
-    useEffect(() => {
-        setImageFailed(false);
-    }, [serviceId]);
-
-    const serviceAny = (service || {}) as any;
-    const isVerified = service?.organization?.verificationStatus === 'VERIFIED' || serviceAny?.sellerVerified || Boolean(service?.organization?.id);
-    const location = service?.organization?.city || service?.organization?.district || service?.organization?.state || serviceAny?.location || (serviceAny?.district ? `${serviceAny.district}, ${serviceAny.state || 'ODISHA'}` : undefined);
-    const sellerOrgId = service?.organization?.id || serviceAny?.organizationId;
-    const sellerUserId = Number(service?.seller?.id || serviceAny?.sellerId || 0);
-    const sellerDisplayName = service?.organization?.organizationName || service?.seller?.name || serviceAny?.sellerName || serviceAny?.vendorName || 'Verified Provider';
-
-    const cartQuantity = getQuantity(serviceId, 'service');
-
-    const handleAddToCart = () => {
-        if (cartQuantity === 0 && service) {
-            addCartItem(
-                {
-                    id: service.id,
-                    name: service.name,
-                    price: service.basePrice ? Number(service.basePrice) : undefined,
-                    unit: pricingLabels[service.pricingModel] || 'engagement',
-                    imageUrl: resolveMarketplaceImage(service, 'service'),
-                    category: service.category?.name,
-                    type: 'service',
-                },
-                { source: 'service-detail' }
-            );
-            toast.success(`${service.name} added to requirements!`);
-        }
-    };
-
-    const handleQuantityChange = (delta: number) => {
-        const newQuantity = Math.max(0, cartQuantity + delta);
-        updateCartQty(serviceId, 'service', newQuantity);
-    };
-
-    const handleRequestQuote = () => {
-        if (!service) return;
-        if (!user) {
-            toast.info('Login is required to send a quote request.', {
-                action: { label: 'Login', onClick: () => router.push(`/login?redirect=${encodeURIComponent(pathname)}`) },
-            });
-            return;
-        }
-        if (user.role !== 'buyer') {
-            toast.info('Quote requests are available from buyer accounts.');
-            return;
-        }
-        const targetSellerId = sellerUserId || sellerOrgId;
-        if (!targetSellerId) {
-            toast.error('Seller contact is not available for this listing.');
-            return;
-        }
-        const params = new URLSearchParams({
-            intent: 'quote',
-            sellerId: String(targetSellerId),
-            subject: `Quote request: ${service.name}`,
-            message: `Hello, I would like to request a quotation for ${service.name}.\n\nCategory: ${service.category?.name || serviceAny.categoryName || 'Not specified'}\nService area: ${service.serviceArea || location || 'Please confirm'}\nPlease share scope, delivery timeline, payment terms, and applicable taxes.`
-        });
-        router.push(`/buyer/messages?${params.toString()}`);
-    };
+    const service = (detailData as any)?.service || (detailData as any);
+    const related = (detailData as any)?.relatedServices || [];
 
     const handleShare = () => {
-        if (navigator.share) {
-            navigator.share({
-                title: service?.name || 'Service Detail',
-                url: window.location.href,
-            }).catch(() => { });
-        } else {
+        if (typeof window !== 'undefined') {
             navigator.clipboard.writeText(window.location.href);
             toast.success('Service link copied to clipboard!');
         }
     };
 
-    if (loading) return <ServiceDetailSkeleton useDashboardShell={useDashboardShell} />;
+    if (loading) {
+        return (
+            <div className={useDashboardShell ? "min-h-full bg-slate-50/60" : "min-h-dvh bg-slate-50/60 flex flex-col"}>
+                <main className="flex-1 max-w-7xl mx-auto px-4 py-12 w-full">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-pulse">
+                        <div className="lg:col-span-5 bg-slate-200 aspect-square rounded-2xl" />
+                        <div className="lg:col-span-7 space-y-4">
+                            <div className="h-8 bg-slate-200 rounded w-3/4" />
+                            <div className="h-4 bg-slate-200 rounded w-1/4" />
+                            <div className="h-24 bg-slate-200 rounded" />
+                            <div className="h-40 bg-slate-200 rounded" />
+                        </div>
+                    </div>
+                </main>
+            </div>
+        );
+    }
 
-    if (!service) {
+    if (!service || !service.id) {
         return (
             <div className={useDashboardShell ? "min-h-full bg-slate-50" : "min-h-dvh bg-slate-50 flex flex-col"}>
                 <main className="flex-1 flex items-center justify-center py-20 px-4">
@@ -154,9 +143,9 @@ export default function MarketplaceServiceDetail() {
                             <Wrench className="h-8 w-8" />
                         </div>
                         <h2 className="text-xl font-bold text-slate-800 mb-2">Service Listing Not Found</h2>
-                        <p className="text-xs text-slate-500 mb-6 leading-relaxed">This service listing may have been unlisted, modified, or is temporarily unavailable on the marketplace.</p>
+                        <p className="text-xs text-slate-500 mb-6 leading-relaxed">This service listing may have been unlisted, moved, or is temporarily unavailable.</p>
                         <Link href="/marketplace/services" className="inline-flex items-center justify-center gap-2 h-10 px-6 rounded-xl bg-[#0b2447] text-white text-xs font-bold hover:bg-[#12335f] transition shadow-sm">
-                            <ArrowLeft className="h-4 w-4" /> Browse All Services
+                            <ArrowLeft className="h-4 w-4" /> Browse Services
                         </Link>
                     </div>
                 </main>
@@ -165,9 +154,32 @@ export default function MarketplaceServiceDetail() {
         );
     }
 
+    const serviceAny = service as any;
+    const isVerified = service.organization?.verificationStatus === 'VERIFIED' || serviceAny.sellerVerified || Boolean(service.organization?.id);
+    const location = service.organization?.city || service.organization?.district || service.organization?.state || serviceAny.location || (serviceAny.district ? `${serviceAny.district}, ${serviceAny.state || 'ODISHA'}` : undefined);
+    const sellerOrgId = service.organization?.id || serviceAny.organizationId;
+    const sellerUserId = Number(service.seller?.id || serviceAny.sellerId || 0);
+    const sellerDisplayName = service.organization?.organizationName || service.seller?.name || serviceAny.sellerName || serviceAny.vendorName || 'Verified MSME Service Provider';
+
+    const basePrice = Number(service.basePrice || serviceAny.price || 0);
+    const originalPrice = serviceAny.originalPrice ? Number(serviceAny.originalPrice) : 0;
+    const discountPrice = serviceAny.discountPrice ? Number(serviceAny.discountPrice) : 0;
+    const rawDiscountPercent = serviceAny.discountPercent ? Number(serviceAny.discountPercent) : 0;
+
+    const baselinePrice = originalPrice > 0 ? originalPrice : basePrice;
+    const effectiveDiscountPrice = discountPrice > 0 ? discountPrice : (rawDiscountPercent > 0 && baselinePrice > 0 ? Math.round(baselinePrice * (1 - rawDiscountPercent / 100) * 100) / 100 : 0);
+    const displayPrice = effectiveDiscountPrice > 0 ? effectiveDiscountPrice : basePrice;
+    const hasOffer = serviceAny.isOfferActive !== false && (
+        (effectiveDiscountPrice > 0 && effectiveDiscountPrice < baselinePrice) ||
+        rawDiscountPercent > 0 ||
+        Boolean(serviceAny.offerLabel)
+    );
+    const effectiveDiscountPercent = rawDiscountPercent > 0 ? rawDiscountPercent : (baselinePrice > displayPrice && baselinePrice > 0 ? Math.round(((baselinePrice - displayPrice) / baselinePrice) * 100) : 0);
+    const savingsAmount = baselinePrice > displayPrice ? (baselinePrice - displayPrice) : 0;
+
     const handleSaveSupplier = () => {
         if (!sellerOrgId && !sellerUserId) {
-            toast.error('Supplier details are not available for this listing.');
+            toast.error('Provider details are not available for this listing.');
             return;
         }
         saveSupplier({
@@ -178,39 +190,45 @@ export default function MarketplaceServiceDetail() {
             verificationStatus: service.organization?.verificationStatus || (isVerified ? 'VERIFIED' : 'PENDING'),
             source: service.name,
         });
-        toast.success('Service provider added to saved sellers!');
+        toast.success('Service provider added to saved list!');
     };
 
-    const imageUrl = imageFailed ? '' : resolveMarketplaceImage(service, 'service');
+    // Extract all image candidates
+    const imageCandidates = getMarketplaceImageCandidates(service).filter((img) => !failedImages.includes(img));
+    const currentImage = imageCandidates[selectedImage] || imageCandidates[0] || resolveMarketplaceImage(service, 'service');
 
+    // Extract all uploaded documents & certifications
     const serviceDocuments = (() => {
         if (!service) return [];
         const docs: any[] = [
-            ...(service.certifications || []),
+            ...(serviceAny.certifications || []),
             ...(serviceAny.documents || []),
             ...(serviceAny.attachments || []),
             ...(serviceAny.files || [])
                 .filter((file: any) => !isImageFile(file))
                 .map((file: any) => ({
-                    id: `file-${file.id}`,
+                    id: `file-${file.id || file.fileAssetId}`,
                     name: file.originalName || file.name || 'Service Document',
+                    mimeType: file.mimeType || file.fileAsset?.mimeType,
                     verificationStatus: 'UPLOADED',
-                    fileAsset: file,
+                    fileAsset: file.fileAsset || file,
                 })),
             ...(serviceAny.catalogueFiles || [])
                 .filter((file: any) => !isImageFile(file))
                 .map((file: any) => ({
-                    id: `catalogue-file-${file.id}`,
-                    name: file.originalName || file.name || 'Uploaded service document',
+                    id: `catalogue-file-${file.id || file.fileAssetId}`,
+                    name: file.originalName || file.name || 'Service Brochure / Scope Document',
+                    mimeType: file.mimeType || file.fileAsset?.mimeType,
                     verificationStatus: 'UPLOADED',
-                    fileAsset: file,
+                    fileAsset: file.fileAsset || file,
                 })),
-            ...(service?.organization?.certifications || [])
+            ...((service?.organization as any)?.certifications || [])
                 .map((cert: any) => ({
                     id: `org-cert-${cert.id}`,
-                    name: cert.name || cert.title || 'Seller Organization Certification',
+                    name: cert.name || cert.title || 'Provider Certification',
+                    mimeType: cert.mimeType || cert.fileAsset?.mimeType || 'application/pdf',
                     verificationStatus: cert.verificationStatus || 'VERIFIED',
-                    issuingAuthority: cert.issuingAuthority || 'Organization Document',
+                    issuingAuthority: cert.issuingAuthority || 'Certified Body',
                     fileAsset: cert.fileAsset || cert,
                 })),
         ];
@@ -224,46 +242,73 @@ export default function MarketplaceServiceDetail() {
         });
     })();
 
-    const overviewFields = buildServiceDetailFields(serviceAny).filter(f =>
-        ['Service Name', 'Category', 'Seller', 'Seller Location', 'Description', 'Status', 'Service Area'].includes(f.label)
-    );
-    const pricingFields = buildServiceDetailFields(serviceAny).filter(f =>
-        ['Pricing Model', 'Base Price', 'Currency', 'GST Rate', 'Original Price', 'Discount Price', 'Discount Percent', 'Offer Label', 'Offer Start Date', 'Offer End Date'].includes(f.label)
-    );
-    const scopeFields = buildServiceDetailFields(serviceAny).filter(f =>
-        ['Scope of Work', 'Deliverables', 'Inclusions', 'Exclusions', 'SLA / Response Time', 'Duration'].includes(f.label)
-    );
+    // Parsed structured technical specifications
+    const technicalSpecifications = parseServiceSpecifications(serviceAny);
+
+    // Clean Key Highlights (Moglix Style)
+    const keyHighlights = [
+        { label: 'Pricing Model', value: pricingLabels[service.pricingModel] || service.pricingModel || 'Fixed Rate' },
+        service.serviceArea ? { label: 'Service Coverage', value: service.serviceArea } : null,
+        serviceAny.duration ? { label: 'Typical Duration', value: serviceAny.duration } : null,
+        serviceAny.slaResponseTime ? { label: 'SLA Response', value: serviceAny.slaResponseTime } : null,
+        { label: 'Provider Category', value: service.category?.name || 'Professional Services' },
+        { label: 'MSME Certified', value: 'Government Verified MSME' },
+    ].filter(Boolean) as Array<{ label: string; value: string }>;
+
+    const handleAddToCart = () => {
+        if (!user) {
+            router.push(`/login?returnUrl=${encodeURIComponent(pathname)}`);
+            return;
+        }
+        addToCart({
+            type: 'service',
+            id: service.id,
+            name: service.name,
+            price: displayPrice,
+            unit: pricingLabels[service.pricingModel] || 'engagement',
+            imageUrl: currentImage || undefined,
+            category: service.category?.name,
+        });
+    };
+
+    const handleRequestQuote = () => {
+        if (!user) {
+            router.push(`/login?returnUrl=${encodeURIComponent(pathname)}`);
+            return;
+        }
+        router.push(`/buyer/procurement/rfq/new?serviceId=${service.id}`);
+    };
 
     return (
-        <div className={useDashboardShell ? "min-h-full bg-slate-50/60" : "min-h-dvh bg-slate-50/60 flex flex-col"}>
+        <div className={useDashboardShell ? "min-h-full bg-slate-50/50" : "min-h-dvh bg-slate-50/50 flex flex-col"}>
             <main className="flex-1 pb-16">
-                {/* Modern Header Breadcrumbs Bar */}
+                {/* Modern Breadcrumbs Header */}
                 <div className="bg-white border-b border-slate-200/80 sticky top-0 z-10 shadow-2xs">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
                         <div className="flex items-center gap-1.5 text-slate-500 font-medium overflow-hidden">
                             <Link href="/" className="hover:text-[#0b2447] transition flex items-center gap-1 shrink-0">
                                 Home
                             </Link>
                             <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                             <Link href="/marketplace/services" className="hover:text-[#0b2447] transition shrink-0">
-                                Services Marketplace
+                                Services
                             </Link>
                             {service.category && (
                                 <>
                                     <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                    <Link title={service.category.name} href={`/marketplace/services?categoryId=${service.category.id}`} className="hover:text-[#0b2447] transition truncate max-w-[150px] shrink-0">
+                                    <Link href={`/marketplace/services?categoryId=${service.category.id}`} className="hover:text-[#0b2447] transition truncate max-w-[150px] shrink-0">
                                         {service.category.name}
                                     </Link>
                                 </>
                             )}
                             <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span title={service.name} className="text-[#0b2447] font-semibold truncate max-w-[220px]">{service.name}</span>
+                            <span title={service.name} className="text-[#0b2447] font-bold truncate max-w-[200px]">{service.name}</span>
                         </div>
 
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={handleShare}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 font-semibold text-xs hover:bg-slate-50 hover:text-[#0b2447] transition shadow-2xs"
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 font-semibold text-xs hover:bg-slate-50 hover:text-[#0b2447] transition shadow-2xs cursor-pointer"
                                 title="Share service link"
                             >
                                 <Share2 className="h-3.5 w-3.5" /> Share
@@ -272,445 +317,498 @@ export default function MarketplaceServiceDetail() {
                     </div>
                 </div>
 
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-24 lg:pb-12">
-                    {/* Navigation Top Bar */}
-                    <div className="flex items-center justify-between mb-6">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 pb-20">
+                    {/* Top Navigation Strip */}
+                    <div className="flex items-center justify-between mb-5">
                         <button
                             onClick={() => window.history.back()}
-                            className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-[#0b2447] bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-2xs hover:shadow-xs transition"
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-[#0b2447] bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs hover:shadow-xs transition cursor-pointer"
                         >
-                            <ArrowLeft className="h-4 w-4" /> Back to listings
+                            <ArrowLeft className="h-3.5 w-3.5" /> Back
                         </button>
                         <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-[#0b2447] border border-blue-200">
-                                {pricingLabels[service.pricingModel] || 'Professional Service'}
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <Award className="h-3 w-3" /> Certified MSME Service
                             </span>
                             {isVerified && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
                                     <BadgeCheck className="h-3 w-3" /> Verified Provider
                                 </span>
                             )}
                         </div>
                     </div>
 
-                    <div className={user?.role === 'seller' ? "grid gap-8 lg:grid-cols-2" : "grid gap-8 lg:grid-cols-3"}>
-                        {/* COLUMN 1 & 2: Service Information & Media */}
-                        <div className="lg:col-span-2 space-y-6">
-                            {/* Service Banner Hero */}
-                            <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-                                <div className={imageUrl ? 'aspect-[16/7] min-h-56' : 'h-44 bg-gradient-to-br from-[#0b2447] via-[#12335f] to-slate-900 flex items-center justify-center'}>
-                                    {imageUrl ? (
-                                        <img
-                                            src={imageUrl}
-                                            alt={service.name}
-                                            onError={() => setImageFailed(true)}
-                                            className="h-full w-full object-cover"
-                                        />
-                                    ) : (
-                                        <div className="text-center text-white/80 p-6">
-                                            <Wrench className="mx-auto h-12 w-12 opacity-40 mb-2" />
-                                            <p className="text-xs font-extrabold uppercase tracking-wider text-slate-300">MSME Service Provider Listing</p>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="absolute top-4 left-4 flex flex-wrap gap-2">
-                                    <span className="rounded-lg bg-white/95 backdrop-blur-md px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#0b2447] shadow-md border border-slate-200/50">
-                                        Service Solution
-                                    </span>
-                                    {isVerified && (
-                                        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/90 backdrop-blur-md px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-md">
-                                            <BadgeCheck className="h-3.5 w-3.5" /> Verified Provider
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Service Title & Identity */}
-                            <div className="flex items-start gap-4 p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
-                                <div className="w-14 h-14 rounded-2xl bg-[#0b2447] text-white flex items-center justify-center shrink-0 shadow-md">
-                                    <Wrench className="h-7 w-7" />
-                                </div>
-                                <div className="space-y-1">
-                                    {service.category && (
-                                        <span className="text-[10px] font-extrabold text-[#0b2447] uppercase tracking-wider bg-[#0b2447]/5 px-2.5 py-0.5 rounded border border-[#0b2447]/10">
-                                            {service.category.name}
-                                        </span>
-                                    )}
-                                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">{service.name}</h1>
-                                    <p className="text-xs font-medium text-slate-500">
-                                        Listed for industrial discovery, enterprise service RFQs, and contract agreements.
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Provider Organization Card */}
-                            <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-11 h-11 rounded-xl bg-slate-900 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
-                                        {(sellerDisplayName || 'M')[0].toUpperCase()}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <h4 title={sellerDisplayName} className="text-xs font-extrabold text-slate-900 truncate">
-                                            {sellerDisplayName}
-                                        </h4>
-                                        <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500">
-                                            {location && (
-                                                <span className="inline-flex items-center gap-1 font-medium text-slate-600">
-                                                    <MapPin className="h-3 w-3 text-slate-400 shrink-0" /> {location}
-                                                </span>
-                                            )}
-                                            {isVerified && (
-                                                <span className="inline-flex items-center gap-0.5 text-emerald-700 font-extrabold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80">
-                                                    <BadgeCheck className="h-3 w-3" /> Verified Provider
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                                {sellerOrgId && (
-                                    <Link
-                                        href={`/marketplace/sellers/${sellerOrgId}`}
-                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0b2447] hover:underline shrink-0 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200/60"
-                                    >
-                                        Storefront <ExternalLink className="h-3 w-3" />
-                                    </Link>
-                                )}
-                            </div>
-
-                            {/* Service Quick Metrics Strip */}
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
-                                    <ShieldCheck className="h-5 w-5 text-[#0b2447] mb-1.5" />
-                                    <p className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Procurement Fit</p>
-                                    <p className="text-xs font-extrabold text-slate-800 mt-0.5">{service.category?.name || 'Service Standard'}</p>
-                                </div>
-                                <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
-                                    <MapPin className="h-5 w-5 text-[#0b2447] mb-1.5" />
-                                    <p className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Service Coverage</p>
-                                    <p className="text-xs font-extrabold text-slate-800 mt-0.5">{service.serviceArea || location || 'On-site / District'}</p>
-                                </div>
-                                <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
-                                    <ClipboardList className="h-5 w-5 text-[#0b2447] mb-1.5" />
-                                    <p className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Engagement Type</p>
-                                    <p className="text-xs font-extrabold text-slate-800 mt-0.5">{pricingLabels[service.pricingModel] || 'Custom Terms'}</p>
-                                </div>
-                            </div>
-
-                            {/* Interactive Navigation Tabs */}
-                            <div className="space-y-4 pt-2">
-                                <div className="flex border-b border-slate-200 gap-2 overflow-x-auto scrollbar-none">
-                                    <button
-                                        onClick={() => setActiveTab('overview')}
-                                        className={`pb-3 px-3 text-xs font-extrabold transition-all border-b-2 whitespace-nowrap ${activeTab === 'overview' ? 'border-[#0b2447] text-[#0b2447]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-                                    >
-                                        Overview & Scope
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('scope')}
-                                        className={`pb-3 px-3 text-xs font-extrabold transition-all border-b-2 whitespace-nowrap ${activeTab === 'scope' ? 'border-[#0b2447] text-[#0b2447]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-                                    >
-                                        Deliverables & SLA
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('pricing')}
-                                        className={`pb-3 px-3 text-xs font-extrabold transition-all border-b-2 whitespace-nowrap ${activeTab === 'pricing' ? 'border-[#0b2447] text-[#0b2447]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-                                    >
-                                        Pricing Details
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('provider')}
-                                        className={`pb-3 px-3 text-xs font-extrabold transition-all border-b-2 whitespace-nowrap ${activeTab === 'provider' ? 'border-[#0b2447] text-[#0b2447]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-                                    >
-                                        Provider Compliance
-                                    </button>
-                                </div>
-
-                                {/* TAB 1: OVERVIEW */}
-                                {activeTab === 'overview' && (
-                                    <div className="space-y-4 animate-in fade-in duration-200">
-                                        <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
-                                            {overviewFields.map(({ label, value }) => (
-                                                <div key={label} className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
-                                                    <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{label}</span>
-                                                    <span className="mt-1 block font-bold text-slate-800 text-wrap-anywhere">{String(value ?? '—')}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-
-                                        {service.description && (
-                                            <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs space-y-2">
-                                                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Full Service Description</h3>
-                                                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{service.description}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* TAB 2: DELIVERABLES & SLA */}
-                                {activeTab === 'scope' && (
-                                    <div className="space-y-4 animate-in fade-in duration-200">
-                                        {scopeFields.length > 0 ? (
-                                            <div className="grid gap-3 text-xs sm:grid-cols-2">
-                                                {scopeFields.map(({ label, value }) => (
-                                                    <div key={label} className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs space-y-1">
-                                                        <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{label}</span>
-                                                        <span className="block font-bold text-slate-800 whitespace-pre-line leading-relaxed">{String(value)}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center text-xs font-semibold text-slate-500">
-                                                Standard service terms apply. Contact service provider for detailed scope of work specification sheet.
-                                            </div>
-                                        )}
-
-                                        {serviceAny.specifications?.length > 0 && (
-                                            <div className="space-y-2">
-                                                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Service Parameters & SLA Table</h4>
-                                                <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
-                                                    <table className="w-full text-xs">
-                                                        <thead>
-                                                            <tr className="bg-slate-100/70 border-b border-slate-200 text-[#0b2447]">
-                                                                <th className="px-4 py-3 text-left font-extrabold">Parameter</th>
-                                                                <th className="px-4 py-3 text-left font-extrabold">Value / SLA</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="divide-y divide-slate-100">
-                                                            {serviceAny.specifications.map((spec: any, i: number) => (
-                                                                <tr key={spec.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                                                                    <td className="px-4 py-3 font-semibold text-slate-700 w-1/3 border-r border-slate-100">{spec.name}</td>
-                                                                    <td className="px-4 py-3 font-bold text-slate-900">{spec.value}{spec.unit ? ` ${spec.unit}` : ''}</td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* TAB 3: PRICING DETAILS */}
-                                {activeTab === 'pricing' && (
-                                    <div className="space-y-4 animate-in fade-in duration-200">
-                                        <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
-                                            {pricingFields.map(({ label, value }) => (
-                                                <div key={label} className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
-                                                    <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{label}</span>
-                                                    <span className="mt-1 block font-bold text-slate-800">{String(value)}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-
-                                        <div className="p-4 rounded-xl border border-blue-200/80 bg-blue-50/50 text-xs space-y-1.5">
-                                            <h4 className="font-extrabold text-[#0b2447] flex items-center gap-1.5">
-                                                <Info className="h-4 w-4 text-blue-600" /> Commercial Service Terms
-                                            </h4>
-                                            <p className="text-slate-600 leading-relaxed">
-                                                Final engagement costs may vary depending on project scope, duration, site location, and specific custom requirements agreed upon via quote request.
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* TAB 4: PROVIDER COMPLIANCE */}
-                                {activeTab === 'provider' && (
-                                    <div className="space-y-4 animate-in fade-in duration-200">
-                                        <div className="rounded-xl border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
-                                            <div className="flex items-center gap-3">
-                                                <div className="p-3 rounded-xl bg-emerald-50 text-emerald-700">
-                                                    <ShieldCheck className="h-6 w-6" />
-                                                </div>
-                                                <div>
-                                                    <h4 className="text-sm font-extrabold text-slate-900">
-                                                        {sellerDisplayName}
-                                                    </h4>
-                                                    <p className="text-xs text-slate-500 font-medium">MSME Registered Service Provider Profile</p>
-                                                </div>
-                                            </div>
-
-                                            <div className="grid gap-3 text-xs sm:grid-cols-2 pt-2 border-t border-slate-100">
-                                                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                                                    <span className="text-[10px] font-extrabold uppercase text-slate-400">Verification Status</span>
-                                                    <p className="mt-0.5 font-extrabold text-emerald-700 flex items-center gap-1">
-                                                        <BadgeCheck className="h-4 w-4" /> {isVerified ? 'VERIFIED PROVIDER' : 'UNDER VERIFICATION'}
-                                                    </p>
-                                                </div>
-                                                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                                                    <span className="text-[10px] font-extrabold uppercase text-slate-400">Service Area</span>
-                                                    <p className="mt-0.5 font-extrabold text-slate-800">{service.serviceArea || location || 'State / National Coverage'}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Uploaded Documents and Certifications */}
-                            {serviceDocuments.length > 0 && (
-                                <div className="pt-6 border-t border-slate-200/80">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div>
-                                            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                                                <FileText className="h-5 w-5 text-[#0b2447]" /> Provider Certifications & Documents
-                                            </h3>
-                                            <p className="text-xs text-slate-500 font-medium">Licenses, compliance certificates, and service brochures.</p>
-                                        </div>
-                                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-                                            {serviceDocuments.length} Attachments
-                                        </span>
-                                    </div>
-
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                        {serviceDocuments.map((cert: any) => {
-                                            return (
-                                                <div
-                                                    key={cert.id}
-                                                    className="group flex items-start gap-3 rounded-xl border border-slate-200/80 bg-white p-3.5 text-xs shadow-2xs hover:border-[#0b2447]/30 transition"
+                    {/* MOGLIX-STYLE 3-COLUMN ENTERPRISE LAYOUT */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                        
+                        {/* ========================================================================= */}
+                        {/* COLUMN 1 (Left 5 Cols): Image / Visual Showcase & Deliverables Downloads  */}
+                        {/* ========================================================================= */}
+                        <div className="lg:col-span-5 space-y-4">
+                            <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
+                                <div className="flex flex-col-reverse md:flex-row gap-3">
+                                    
+                                    {/* Thumbnail Rail */}
+                                    {imageCandidates.length > 1 && (
+                                        <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto max-h-[380px] scrollbar-thin shrink-0">
+                                            {imageCandidates.map((img: string, idx: number) => (
+                                                <button
+                                                    key={`${img}-${idx}`}
+                                                    type="button"
+                                                    onClick={() => setSelectedImage(idx)}
+                                                    className={`relative w-16 h-16 md:w-18 md:h-18 rounded-xl border-2 overflow-hidden shrink-0 bg-slate-50 transition-all cursor-pointer ${idx === selectedImage ? 'border-emerald-600 ring-2 ring-emerald-600/20 shadow-xs scale-102' : 'border-slate-200 hover:border-slate-300 opacity-75 hover:opacity-100'}`}
                                                 >
-                                                    <BadgeCheck className="h-5 w-5 shrink-0 text-emerald-600 mt-0.5" />
-                                                    <div className="min-w-0 flex-1">
-                                                        <span title={cert.name || cert.fileAsset?.originalName || 'Service Document'} className="block truncate font-extrabold text-slate-900 group-hover:text-[#0b2447] transition">
-                                                            {cert.name || cert.fileAsset?.originalName || 'Service Document'}
-                                                        </span>
-                                                        <span className="mt-0.5 block text-[10px] font-semibold text-slate-500">
-                                                            {cert.issuingAuthority ? `${cert.issuingAuthority} • ` : ''}{cert.verificationStatus || 'VERIFIED'}
-                                                        </span>
-                                                        {cert.fileAsset?.url && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => openFileAsset(cert.fileAsset, cert.name || 'Document').catch(err => toast.error(err instanceof Error ? err.message : 'Unable to open file'))}
-                                                                className="mt-2 inline-flex items-center gap-1 text-[11px] font-extrabold text-[#0b2447] hover:underline"
-                                                            >
-                                                                View / Open Document <ExternalLink className="h-3 w-3" />
-                                                            </button>
-                                                        )}
-                                                    </div>
+                                                    <img
+                                                        src={img}
+                                                        alt={`${service.name} thumb ${idx + 1}`}
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => { e.currentTarget.src = resolveMarketplaceImage(service, 'service'); }}
+                                                    />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Main Showcase Stage */}
+                                    <div className="relative flex-1 aspect-square rounded-xl bg-slate-50/50 border border-slate-100 flex items-center justify-center overflow-hidden group">
+                                        {currentImage ? (
+                                            <>
+                                                <img
+                                                    src={currentImage}
+                                                    alt={service.name}
+                                                    onError={() => setFailedImages((prev) => prev.includes(currentImage) ? prev : [...prev, currentImage])}
+                                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                                />
+                                                <button
+                                                    onClick={() => setFullScreenImage(currentImage)}
+                                                    className="absolute bottom-3 right-3 p-2 rounded-xl bg-slate-900/70 text-white hover:bg-[#0b2447] backdrop-blur-md opacity-0 group-hover:opacity-100 transition shadow-lg cursor-pointer"
+                                                    title="Zoom Fullscreen"
+                                                >
+                                                    <Eye className="h-4 w-4" />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center p-8 text-center">
+                                                <Wrench className="h-16 w-16 text-slate-300 mb-2" />
+                                                <p className="text-xs font-bold text-slate-400">Visual showcase preview</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Service Assurances Strip */}
+                            <div className="grid grid-cols-3 gap-2 bg-white rounded-xl border border-slate-200/80 p-3 text-center shadow-2xs">
+                                <div>
+                                    <ShieldCheck className="h-4.5 w-4.5 text-emerald-600 mx-auto mb-1" />
+                                    <p className="text-[10px] font-extrabold text-slate-800">Verified MSME</p>
+                                    <p className="text-[8px] font-medium text-slate-400">Legally Audited</p>
+                                </div>
+                                <div>
+                                    <Clock className="h-4.5 w-4.5 text-blue-600 mx-auto mb-1" />
+                                    <p className="text-[10px] font-extrabold text-slate-800">SLA Backed</p>
+                                    <p className="text-[8px] font-medium text-slate-400">Guaranteed Response</p>
+                                </div>
+                                <div>
+                                    <FileText className="h-4.5 w-4.5 text-indigo-600 mx-auto mb-1" />
+                                    <p className="text-[10px] font-extrabold text-slate-800">GST Invoice</p>
+                                    <p className="text-[8px] font-medium text-slate-400">Commercial Tax</p>
+                                </div>
+                            </div>
+
+                            {/* Downloadable Documents / Service Brochures */}
+                            {serviceDocuments.length > 0 && (
+                                <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                                            <FileDown className="h-4 w-4 text-[#0b2447]" /> Service Documents & Brochures
+                                        </h4>
+                                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                                            {serviceDocuments.length}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {serviceDocuments.map((doc: any) => (
+                                            <div
+                                                key={doc.id}
+                                                className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 bg-slate-50/70 hover:bg-slate-50 transition"
+                                            >
+                                                <div className="min-w-0 flex items-center gap-2">
+                                                    {getDocumentIcon(doc.name, doc.mimeType)}
+                                                    <span title={doc.name} className="text-xs font-bold text-slate-800 truncate max-w-[190px]">
+                                                        {doc.name}
+                                                    </span>
                                                 </div>
-                                            );
-                                        })}
+                                                {doc.fileAsset && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openFileAsset(doc.fileAsset, doc.name).catch(err => toast.error(err instanceof Error ? err.message : 'Unable to open document'))}
+                                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded border border-emerald-200/80 transition cursor-pointer"
+                                                    >
+                                                        <Download className="h-3 w-3" /> Download
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        {/* COLUMN 3: Sidebar Actions */}
-                        {user?.role !== 'seller' && (
-                            <div className="lg:col-span-1">
-                                <div className="sticky top-20 bg-white rounded-2xl border border-slate-200/90 p-5 space-y-5 shadow-md">
-                                    <div>
-                                        <h3 className="text-sm font-extrabold text-slate-900">Service Procurement</h3>
-                                        <p className="text-[11px] font-medium leading-relaxed text-slate-500 mt-1">
-                                            Request custom quote, submit scope requirements, or bookmark vendor.
-                                        </p>
+                        {/* ========================================================================= */}
+                        {/* COLUMN 2 (Center 4 Cols): Service Details, Scope, Pricing, Highlights     */}
+                        {/* ========================================================================= */}
+                        <div className="lg:col-span-4 space-y-5">
+                            
+                            {/* Service Header & Meta */}
+                            <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[11px] font-black uppercase text-[#0b2447] bg-[#0b2447]/5 border border-[#0b2447]/10 px-2.5 py-0.5 rounded-md">
+                                        {pricingLabels[service.pricingModel] || service.pricingModel || 'Fixed Price'}
+                                    </span>
+                                    {service.category && (
+                                        <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-md">
+                                            {service.category.name}
+                                        </span>
+                                    )}
+                                </div>
+
+                                <h1 className="text-xl sm:text-2xl font-black text-slate-900 leading-snug tracking-tight">
+                                    {service.name}
+                                </h1>
+                            </div>
+
+                            {/* Key Highlights Bullets (Moglix Style) */}
+                            {keyHighlights.length > 0 && (
+                                <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs space-y-2">
+                                    <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400">Key Highlights</h3>
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        {keyHighlights.map((item) => (
+                                            <div key={item.label} className="flex items-start gap-1.5">
+                                                <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                                <div>
+                                                    <span className="text-slate-500 font-medium">{item.label}: </span>
+                                                    <strong className="text-slate-800 font-bold">{item.value}</strong>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* PROMOTIONAL OFFER & DISCOUNT CARD */}
+                            {hasOffer && (
+                                <div className="rounded-xl border border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50/50 to-amber-50 p-3.5 shadow-2xs space-y-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="bg-amber-500 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1">
+                                                <Sparkles className="h-3 w-3" />
+                                                {serviceAny.offerLabel || 'SPECIAL SERVICE ENGAGEMENT'}
+                                            </span>
+                                            {effectiveDiscountPercent > 0 && (
+                                                <span className="bg-emerald-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full">
+                                                    {effectiveDiscountPercent}% OFF
+                                                </span>
+                                            )}
+                                        </div>
+                                        {serviceAny.offerEndAt && (
+                                            <span className="text-[10px] font-bold text-amber-900 bg-amber-200/70 px-2 py-0.5 rounded-full">
+                                                Valid until {formatCatalogueDate(serviceAny.offerEndAt)}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* COMMERCIAL PRICING OR AUTHENTICATION GATEWAY */}
+                            {user ? (
+                                <div className="bg-gradient-to-br from-blue-50/80 to-indigo-50/80 border border-blue-100 rounded-xl p-4 shadow-2xs space-y-1">
+                                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700">Commercial Price</span>
+                                    {displayPrice > 0 ? (
+                                        <div>
+                                            <div className="flex items-baseline gap-2.5">
+                                                <span className="text-3xl font-black text-[#0b2447]">
+                                                    ₹{displayPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                </span>
+                                                {hasOffer && baselinePrice > displayPrice && (
+                                                    <span className="text-sm font-bold text-slate-400 line-through">
+                                                        ₹{baselinePrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </span>
+                                                )}
+                                                {savingsAmount > 0 && (
+                                                    <span className="text-xs font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                                                        Save ₹{savingsAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-[11px] font-semibold text-slate-500 mt-1">
+                                                Per {pricingLabels[service.pricingModel] || 'engagement'} {service.taxRate ? `• ${service.taxRate}% GST applicable` : '• GST extra'}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <span className="text-xl font-black text-amber-600">Custom Quote on Scope</span>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/60 p-4 shadow-2xs space-y-2.5">
+                                    <div className="flex items-start gap-2.5">
+                                        <div className="p-2 rounded-lg bg-[#0b2447] text-white shrink-0 mt-0.5">
+                                            <Lock className="h-4 w-4" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-slate-900">
+                                                B2B Commercial Rates Protected
+                                            </h4>
+                                            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                                                Sign in as a registered enterprise or buyer to access transparent rates, customized quotes, and service contracts.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 pt-1">
+                                        <Link
+                                            href={`/login?returnUrl=${encodeURIComponent(pathname)}`}
+                                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#0b2447] text-white text-xs font-black hover:bg-[#12335f] transition shadow-xs"
+                                        >
+                                            Sign In to View Price
+                                        </Link>
+                                        <Link
+                                            href="/register?role=buyer"
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-800 text-xs font-bold hover:bg-slate-50 transition"
+                                        >
+                                            Register as Buyer
+                                        </Link>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Service Description */}
+                            {service.description && (
+                                <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-1.5">
+                                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">Service Overview</h3>
+                                    <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{service.description}</p>
+                                </div>
+                            )}
+
+                            {/* Scope of Work & Deliverables */}
+                            {(serviceAny.scopeOfWork || serviceAny.deliverables) && (
+                                <div className="grid grid-cols-1 gap-3">
+                                    {serviceAny.scopeOfWork && (
+                                        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-1.5">
+                                            <h4 className="text-xs font-black text-[#0b2447] uppercase tracking-wider flex items-center gap-1.5">
+                                                <Layers3 className="h-4 w-4 text-blue-600" /> Scope of Work
+                                            </h4>
+                                            <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{serviceAny.scopeOfWork}</p>
+                                        </div>
+                                    )}
+                                    {serviceAny.deliverables && (
+                                        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-1.5">
+                                            <h4 className="text-xs font-black text-[#0b2447] uppercase tracking-wider flex items-center gap-1.5">
+                                                <CheckCircle className="h-4 w-4 text-emerald-600" /> Key Deliverables
+                                            </h4>
+                                            <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{serviceAny.deliverables}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Inclusions & Exclusions */}
+                            {(serviceAny.inclusions || serviceAny.exclusions) && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {serviceAny.inclusions && (
+                                        <div className="bg-emerald-50/50 border border-emerald-200/80 rounded-xl p-3.5 space-y-1">
+                                            <h4 className="text-xs font-extrabold text-emerald-900 flex items-center gap-1">
+                                                <Check className="h-3.5 w-3.5 text-emerald-600" /> Inclusions
+                                            </h4>
+                                            <p className="text-xs text-emerald-800 leading-relaxed whitespace-pre-line">{serviceAny.inclusions}</p>
+                                        </div>
+                                    )}
+                                    {serviceAny.exclusions && (
+                                        <div className="bg-rose-50/50 border border-rose-200/80 rounded-xl p-3.5 space-y-1">
+                                            <h4 className="text-xs font-extrabold text-rose-900 flex items-center gap-1">
+                                                <X className="h-3.5 w-3.5 text-rose-600" /> Exclusions
+                                            </h4>
+                                            <p className="text-xs text-rose-800 leading-relaxed whitespace-pre-line">{serviceAny.exclusions}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* CONSOLIDATED TECHNICAL SPECIFICATIONS TABLE (Moglix Standard) */}
+                            {technicalSpecifications.length > 0 && (
+                                <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs space-y-0">
+                                    <div className="bg-slate-100/80 border-b border-slate-200 px-4 py-2.5 flex items-center justify-between">
+                                        <h3 className="text-xs font-black text-[#0b2447] uppercase tracking-wider flex items-center gap-1.5">
+                                            <ClipboardList className="h-4 w-4 text-emerald-600" /> Technical & Service Parameters
+                                        </h3>
+                                        <span className="text-[10px] font-bold text-slate-500">
+                                            {technicalSpecifications.length} Parameters
+                                        </span>
                                     </div>
 
-                                    {/* Pricing Box */}
-                                    <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/80 space-y-1">
-                                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Pricing Basis</span>
-                                        {service.basePrice ? (
-                                            <div>
-                                                <span className="text-2xl font-black text-[#0b2447]">
-                                                    ₹{Number(service.basePrice).toLocaleString('en-IN')}
-                                                </span>
-                                                <p className="text-[10px] font-bold text-slate-500 mt-0.5">
-                                                    {pricingLabels[service.pricingModel] || 'Per engagement'}
-                                                </p>
-                                            </div>
+                                    <table className="w-full text-xs">
+                                        <tbody className="divide-y divide-slate-100">
+                                            {technicalSpecifications.map((spec, idx) => (
+                                                <tr key={`${spec.name}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/20'}>
+                                                    <td className="px-4 py-2.5 font-bold text-slate-600 w-1/3 border-r border-slate-100 bg-slate-50/50">{spec.name}</td>
+                                                    <td className="px-4 py-2.5 font-bold text-slate-900">{spec.value}{spec.unit ? ` ${spec.unit}` : ''}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ========================================================================= */}
+                        {/* COLUMN 3 (Right 3 Cols): Sticky RFQ Action Box & Verified Provider Info   */}
+                        {/* ========================================================================= */}
+                        <div className="lg:col-span-3 space-y-4">
+                            <div className="sticky top-20 space-y-4">
+                                
+                                {/* Buy Box Card */}
+                                <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm space-y-4">
+                                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                                        <span className="text-xs font-black text-slate-900 uppercase tracking-wider">Service Engagement</span>
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                                            Active Service
+                                        </span>
+                                    </div>
+
+                                    {/* Order Pricing Snapshot */}
+                                    <div className="space-y-1">
+                                        <span className="text-[10px] font-bold uppercase text-slate-400">Rate / Model</span>
+                                        {user ? (
+                                            displayPrice > 0 ? (
+                                                <div>
+                                                    <div className="text-2xl font-black text-[#0b2447]">
+                                                        ₹{displayPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </div>
+                                                    <p className="text-[10px] font-bold text-slate-500">
+                                                        Per {pricingLabels[service.pricingModel] || 'engagement'} {service.taxRate ? `| GST ${service.taxRate}% extra` : ''}
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs font-bold text-amber-700">Custom Scope Required</p>
+                                            )
                                         ) : (
-                                            <p className="text-xs font-extrabold text-amber-800 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200 text-center">
-                                                Custom Quote Required
-                                            </p>
+                                            <span className="inline-block text-xs font-bold text-slate-500">
+                                                Login to view commercial rates
+                                            </span>
                                         )}
                                     </div>
 
                                     {/* Action Buttons */}
-                                    <div className="space-y-3">
+                                    <div className="space-y-2.5 pt-2">
                                         <button
+                                            type="button"
                                             onClick={handleRequestQuote}
-                                            className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-xl bg-[#0b2447] text-white text-xs font-extrabold shadow-md shadow-[#0b2447]/15 hover:bg-[#12335f] active:scale-[0.98] transition-all"
+                                            className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0b2447] text-white text-xs font-black hover:bg-[#12335f] shadow-md shadow-[#0b2447]/15 active:scale-[0.98] transition cursor-pointer"
                                         >
-                                            <FileText className="h-4 w-4" /> Request Custom Quote
+                                            <Send className="h-4 w-4" /> Request Formal Quote (RFQ)
                                         </button>
 
                                         <button
                                             type="button"
-                                            onClick={handleSaveSupplier}
-                                            className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-extrabold hover:bg-slate-50 transition"
+                                            onClick={handleAddToCart}
+                                            className="w-full h-10 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white text-slate-800 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
                                         >
-                                            <BookmarkPlus className="h-4 w-4 text-[#0b2447]" /> Save Service Provider
+                                            <ShoppingCart className="h-4 w-4 text-[#0b2447]" /> Add to Requirements Cart
                                         </button>
-
-                                        {cartQuantity > 0 ? (
-                                            <div className="w-full inline-flex items-center justify-between h-11 rounded-xl border-2 border-[#0b2447] bg-white overflow-hidden shadow-sm">
-                                                <button
-                                                    onClick={() => handleQuantityChange(-1)}
-                                                    className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] font-bold text-lg transition"
-                                                >
-                                                    −
-                                                </button>
-                                                <div className="flex-1 flex items-center justify-center text-[#0b2447] font-extrabold text-xs">
-                                                    {cartQuantity} in requirements
-                                                </div>
-                                                <button
-                                                    onClick={() => handleQuantityChange(1)}
-                                                    className="w-12 h-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-[#0b2447] font-bold text-lg transition"
-                                                >
-                                                    +
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <button
-                                                onClick={handleAddToCart}
-                                                className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-xl border-2 border-[#0b2447] text-[#0b2447] text-xs font-extrabold hover:bg-[#0b2447] hover:text-white active:scale-[0.98] transition-all"
-                                            >
-                                                <ShoppingCart className="h-4 w-4" /> Add to Service Requirements
-                                            </button>
-                                        )}
                                     </div>
 
-                                    {/* Service Guarantee Card */}
-                                    <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/70 text-[11px] space-y-2">
-                                        <div className="flex items-center gap-2 text-slate-700 font-bold">
-                                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" /> Verified MSME Service Provider
-                                        </div>
-                                        <div className="flex items-center gap-2 text-slate-700 font-bold">
-                                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" /> Audit-Logged Procurement RFQs
-                                        </div>
+                                    {/* Utility Actions */}
+                                    <div className="pt-2 border-t border-slate-100">
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveSupplier}
+                                            className="h-8 w-full inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white text-slate-700 text-[11px] font-bold hover:bg-slate-50 transition cursor-pointer"
+                                        >
+                                            <BookmarkPlus className="h-3.5 w-3.5 text-[#0b2447]" /> Save Provider Profile
+                                        </button>
                                     </div>
                                 </div>
+
+                                {/* Single Verified Provider Card (Clean, 1 Instance Only) */}
+                                <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-3">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Service Provider</span>
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-[#0b2447] text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                                            {(sellerDisplayName || 'M')[0].toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <h4 title={sellerDisplayName} className="text-xs font-black text-slate-900 truncate">
+                                                {sellerDisplayName}
+                                            </h4>
+                                            {location && (
+                                                <p className="text-[11px] font-medium text-slate-500 flex items-center gap-1 mt-0.5 truncate">
+                                                    <MapPin className="h-3 w-3 text-slate-400 shrink-0" /> {location}
+                                                </p>
+                                            )}
+                                            {isVerified && (
+                                                <span className="inline-flex items-center gap-0.5 text-emerald-700 font-extrabold text-[10px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 mt-1">
+                                                    <BadgeCheck className="h-3 w-3" /> Verified Provider
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {sellerOrgId && (
+                                        <Link
+                                            href={`/marketplace/sellers/${sellerOrgId}`}
+                                            className="block text-center text-[11px] font-bold text-[#0b2447] hover:underline bg-slate-50 py-1.5 rounded-lg border border-slate-200/60 transition"
+                                        >
+                                            Visit Provider Profile →
+                                        </Link>
+                                    )}
+                                </div>
                             </div>
-                        )}
+                        </div>
                     </div>
 
-                    {/* Related Services */}
+                    {/* ========================================================================= */}
+                    {/* BOTTOM SECTION: Related Services in Category                             */}
+                    {/* ========================================================================= */}
                     {related.length > 0 && (
                         <div className="mt-14 pt-8 border-t border-slate-200/80">
-                            <h3 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
-                                <Sparkles className="h-5 w-5 text-amber-500" /> Related Services in Category
+                            <h3 className="text-base font-black text-slate-900 mb-4 flex items-center gap-2">
+                                <Sparkles className="h-5 w-5 text-amber-500" /> Related Services in {service.category?.name || 'Category'}
                             </h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                 {related.map((s: any) => (
                                     <Link
                                         key={s.id}
                                         href={`/marketplace/services/${s.id}`}
-                                        className="group bg-white rounded-xl border border-slate-200/80 p-3.5 hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between space-y-3"
+                                        className="group bg-white rounded-xl border border-slate-200/80 p-3.5 hover:shadow-md hover:border-slate-300 transition flex flex-col justify-between space-y-3"
                                     >
                                         <div className="space-y-2">
-                                            <div className="h-32 rounded-lg bg-slate-50 flex items-center justify-center overflow-hidden relative">
+                                            <div className="h-36 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden relative">
                                                 {resolveMarketplaceImage(s, 'service') ? (
-                                                    <img src={resolveMarketplaceImage(s, 'service')} alt={s.name} className="h-full w-full object-cover group-hover:scale-105 transition" />
+                                                    <img
+                                                        src={resolveMarketplaceImage(s, 'service')}
+                                                        alt={s.name}
+                                                        className="w-full h-full object-cover group-hover:scale-105 transition"
+                                                        onError={(e) => { e.currentTarget.src = resolveMarketplaceImage({}, 'service'); }}
+                                                    />
                                                 ) : (
                                                     <Wrench className="h-10 w-10 text-slate-300" />
                                                 )}
                                             </div>
-                                            <h4 title={s.name} className="text-xs font-extrabold text-slate-900 line-clamp-2 group-hover:text-[#0b2447] transition">{s.name}</h4>
+                                            <h4 title={s.name} className="text-xs font-black text-slate-900 line-clamp-2 group-hover:text-[#0b2447] transition">{s.name}</h4>
                                             <p title={s.organization?.organizationName || 'Verified Provider'} className="text-[10px] font-semibold text-slate-500 truncate">{s.organization?.organizationName || 'Verified Provider'}</p>
                                         </div>
                                         <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                                            <span className="text-[10px] font-extrabold text-[#0b2447] bg-[#0b2447]/5 px-2 py-0.5 rounded">
-                                                {pricingLabels[s.pricingModel] || 'Quote Based'}
-                                            </span>
+                                            <div>
+                                                {user ? (
+                                                    s.basePrice ? (
+                                                        <span className="text-xs font-black text-[#0b2447]">
+                                                            ₹{Number(s.basePrice).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] font-bold text-slate-500">Quote</span>
+                                                    )
+                                                ) : (
+                                                    <span className="text-[10px] font-bold text-slate-400">Login for rate</span>
+                                                )}
+                                            </div>
                                             <span className="text-[10px] font-bold text-[#0b2447] group-hover:underline flex items-center gap-0.5">
                                                 View <ChevronRight className="h-3 w-3" />
                                             </span>
@@ -723,31 +821,20 @@ export default function MarketplaceServiceDetail() {
                 </div>
             </main>
 
-            {/* Sticky Mobile Procurement Action Bar */}
-            {user?.role !== 'seller' && (
-                <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
-                    <div className="flex items-center gap-3">
-                        <div className="min-w-0 flex-1">
-                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Service Fee</span>
-                            {service.basePrice ? (
-                                <div className="truncate">
-                                    <span className="text-base font-black text-[#0b2447]">₹{Number(service.basePrice).toLocaleString('en-IN')}</span>
-                                    <span title={pricingLabels[service.pricingModel] || 'Per engagement'} className="text-[10px] font-semibold text-slate-500 block truncate">{pricingLabels[service.pricingModel] || 'Per engagement'}</span>
-                                </div>
-                            ) : (
-                                <span className="text-xs font-black text-amber-700">Quote Based</span>
-                            )}
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                            <button
-                                type="button"
-                                onClick={handleRequestQuote}
-                                className="h-10 px-4 rounded-xl bg-[#0b2447] text-white font-black text-xs uppercase tracking-wider shadow-md active:scale-95 transition"
-                            >
-                                Request Quote
-                            </button>
-                        </div>
+            {/* Lightbox Modal */}
+            {fullScreenImage && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm cursor-pointer"
+                    onClick={() => setFullScreenImage(null)}
+                >
+                    <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-2xl overflow-hidden p-4">
+                        <img src={fullScreenImage} alt="Fullscreen Preview" className="w-full h-full object-contain max-h-[80vh]" />
+                        <button
+                            onClick={() => setFullScreenImage(null)}
+                            className="absolute top-3 right-3 bg-slate-900 text-white rounded-full p-2 text-xs font-bold"
+                        >
+                            ✕ Close
+                        </button>
                     </div>
                 </div>
             )}

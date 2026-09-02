@@ -661,7 +661,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (/^\/marketplace\/requirements\/-?\d+$/.test(pathname)) return <BuyerRequirementDetailsPage />;
 
     // Public vendor store — accessible to everyone
-    if (/^\/vendors\/-?\d+$/.test(pathname)) return <MarketplaceSellerStore />;
+    if (/^\/vendors\/-?\d+$/.test(pathname) || /^\/marketplace\/sellers\/-?\d+$/.test(pathname) || /^\/marketplace\/vendors\/-?\d+$/.test(pathname)) return <MarketplaceSellerStore />;
     {
       const buyerRequirementsMatch = pathname.match(/^\/buyer-requirements\/(-?\d+)$/);
       if (buyerRequirementsMatch) {

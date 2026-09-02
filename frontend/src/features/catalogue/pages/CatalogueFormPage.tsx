@@ -29,7 +29,10 @@ import {
   Calendar,
   Building2,
   Clock,
-  MapPin
+  MapPin,
+  Star,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -375,6 +378,28 @@ export default function CatalogueFormPage() {
       if (removed?.localUrl) URL.revokeObjectURL(removed.localUrl);
       setUploadedDocuments(prev => prev.filter(doc => doc.id !== fileId));
     }
+  };
+
+  const moveImage = (index: number, direction: 'left' | 'right') => {
+    setUploadedImages(prev => {
+      const newArr = [...prev];
+      const targetIdx = direction === 'left' ? index - 1 : index + 1;
+      if (targetIdx < 0 || targetIdx >= newArr.length) return prev;
+      const temp = newArr[index];
+      newArr[index] = newArr[targetIdx];
+      newArr[targetIdx] = temp;
+      return newArr;
+    });
+  };
+
+  const setAsPrimaryImage = (index: number) => {
+    if (index === 0) return;
+    setUploadedImages(prev => {
+      const newArr = [...prev];
+      const [selected] = newArr.splice(index, 1);
+      return [selected, ...newArr];
+    });
+    toast.success('Set as primary cover image');
   };
 
   const updateForm = (field: keyof typeof blankForm, value: string | boolean) => {
@@ -1665,56 +1690,111 @@ export default function CatalogueFormPage() {
                       </span>
                     </div>
 
-                    {/* Thumbnail Grid */}
+                    {/* Thumbnail Grid with Reordering & Actions */}
                     {uploadedImages.length > 0 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2.5">
-                        {uploadedImages.map((img, idx) => (
-                          <div
-                            key={img.id}
-                            className="group relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-xs"
-                          >
-                            <img
-                              src={img.localUrl || getCatalogueImageUrl(img.id)}
-                              alt={img.originalName || `Upload ${idx + 1}`}
-                              className="h-full w-full object-cover"
-                            />
-                            {idx === 0 && (
-                              <div className="absolute top-1.5 left-1.5 bg-emerald-600 text-white text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow-xs">
-                                Primary
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-200/80">
+                          <span className="font-semibold text-slate-700">
+                            Rearrange Order: Use arrows to position images. Image #1 is the primary cover photo.
+                          </span>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
+                            {uploadedImages.length} Image{uploadedImages.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                          {uploadedImages.map((img, idx) => (
+                            <div
+                              key={img.id}
+                              className={cn(
+                                "group relative rounded-xl overflow-hidden border bg-white shadow-xs flex flex-col transition-all",
+                                idx === 0 ? "border-emerald-500 ring-2 ring-emerald-500/20" : "border-slate-200 hover:border-slate-300"
+                              )}
+                            >
+                              <div className="relative aspect-square w-full bg-slate-100 overflow-hidden">
+                                <img
+                                  src={img.localUrl || getCatalogueImageUrl(img.id)}
+                                  alt={img.originalName || `Upload ${idx + 1}`}
+                                  className="h-full w-full object-cover"
+                                />
+                                {idx === 0 ? (
+                                  <div className="absolute top-1.5 left-1.5 bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-xs flex items-center gap-1">
+                                    <Star className="h-2.5 w-2.5 fill-current" /> Cover Photo
+                                  </div>
+                                ) : (
+                                  <div className="absolute top-1.5 left-1.5 bg-slate-900/75 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                                    #{idx + 1}
+                                  </div>
+                                )}
+
+                                {/* Hover Quick Actions Overlay */}
+                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-2">
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        setPreviewDocument(await getFileAssetPreview({
+                                          id: img.id,
+                                          fileId: img.id,
+                                          url: img.localUrl || getCatalogueImageUrl(img.id),
+                                          originalName: img.originalName,
+                                          mimeType: img.mimeType || 'image/png'
+                                        }, img.originalName));
+                                      } catch (err) {
+                                        toast.error('Unable to preview image');
+                                      }
+                                    }}
+                                    className="h-7 w-7 rounded-lg bg-white/90 text-slate-900 flex items-center justify-center hover:bg-white transition-colors cursor-pointer"
+                                    title="View Image"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeUploadedFile(img.id, 'image')}
+                                    className="h-7 w-7 rounded-lg bg-red-600 text-white flex items-center justify-center hover:bg-red-700 transition-colors cursor-pointer"
+                                    title="Delete Image"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
                               </div>
-                            )}
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  try {
-                                    setPreviewDocument(await getFileAssetPreview({
-                                      id: img.id,
-                                      fileId: img.id,
-                                      url: img.localUrl || getCatalogueImageUrl(img.id),
-                                      originalName: img.originalName,
-                                      mimeType: img.mimeType || 'image/png'
-                                    }, img.originalName));
-                                  } catch (err) {
-                                    toast.error('Unable to preview image');
-                                  }
-                                }}
-                                className="h-7 w-7 rounded-lg bg-white/90 text-slate-900 flex items-center justify-center hover:bg-white transition-colors cursor-pointer"
-                                title="View Image"
-                              >
-                                <Eye className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => removeUploadedFile(img.id, 'image')}
-                                className="h-7 w-7 rounded-lg bg-red-600 text-white flex items-center justify-center hover:bg-red-700 transition-colors cursor-pointer"
-                                title="Delete Image"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+
+                              {/* Footer Reordering Controls */}
+                              <div className="p-1.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-1">
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => moveImage(idx, 'left')}
+                                    className="h-6 w-6 rounded border border-slate-200 bg-white text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 flex items-center justify-center cursor-pointer transition-colors"
+                                    title="Move Left"
+                                  >
+                                    <ChevronLeft className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === uploadedImages.length - 1}
+                                    onClick={() => moveImage(idx, 'right')}
+                                    className="h-6 w-6 rounded border border-slate-200 bg-white text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 flex items-center justify-center cursor-pointer transition-colors"
+                                    title="Move Right"
+                                  >
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                                {idx !== 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setAsPrimaryImage(idx)}
+                                    className="text-[10px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200/80 cursor-pointer flex items-center gap-0.5 transition-colors"
+                                    title="Set as Primary Cover Photo"
+                                  >
+                                    <Star className="h-2.5 w-2.5" /> Set Cover
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     )}
 
