@@ -347,7 +347,14 @@ const productInstructions = () => [
   ['4. Linking Technical Specifications:'],
   ['   - Switch to the "Product Specifications" sheet to define technical specifications.'],
   ['   - Link specifications by entering the matching "Product SKU" OR "Product Name" used in the Products sheet.'],
-  ['   - Multiple specification rows can be added for the same product.']
+  ['   - Multiple specification rows can be added for the same product.'],
+  [''],
+  ['5. Automated Promotional Offers & Bulk Tiers:'],
+  ['   - If you provide "Discount Percent" (e.g. 20), the system auto-calculates "Discount Price".'],
+  ['   - If you provide "Discount Price" (e.g. 800), the system auto-calculates "Discount Percent".'],
+  ['   - If "Original Price" is left blank, the system automatically uses the "Price" as the baseline reference MRP.'],
+  ['   - Providing an "Offer Label", "Discount Price", or validity dates automatically activates the special deal badge.'],
+  ['   - To enable volume tier discounts, set "Bulk Deal Available" to Yes and enter "Bulk Minimum Quantity" (e.g. 10).']
 ];
 
 const serviceInstructions = () => [
@@ -355,23 +362,36 @@ const serviceInstructions = () => [
   [''],
   ['1. Mandatory vs Optional Fields:'],
   ['   - MANDATORY (*): Service Name *, Category *, Pricing Model *, Base Price * (if FIXED), Service Area *.'],
-  ['   - OPTIONAL: Description, GST Rate, Scope Of Work, Deliverables, SLA Response Time, Duration,'],
-  ['     Offer fields, Document URLs.'],
+  ['   - OPTIONAL: Description, GST Rate, Scope Of Work, Deliverables, Inclusions, Exclusions,'],
+  ['     SLA Response Time, Duration, Original Price, Discount Price, Discount Percent,'],
+  ['     Offer Label, Offer Start Date, Offer End Date, Bulk Deal Available, Bulk Minimum Quantity,'],
+  ['     Image URLs, Document URLs.'],
   [''],
   ['2. Sample Data in Template:'],
-  ['   - Row 2 in the "Services" sheet contains a complete sample service.'],
-  ['   - Rows in "Service Specifications" show sample service attributes.'],
+  ['   - Row 2 in the "Services" sheet contains a complete sample service with all commercial and operational fields.'],
+  ['   - Rows in "Service Specifications" show sample technical attributes and SLAs.'],
   ['   - You can replace or delete the sample rows before uploading.'],
   [''],
   ['3. Field Formatting Guidelines:'],
+  ['   - Category: Must match an active category name from the "Dropdown Values" sheet.'],
+  ['   - Status: DRAFT, ACTIVE, or INACTIVE (Defaults to DRAFT).'],
   ['   - Pricing Model: FIXED, HOURLY, DAILY, MONTHLY, PER_PROJECT, or CUSTOM.'],
-  ['   - Base Price: Numeric amount in INR (Mandatory for FIXED pricing).'],
-  ['   - GST Rate: Number between 0 and 40 (e.g. 18).'],
-  ['   - Dates: YYYY-MM-DD format.'],
-  ['   - Service Area: Geographical coverage (e.g., "Pan-India", "Maharashtra & Gujarat", "District-wide").'],
+  ['   - Base Price & Original Price: Numeric amount in INR (Mandatory for FIXED pricing).'],
+  ['   - GST Rate: Number between 0 and 40 (e.g. 18). Do not append %.'],
+  ['   - Dates (Offer Start / End): Format as YYYY-MM-DD (e.g. 2026-09-01).'],
+  ['   - Booleans (Bulk Deal Available): Enter Yes or No (or TRUE / FALSE).'],
+  ['   - Service Area: Geographical coverage (e.g., "Pan-India", "Maharashtra", "District-wide").'],
+  ['   - Image / Document URLs: Direct HTTP/HTTPS links separated by commas or semicolons.'],
   [''],
   ['4. Specifications:'],
-  ['   - In "Service Specifications", link attributes using the exact "Service Name".']
+  ['   - In "Service Specifications", link attributes using the exact "Service Name" matching the Services sheet.'],
+  [''],
+  ['5. Automated Promotional Offers & Bulk Tiers:'],
+  ['   - If you provide "Discount Percent" (e.g. 20), the system auto-calculates "Discount Price".'],
+  ['   - If you provide "Discount Price" (e.g. 20000), the system auto-calculates "Discount Percent".'],
+  ['   - If "Original Price" is left blank, the system automatically uses "Base Price" as baseline reference rate.'],
+  ['   - Providing an "Offer Label", "Discount Price", or validity dates automatically activates the special deal badge.'],
+  ['   - To enable volume tier contracts, set "Bulk Deal Available" to Yes and enter "Bulk Minimum Quantity" (e.g. 5).']
 ];
 
 export const catalogueImportService = {
@@ -488,8 +508,9 @@ export const catalogueImportService = {
 
     const serviceHeaders = [
       'Service Name *', 'Category *', 'Status', 'Description', 'Pricing Model *', 'Base Price *', 'Currency',
-      'GST Rate (%)', 'Service Area *', 'Scope Of Work', 'Deliverables', 'SLA Response Time', 'Duration',
-      'Offer Label', 'Offer Start Date (YYYY-MM-DD)', 'Offer End Date (YYYY-MM-DD)', 'Document URLs'
+      'GST Rate (%)', 'Service Area *', 'Scope Of Work', 'Deliverables', 'Inclusions', 'Exclusions', 'SLA Response Time', 'Duration',
+      'Original Price', 'Discount Price', 'Discount Percent', 'Offer Label', 'Offer Start Date (YYYY-MM-DD)', 'Offer End Date (YYYY-MM-DD)',
+      'Bulk Deal Available (Yes/No)', 'Bulk Minimum Quantity', 'Image URLs', 'Document URLs'
     ];
 
     const sampleServiceCategory = categories[0]?.name || 'Industrial Maintenance Services';
@@ -507,11 +528,19 @@ export const catalogueImportService = {
         'Pan-India / On-site',
         'Quarterly on-site visits, infrared thermography inspection, earth pit testing, relay calibration.',
         'Audit report, compliance certificate, thermography scan sheets, maintenance log.',
+        'Licensed Grade-A engineers, calibrated diagnostic equipment, travel within state.',
+        'Replacement spare parts, high-voltage component overhaul.',
         '24 Hours',
         '1 Year Contract',
+        30000,
+        25000,
+        16.67,
         'Annual MSME Maintenance Discount',
         '2026-09-01',
         '2027-08-31',
+        'Yes',
+        3,
+        'https://images.unsplash.com/photo-1581092160607-ee22621dd758',
         ''
       ]
     ];
@@ -525,11 +554,12 @@ export const catalogueImportService = {
 
     const maxDropdownLength = Math.max(categories.length, PRICING_MODELS.size, 3);
     const dropdownRows = [
-      ['Categories', 'Pricing Models', 'Statuses'],
+      ['Categories', 'Pricing Models', 'Statuses', 'Yes / No'],
       ...Array.from({ length: maxDropdownLength }, (_, i) => [
         categories[i]?.name || '',
         ['FIXED', 'HOURLY', 'DAILY', 'MONTHLY', 'PER_PROJECT', 'CUSTOM'][i] || '',
-        ['ACTIVE', 'DRAFT', 'INACTIVE'][i] || ''
+        ['ACTIVE', 'DRAFT', 'INACTIVE'][i] || '',
+        ['Yes', 'No'][i] || ''
       ])
     ];
 
@@ -585,7 +615,7 @@ export const catalogueImportService = {
       'unit of measure', 'hsn code', 'sku', 'brand', 'model number', 'item condition', 'msme made',
       'original price', 'discount price', 'discount percent', 'offer label', 'offer start date', 'offer end date',
       'bulk deal available', 'bulk minimum quantity', 'image urls', 'document urls',
-      'pricing model', 'base price', 'service area', 'scope of work', 'deliverables', 'sla response time', 'duration'
+      'pricing model', 'base price', 'service area', 'scope of work', 'deliverables', 'inclusions', 'exclusions', 'sla response time', 'duration'
     ]);
     const unknownHeaders = headers.filter(h => {
       const norm = normalizeHeader(h);
@@ -674,7 +704,7 @@ export const catalogueImportService = {
 
       const imageIds: number[] = [];
       const imageResults = await Promise.all(
-        imageUrls.map(url => downloadAndUploadUrl(url, actor.id, actor.role, 'catalogue_product', 'image'))
+        imageUrls.map(url => downloadAndUploadUrl(url, actor.id, actor.role, type === 'PRODUCT' ? 'catalogue_product' : 'catalogue_service', 'image'))
       );
       for (const id of imageResults) {
         if (id) imageIds.push(id);
@@ -688,6 +718,26 @@ export const catalogueImportService = {
         if (id) documentIds.push(id);
       }
 
+      const rawOriginalPrice = parseNumber(col(row, 'Original Price'));
+      const rawDiscountPrice = parseNumber(col(row, 'Discount Price'));
+      const rawDiscountPercent = parseNumber(col(row, 'Discount Percent'));
+      const basePriceVal = type === 'PRODUCT' ? price : parseNumber(col(row, 'Base Price'));
+      const effectiveOriginalPrice = rawOriginalPrice ?? ((rawDiscountPrice !== null || rawDiscountPercent !== null) ? basePriceVal : null);
+
+      let finalDiscountPrice = rawDiscountPrice;
+      let finalDiscountPercent = rawDiscountPercent;
+
+      if (effectiveOriginalPrice && effectiveOriginalPrice > 0) {
+        if (finalDiscountPrice !== null && finalDiscountPercent === null && effectiveOriginalPrice > finalDiscountPrice) {
+          finalDiscountPercent = Math.round(((effectiveOriginalPrice - finalDiscountPrice) / effectiveOriginalPrice) * 100 * 10) / 10;
+        } else if (finalDiscountPercent !== null && finalDiscountPrice === null) {
+          finalDiscountPrice = Math.round(effectiveOriginalPrice * (1 - finalDiscountPercent / 100) * 100) / 100;
+        }
+      }
+
+      const offerLabelVal = sanitizeText(col(row, 'Offer Label'), 120);
+      const isOfferActive = Boolean(offerLabelVal || finalDiscountPrice !== null || finalDiscountPercent !== null || offerStart || offerEnd);
+
       validRows.push({
         rowNumber,
         name,
@@ -699,6 +749,15 @@ export const catalogueImportService = {
         specifications: specs,
         imageIds,
         documentIds,
+        originalPrice: effectiveOriginalPrice,
+        discountPrice: finalDiscountPrice,
+        discountPercent: finalDiscountPercent,
+        offerLabel: offerLabelVal,
+        offerStartAt: offerStart,
+        offerEndAt: offerEnd,
+        isOfferActive,
+        bulkDealAvailable: parseBool(col(row, 'Bulk Deal Available')) ?? false,
+        bulkMinQuantity: parseNumber(col(row, 'Bulk Minimum Quantity')),
         ...(type === 'PRODUCT'
           ? {
             price,
@@ -708,15 +767,7 @@ export const catalogueImportService = {
             brand: sanitizeText(col(row, 'Brand'), 120),
             modelNumber: sanitizeText(col(row, 'Model Number'), 120),
             itemCondition: sanitizeText(col(row, 'Item Condition'), 40),
-            isMsmeMade: parseBool(col(row, 'MSME Made')) ?? false,
-            originalPrice: parseNumber(col(row, 'Original Price')),
-            discountPrice: parseNumber(col(row, 'Discount Price')),
-            discountPercent: parseNumber(col(row, 'Discount Percent')),
-            offerLabel: sanitizeText(col(row, 'Offer Label'), 120),
-            offerStartAt: offerStart,
-            offerEndAt: offerEnd,
-            bulkDealAvailable: parseBool(col(row, 'Bulk Deal Available')) ?? false,
-            bulkMinQuantity: parseNumber(col(row, 'Bulk Minimum Quantity'))
+            isMsmeMade: parseBool(col(row, 'MSME Made')) ?? false
           }
           : {
             pricingModel: clean(col(row, 'Pricing Model')).toUpperCase() || 'FIXED',
@@ -724,11 +775,10 @@ export const catalogueImportService = {
             serviceArea: sanitizeText(col(row, 'Service Area'), 300),
             scopeOfWork: sanitizeText(col(row, 'Scope Of Work')),
             deliverables: sanitizeText(col(row, 'Deliverables')),
+            inclusions: sanitizeText(col(row, 'Inclusions')),
+            exclusions: sanitizeText(col(row, 'Exclusions')),
             slaResponseTime: sanitizeText(col(row, 'SLA Response Time'), 120),
-            duration: sanitizeText(col(row, 'Duration'), 120),
-            offerLabel: sanitizeText(col(row, 'Offer Label'), 120),
-            offerStartAt: offerStart,
-            offerEndAt: offerEnd
+            duration: sanitizeText(col(row, 'Duration'), 120)
           })
       });
     }

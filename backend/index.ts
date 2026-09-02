@@ -4581,6 +4581,9 @@ app.get('/api/invoices', authenticate, authorize('buyer', 'seller', 'admin'), as
     const statusFilter = req.query.status ? String(req.query.status).trim() : '';
     const acceptedPo = req.query.acceptedPo === 'true';
     const scope = req.query.scope ? String(req.query.scope) : 'all';
+    const dateRange = req.query.dateRange ? String(req.query.dateRange) : 'all';
+    const amountRange = req.query.amountRange ? String(req.query.amountRange) : 'all';
+    const paymentStatus = req.query.paymentStatus ? String(req.query.paymentStatus) : 'all';
     const sortBy = req.query.sortBy ? String(req.query.sortBy) : 'createdAt';
     const sortOrder = req.query.sortOrder === 'asc' ? 'asc' : 'desc';
 
@@ -4590,33 +4593,34 @@ app.get('/api/invoices', authenticate, authorize('buyer', 'seller', 'admin'), as
         ? { buyerId: userId }
         : { sellerId: userId };
 
+    const andConditions: any[] = [];
+
     if (search) {
-      where.AND = [
-        ...(where.AND || []),
-        {
-          OR: [
-            { invoiceNumber: { contains: search, mode: 'insensitive' } },
-            { status: { contains: search, mode: 'insensitive' } },
-            {
-              purchaseOrder: {
-                OR: [
-                  { poNumber: { contains: search, mode: 'insensitive' } },
-                  { title: { contains: search, mode: 'insensitive' } }
-                ]
-              }
-            },
-            { buyer: { name: { contains: search, mode: 'insensitive' } } },
-            { seller: { name: { contains: search, mode: 'insensitive' } } }
-          ]
-        }
-      ];
+      andConditions.push({
+        OR: [
+          { invoiceNumber: { contains: search, mode: 'insensitive' } },
+          { status: { contains: search, mode: 'insensitive' } },
+          {
+            purchaseOrder: {
+              OR: [
+                { poNumber: { contains: search, mode: 'insensitive' } },
+                { title: { contains: search, mode: 'insensitive' } }
+              ]
+            }
+          },
+          { buyer: { name: { contains: search, mode: 'insensitive' } } },
+          { seller: { name: { contains: search, mode: 'insensitive' } } }
+        ]
+      });
     }
 
     if (statusFilter) {
-      where.OR = [
-        { status: { equals: statusFilter, mode: 'insensitive' } },
-        { invoiceStatus: { equals: statusFilter as any } }
-      ];
+      andConditions.push({
+        OR: [
+          { status: { equals: statusFilter, mode: 'insensitive' } },
+          { invoiceStatus: { equals: statusFilter as any } }
+        ]
+      });
     }
 
     if (acceptedPo) {
@@ -4627,9 +4631,87 @@ app.get('/api/invoices', authenticate, authorize('buyer', 'seller', 'admin'), as
     }
 
     if (scope === 'interstate') {
-      where.metadata = { path: ['interstate'], equals: true };
+      andConditions.push({ metadata: { path: ['interstate'], equals: true } });
     } else if (scope === 'domestic') {
-      where.NOT = { metadata: { path: ['interstate'], equals: true } };
+      andConditions.push({ NOT: { metadata: { path: ['interstate'], equals: true } } });
+    }
+
+    const now = new Date();
+    if (dateRange === 'today') {
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      andConditions.push({ createdAt: { gte: startOfDay } });
+    } else if (dateRange === 'this_week') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), diff);
+      startOfWeek.setHours(0, 0, 0, 0);
+      andConditions.push({ createdAt: { gte: startOfWeek } });
+    } else if (dateRange === 'this_month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      andConditions.push({ createdAt: { gte: startOfMonth } });
+    } else if (dateRange === 'last_month') {
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      andConditions.push({ createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } });
+    } else if (dateRange === 'this_quarter') {
+      const quarterMonth = Math.floor(now.getMonth() / 3) * 3;
+      const startOfQuarter = new Date(now.getFullYear(), quarterMonth, 1);
+      andConditions.push({ createdAt: { gte: startOfQuarter } });
+    } else if (dateRange === 'this_fy') {
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const fyStartYear = currentMonth >= 3 ? currentYear : currentYear - 1;
+      const startOfFy = new Date(fyStartYear, 3, 1);
+      andConditions.push({ createdAt: { gte: startOfFy } });
+    }
+
+    if (amountRange === 'under_50k') {
+      andConditions.push({ amount: { lt: 50000 } });
+    } else if (amountRange === '50k_to_2L') {
+      andConditions.push({ amount: { gte: 50000, lte: 200000 } });
+    } else if (amountRange === '2L_to_10L') {
+      andConditions.push({ amount: { gte: 200000, lte: 1000000 } });
+    } else if (amountRange === 'above_10L') {
+      andConditions.push({ amount: { gt: 1000000 } });
+    }
+
+    if (paymentStatus === 'paid') {
+      andConditions.push({
+        OR: [
+          { status: { in: ['paid', 'PAID'], mode: 'insensitive' } },
+          { invoiceStatus: { equals: 'PAID' } }
+        ]
+      });
+    } else if (paymentStatus === 'pending') {
+      andConditions.push({
+        AND: [
+          { status: { in: ['draft', 'submitted', 'under_review', 'approved', 'payment_initiated'], mode: 'insensitive' } },
+          { invoiceStatus: { not: 'PAID' } }
+        ]
+      });
+    } else if (paymentStatus === 'overdue') {
+      const overdueThreshold = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
+      andConditions.push({
+        AND: [
+          { status: { notIn: ['paid', 'PAID', 'cancelled', 'rejected'], mode: 'insensitive' } },
+          { invoiceStatus: { notIn: ['PAID', 'CANCELLED', 'REJECTED'] as any } },
+          { createdAt: { lt: overdueThreshold } }
+        ]
+      });
+    } else if (paymentStatus === 'due_soon') {
+      const dueSoonStart = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
+      const dueSoonEnd = new Date(now.getTime() - 38 * 24 * 60 * 60 * 1000);
+      andConditions.push({
+        AND: [
+          { status: { notIn: ['paid', 'PAID', 'cancelled', 'rejected'], mode: 'insensitive' } },
+          { invoiceStatus: { notIn: ['PAID', 'CANCELLED', 'REJECTED'] as any } },
+          { createdAt: { gte: dueSoonStart, lte: dueSoonEnd } }
+        ]
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     let orderBy: any = {};

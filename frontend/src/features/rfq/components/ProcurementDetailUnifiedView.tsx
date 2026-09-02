@@ -132,6 +132,29 @@ const noisyDetailKeys = new Set([
   'sellerId',
   'bidId',
   'requirementId',
+  'authUserId',
+  'userId',
+  'creatorId',
+  'internalId',
+  'sourceId',
+  'sourceModel',
+  'linkedProcurementBidId',
+  'isDeleted',
+  'originalPayload',
+  'password',
+  'token',
+  'sourcePayload',
+  'rawPayload',
+  'technicalPacket',
+  'fileAssetId',
+  'assetId',
+  'draftMeta',
+  'draftStep',
+  '__v',
+  'statusEnum',
+  'metadata',
+  'hash',
+  'signature',
   'emdRequired',
   'emdAmount',
   'isEmdRequired',
@@ -153,6 +176,7 @@ function humanizeKey(key: string): string {
     .replace(/([A-Z])/g, ' $1')
     .replace(/_/g, ' ')
     .replace(/^\w/, char => char.toUpperCase())
+    .replace(/\b\w/g, l => l.toUpperCase())
     .trim();
 }
 
@@ -160,7 +184,7 @@ function hasDetailData(val: any): boolean {
   if (val === null || val === undefined) return false;
   if (typeof val === 'boolean') return true;
   if (typeof val === 'number') return !isNaN(val);
-  if (typeof val === 'string') return val.trim().length > 0;
+  if (typeof val === 'string') return val.trim().length > 0 && val.trim() !== 'null' && val.trim() !== 'undefined';
   if (Array.isArray(val)) return val.some(hasDetailData);
   if (typeof val === 'object') return Object.values(val).some(hasDetailData);
   return false;
@@ -233,19 +257,30 @@ function formatPrimitiveValue(val: any, valueKey?: string): string {
   if (val === null || val === undefined || val === '') return 'N/A';
   if (typeof val === 'boolean') return val ? 'Yes' : 'No';
   if (typeof val === 'number') {
-    if (valueKey && (valueKey.toLowerCase().includes('amount') || valueKey.toLowerCase().includes('budget') || valueKey.toLowerCase().includes('val'))) {
+    if (valueKey && (valueKey.toLowerCase().includes('amount') || valueKey.toLowerCase().includes('budget') || valueKey.toLowerCase().includes('val') || valueKey.toLowerCase().includes('rate') || valueKey.toLowerCase().includes('price') || valueKey.toLowerCase().includes('cost') || valueKey.toLowerCase().includes('fee') || valueKey.toLowerCase().includes('deposit'))) {
       return formatCurrency(val);
     }
     return val.toLocaleString('en-IN');
   }
   if (typeof val === 'string') {
     const trimmed = val.trim();
-    if (!trimmed) return 'N/A';
+    if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '[object Object]') return 'N/A';
     if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-      const formattedDate = formatDateString(trimmed, trimmed.includes('T'));
+      const formattedDate = formatDateString(trimmed, trimmed.includes('T') || trimmed.includes(':'));
       if (formattedDate) return formattedDate;
     }
+    // Format ALL_CAPS_WITH_UNDERSCORE enums to title case (e.g. ON_DELIVERY -> On Delivery)
+    if (/^[A-Z0-9_ -]+$/.test(trimmed) && trimmed.includes('_')) {
+      return humanizeKey(trimmed.toLowerCase());
+    }
     return trimmed;
+  }
+  if (Array.isArray(val)) {
+    const cleanList = val.map(v => formatPrimitiveValue(v, valueKey)).filter(v => v !== 'N/A' && v !== '');
+    return cleanList.length ? cleanList.join(', ') : 'N/A';
+  }
+  if (typeof val === 'object') {
+    return 'N/A';
   }
   return String(val);
 }
@@ -2499,7 +2534,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   <PropertyItem label="Delivery Location" value={deliveryLocation} />
                   <PropertyItem label="Project Duration" value={projectDuration} />
                   <PropertyItem label="Payment Terms" value={paymentTerms} />
-                  <PropertyItem label={`${procurementTypeLabel} Scope Summary`} value={scopeText} fullWidth />
+                  <PropertyItem label="Procurement Brief" value={props.description && props.description.length < 160 && !props.description.includes('\n') ? props.description : (basics.description && basics.description.length < 160 ? basics.description : `${resolvedSubject} (${category})`)} fullWidth />
                 </PropertyGrid>
               </DataCard>
 

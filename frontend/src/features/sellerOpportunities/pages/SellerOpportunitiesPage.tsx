@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Building2,
+  Calendar,
   CalendarDays,
   ChevronDown,
   ChevronUp,
@@ -1283,6 +1284,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       {/* ── Search + Filter + View Toggle Toolbar ── */}
       <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
         <ResponsiveFilterBar
+          singleRowDesktop={false}
           activeFilterCount={(query ? 1 : 0) + (type ? 1 : 0) + (status ? 1 : 0) + (category ? 1 : 0) + (buyerFilter ? 1 : 0) + (location ? 1 : 0) + (startDate ? 1 : 0) + (endDate ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
@@ -1290,16 +1292,26 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               <input
                 value={query}
                 onChange={event => { setQuery(event.target.value); setPage(1); }}
-                placeholder="Search opportunities..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                placeholder="Search opportunities by title, ref no, buyer, category..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-9 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => { setQuery(''); setPage(1); }}
+                  aria-label="Clear search input"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full transition-colors cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           }
           filters={
             <>
               {/* Type Dropdown */}
               {!subRouteType && (
-                <div className="w-full sm:w-auto sm:min-w-[105px] sm:max-w-[130px]">
+                <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
                   <select
                     value={type}
                     onChange={e => { setType(e.target.value as OpportunityType | ''); setPage(1); }}
@@ -1313,7 +1325,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               )}
 
               {/* Status Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[140px]">
+              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[145px]">
                 <select
                   value={status}
                   onChange={e => { setStatus(e.target.value); setPage(1); }}
@@ -1330,7 +1342,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Category Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[145px]">
+              <div className="w-full sm:w-auto sm:min-w-[120px] sm:max-w-[150px]">
                 <select
                   value={category}
                   onChange={e => { setCategory(e.target.value); setPage(1); }}
@@ -1343,7 +1355,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Buyer Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
+              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[140px]">
                 <select
                   value={buyerFilter}
                   onChange={e => { setBuyerFilter(e.target.value); setPage(1); }}
@@ -1356,7 +1368,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Location Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
+              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[140px]">
                 <select
                   value={location}
                   onChange={e => { setLocation(e.target.value); setPage(1); }}
@@ -1368,39 +1380,33 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 </select>
               </div>
 
-              {/* Start Date Filter */}
-              <div className="w-full sm:w-auto sm:min-w-[140px] sm:max-w-[165px]">
-                <div className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-2.5 hover:border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/10 transition-colors shadow-xs">
-                  <span className="text-[10px] font-bold text-slate-400 mr-1.5 uppercase select-none shrink-0">From</span>
-                  <input
-                    id="filter-start-date"
-                    type="date"
-                    value={startDate}
-                    max={endDate && endDate <= todayStr ? endDate : todayStr}
-                    onChange={e => handleStartDateChange(e.target.value)}
-                    className="w-full text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer"
-                    aria-label="Start date (From)"
-                    title="Start Date (Published on or after)"
-                  />
-                </div>
-              </div>
-
-              {/* End Date Filter */}
-              <div className="w-full sm:w-auto sm:min-w-[140px] sm:max-w-[165px]">
-                <div className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-2.5 hover:border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/10 transition-colors shadow-xs">
-                  <span className="text-[10px] font-bold text-slate-400 mr-1.5 uppercase select-none shrink-0">To</span>
-                  <input
-                    id="filter-end-date"
-                    type="date"
-                    value={endDate}
-                    min={startDate || undefined}
-                    max={todayStr}
-                    onChange={e => handleEndDateChange(e.target.value)}
-                    className="w-full text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer"
-                    aria-label="End date (To)"
-                    title="End Date (Published on or before)"
-                  />
-                </div>
+              {/* Unified Date Range Group (From - To) */}
+              <div className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 hover:border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/10 transition-colors shadow-xs w-full sm:w-auto">
+                <Calendar className="h-3.5 w-3.5 text-slate-400 mr-1.5 shrink-0" />
+                <span className="text-[10px] font-bold text-slate-400 mr-1 uppercase select-none shrink-0">From</span>
+                <input
+                  id="filter-start-date"
+                  type="date"
+                  value={startDate}
+                  max={endDate && endDate <= todayStr ? endDate : todayStr}
+                  onChange={e => handleStartDateChange(e.target.value)}
+                  className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[110px]"
+                  aria-label="Start date (From)"
+                  title="Start Date (Published on or after)"
+                />
+                <span className="text-slate-300 mx-1.5 font-bold select-none">–</span>
+                <span className="text-[10px] font-bold text-slate-400 mr-1 uppercase select-none shrink-0">To</span>
+                <input
+                  id="filter-end-date"
+                  type="date"
+                  value={endDate}
+                  min={startDate || undefined}
+                  max={todayStr}
+                  onChange={e => handleEndDateChange(e.target.value)}
+                  className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[110px]"
+                  aria-label="End date (To)"
+                  title="End Date (Published on or before)"
+                />
               </div>
 
               {/* Reset Trigger */}
@@ -1409,10 +1415,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                   type="button"
                   variant="outline"
                   onClick={reset}
-                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px] cursor-pointer"
+                  className="h-10 px-3.5 rounded-xl border-rose-200 bg-rose-50/70 text-xs font-extrabold text-rose-700 hover:bg-rose-100 flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
                   aria-label="Reset all filters"
                 >
-                  Reset
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Reset</span>
                 </Button>
               )}
             </>

@@ -701,9 +701,9 @@ export default function CatalogueFormPage() {
                   </span>
                   {title}
                 </h1>
-                <Badge variant="default" className="border-slate-200 bg-slate-100/70 text-[10px] font-bold text-slate-700 uppercase tracking-wider py-0.5 px-2">
+                {/* <Badge variant="default" className="border-slate-200 bg-slate-100/70 text-[10px] font-bold text-slate-700 uppercase tracking-wider py-0.5 px-2">
                   {isEdit ? 'Revision Mode' : `${kind.toUpperCase()} WIZARD`}
-                </Badge>
+                </Badge> */}
                 {form.isMsmeMade && (
                   <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-[10px] font-bold px-2 py-0.5">
                     MSME Verified
@@ -1148,8 +1148,8 @@ export default function CatalogueFormPage() {
                     <Input
                       label={`${kind === 'product' ? 'Base Unit Price' : 'Base Service Rate'} (INR)`}
                       type="number"
-                      min="0.01"
-                      step="0.01"
+                      min="0"
+                      step="1"
                       value={kind === 'product' ? form.price : form.basePrice}
                       onChange={event => {
                         updateForm(kind === 'product' ? 'price' : 'basePrice', event.target.value);
@@ -1167,10 +1167,10 @@ export default function CatalogueFormPage() {
                       type="number"
                       min="0"
                       max="100"
-                      step="0.01"
+                      step="1"
                       value={form.discount}
                       onChange={event => updateForm('discount', event.target.value)}
-                      placeholder="0.00 (Optional)"
+                      placeholder="0 (Optional)"
                       className="bg-slate-50/50 focus:bg-white text-xs h-10"
                     />
                   </div>
@@ -1223,90 +1223,413 @@ export default function CatalogueFormPage() {
                     </div>
                   </div>
 
-                  {/* Promotional & Bulk Deals Collapsible */}
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  {/* Automated Promotional & Bulk Deals Section */}
+                  <div className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 space-y-4 shadow-xs">
+                    <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
-                        <h3 className="text-xs font-bold text-slate-900">Promotional Offers & Bulk Quantity Discounts</h3>
-                        <p className="text-[11px] text-slate-500">Configure temporary festival campaigns or tier-based volume pricing.</p>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(form.isOfferActive)}
-                            onChange={e => updateForm('isOfferActive', e.target.checked)}
-                            className="h-4 w-4 rounded border-slate-300 text-blue-600 accent-blue-600"
-                          />
-                          Special Offer
-                        </label>
-                        <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(form.bulkDealAvailable)}
-                            onChange={e => updateForm('bulkDealAvailable', e.target.checked)}
-                            className="h-4 w-4 rounded border-slate-300 text-emerald-600 accent-emerald-600"
-                          />
-                          Bulk Deal
-                        </label>
+                        <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-amber-500" />
+                          Promotions, Festival Offers & Bulk Quantity Pricing
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Boost listing conversion with automated festival discounts, campaign tags, or volume order tiers.
+                        </p>
                       </div>
                     </div>
 
+                    {/* Toggle Cards: Special Offer & Bulk Tier */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Special Offer Card Toggle */}
+                      <div
+                        onClick={() => {
+                          const nextState = !form.isOfferActive;
+                          updateForm('isOfferActive', nextState);
+                          if (nextState) {
+                            const baseVal = kind === 'product' ? form.price : form.basePrice;
+                            if (!form.originalPrice && baseVal) {
+                              updateForm('originalPrice', baseVal);
+                            }
+                            if (!form.offerLabel) {
+                              updateForm('offerLabel', '🔥 Special Deal');
+                            }
+                          }
+                        }}
+                        className={cn(
+                          "flex items-start justify-between p-3.5 rounded-xl border transition-all cursor-pointer select-none",
+                          form.isOfferActive
+                            ? "border-amber-400 bg-amber-50/40 ring-1 ring-amber-300/60 shadow-xs"
+                            : "border-slate-200 bg-slate-50/50 hover:bg-slate-100/60 hover:border-slate-300"
+                        )}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div className={cn(
+                            "flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold mt-0.5 shrink-0",
+                            form.isOfferActive ? "bg-amber-500 text-white shadow-xs" : "bg-slate-200 text-slate-600"
+                          )}>
+                            <Tag className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-900">Limited-Time Promotional Discount</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                              Offer temporary MRP discounts, flash deals, or festival campaign rates.
+                            </p>
+                          </div>
+                        </div>
+                        <span className={cn(
+                          "text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0",
+                          form.isOfferActive ? "bg-amber-100 text-amber-800 border border-amber-300" : "bg-slate-200 text-slate-600"
+                        )}>
+                          {form.isOfferActive ? 'Active' : 'Off'}
+                        </span>
+                      </div>
+
+                      {/* Bulk Deal Card Toggle */}
+                      <div
+                        onClick={() => {
+                          const nextState = !form.bulkDealAvailable;
+                          updateForm('bulkDealAvailable', nextState);
+                          if (nextState && !form.bulkMinQuantity) {
+                            updateForm('bulkMinQuantity', '10');
+                          }
+                        }}
+                        className={cn(
+                          "flex items-start justify-between p-3.5 rounded-xl border transition-all cursor-pointer select-none",
+                          form.bulkDealAvailable
+                            ? "border-emerald-400 bg-emerald-50/40 ring-1 ring-emerald-300/60 shadow-xs"
+                            : "border-slate-200 bg-slate-50/50 hover:bg-slate-100/60 hover:border-slate-300"
+                        )}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div className={cn(
+                            "flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold mt-0.5 shrink-0",
+                            form.bulkDealAvailable ? "bg-emerald-600 text-white shadow-xs" : "bg-slate-200 text-slate-600"
+                          )}>
+                            <Package className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-900">Bulk Order Volume Tier</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                              Highlight volume discounts when buyers order in higher quantities (MOQ).
+                            </p>
+                          </div>
+                        </div>
+                        <span className={cn(
+                          "text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0",
+                          form.bulkDealAvailable ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-slate-200 text-slate-600"
+                        )}>
+                          {form.bulkDealAvailable ? 'Active' : 'Off'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Active Promotional Offer Configuration */}
                     {form.isOfferActive && (
-                      <div className="grid gap-3 sm:grid-cols-3 pt-3 border-t border-slate-100 animate-in slide-in-from-top-1 duration-150">
-                        <Input
-                          label="Original Reference Price"
-                          type="number"
-                          value={form.originalPrice}
-                          onChange={e => updateForm('originalPrice', e.target.value)}
-                          placeholder="MRP / Before offer"
-                          className="bg-slate-50/50 text-xs h-9"
-                        />
-                        <Input
-                          label="Promotional Price"
-                          type="number"
-                          value={form.discountPrice}
-                          onChange={e => updateForm('discountPrice', e.target.value)}
-                          placeholder="Offer price"
-                          className="bg-slate-50/50 text-xs h-9"
-                        />
-                        <Input
-                          label="Offer Campaign Tag"
-                          value={form.offerLabel}
-                          onChange={e => updateForm('offerLabel', e.target.value)}
-                          placeholder="e.g. Diwali Fest, Volume Saver"
-                          className="bg-slate-50/50 text-xs h-9"
-                        />
-                        <Input
-                          label="Offer Start Date"
-                          type="date"
-                          value={form.offerStartAt}
-                          onChange={e => updateForm('offerStartAt', e.target.value)}
-                          className="bg-slate-50/50 text-xs h-9"
-                        />
-                        <Input
-                          label="Offer End Date"
-                          type="date"
-                          value={form.offerEndAt}
-                          onChange={e => updateForm('offerEndAt', e.target.value)}
-                          className="bg-slate-50/50 text-xs h-9"
-                        />
+                      <div className="rounded-xl border border-amber-200/90 bg-amber-50/30 p-4 space-y-4 animate-in slide-in-from-top-1 duration-200">
+                        {/* Baseline Header & Auto-Set Button */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-2.5">
+                          <div className="text-xs">
+                            <span className="font-bold text-slate-800">Auto Pricing Calculator:</span>{' '}
+                            <span className="text-slate-600">
+                              Standard Base Price is <strong className="text-slate-900">₹{(kind === 'product' ? toNumber(form.price) : toNumber(form.basePrice)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const baseVal = kind === 'product' ? form.price : form.basePrice;
+                              if (baseVal) {
+                                updateForm('originalPrice', baseVal);
+                                toast.success(`Reference MRP set to base price (₹${baseVal})`);
+                              }
+                            }}
+                            className="text-[11px] font-bold text-amber-800 hover:text-amber-900 bg-amber-100/80 px-2.5 py-1 rounded-md border border-amber-300/70 cursor-pointer self-start sm:self-auto"
+                          >
+                            Set MRP = Base Price
+                          </button>
+                        </div>
+
+                        {/* Automatic 3-Way Pricing Row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              Original Reference Price / MRP (₹)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              step="any"
+                              value={form.originalPrice}
+                              onChange={e => {
+                                const val = e.target.value;
+                                updateForm('originalPrice', val);
+                                const orig = parseFloat(val);
+                                const promo = parseFloat(form.discountPrice);
+                                if (!isNaN(orig) && !isNaN(promo) && orig > promo && orig > 0) {
+                                  const pct = Math.round(((orig - promo) / orig) * 100 * 10) / 10;
+                                  updateForm('discountPercent', String(pct));
+                                }
+                              }}
+                              placeholder="MRP before discount"
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/15"
+                            />
+                            <span className="text-[10px] text-slate-400 mt-0.5 block">Higher list price (strikethrough)</span>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              Discount Percentage (%)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step="any"
+                              value={form.discountPercent}
+                              onChange={e => {
+                                const val = e.target.value;
+                                updateForm('discountPercent', val);
+                                const pct = parseFloat(val);
+                                const orig = toNumber(form.originalPrice) || (kind === 'product' ? toNumber(form.price) : toNumber(form.basePrice));
+                                if (!isNaN(pct) && orig > 0) {
+                                  if (!form.originalPrice) updateForm('originalPrice', String(orig));
+                                  const promo = Math.round(orig * (1 - pct / 100) * 100) / 100;
+                                  updateForm('discountPrice', String(promo));
+                                }
+                              }}
+                              placeholder="e.g. 20"
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/15"
+                            />
+                            <span className="text-[10px] text-slate-400 mt-0.5 block">Auto-computes offer price</span>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              Promotional Offer Price (₹)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              step="any"
+                              value={form.discountPrice}
+                              onChange={e => {
+                                const val = e.target.value;
+                                updateForm('discountPrice', val);
+                                const promo = parseFloat(val);
+                                const orig = toNumber(form.originalPrice) || (kind === 'product' ? toNumber(form.price) : toNumber(form.basePrice));
+                                if (!isNaN(promo) && orig > promo && orig > 0) {
+                                  if (!form.originalPrice) updateForm('originalPrice', String(orig));
+                                  const pct = Math.round(((orig - promo) / orig) * 100 * 10) / 10;
+                                  updateForm('discountPercent', String(pct));
+                                } else {
+                                  updateForm('discountPercent', '');
+                                }
+                              }}
+                              placeholder="Special selling price"
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-emerald-800 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15"
+                            />
+                            <span className="text-[10px] text-slate-400 mt-0.5 block">Actual price buyer pays</span>
+                          </div>
+                        </div>
+
+                        {/* Quick Discount Pill Presets */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick Discounts:</span>
+                          {[5, 10, 15, 20, 25, 30, 50].map(pct => (
+                            <button
+                              key={`pct-${pct}`}
+                              type="button"
+                              onClick={() => {
+                                const orig = toNumber(form.originalPrice) || (kind === 'product' ? toNumber(form.price) : toNumber(form.basePrice));
+                                if (orig > 0) {
+                                  if (!form.originalPrice) updateForm('originalPrice', String(orig));
+                                  const promo = Math.round(orig * (1 - pct / 100) * 100) / 100;
+                                  updateForm('discountPercent', String(pct));
+                                  updateForm('discountPrice', String(promo));
+                                } else {
+                                  toast.error('Please enter a Base Price or Original Reference Price first.');
+                                }
+                              }}
+                              className={cn(
+                                "px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer",
+                                form.discountPercent === String(pct)
+                                  ? "bg-amber-500 text-white border-amber-600 shadow-xs"
+                                  : "bg-white text-slate-700 border-slate-200 hover:bg-amber-50 hover:border-amber-300"
+                              )}
+                            >
+                              {pct}% OFF
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Campaign Tag & Presets */}
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-slate-700">
+                            Offer Campaign Tag / Badge
+                          </label>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              type="text"
+                              value={form.offerLabel}
+                              onChange={e => updateForm('offerLabel', e.target.value)}
+                              placeholder="e.g. Diwali Fest, Flash Deal, Volume Saver"
+                              className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/15"
+                            />
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {['🔥 Festive Deal', '⚡ Flash Sale', '🏷️ Clearance', '🎉 Launch Special', '⭐ MSME Saver'].map(tag => (
+                                <button
+                                  key={tag}
+                                  type="button"
+                                  onClick={() => updateForm('offerLabel', tag)}
+                                  className={cn(
+                                    "px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer",
+                                    form.offerLabel === tag
+                                      ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                                      : "bg-white text-slate-700 border-slate-200 hover:bg-amber-50 hover:border-amber-300"
+                                  )}
+                                >
+                                  {tag}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Validity Dates & Quick Durations */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              Offer Start Date
+                            </label>
+                            <input
+                              type="date"
+                              value={form.offerStartAt}
+                              onChange={e => updateForm('offerStartAt', e.target.value)}
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/15"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              Offer End Date
+                            </label>
+                            <input
+                              type="date"
+                              value={form.offerEndAt}
+                              onChange={e => updateForm('offerEndAt', e.target.value)}
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/15"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Duration Preset Chips */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick Validity:</span>
+                          {[
+                            [7, '7 Days'],
+                            [15, '15 Days'],
+                            [30, '30 Days'],
+                            [60, '60 Days'],
+                            [90, '90 Days']
+                          ].map(([days, label]) => (
+                            <button
+                              key={String(days)}
+                              type="button"
+                              onClick={() => {
+                                const start = new Date();
+                                const end = new Date();
+                                end.setDate(start.getDate() + Number(days));
+                                updateForm('offerStartAt', start.toISOString().slice(0, 10));
+                                updateForm('offerEndAt', end.toISOString().slice(0, 10));
+                              }}
+                              className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-white text-slate-700 border border-slate-200 hover:bg-amber-50 hover:border-amber-300 cursor-pointer"
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Live Buyer-Facing Offer Badge Preview */}
+                        {(form.offerLabel || form.discountPercent || form.discountPrice) && (
+                          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="bg-amber-500 text-white text-[11px] font-extrabold px-2.5 py-0.5 rounded-full shadow-xs">
+                                {form.offerLabel || 'SPECIAL OFFER'}
+                              </span>
+                              {form.discountPercent && (
+                                <span className="bg-emerald-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">
+                                  {form.discountPercent}% OFF
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-800">
+                              {form.originalPrice && form.discountPrice && (
+                                <span>
+                                  MRP: <span className="line-through text-slate-400">₹{toNumber(form.originalPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                  {' '}→{' '}
+                                  <strong className="text-emerald-900 text-sm font-black">
+                                    ₹{toNumber(form.discountPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </strong>
+                                  <span className="text-emerald-700 text-[11px] ml-1 font-semibold">
+                                    (Save ₹{(toNumber(form.originalPrice) - toNumber(form.discountPrice)).toLocaleString('en-IN', { minimumFractionDigits: 2 })})
+                                  </span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
+                    {/* Active Bulk Deal Configuration */}
                     {form.bulkDealAvailable && (
-                      <div className="pt-3 border-t border-slate-100 animate-in slide-in-from-top-1 duration-150">
-                        <div className="max-w-xs">
-                          <Input
-                            label="Minimum Order Quantity for Bulk Rates"
-                            type="number"
-                            min="1"
-                            value={form.bulkMinQuantity}
-                            onChange={e => updateForm('bulkMinQuantity', e.target.value)}
-                            placeholder="e.g. 50 units or 10 hours"
-                            className="bg-slate-50/50 text-xs h-9"
-                          />
+                      <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/30 p-4 space-y-3 animate-in slide-in-from-top-1 duration-200">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <label className="text-xs font-bold text-slate-800">
+                            Minimum Order Quantity for Bulk Rates (MOQ)
+                          </label>
+                          <span className="text-[11px] text-emerald-800 font-semibold bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-200">
+                            Tier-Based Deal Enabled
+                          </span>
                         </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                          <div className="relative w-full sm:w-64">
+                            <input
+                              type="number"
+                              min="1"
+                              value={form.bulkMinQuantity}
+                              onChange={e => updateForm('bulkMinQuantity', e.target.value)}
+                              placeholder="e.g. 10"
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-3 pr-16 text-xs font-bold text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">
+                              {kind === 'product' ? (form.unitOfMeasure || 'Units') : 'Milestones'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick MOQ:</span>
+                            {['5', '10', '25', '50', '100', '500'].map(moq => (
+                              <button
+                                key={moq}
+                                type="button"
+                                onClick={() => updateForm('bulkMinQuantity', moq)}
+                                className={cn(
+                                  "px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer",
+                                  form.bulkMinQuantity === moq
+                                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                                    : "bg-white text-slate-700 border-slate-200 hover:bg-emerald-50 hover:border-emerald-300"
+                                )}
+                              >
+                                {moq}+
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <p className="text-[11px] text-slate-500">
+                          Buyers purchasing <strong className="text-slate-800">{form.bulkMinQuantity || '10'}+ {kind === 'product' ? (form.unitOfMeasure || 'units') : 'hours/milestones'}</strong> will see the Volume Deal badge on your marketplace card and can initiate bulk procurement orders.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1464,14 +1787,14 @@ export default function CatalogueFormPage() {
                                 className="bg-white text-xs h-8"
                               />
                             </div>
-                            <div className="w-24">
+                            {/* <div className="w-24">
                               <Input
                                 value={spec.unit}
                                 onChange={e => setSpecifications(prev => prev.map((row, i) => i === index ? { ...row, unit: e.target.value } : row))}
                                 placeholder="Unit (e.g. MPa)"
                                 className="bg-white text-xs h-8"
                               />
-                            </div>
+                            </div> */}
                             <button
                               type="button"
                               onClick={() => setSpecifications(prev => prev.filter((_, i) => i !== index))}

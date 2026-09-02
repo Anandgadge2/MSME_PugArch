@@ -75,17 +75,6 @@ function formatDateString(dateVal?: string | Date | null, includeTime: boolean =
   }
 }
 
-function formatCurrency(val?: number | string | null) {
-  if (val === undefined || val === null || val === '') return null;
-  const num = typeof val === 'string' ? parseFloat(val) : val;
-  if (isNaN(num)) return null;
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(num);
-}
-
 function hasValue(val: unknown): boolean {
   if (val === null || val === undefined || val === '') return false;
   if (typeof val === 'string' && val.trim() === '') return false;
@@ -102,40 +91,6 @@ function formatDisplayValue(val: unknown): string {
   if (typeof val === 'object') return Object.entries(val as object).map(([k, v]) => `${k}: ${formatDisplayValue(v)}`).join(' | ');
   const str = String(val);
   return str.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-}
-
-/* ─── Reusable Sub-Components ───────────────────────────── */
-
-const SectionHeading = ({ title }: { title: string }) => (
-  <h3 className="text-xs font-black text-[#0b2447] tracking-wider uppercase mb-3 flex items-center gap-2">
-    <span className="w-1.5 h-4 bg-[#0b2447] rounded-full inline-block" />
-    {title}
-  </h3>
-);
-
-/** Only renders a row if value is present */
-const InfoRow = ({ label, value }: { label: string; value: React.ReactNode }) => {
-  if (!hasValue(value)) return null;
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0 text-xs">
-      <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">{label}</span>
-      <span className="font-semibold text-slate-800 text-right">{value}</span>
-    </div>
-  );
-};
-
-/** Card that auto-hides when it has zero visible InfoRow children */
-function AutoHideCard({ title, children }: { title: string; children: React.ReactNode }) {
-  // We render and rely on InfoRow's null-return to naturally collapse empty cards.
-  // To avoid showing a card with only a heading, we wrap to inspect rendered output.
-  const childrenArray = React.Children.toArray(children);
-  if (childrenArray.length === 0) return null;
-  return (
-    <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80 space-y-2">
-      <SectionHeading title={title} />
-      <div className="space-y-0.5">{children}</div>
-    </div>
-  );
 }
 
 /* ─── Main Page ─────────────────────────────────────────── */
