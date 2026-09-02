@@ -130,6 +130,7 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/buyer/tracking': () => import('../../views/ParcelTracking'),
   '/admin/delivery': () => import('../../features/delivery/pages/DeliveryListPage'),
   '/admin/reports': () => import('../../views/MISReports'),
+  '/admin/cms': () => import('../../features/admin/pages/AdminCmsHubPage'),
   '/admin/banners': () => import('../../features/banners/pages/AdminBannerManagementPage'),
   '/admin/monthly-rankings': () => import('../../features/banners/pages/MonthlyRankingsAdminPage'),
   '/my-org/banner-eligibility': () => import('../../features/banners/pages/OrganizationBannerEligibilityPage'),
@@ -146,6 +147,7 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/admin/disputes': () => import('../../features/disputes/pages/DisputesPage'),
   '/settings/notifications': () => import('../../features/settings/pages/NotificationPrefsPage'),
   '/admin/users': () => import('../../features/admin/pages/AdminRecordsPage'),
+  '/admin/catalogue-moderation': () => Promise.resolve(),
   '/admin/marketplace': () => Promise.resolve(),
   '/admin/organizations': () => import('../../views/OrganizationManagement'),
   '/admin/rbac': () => import('../../views/RbacPanel'),
@@ -214,7 +216,7 @@ const ALL_MENU_PATHS = [
   '/orders/delivery-confirmation',
   '/orders/tracking',
   '/grn',
-  '/admin/marketplace/home-sections'
+  '/admin/cms'
 ];
 
 const isSidebarRouteActive = (targetPath: string | undefined, pathname?: string | null, currentPathWithQuery?: string) => {
@@ -522,12 +524,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       { label: 'Payments & Escrow', path: '/payments/transactions', icon: CreditCard, roles: ['admin'] },
       { label: 'Fraud Alerts', path: '/admin/fraud-alerts', icon: AlertTriangle, roles: ['admin'] },
     ] },
-    { label: 'Marketplace', icon: ShoppingCart, roles: ['admin'], children: [
-      { label: 'Catalogue Review', path: '/admin/marketplace', icon: ShoppingCart, roles: ['admin'] },
+    { label: 'Marketplace & Content', icon: ShoppingCart, roles: ['admin'], children: [
+      { label: 'Catalogue Moderation', path: '/admin/catalogue-moderation', icon: ShoppingCart, roles: ['admin'] },
       { label: 'Categories', path: '/admin/categories', icon: ClipboardList, roles: ['admin'] },
-      { label: 'Homepage Sections', path: '/admin/marketplace/home-sections', icon: Images, roles: ['admin'] },
-      { label: 'Banners', path: '/admin/banners', icon: Images, roles: ['admin'] },
-      { label: 'Monthly Rankings', path: '/admin/monthly-rankings', icon: Trophy, roles: ['admin'] },
+      { label: 'CMS & Banners', path: '/admin/cms', icon: Images, roles: ['admin'] },
     ] },
     { label: 'Organizations', icon: Building2, roles: ['admin'], children: [
       { label: 'Users', path: '/admin/users', icon: Users, roles: ['admin'] },

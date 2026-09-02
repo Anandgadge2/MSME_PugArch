@@ -1737,7 +1737,7 @@ export default function MasterAdminPage() {
               viewMode={viewMode}
               setViewMode={setViewMode}
               selects={[
-                ['role', 'All roles', ['master_admin', 'admin', 'buyer', 'seller']],
+                ['role', 'All roles', ['master_admin', 'admin', 'buyer', 'seller', 'shg']],
                 ['status', 'All account statuses', ['ACTIVE', 'SUSPENDED', 'DEACTIVATED', 'PENDING']]
               ]}
             />
@@ -2049,8 +2049,8 @@ export default function MasterAdminPage() {
               icon={Store}
               links={[
                 ['Categories', '/admin/categories', 0, 'Preserved existing category controls'],
-                ['Homepage Sections', '/admin/marketplace/home-sections', 0, 'Featured marketplace content'],
-                ['Banners', '/admin/banners', 0, 'Existing banner management'],
+                ['CMS & Banners', '/admin/cms', 0, 'Centralized banners and marketplace discovery rails'],
+                ['Catalogue Moderation', '/admin/catalogue-moderation', 0, 'Moderate seller product and service submissions'],
                 ['Monthly Rankings', '/admin/monthly-rankings', 0, 'Seller and listing visibility signals']
               ]}
             />
@@ -4163,7 +4163,7 @@ function EntityEditor({
             <FormField label="Name" value={values.name} onChange={value => set('name', sanitizePersonNameInput(value))} error={errors.name} maxLength={100} required />
             <FormField label="Email" value={values.email} onChange={value => set('email', value)} error={errors.email} inputMode="email" required />
             <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} error={errors.mobile} inputMode="numeric" maxLength={10} />
-            <SelectField label="Role" value={values.role} onChange={value => set('role', value)} options={['buyer', 'seller', 'admin', 'master_admin']} />
+            <SelectField label="Role" value={values.role} onChange={value => set('role', value)} options={['buyer', 'seller', 'shg', 'admin', 'master_admin']} />
             <SelectField label="Status" value={values.accountStatus} onChange={value => set('accountStatus', value)} options={['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']} />
             <OrganizationSelectField organizations={organizations} value={values.organizationId} onChange={value => set('organizationId', value)} />
             {editor.mode === 'create' && <FormField label="Temporary password" value={values.password} onChange={value => set('password', value)} placeholder="Auto-generated if blank" />}

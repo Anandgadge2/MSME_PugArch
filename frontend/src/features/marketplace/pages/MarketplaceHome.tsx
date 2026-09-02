@@ -137,6 +137,8 @@ export default function MarketplaceHome() {
     const itemLayoutSections = layoutSections.filter((section: MarketplaceLayoutSection) =>
         section.items?.some((item: any) => item?.itemType === 'PRODUCT' || item?.itemType === 'SERVICE')
     );
+    const buyerRequirementSection = layoutSections.find((section: MarketplaceLayoutSection) => section.key === 'buyer_requirements');
+    const showBuyerRequirements = layoutSections.length === 0 || Boolean(buyerRequirementSection);
     const activeCategory = categories.find(category => String(category.id) === activeCategoryId);
     const filteredProducts = byCategory(visibleProducts, activeCategoryId);
     const filteredServices = byCategory(data?.featuredServices || [], activeCategoryId);
@@ -307,7 +309,13 @@ export default function MarketplaceHome() {
                     </>
                 )}
 
-                <BuyerRequirementBrowser buyers={homeBuyers} requirements={data?.featuredRequirements || []} />
+                {showBuyerRequirements && (
+                    <BuyerRequirementBrowser
+                        buyers={homeBuyers}
+                        requirements={data?.featuredRequirements || []}
+                        title={buyerRequirementSection?.title}
+                    />
+                )}
                 <LatestBids requirements={data?.featuredRequirements} tenders={data?.latestTenders} bids={data?.latestBids} loading={isHomeLoading && !data} />
                 <SellerStrip sellers={homeSellers} />
                 <StatsSection stats={data?.stats} />

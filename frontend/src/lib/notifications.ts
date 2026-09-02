@@ -41,7 +41,7 @@ export const routeForNotification = (
     if (role === 'admin') return '/admin/disputes';
     return role === 'buyer' ? '/buyer/disputes' : '/seller/disputes';
   }
-  if (type.includes('grievance')) return role === 'admin' ? '/admin/grievances' : '/dashboard';
+  if (type.includes('grievance')) return role === 'admin' ? '/admin/disputes?tab=grievances' : '/dashboard';
   if (type.includes('organization')) return role === 'admin' ? '/admin/organizations' : '/dashboard';
 
   return '/notifications';

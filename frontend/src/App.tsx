@@ -53,6 +53,7 @@ const GenericFeaturePage = lazy(() => import('./features/shared/GenericFeaturePa
 const EscrowPage = lazy(() => import('./features/escrow/pages/EscrowPage'));
 const AdminRecordsPage = lazy(() => import('./features/admin/pages/AdminRecordsPage'));
 const AdminCategoriesPage = lazy(() => import('./features/admin/pages/AdminCategoriesPage'));
+const AdminCmsHubPage = lazy(() => import('./features/admin/pages/AdminCmsHubPage'));
 const RatingsPage = lazy(() => import('./features/ratings/pages/RatingsPage'));
 const ComplianceRulesPage = lazy(() => import('./features/compliance/pages/ComplianceRulesPage'));
 const FraudAlertsPage = lazy(() => import('./features/fraudAlerts/pages/FraudAlertsPage'));
@@ -887,18 +888,20 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/admin/shg-applications' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/onboarding?tab=shg" />;
     if (/^\/admin\/shg-applications\/\d+$/.test(pathname) && roleOk(user.role, ['admin'])) return <Redirect to="/admin/onboarding?tab=shg" />;
     if (pathname === '/admin/users' && roleOk(user.role, ['admin'])) return <AdminRecordsPage kind="users" />;
-    if (pathname === '/admin/marketplace' && roleOk(user.role, ['admin'])) return <CataloguePage mode="admin" />;
-    if (pathname === '/admin/marketplace/home-sections' && roleOk(user.role, ['admin'])) return <AdminMarketplaceHomeSectionsPage />;
+    if (pathname === '/admin/catalogue-moderation' && roleOk(user.role, ['admin'])) return <CataloguePage mode="admin" />;
+    if (pathname === '/admin/marketplace' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/catalogue-moderation" />;
+    if (pathname === '/admin/cms' && roleOk(user.role, ['admin'])) return <AdminCmsHubPage />;
+    if (pathname === '/admin/marketplace/home-sections' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/cms?tab=sections" />;
+    if (pathname === '/admin/banners' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/cms?tab=banners" />;
     if (pathname === '/admin/categories' && roleOk(user.role, ['admin'])) return <AdminCategoriesPage />;
     if (pathname === '/admin/fraud-alerts' && roleOk(user.role, ['admin'])) return <FraudAlertsPage />;
+    if (pathname === '/admin/security-monitoring' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/fraud-alerts" />;
     if (pathname === '/admin/disputes' && roleOk(user.role, ['admin'])) return <DisputesPage />;
-    if (pathname === '/admin/grievances' && roleOk(user.role, ['admin'])) return <GenericFeaturePage title="Grievances" description="Grievance records and statuses." endpoint="/api/grievances" />;
+    if (pathname === '/admin/grievances' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/disputes?tab=grievances" />;
     if (pathname === '/admin/payments' && roleOk(user.role, ['admin'])) return <PaymentHistoryPage admin />;
     if (pathname === '/admin/compliance-rules' && roleOk(user.role, ['admin'])) return <ComplianceRulesPage />;
-    if (pathname === '/admin/security-monitoring' && roleOk(user.role, ['admin'])) return <GenericFeaturePage title="Security Monitoring" description="Audit and fraud signals for platform operations." endpoint="/api/admin/fraud-alerts" />;
     if (['/admin/governance', '/admin/procurement', '/admin/compliance'].includes(pathname) && roleOk(user.role, ['admin'])) return <Redirect to="/admin/onboarding" />;
     if (pathname === '/admin/reports' && roleOk(user.role, ['admin'])) return <MISReports />;
-    if (pathname === '/admin/banners' && roleOk(user.role, ['admin'])) return <AdminBannerManagementPage />;
     if (pathname === '/admin/monthly-rankings' && roleOk(user.role, ['admin'])) return <MonthlyRankingsAdminPage />;
     if (pathname === '/roles-permissions') return <PermissionRouteGuard permission="team.role.manage"><RbacPanel /></PermissionRouteGuard>;
     if (pathname === '/admin/rbac' && roleOk(user.role, ['admin'])) return <RbacPanel />;
@@ -955,9 +958,9 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/settings/security') return <SecuritySettingsPage />;
     if (pathname === '/settings/notifications') return <NotificationPrefsPage />;
     if (pathname === '/onboarding/kyc') return <AadhaarKycPage />;
-    if (pathname === '/admin/reports/procurement' && roleOk(user.role, ['admin'])) return <ProcurementReportPage />;
-    if (pathname === '/admin/reports/payments' && roleOk(user.role, ['admin'])) return <PaymentsReportPage />;
-    if (pathname === '/admin/reports/suppliers' && roleOk(user.role, ['admin'])) return <SuppliersReportPage />;
+    if (pathname === '/admin/reports/procurement' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/reports?tab=procurement" />;
+    if (pathname === '/admin/reports/payments' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/reports?tab=finance" />;
+    if (pathname === '/admin/reports/suppliers' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/reports?tab=suppliers" />;
     return <Redirect to={authenticatedHome} />;
   };
 

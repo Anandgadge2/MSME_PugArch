@@ -33,5 +33,7 @@ export const bannerApi = {
   grant: (data: Record<string, unknown>) =>
     api.post('/api/admin/banner-eligibility/grant', data, { headers: headers() }).then(res => json<any>(res)),
   revoke: (data: Record<string, unknown>) =>
-    api.post('/api/admin/banner-eligibility/revoke', data, { headers: headers() }).then(res => json<any>(res))
+    api.post('/api/admin/banner-eligibility/revoke', data, { headers: headers() }).then(res => json<any>(res)),
+  organizations: () =>
+    api.get('/api/admin/banner-eligibility/organizations', { headers: headers(), skipCache: true }).then(res => json<{ organizations: any[] }>(res))
 };

@@ -2,7 +2,8 @@
 export const ROLES = {
   ADMIN: 'admin',
   BUYER: 'buyer',
-  SELLER: 'seller'
+  SELLER: 'seller',
+  SHG: 'shg'
 } as const;
 
 export type RoleName = (typeof ROLES)[keyof typeof ROLES];
@@ -15,6 +16,7 @@ export const RBAC_SYSTEM_ROLES = {
   VERIFICATION_OFFICER: 'VERIFICATION_OFFICER',
   BUYER: 'BUYER',
   SELLER: 'SELLER',
+  SHG: 'SHG',
   FINANCE_OFFICER: 'FINANCE_OFFICER',
   AUDITOR: 'AUDITOR',
   SUPPORT_AGENT: 'SUPPORT_AGENT'

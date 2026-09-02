@@ -58,3 +58,7 @@ This project must strictly adhere to **VPAT (WCAG 2.1 / 2.2 Level AA)** accessib
 * **PII & Data Masking**: Ensure sensitive financial and identity data (Aadhaar, PAN, Bank Accounts, GSTIN) are masked in responses and logs.
 * **Cryptographic & Financial Integrity**: Use constant-time comparison for webhooks/signatures and idempotency locks for escrow/payment state transitions.
 
+### 3. Absolute Rule: Real Production Data Only (Zero Mock, Seeded, or Dummy Fallbacks)
+* **Zero Dummy / Mock Data**: All statistics, metrics, charts, tables, lists, and cards across the frontend and backend must strictly reflect authentic database records.
+* **No Synthetic Percentages or Fictitious Records**: Never use artificial multipliers, simulated trends, fabricated clusters, or mock fallback datasets.
+* **Empty / Zero States**: If there are no records for a given metric, period, or filter, render legitimate zeroes (`0`, `₹0.00`, `0%`) or clean empty state UI rather than inventing dummy data.
