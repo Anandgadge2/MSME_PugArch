@@ -338,9 +338,10 @@ type AuditRecord = {
 };
 
 type ActionDialogState = {
-  entity: 'company' | 'organization' | 'user' | 'feature' | 'email' | 'marketplaceProduct' | 'marketplaceService' | 'order' | 'invoice' | 'payment' | 'escrow';
+  entity: 'company' | 'organization' | 'user' | 'feature' | 'email' | 'emailTemplate' | 'marketplaceProduct' | 'marketplaceService' | 'order' | 'invoice' | 'payment' | 'escrow';
   action: string;
   id?: number;
+  templateId?: string;
   label: string;
   danger?: boolean;
   featureKey?: string;
@@ -1369,6 +1370,10 @@ export default function MasterAdminPage() {
       }
       if (entity === 'email' && action === 'test') {
         await masterAdminApi.sendTestEmail({ to: reason, reason: 'Master admin SMTP test' });
+      }
+      if (entity === 'emailTemplate' && actionDialog.templateId && action === 'deactivate') {
+        await masterAdminApi.deleteEmailTemplate(actionDialog.templateId, reason);
+        if (emailTemplateCompanyId) await loadEmailTemplates(emailTemplateCompanyId);
       }
       if (entity === 'marketplaceProduct' && id && status) {
         await masterAdminApi.updateMarketplaceProductStatus(id, status, reason);
@@ -2453,12 +2458,13 @@ export default function MasterAdminPage() {
                                   variant="outline"
                                   className="h-7 rounded border-red-200 px-2 text-[10px] font-bold text-red-600 hover:bg-red-50"
                                   onClick={() => {
-                                    const reason = window.prompt('Audit reason for deactivating this template:');
-                                    if (reason && reason.trim().length >= 4 && emailTemplateCompanyId) {
-                                      masterAdminApi.deleteEmailTemplate(tpl.id, reason.trim())
-                                        .then(() => { toast.success('Template deactivated'); loadEmailTemplates(emailTemplateCompanyId); })
-                                        .catch((err: any) => toast.error(err.message || 'Failed to deactivate'));
-                                    }
+                                    openAction({
+                                      entity: 'emailTemplate',
+                                      action: 'deactivate',
+                                      templateId: tpl.id,
+                                      label: `Email Template: ${tpl.name}`,
+                                      danger: true
+                                    });
                                   }}
                                 >
                                   <XCircle className="mr-1 h-3 w-3" /> Deactivate
@@ -3569,6 +3575,11 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
   const [replaceFile, setReplaceFile] = useState<File | null>(null);
   const [replaceReason, setReplaceReason] = useState('');
 
+  // Target document for dedicated removal modal
+  const [deletingDoc, setDeletingDoc] = useState<any | null>(null);
+  const [deleteDocReason, setDeleteDocReason] = useState('');
+  const [deletingDocLoading, setDeletingDocLoading] = useState(false);
+
   const fetchDocs = useCallback(async () => {
     if (!organizationId) return;
     setLoading(true);
@@ -3670,28 +3681,35 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
     }
   };
 
-  const handleDelete = async (docId: number) => {
-    const r = prompt('Enter reason for removing this document:');
-    if (!r || !r.trim()) return toast.error('Reason is required to remove a document.');
+  const handleDeleteConfirm = async () => {
+    if (!deletingDoc) return;
+    if (!deleteDocReason.trim() || deleteDocReason.trim().length < 4) {
+      return toast.error('Audit reason (at least 4 characters) is required to remove a document.');
+    }
 
+    setDeletingDocLoading(true);
     try {
       const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      const res = await api.fetch(`/api/master-admin/organizations/${organizationId}/documents/${docId}`, {
+      const res = await api.fetch(`/api/master-admin/organizations/${organizationId}/documents/${deletingDoc.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
         },
-        body: JSON.stringify({ reason: r })
+        body: JSON.stringify({ reason: deleteDocReason.trim() })
       });
       if (res.ok) {
         toast.success('Document removed.');
+        setDeletingDoc(null);
+        setDeleteDocReason('');
         fetchDocs();
       } else {
         toast.error('Failed to remove document.');
       }
     } catch (err: any) {
       toast.error(err?.message || 'Error removing document.');
+    } finally {
+      setDeletingDocLoading(false);
     }
   };
 
@@ -3803,7 +3821,7 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
                   {doc.isUserUploaded === false ? (
                     <button
                       type="button"
-                      onClick={() => handleDelete(doc.id)}
+                      onClick={() => { setDeletingDoc(doc); setDeleteDocReason(''); }}
                       className="inline-flex items-center justify-center text-slate-400 hover:text-red-600 p-1 rounded transition-colors"
                       title="Remove Extra Admin Document"
                     >
@@ -3868,11 +3886,60 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
           </div>
         </ModalShell>
       )}
+
+      {deletingDoc && (
+        <ModalShell title={`Remove Document: ${deletingDoc.originalName || deletingDoc.documentType}`} onCancel={() => setDeletingDoc(null)}>
+          <div className="space-y-4">
+            <p className="text-xs text-slate-600">
+              Are you sure you want to remove document <strong className="text-slate-900">{deletingDoc.originalName || deletingDoc.documentType}</strong>? This administrative action will be recorded in the audit trail.
+            </p>
+            <div>
+              <label htmlFor="doc-delete-audit-reason" className="block text-xs font-bold text-slate-700 mb-1">
+                Audit Reason <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                id="doc-delete-audit-reason"
+                value={deleteDocReason}
+                onChange={e => setDeleteDocReason(e.target.value)}
+                rows={3}
+                placeholder="State the compliance or administrative reason for removing this document..."
+                className="w-full rounded-md border border-slate-300 p-2 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button type="button" variant="outline" className="h-9 rounded-lg text-xs font-semibold" onClick={() => setDeletingDoc(null)} disabled={deletingDocLoading}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-9 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold"
+                onClick={handleDeleteConfirm}
+                disabled={deletingDocLoading || !deleteDocReason.trim() || deleteDocReason.trim().length < 4}
+              >
+                {deletingDocLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1.5 h-3.5 w-3.5" />}
+                Confirm Removal
+              </Button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
     </div>
   );
 
 
 }
+
+const sanitizeEmailHtml = (dirty: string): string => {
+  if (!dirty) return '';
+  return dirty
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
+    .replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, '')
+    .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
+    .replace(/href\s*=\s*(['"])javascript:.*?\1/gi, 'href="#"');
+};
 
 function EntityEditor({
   editor,
@@ -4235,7 +4302,7 @@ function EntityEditor({
                     className="w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-medium normal-case text-slate-800 outline-none focus:border-[#12335f] min-h-[140px] max-h-[220px] overflow-y-auto"
                     onFocus={() => setFocusedField('htmlBody')}
                     onBlur={e => set('htmlBody', e.currentTarget.innerHTML)}
-                    dangerouslySetInnerHTML={{ __html: values.htmlBody || '' }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(values.htmlBody || '') }}
                   />
                 ) : (
                   <textarea
@@ -4343,20 +4410,36 @@ function ModalShell({ title, children, onCancel, wide }: { title: string; childr
     };
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCancel();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onCancel]);
+
   return (
     <div
       ref={containerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="master-admin-modal-title"
       className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4"
       onClick={onCancel}
     >
       <section
         ref={modalScrollRef}
+        tabIndex={-1}
         className={cn('max-h-[92vh] w-full overflow-y-auto rounded-t-md bg-white p-4 shadow-xl sm:rounded-md overscroll-contain focus:outline-none', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}
         onClick={e => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-base font-black text-slate-950">{title}</h2>
-          <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-xs font-black" onClick={onCancel}>Close</Button>
+          <h2 id="master-admin-modal-title" className="text-base font-black text-slate-950">{title}</h2>
+          <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-xs font-black" onClick={onCancel} aria-label="Close dialog">Close</Button>
         </div>
         <div className="space-y-4">{children}</div>
       </section>
