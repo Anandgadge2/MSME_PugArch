@@ -1171,9 +1171,11 @@ const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketpl
         orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
         select: {
             id: true,
+            parentId: true,
             name: true,
             slug: true,
             type: true,
+            description: true,
             displayOrder: true,
             imageUrl: true,
             _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
@@ -1181,10 +1183,12 @@ const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketpl
     }).catch(() => []);
     return (categories || []).map((category: any) => ({
         id: category.id,
+        parentId: category.parentId || null,
         name: category.name,
         slug: category.slug,
         icon: category.slug,
         imageUrl: category.imageUrl || null,
+        description: category.description || null,
         type: category.type,
         productCount: category._count?.products || 0,
         serviceCount: category._count?.services || 0,
