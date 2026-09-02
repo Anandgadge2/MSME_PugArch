@@ -16,6 +16,7 @@ export interface MarketplaceBanner {
 
 export interface MarketplaceCategory {
     id: number;
+    parentId?: number | null;
     name: string;
     slug: string;
     type: string;

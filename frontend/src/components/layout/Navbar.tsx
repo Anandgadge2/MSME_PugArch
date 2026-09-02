@@ -58,6 +58,7 @@ import {
 import { cn } from '../../lib/utils';
 import { routeForNotification, type PortalNotification } from '../../lib/notifications';
 import { isShgUser, getSellerPortalPath } from '../../lib/shg';
+import { useMarketplaceCart } from '../../features/marketplace/hooks/useMarketplaceCart';
 
 interface SidebarItem {
   label: string;
@@ -110,6 +111,7 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/seller/delivery': () => import('../../views/ParcelTracking'),
   '/seller/delivery-management': () => import('../../features/sellerDelivery/pages/SellerDeliveryManagementPage'),
   '/seller/ratings': () => import('../../features/ratings/pages/RatingsPage'),
+  '/buyer/sellers': () => import('../../views/Vendors'),
   '/buyer/vendors': () => import('../../views/Vendors'),
   '/buyer/saved-suppliers': () => import('../../features/marketplace/pages/SavedSuppliersPage'),
   '/buyer/messages': () => import('../../features/messages/pages/MessagesPage'),
@@ -561,7 +563,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     ] },
     // Buyer Suppliers
     { label: 'Suppliers', icon: Users, roles: ['buyer'], children: [
-      { label: 'Supplier Directory', path: '/buyer/vendors', icon: Users, roles: ['buyer'], permission: 'vendor.view' },
+      { label: 'Supplier Directory', path: '/buyer/sellers', icon: Users, roles: ['buyer'], permission: 'vendor.view' },
       { label: 'Saved Suppliers', path: '/buyer/saved-suppliers', icon: CheckCircle2, roles: ['buyer'], permission: 'vendor.view' },
       { label: 'Messages', path: '/buyer/messages', icon: MessageSquare, roles: ['buyer'], permission: 'vendor.view' }
     ] },
@@ -811,6 +813,7 @@ interface HeaderProps {
 
 export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: HeaderProps) {
   const { user, token: authToken, logout, login } = useAuth();
+  const { count: cartCount } = useMarketplaceCart();
   const { orgStatus } = useOrgRole();
   const orgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
   const pathname = usePathname();

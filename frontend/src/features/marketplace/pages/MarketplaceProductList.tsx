@@ -522,10 +522,13 @@ export default function MarketplaceProductList() {
     };
 
     const cacheAndTrackItem = (item: any) => {
-        queryClient.setQueryData(
-            [isServices ? 'marketplaceService' : 'marketplaceProduct', item.id],
-            isServices ? { service: item } : { product: item }
-        );
+        if (item.id && Number(item.id) > 0) {
+            void queryClient.prefetchQuery({
+                queryKey: [isServices ? 'marketplaceService' : 'marketplaceProduct', Number(item.id)],
+                queryFn: () => isServices ? marketplaceApi.getServiceDetail(Number(item.id)) : marketplaceApi.getProductDetail(Number(item.id)),
+                staleTime: 60 * 1000,
+            });
+        }
         marketplaceApi.trackInteraction({
             itemId: item.id,
             itemType: isServices ? 'SERVICE' : 'PRODUCT',
@@ -576,6 +579,28 @@ export default function MarketplaceProductList() {
         });
         return Array.from(set);
     }, [items]);
+
+    // Extract unique locations (districts / cities / states) dynamically from portal items
+    const availableLocations = useMemo(() => {
+        const set = new Set<string>();
+        items.forEach((item: any) => {
+            const district = item.organization?.district || item.district;
+            const city = item.organization?.city || item.city;
+            const state = item.organization?.state || item.state;
+            const loc = item.location;
+            if (district && typeof district === 'string' && district.trim()) {
+                set.add(district.trim());
+            } else if (city && typeof city === 'string' && city.trim()) {
+                set.add(city.trim());
+            } else if (loc && typeof loc === 'string' && loc.trim()) {
+                const parts = loc.split(',').map((s: string) => s.trim()).filter(Boolean);
+                if (parts[0]) set.add(parts[0]);
+            } else if (state && typeof state === 'string' && state.trim()) {
+                set.add(state.trim());
+            }
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }, [items]);
     // Category-specific subcategories mapping
     const availableSubcategories = useMemo(() => {
         const subMap: Record<string, string[]> = {
@@ -610,27 +635,44 @@ export default function MarketplaceProductList() {
             <main className="flex-1">
                 {/* Breadcrumb */}
                 <div className="bg-white border-b border-slate-200">
-                    <div className="max-w-[1680px] mx-auto px-4 sm:px-6 2xl:px-8 py-3 flex items-center gap-2 text-xs font-semibold text-slate-500">
-                        <Link href="/" className="hover:text-[#0b2447] transition">Home</Link>
-                        <ChevronRight className="h-3 w-3" />
-                        <Link href="/marketplace/products" className="hover:text-[#0b2447] transition">{isServices ? 'Services' : 'Products'}</Link>
-                        {searchQuery && (
-                            <>
-                                <ChevronRight className="h-3 w-3" />
-                                <span className="text-[#0b2447] font-black">Search: "{searchQuery}"</span>
-                            </>
-                        )}
-                        {selectedCategoryIds.length === 1 && activeCategory && (
-                            <>
-                                <ChevronRight className="h-3 w-3" />
-                                <span className="text-[#0b2447] font-black">{activeCategory.name}</span>
-                            </>
-                        )}
-                        {selectedCategoryIds.length > 1 && (
-                            <>
-                                <ChevronRight className="h-3 w-3" />
-                                <span className="text-[#0b2447] font-black">{selectedCategoryIds.length} Categories Selected</span>
-                            </>
+                    <div className="max-w-[1680px] mx-auto px-4 sm:px-6 2xl:px-8 py-3 flex items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            <Link href="/" className="hover:text-[#0b2447] transition">Home</Link>
+                            <ChevronRight className="h-3 w-3" />
+                            <Link href="/marketplace/products" className="hover:text-[#0b2447] transition">{isServices ? 'Services' : 'Products'}</Link>
+                            {searchQuery && (
+                                <>
+                                    <ChevronRight className="h-3 w-3" />
+                                    <span className="text-[#0b2447] font-black">Search: "{searchQuery}"</span>
+                                </>
+                            )}
+                            {selectedCategoryIds.length === 1 && activeCategory && (
+                                <>
+                                    <ChevronRight className="h-3 w-3" />
+                                    <span className="text-[#0b2447] font-black">{activeCategory.name}</span>
+                                </>
+                            )}
+                            {selectedCategoryIds.length > 1 && (
+                                <>
+                                    <ChevronRight className="h-3 w-3" />
+                                    <span className="text-[#0b2447] font-black">{selectedCategoryIds.length} Categories Selected</span>
+                                </>
+                            )}
+                        </div>
+                        {user?.role === 'buyer' && (
+                            <Link
+                                href="/cart"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-[#0b2447] transition shadow-2xs shrink-0 cursor-pointer"
+                                title="View Shopping Cart"
+                            >
+                                <ShoppingCart className="h-4 w-4 text-[#0b2447]" />
+                                <span className="hidden sm:inline">Cart</span>
+                                {cartItems.length > 0 && (
+                                    <span className="flex items-center justify-center min-w-[18px] h-4.5 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-black leading-none">
+                                        {cartItems.length}
+                                    </span>
+                                )}
+                            </Link>
                         )}
                     </div>
                 </div>
@@ -810,6 +852,7 @@ export default function MarketplaceProductList() {
                                     setPage(1);
                                     syncUrl({ district: dist, page: 1 });
                                 }}
+                                availableLocations={availableLocations}
                                 discountFilter={discountFilter}
                                 onDiscountToggle={(active) => {
                                     const next = active ? 'active' : '';
@@ -936,6 +979,7 @@ export default function MarketplaceProductList() {
                                                 setPage(1);
                                                 syncUrl({ district: dist, page: 1 });
                                             }}
+                                            availableLocations={availableLocations}
                                             discountFilter={discountFilter}
                                             onDiscountToggle={(active) => {
                                                 const next = active ? 'active' : '';

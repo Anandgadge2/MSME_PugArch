@@ -3,7 +3,7 @@ import { Button } from '../../components/ui/button';
 
 export function LoadingState({ label = 'Loading records...' }: { label?: string }) {
   return (
-    <div className="space-y-4 animate-in fade-in duration-200">
+    <div className="w-full max-w-7xl mx-auto space-y-4 animate-in fade-in duration-200">
       {/* Page heading skeleton */}
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
         <div className="space-y-2">

@@ -44,7 +44,7 @@ interface Vendor {
 
 const Vendors = () => {
   const authOptions = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
-  const cachedVendors = api.peek('/api/vendors', authOptions);
+  const cachedVendors = api.peek('/api/sellers', authOptions);
   const [vendors, setVendors] = useState<Vendor[]>(cachedVendors || []);
   const [loading, setLoading] = useState(!cachedVendors);
   const [searchTerm, setSearchTerm] = useState('');
@@ -150,7 +150,7 @@ const Vendors = () => {
     let ignore = false;
     async function loadVendors() {
       try {
-        const res = await api.get('/api/vendors', authOptions);
+        const res = await api.get('/api/sellers', authOptions);
         if (res.ok) {
           const data = await res.json();
           if (!ignore) setVendors(data);
@@ -189,7 +189,7 @@ const Vendors = () => {
     pulseVendorAction(vendor, 'info');
     setFetchingDetails(true);
     try {
-      const res = await api.get(`/api/vendors/${vendor.id || vendor._id}`, {
+      const res = await api.get(`/api/sellers/${vendor.id || vendor._id}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       if (res.ok) {

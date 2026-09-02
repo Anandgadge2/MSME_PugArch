@@ -294,13 +294,6 @@ export function BuyerRequirementsList({
     };
 
     const handleViewDetails = (req: BuyerRequirement) => {
-        const sourceId = req?.sourceId || (req?.id ? Math.abs(req.id) : null);
-        if (sourceId) {
-            queryClient.setQueryData(['marketplaceRequirementDetail', String(sourceId)], (existing: any) => {
-                if (existing) return existing;
-                return { requirement: req, similarRequirements: [], ownResponse: null };
-            });
-        }
         router.push(getRequirementHref(req));
     };
 

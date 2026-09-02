@@ -74,14 +74,14 @@ function BuyerLogoImage({
                 src={logo}
                 alt={`${name} logo`}
                 onError={() => setImgError(true)}
-                className="w-full h-full object-contain rounded-full transition-transform duration-300 group-hover:scale-105"
+                className="max-h-full max-w-[92%] object-contain drop-shadow-2xs transition-transform duration-300 group-hover:scale-108"
                 loading="lazy"
             />
         );
     }
 
     return (
-        <span className={`flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br font-black tracking-wider text-white shadow-xs ${initialsBg}`}>
+        <span className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br font-black text-base tracking-wider text-white shadow-xs ${initialsBg}`}>
             {orgInitials}
         </span>
     );
@@ -90,7 +90,7 @@ function BuyerLogoImage({
 function BuyersSkeleton({ viewMode }: { viewMode: 'grid' | 'list' }) {
     if (viewMode === 'list') {
         return (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-2xs">
                 <table className="w-full text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50">
                         <tr>
@@ -107,7 +107,7 @@ function BuyersSkeleton({ viewMode }: { viewMode: 'grid' | 'list' }) {
                             <tr key={idx}>
                                 <td className="px-4 py-3 sm:px-6">
                                     <div className="flex items-center gap-3">
-                                        <Skeleton className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl shrink-0" />
+                                        <Skeleton className="h-12 w-24 rounded-xl shrink-0" />
                                         <Skeleton className="h-4 w-40" />
                                     </div>
                                 </td>
@@ -125,21 +125,21 @@ function BuyersSkeleton({ viewMode }: { viewMode: 'grid' | 'list' }) {
     }
 
     return (
-        <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-4 sm:gap-4.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, idx) => (
-                <div key={idx} className="rounded-3xl border border-slate-100 bg-white p-5 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] flex flex-col justify-between space-y-4">
+                <div key={idx} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex flex-col justify-between space-y-3">
                     <div className="flex items-center justify-between">
-                        <Skeleton className="h-4 w-16 rounded-full" />
+                        <Skeleton className="h-4 w-16 rounded-md" />
                         <Skeleton className="h-4 w-16 rounded-full" />
                     </div>
-                    <div className="flex flex-col items-center space-y-2.5 py-1">
-                        <Skeleton className="h-24 w-24 sm:h-26 sm:w-26 rounded-full" />
-                        <Skeleton className="h-4 w-36 mt-2 rounded-full" />
-                        <Skeleton className="h-3 w-24 rounded-full" />
+                    <Skeleton className="h-24 w-full rounded-2xl" />
+                    <div className="space-y-1.5">
+                        <Skeleton className="h-4 w-3/4 rounded" />
+                        <Skeleton className="h-3 w-1/2 rounded" />
                     </div>
-                    <div className="border-t border-slate-100/80 pt-3 flex items-center justify-between">
-                        <Skeleton className="h-5 w-16 rounded-full" />
-                        <Skeleton className="h-8.5 w-24 rounded-full" />
+                    <div className="border-t border-slate-100 pt-2.5 flex items-center justify-between">
+                        <Skeleton className="h-5 w-16 rounded-md" />
+                        <Skeleton className="h-7.5 w-24 rounded-lg" />
                     </div>
                 </div>
             ))}
@@ -352,7 +352,7 @@ export default function MarketplaceBuyersPage() {
                 ) : (
                     <div className="space-y-6">
                         {viewMode === 'list' ? (
-                            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
+                            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-2xs">
                                 <table className="w-full text-left text-sm">
                                     <thead className="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
                                         <tr>
@@ -375,11 +375,11 @@ export default function MarketplaceBuyersPage() {
                                             const profileHref = `/buyer-requirements/${buyer.id}`;
 
                                             return (
-                                                <tr key={buyer.id} className="hover:bg-slate-50/80 transition-colors group">
+                                                <tr key={buyer.id} className="hover:bg-blue-50/40 transition-colors group">
                                                     <td className="px-4 py-3 sm:px-6">
                                                         <div className="flex items-center gap-3.5">
                                                             <Link href={profileHref} className="shrink-0">
-                                                                <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs p-1 group-hover:border-[#0b2447] group-hover:shadow-sm transition-all">
+                                                                <div className="flex h-14 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-2 group-hover:border-[#0b2447] group-hover:shadow-xs transition-all">
                                                                     <BuyerLogoImage
                                                                         logo={logo}
                                                                         name={buyer.organizationName}
@@ -417,7 +417,7 @@ export default function MarketplaceBuyersPage() {
                                                     <td className="px-4 py-3 sm:px-6 text-right whitespace-nowrap">
                                                         <Link
                                                             href={profileHref}
-                                                            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-[#0b2447] hover:border-blue-200 active:scale-95"
+                                                            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3.5 py-1.5 text-xs font-bold text-slate-700 shadow-xs transition-all hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] active:scale-95"
                                                         >
                                                             <Eye className="h-3.5 w-3.5" /> View
                                                         </Link>
@@ -429,7 +429,7 @@ export default function MarketplaceBuyersPage() {
                                 </table>
                             </div>
                         ) : (
-                            <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            <div className="grid gap-4 sm:gap-4.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                                 {pagedBuyers.map((buyer: any) => {
                                     const profile = buyer.profile || {};
                                     const location = Array.from(new Set([buyer.city, buyer.district, buyer.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
@@ -442,25 +442,21 @@ export default function MarketplaceBuyersPage() {
                                     return (
                                         <article
                                             key={buyer.id}
-                                            className="group relative flex flex-col justify-between rounded-3xl border border-slate-100 bg-gradient-to-b from-white via-white to-slate-50/40 p-5 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_16px_36px_-6px_rgba(11,36,71,0.1)] hover:border-blue-200/80 transition-all duration-400 ease-out hover:-translate-y-1.5 overflow-hidden"
+                                            className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-xs hover:shadow-[0_14px_32px_-6px_rgba(11,36,71,0.12)] hover:border-blue-300 transition-all duration-300 hover:-translate-y-1 overflow-hidden"
                                         >
-                                            {/* Soft subtle ambient background glow */}
-                                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-36 h-36 bg-blue-400/5 rounded-full blur-2xl pointer-events-none group-hover:bg-blue-500/10 transition-colors duration-500" />
-
                                             {/* Top Bar: Badges */}
-                                            <div className="relative flex items-center justify-between gap-2 z-10">
-                                                <span className="inline-flex items-center rounded-full bg-slate-100/80 px-2.5 py-0.5 text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                            <div className="flex items-center justify-between gap-2 mb-2.5">
+                                                <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 uppercase tracking-wider truncate max-w-[140px]">
                                                     {buyer.organizationType ? String(buyer.organizationType).replace(/_/g, ' ') : 'BUYER'}
                                                 </span>
-                                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 text-[10px] font-bold text-emerald-700 shrink-0">
                                                     <BadgeCheck className="h-3 w-3 text-emerald-500" /> Verified
                                                 </span>
                                             </div>
 
-                                            {/* Main Content: Big Logo + Title + Location */}
-                                            <Link href={profileHref} className="relative flex flex-col items-center text-center my-3 z-10">
-                                                {/* Smooth Floating Circular Logo Disc */}
-                                                <div className="relative flex h-24 w-24 sm:h-26 sm:w-26 shrink-0 items-center justify-center rounded-full bg-white shadow-[0_6px_20px_rgba(0,0,0,0.06)] ring-4 ring-slate-50/90 transition-all duration-400 ease-out group-hover:scale-105 group-hover:ring-blue-100/90 group-hover:shadow-[0_10px_25px_rgba(11,36,71,0.12)] p-3">
+                                            {/* Organization Logo Canvas: Wide, prominent, crystal-clear */}
+                                            <Link href={profileHref} className="block mb-3">
+                                                <div className="flex h-24 sm:h-26 w-full items-center justify-center rounded-2xl bg-gradient-to-b from-slate-50/90 to-slate-100/40 border border-slate-200/70 p-3 transition-all duration-300 group-hover:bg-white group-hover:border-blue-300 group-hover:shadow-xs">
                                                     <BuyerLogoImage
                                                         logo={logo}
                                                         name={buyer.organizationName}
@@ -468,28 +464,32 @@ export default function MarketplaceBuyersPage() {
                                                         initialsBg={initialsBg}
                                                     />
                                                 </div>
-
-                                                {/* Org Name */}
-                                                <h3 title={buyer.organizationName} className="mt-3 text-sm sm:text-base font-extrabold text-[#0b2447] group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug px-1">
-                                                    {buyer.organizationName}
-                                                </h3>
-
-                                                {/* Location */}
-                                                <p className="mt-1 flex items-center justify-center gap-1 text-xs font-medium text-slate-500 px-1">
-                                                    <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                    <span title={location || 'Jharsuguda, Odisha'} className="line-clamp-1">{location || 'Jharsuguda, Odisha'}</span>
-                                                </p>
                                             </Link>
 
+                                            {/* Org Name & Location */}
+                                            <div className="mb-3 space-y-0.5">
+                                                <Link href={profileHref}>
+                                                    <h3 title={buyer.organizationName} className="text-sm font-bold text-[#0b2447] group-hover:text-blue-600 transition-colors line-clamp-1 leading-snug">
+                                                        {buyer.organizationName}
+                                                    </h3>
+                                                </Link>
+                                                <p className="flex items-center gap-1 text-xs text-slate-500">
+                                                    <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                    <span title={location || 'Jharsuguda, Odisha'} className="line-clamp-1 truncate">
+                                                        {location || 'Jharsuguda, Odisha'}
+                                                    </span>
+                                                </p>
+                                            </div>
+
                                             {/* Bottom Row: Requirements Count & Action */}
-                                            <div className="relative pt-3 border-t border-slate-100/80 flex items-center justify-between gap-2 z-10">
-                                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50/80 px-2.5 py-1 text-[11px] font-bold text-[#0b2447]">
+                                            <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                                                <span className="inline-flex items-center gap-1 rounded-md bg-blue-50/80 px-2 py-0.5 text-[11px] font-bold text-[#0b2447]">
                                                     <span>{requirements}</span>
-                                                    <span className="text-slate-500 font-medium">Req{requirements === 1 ? '' : 's'}</span>
+                                                    <span className="text-slate-500 font-normal">Req{requirements === 1 ? '' : 's'}</span>
                                                 </span>
                                                 <Link
                                                     href={profileHref}
-                                                    className="inline-flex h-8.5 items-center justify-center gap-1.5 rounded-full bg-[#0b2447] px-4 text-xs font-bold text-white shadow-xs transition-all duration-300 hover:bg-[#12335f] hover:shadow-md hover:scale-[1.02] active:scale-95 shrink-0"
+                                                    className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-[#0b2447] px-3.5 text-xs font-bold text-white shadow-xs transition-all duration-200 hover:bg-[#12335f] hover:shadow-sm active:scale-95 shrink-0"
                                                 >
                                                     <Eye className="h-3.5 w-3.5" />
                                                     <span>View Profile</span>
@@ -517,3 +517,4 @@ export default function MarketplaceBuyersPage() {
         </div>
     );
 }
+

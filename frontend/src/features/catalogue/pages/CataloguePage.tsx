@@ -589,7 +589,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
     setSellerLoading(true);
     setSelectedSeller({ id: sellerId, name: seller?.name, email: seller?.email });
     try {
-      const profile = await getApi(`/api/vendors/${sellerId}`);
+      const profile = await getApi(`/api/sellers/${sellerId}`);
       setSelectedSeller(profile);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to open seller profile');

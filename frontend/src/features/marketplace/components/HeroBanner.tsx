@@ -2,17 +2,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight, TrendingUp, ShieldCheck, Sparkles } from 'lucide-react';
 import type { MarketplaceBanner } from '../api';
 import { DEFAULT_MARKETPLACE_BANNERS } from '../../banners/defaultBanners';
 import { BASE_URL, resolveMediaUrl } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 
 const DEFAULT_IMAGES = [
-    'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1920&q=90&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1920&q=90&auto=format&fit=crop',
+    'https://6a97e5bed601bb7bf57afe46.imgix.net/equalstock-Cz6pZG0uNCI-unsplash.jpg?w=1920&q=90&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=1920&q=90&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1565043666747-69f6646db940?w=1920&q=90&auto=format&fit=crop',
+    'https://6a97e5bed601bb7bf57afe46.imgix.net/tommao-wang-jr1DdTyU7eA-unsplash%20(1).jpg?utm_source=unsplash&utm_medium=referral&utm_content=creditShareLink',
 ];
 
 interface Props { banners: MarketplaceBanner[]; }
@@ -111,7 +111,7 @@ export function HeroBanner({ banners }: Props) {
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
         >
-            {/* Background image — Vibrant, rich 100% full coverage with natural proportions */}
+            {/* Background image with smooth transition */}
             <div className="absolute inset-0 z-0 overflow-hidden bg-slate-900 select-none pointer-events-none">
                 {activeImageSrc ? (
                     <img
@@ -128,27 +128,31 @@ export function HeroBanner({ banners }: Props) {
                     />
                 ) : null}
 
-                {/* Multi-layered responsive contrast overlay: Keeps text readable on the left while leaving the center/right graphics & photos 100% visible */}
+                {/* Multi-layered responsive contrast overlay */}
                 <div className="absolute inset-0 bg-slate-950/40 sm:bg-slate-950/20" />
                 <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/75 via-45% to-transparent sm:w-[75%] lg:w-[58%]" />
                 <div className="absolute inset-x-0 bottom-0 h-16 sm:h-24 bg-gradient-to-t from-slate-950/70 to-transparent" />
+                
+                {/* Ambient glowing light pulses */}
+                <div className="absolute top-1/4 left-10 w-96 h-96 rounded-full bg-blue-500/10 blur-3xl animate-pulse pointer-events-none" style={{ animationDuration: '6s' }} />
+                <div className="absolute bottom-10 left-1/3 w-80 h-80 rounded-full bg-[#c8a45c]/10 blur-3xl animate-pulse pointer-events-none" style={{ animationDuration: '8s' }} />
             </div>
 
-            {/* Side Navigation Arrow - Left (Desktop & Tablet only: prevented from covering text on mobile) */}
+            {/* Side Navigation Arrow - Left */}
             <button
                 type="button"
                 onClick={prev}
-                className="hidden md:flex absolute left-3 lg:left-6 top-1/2 -translate-y-1/2 z-30 h-9 w-9 lg:h-11 lg:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-white/60 hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-0 group-hover/hero:opacity-100 focus:opacity-100"
+                className="hidden md:flex absolute left-3 lg:left-6 top-1/2 -translate-y-1/2 z-30 h-9 w-9 lg:h-11 lg:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-[#c8a45c] hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-0 group-hover/hero:opacity-100 focus:opacity-100"
                 aria-label="Previous Banner Slide"
             >
                 <ChevronLeft className="h-4 w-4 lg:h-5 lg:w-5 transition-transform duration-200 group-hover/arrow:-translate-x-0.5" />
             </button>
 
-            {/* Side Navigation Arrow - Right (Desktop & Tablet only: prevented from covering text on mobile) */}
+            {/* Side Navigation Arrow - Right */}
             <button
                 type="button"
                 onClick={next}
-                className="hidden md:flex absolute right-3 lg:right-6 top-1/2 -translate-y-1/2 z-30 h-9 w-9 lg:h-11 lg:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-white/60 hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-0 group-hover/hero:opacity-100 focus:opacity-100"
+                className="hidden md:flex absolute right-3 lg:right-6 top-1/2 -translate-y-1/2 z-30 h-9 w-9 lg:h-11 lg:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-[#c8a45c] hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-0 group-hover/hero:opacity-100 focus:opacity-100"
                 aria-label="Next Banner Slide"
             >
                 <ChevronRight className="h-4 w-4 lg:h-5 lg:w-5 transition-transform duration-200 group-hover/arrow:translate-x-0.5" />
@@ -157,30 +161,28 @@ export function HeroBanner({ banners }: Props) {
             {/* Hero Main Content Container */}
             <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-6 sm:py-10 md:py-12 pb-10 sm:pb-14 lg:pb-16">
                 
-                {/* FLOATING CTA OVERLAY (Top Right across Mobile & Desktop) */}
-                <div className="absolute top-3 right-3 sm:top-5 sm:right-6 lg:top-6 lg:right-8 z-30 flex flex-row items-center gap-2 sm:gap-2.5 pointer-events-auto">
+                {/* FLOATING CTA OVERLAY (Top Right) */}
+                <div className="absolute top-2 right-2 sm:top-5 sm:right-6 lg:top-6 lg:right-8 z-30 flex flex-row items-center gap-2 sm:gap-2.5 pointer-events-auto">
                     <button 
                         onClick={handlePostRequirement} 
-                        className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full border border-white/40 bg-black/45 backdrop-blur-md text-white text-[11px] sm:text-xs lg:text-sm font-bold hover:bg-white/20 active:scale-95 transition-all shadow-lg"
+                        className="group inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full border border-white/40 bg-black/50 backdrop-blur-md text-white text-[11px] sm:text-xs lg:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/70 active:scale-95 transition-all shadow-lg"
                     >
-                        Post Requirement
+                        <span>Post Requirement</span>
                     </button>
                     <button 
                         onClick={handleStartSelling} 
-                        className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] sm:text-xs lg:text-sm font-black active:scale-95 transition-all shadow-xl shadow-black/30"
+                        className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] sm:text-xs lg:text-sm font-black active:scale-95 transition-all shadow-xl shadow-black/30 hover:shadow-[0_0_20px_rgba(200,164,92,0.4)]"
                     >
-                        Start Selling
+                        {/* Shimmer light sweep */}
+                        <span className="absolute inset-0 -translate-x-full hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/30 to-transparent pointer-events-none" />
+                        <span>Start Selling</span>
                     </button>
                 </div>
 
                 <div className="w-full max-w-xl lg:max-w-2xl">
                     <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
-                        {/* Official Trust Pill Badge */}
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-black/60 border border-emerald-400/50 text-[9px] sm:text-xs font-bold text-emerald-300 uppercase tracking-wider mb-2 sm:mb-3 backdrop-blur-md shadow-md">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                            <span className="sm:hidden">Official MSME Portal · Jharsuguda</span>
-                            <span className="hidden sm:inline">Official MSME Marketplace · Jharsuguda District, Odisha</span>
-                        </div>
+                        
+                     
 
                         {/* Title */}
                         <h1 className="mb-2 sm:mb-3 text-lg xs:text-xl sm:text-3xl md:text-4xl lg:text-[2.75rem] 2xl:text-5xl font-black leading-tight sm:leading-[1.12] tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
@@ -204,22 +206,23 @@ export function HeroBanner({ banners }: Props) {
                             </p>
                         )}
 
-                        {/* Responsive Action Buttons (Primary CTA + Login to Portal) */}
+                        {/* Responsive Action Buttons */}
                         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                             {ctaText && ctaLink && (
                                 <Link
                                     href={ctaLink}
                                     onClick={(e) => handleCtaClick(e, ctaLink)}
-                                    className="group inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-4 sm:px-6 rounded-full bg-white text-[#0b2447] text-[11px] sm:text-xs md:text-sm font-black hover:bg-slate-100 active:scale-95 transition-all shadow-xl shadow-black/40 shrink-0"
+                                    className="group relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-4 sm:px-6 rounded-full bg-white text-[#0b2447] text-[11px] sm:text-xs md:text-sm font-black hover:bg-slate-100 active:scale-95 transition-all shadow-xl shadow-black/40 hover:shadow-[0_0_25px_rgba(200,164,92,0.4)] shrink-0"
                                 >
+                                    <span className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/20 to-transparent pointer-events-none" />
                                     <span>{ctaText}</span>
-                                    <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                                    <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 group-hover:translate-x-1 text-[#c8a45c]" />
                                 </Link>
                             )}
 
                             <Link
                                 href="/login"
-                                className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-3.5 sm:px-5 rounded-full border border-white/40 bg-black/35 backdrop-blur-md text-white text-[11px] sm:text-xs md:text-sm font-bold hover:bg-white/20 active:scale-95 transition-all shadow-lg shrink-0"
+                                className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-3.5 sm:px-5 rounded-full border border-white/40 bg-black/40 backdrop-blur-md text-white text-[11px] sm:text-xs md:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/60 active:scale-95 transition-all shadow-lg shrink-0"
                             >
                                 Login to Portal
                             </Link>
@@ -228,7 +231,7 @@ export function HeroBanner({ banners }: Props) {
                 </div>
             </div>
 
-            {/* Transparent Floating Carousel Dots Indicator */}
+            {/* Floating Carousel Dots Indicator */}
             <div className="absolute bottom-2.5 sm:bottom-4 md:bottom-5 left-0 right-0 flex items-center justify-center z-20 pointer-events-auto">
                 <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:py-1 rounded-full bg-black/30 backdrop-blur-xs border border-white/15">
                     {slides.map((_, i) => (
@@ -237,7 +240,7 @@ export function HeroBanner({ banners }: Props) {
                             onClick={() => goTo(i)}
                             className={`rounded-full transition-all duration-300 focus:outline-none ${
                                 i === current
-                                    ? 'w-5 sm:w-7 h-1.5 bg-white shadow-[0_0_8px_rgba(255,255,255,0.9),0_2px_4px_rgba(0,0,0,0.8)]'
+                                    ? 'w-5 sm:w-7 h-1.5 bg-[#c8a45c] shadow-[0_0_10px_rgba(200,164,92,0.9)]'
                                     : 'w-1.5 h-1.5 bg-white/45 hover:bg-white/90 hover:scale-125 shadow-[0_1px_3px_rgba(0,0,0,0.8)]'
                             }`}
                             aria-label={`Go to slide ${i + 1}`}
@@ -254,19 +257,16 @@ export function HeroBanner({ banners }: Props) {
                     viewBox="0 0 1440 80"
                     preserveAspectRatio="none"
                 >
-                    {/* Layer 1 - Soft accent wave */}
                     <path
                         d="M0,30 C320,65 520,5 840,40 C1080,68 1280,20 1440,35 L1440,80 L0,80 Z"
                         fill="currentColor"
                         opacity="0.35"
                     />
-                    {/* Layer 2 - Flowing mid wave */}
                     <path
                         d="M0,45 C280,18 560,60 860,30 C1160,5 1320,50 1440,40 L1440,80 L0,80 Z"
                         fill="currentColor"
                         opacity="0.55"
                     />
-                    {/* Layer 3 - Main crisp organic curve */}
                     <path
                         d="M0,52 C240,75 480,25 720,56 C960,82 1200,35 1440,58 L1440,80 L0,80 Z"
                         fill="currentColor"

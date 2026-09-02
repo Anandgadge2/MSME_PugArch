@@ -97,6 +97,7 @@ const footerGroups = [
     links: [
       ['Browse Products', '/marketplace/products'],
       ['Browse Services', '/marketplace/services'],
+      ['Platform Benefits', '/marketplace/benefits'],
       ['Verified Sellers', '/marketplace/sellers'],
       ['Open Bids', '/marketplace'],
       ['Public Tenders', '/tenders'],
@@ -200,6 +201,7 @@ const sitemapGroups = [
       ['Marketplace Home', '/'],
       ['Products', '/marketplace/products'],
       ['Services', '/marketplace/services'],
+      ['Platform Benefits', '/marketplace/benefits'],
       ['Verified Sellers', '/marketplace/sellers'],
       ['Open Bids', '/marketplace'],
       ['Tenders', '/tenders'],

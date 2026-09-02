@@ -19,6 +19,8 @@ import { getMarketplaceImageCandidates, resolveMarketplaceImage } from '../utils
 import { saveSupplier } from '../utils/savedSuppliers';
 import { formatCatalogueDate } from '../../catalogue/utils/catalogueDetailUtils';
 import { useQuery as useTanstackQuery } from '@tanstack/react-query';
+import { CompareToggleButton } from '../components/CompareToggleButton';
+import { CompareTray } from '../components/CompareTray';
 
 const pricingLabels: Record<string, string> = {
     FIXED: 'Fixed Price',
@@ -102,8 +104,8 @@ export default function MarketplaceServiceDetail() {
             return res as { service: MarketplaceService; relatedServices?: MarketplaceService[] };
         },
         enabled: serviceId > 0,
-        staleTime: 5 * 1000,
-        refetchOnMount: true,
+        staleTime: 30 * 1000,
+        refetchOnMount: 'always',
     });
 
     const service = (detailData as any)?.service || (detailData as any);
@@ -306,6 +308,21 @@ export default function MarketplaceServiceDetail() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                            {user?.role === 'buyer' && (
+                                <Link
+                                    href="/cart"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-[#0b2447] transition shadow-2xs cursor-pointer"
+                                    title="View Shopping Cart"
+                                >
+                                    <ShoppingCart className="h-3.5 w-3.5 text-[#0b2447]" />
+                                    <span>Cart</span>
+                                    {cartItems.length > 0 && (
+                                        <span className="flex items-center justify-center min-w-[18px] h-4.5 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-black leading-none">
+                                            {cartItems.length}
+                                        </span>
+                                    )}
+                                </Link>
+                            )}
                             <button
                                 onClick={handleShare}
                                 className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 font-semibold text-xs hover:bg-slate-50 hover:text-[#0b2447] transition shadow-2xs cursor-pointer"
@@ -327,9 +344,21 @@ export default function MarketplaceServiceDetail() {
                             <ArrowLeft className="h-3.5 w-3.5" /> Back
                         </button>
                         <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                <Award className="h-3 w-3" /> Certified MSME Service
-                            </span>
+                            {user?.role === 'buyer' && (
+                                <Link
+                                    href="/cart"
+                                    className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-[#0b2447] bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs hover:shadow-xs transition cursor-pointer"
+                                    title="View Shopping Cart"
+                                >
+                                    <ShoppingCart className="h-3.5 w-3.5 text-[#0b2447]" />
+                                    <span>Cart</span>
+                                    {cartItems.length > 0 && (
+                                        <span className="flex items-center justify-center min-w-[18px] h-4.5 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-black leading-none">
+                                            {cartItems.length}
+                                        </span>
+                                    )}
+                                </Link>
+                            )}
                             {isVerified && (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
                                     <BadgeCheck className="h-3 w-3" /> Verified Provider
@@ -717,13 +746,17 @@ export default function MarketplaceServiceDetail() {
                                     </div>
 
                                     {/* Utility Actions */}
-                                    <div className="pt-2 border-t border-slate-100">
+                                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                                        <CompareToggleButton
+                                            item={{ type: 'service', id: service.id, categoryId: service.category?.id }}
+                                            className="h-8 w-full rounded-lg border-slate-200 text-slate-700 text-[11px] font-bold"
+                                        />
                                         <button
                                             type="button"
                                             onClick={handleSaveSupplier}
                                             className="h-8 w-full inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white text-slate-700 text-[11px] font-bold hover:bg-slate-50 transition cursor-pointer"
                                         >
-                                            <BookmarkPlus className="h-3.5 w-3.5 text-[#0b2447]" /> Save Provider Profile
+                                            <BookmarkPlus className="h-3.5 w-3.5 text-[#0b2447]" /> Save Provider
                                         </button>
                                     </div>
                                 </div>
@@ -840,6 +873,7 @@ export default function MarketplaceServiceDetail() {
             )}
 
             {!useDashboardShell && <MarketplaceFooter />}
+            <CompareTray />
         </div>
     );
 }

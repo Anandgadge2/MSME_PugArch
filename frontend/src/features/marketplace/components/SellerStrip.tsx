@@ -95,10 +95,10 @@ export function SellerStrip({ sellers }: Props) {
 
     return (
         <section id="verified-sellers" className="mt-0 border-b border-slate-100 bg-white scroll-mt-16" aria-labelledby="seller-strip-heading">
-            <div className="mx-auto max-w-[1680px] px-4 pt-5 pb-8 sm:px-6 sm:pt-6 sm:pb-10 2xl:px-8">
+            <div className="mx-auto max-w-[1680px] px-4 pt-3 pb-6 sm:px-6 sm:pt-4 sm:pb-8 2xl:px-8">
                 <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                     <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6a2f]">Trusted Partners</p>
+                       
                         <h2 id="seller-strip-heading" className="mt-1 text-xl font-black text-[#0b2447] sm:text-2xl">Verified Seller Organizations</h2>
                         <p className="mt-1 max-w-2xl text-sm font-medium text-slate-600">Scrollable vendor row of trusted MSMEs with verified GST &amp; Udyam</p>
                     </div>
@@ -136,7 +136,7 @@ export function SellerStrip({ sellers }: Props) {
                                 return (
                                     <Link
                                         key={seller.id}
-                                        href={`/vendors/${seller.id}`}
+                                        href={`/marketplace/sellers/${seller.id}`}
                                         className="group flex flex-col items-center gap-2.5 w-[125px] sm:w-[145px] shrink-0 text-center cursor-pointer transition-transform duration-200"
                                         role="listitem"
                                     >

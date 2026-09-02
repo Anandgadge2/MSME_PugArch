@@ -5163,7 +5163,7 @@ app.post('/api/admin/status', authenticate, authorizeAdmin, async (req, res) => 
   }
 });
 
-app.get('/api/vendors', authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
+app.get(['/api/sellers', '/api/seller', '/api/vendors'], authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
   try {
     const vendors = await prisma.user.findMany({
       where: { role: { in: ['seller', 'shg'] }, onboardingStatus: 'approved_for_procurement' },
@@ -5198,11 +5198,11 @@ app.get('/api/vendors', authenticate, authorize('buyer', 'seller', 'shg', 'admin
   }
 });
 
-app.get('/api/vendors/:id', authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
+app.get(['/api/sellers/:id', '/api/seller/:id', '/api/vendors/:id'], authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
   try {
     const vendorId = Number(req.params.id);
     if (!vendorId || Number.isNaN(vendorId)) {
-      return res.status(400).json({ message: 'Invalid vendor ID' });
+      return res.status(400).json({ message: 'Invalid seller ID' });
     }
     const vendor = await prisma.user.findFirst({
       where: { id: vendorId, role: { in: ['seller', 'shg'] } },
@@ -5221,7 +5221,7 @@ app.get('/api/vendors/:id', authenticate, authorize('buyer', 'seller', 'shg', 'a
         }
       }
     });
-    if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
+    if (!vendor) return res.status(404).json({ message: 'Seller not found' });
 
     let logoUrl = null;
     let bannerUrl = null;
@@ -5278,11 +5278,11 @@ app.get('/api/vendors/:id', authenticate, authorize('buyer', 'seller', 'shg', 'a
   }
 });
 
-app.get('/api/vendors/:id/catalogue', authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
+app.get(['/api/sellers/:id/catalogue', '/api/seller/:id/catalogue', '/api/vendors/:id/catalogue'], authenticate, authorize('buyer', 'seller', 'shg', 'admin'), async (req, res) => {
   try {
     const sellerId = Number(req.params.id);
     if (!sellerId || Number.isNaN(sellerId)) {
-      return res.status(400).json({ message: 'Invalid vendor ID' });
+      return res.status(400).json({ message: 'Invalid seller ID' });
     }
     const [products, services] = await Promise.all([
       prisma.product.findMany({

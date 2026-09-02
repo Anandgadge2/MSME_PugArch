@@ -45,10 +45,10 @@ export const deleteQuoteRequest = (id: number) =>
     deleteApi<{ success: boolean }>(`/api/quote-requests/${id}`);
 
 export const fetchVendors = () =>
-    getApi<any[]>(`/api/vendors`);
+    getApi<any[]>(`/api/sellers`);
 
 export const fetchVendorCatalogue = (vendorId: number) =>
-    getApi<{ products: any[]; services: any[] }>(`/api/vendors/${vendorId}/catalogue`);
+    getApi<{ products: any[]; services: any[] }>(`/api/sellers/${vendorId}/catalogue`);
 
 export const fetchQuoteRequestComparison = (id: number) =>
     getApi<any>(`/api/quote-requests/${id}/responses/compare`);
