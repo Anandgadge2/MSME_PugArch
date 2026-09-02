@@ -89,7 +89,7 @@ const checkNotMasterAdmin = async (id: number, res: Response): Promise<boolean> 
   return true;
 };
 
-const allowedRoles = new Set(['master_admin', 'admin', 'buyer', 'seller', 'financier']);
+const allowedRoles = new Set(['master_admin', 'admin', 'buyer', 'seller', 'financier', 'shg']);
 const allowedUserStatuses = new Set(['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']);
 const allowedVerificationStatuses = new Set(['PENDING', 'UNDER_REVIEW', 'VERIFIED', 'REJECTED', 'SUSPENDED', 'FAILED', 'MANUAL_REVIEW_REQUIRED', 'EXPIRED']);
 const allowedOrganizationTypes = new Set(['MSME', 'PROPRIETORSHIP', 'PARTNERSHIP', 'PRIVATE_LIMITED', 'PUBLIC_LIMITED', 'LLP', 'TRUST', 'SOCIETY', 'STARTUP', 'NGO', 'EDUCATIONAL_INSTITUTION', 'GOVERNMENT', 'PSU']);

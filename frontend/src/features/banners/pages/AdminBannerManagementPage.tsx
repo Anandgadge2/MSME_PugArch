@@ -282,11 +282,10 @@ export default function AdminBannerManagementPage() {
       )}
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-3 gap-3 sm:grid-cols-3">
         <KpiCard label="Total Banners" value={managedCount} icon={Images} tone="blue" />
         <KpiCard label="Active on Homepage" value={activeCount} tone="emerald" icon={Eye} />
         <KpiCard label="Hidden / Draft" value={hiddenCount} tone="slate" icon={EyeOff} />
-        <KpiCard label="Storage Provider" value="GCP Bucket" subtext="jsgsmile1" tone="blue" icon={UploadCloud} />
       </div>
 
       {/* Filters Bar */}
