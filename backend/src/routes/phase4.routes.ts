@@ -2365,14 +2365,14 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     ].includes(String(regDetails.businessType || regDetails.shgType || '').trim().toLowerCase());
 
     const requiredDocs: string[] = isShg
-      ? ['bank_passbook', 'address_proof', 'leader_aadhaar', 'member_list']
+      ? ['bank_passbook', 'leader_aadhaar', 'member_list', 'shg_registration_certificate', 'udyam_certificate']
       : ['pan_copy', 'bank_passbook', 'address_proof'];
 
     const addRequiredDoc = (docType: string) => {
       if (!requiredDocs.includes(docType)) requiredDocs.push(docType);
     };
 
-    if (Array.isArray(regDetails.selectedDocuments)) {
+    if (!isShg && Array.isArray(regDetails.selectedDocuments)) {
       for (const docType of regDetails.selectedDocuments) {
         if (typeof docType === 'string' && docType.trim()) addRequiredDoc(docType.trim());
       }
@@ -2382,22 +2382,22 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
       addRequiredDoc('udyam_certificate');
     }
 
-    if (profile.isStartup || String(profile.organizationType || regDetails.businessType).toLowerCase() === 'startup') {
+    if (!isShg && (profile.isStartup || String(profile.organizationType || regDetails.businessType).toLowerCase() === 'startup')) {
       addRequiredDoc('dipp_certificate');
     }
 
     const hasGstin = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('GST_REGISTERED');
-    if (hasGstin) {
+    if (!isShg && hasGstin) {
       addRequiredDoc('gst_certificate');
     }
 
-    if (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber) {
+    if (!isShg && (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber)) {
       addRequiredDoc('aadhaar_card');
     }
 
     const corporateTypes = ['Company', 'LLP', 'Partnership', 'Cooperative', 'Society', 'Trust'];
     const isCorporate = corporateTypes.some(t => String(profile.organizationType || regDetails.businessType).toLowerCase().includes(t.toLowerCase()));
-    if (isCorporate && (regDetails.cinNumber || regDetails.registrationNumber || regDetails.cin)) {
+    if (!isShg && isCorporate && (regDetails.cinNumber || regDetails.registrationNumber || regDetails.cin)) {
       addRequiredDoc('business_registration_proof');
     }
 
@@ -2409,12 +2409,32 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
         if (normU === normR) return true;
         const aliases: Record<string, string[]> = {
           bankpassbook: ['bankpassbook', 'bankpassbookcancelledcheque'],
-          leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard'],
-          registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate']
+          leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard', 'aadhaarcard'],
+          registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate'],
+          udyamcertificate: ['udyamcertificate', 'udyamregistrationcertificate']
         };
         return (aliases[normR] || []).includes(normU) || (aliases[normU] || []).includes(normR);
       });
-    const missingDocs = requiredDocs.filter(d => !matchesDocType(d, uploadedDocs));
+
+    const shgOptionalDocPatterns = [
+      'pancard', 'pancopy', 'pan',
+      'addressproof',
+      'gstcertificate', 'gst',
+      'productimages',
+      'trainingskill', 'trainingcertificate', 'skilltraining', 'skilldevelopment',
+      'womenempowerment', 'startupentrepreneurship', 'nrlm', 'produce',
+      'farmerid', 'landrecord', 'fpo', 'fpc', 'artisan', 'handicraft',
+      'catalogue', 'dairycooperative', 'dairylinkage', 'livestock',
+      'businessactivity', 'activitydetails', 'tribal', 'activityspecific'
+    ];
+    const isShgOptionalDoc = (docType: string) => {
+      const norm = String(docType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return shgOptionalDocPatterns.some(pat => norm.includes(pat) || pat.includes(norm));
+    };
+
+    const missingDocs = requiredDocs
+      .filter(d => !(isShg && isShgOptionalDoc(d)))
+      .filter(d => !matchesDocType(d, uploadedDocs));
 
     if (missingDocs.length > 0) {
       const labels: Record<string, string> = {
@@ -2430,6 +2450,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
         nsic_certificate: 'NSIC Registration Certificate',
         leader_aadhaar: 'Group Leader Aadhaar Card',
         registration_certificate: 'SHG Registration Certificate',
+        shg_registration_certificate: 'SHG Registration Certificate',
         member_list: 'Member List'
       };
       const missingLabels = missingDocs.map(d => labels[d] || d).join(', ');
