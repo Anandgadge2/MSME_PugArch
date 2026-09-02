@@ -672,10 +672,59 @@ const syncRateContractDefaults = (draft: Draft): Draft => {
   };
 };
 
+const BUYING_OPTIONS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: string; label: string }>> = {
+  RFQ: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'Catalogue item', label: 'Catalogue Standard Item' },
+    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' }
+  ],
+  RFP: [
+    { value: 'Service', label: 'Service Contract' },
+    { value: 'Works', label: 'Works Contract' }
+  ],
+  OPEN_TENDER: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' },
+    { value: 'Works', label: 'Works Contract' },
+    { value: 'Service', label: 'Service Contract' }
+  ],
+  LIMITED_TENDER: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'Service', label: 'Service Contract' },
+    { value: 'Works', label: 'Works Contract' },
+    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' }
+  ],
+  REVERSE_AUCTION: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'Catalogue item', label: 'Catalogue Standard Item' }
+  ],
+  RATE_CONTRACT: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'Catalogue item', label: 'Catalogue Standard Item' },
+    { value: 'Service', label: 'Service Contract' }
+  ],
+  REPEAT_ORDER: [
+    { value: 'Product', label: 'Product / Goods' },
+    { value: 'Catalogue item', label: 'Catalogue Standard Item' }
+  ]
+};
+
 const applyMethodDefaults = (draft: Draft, method: ProcurementMethodId): Draft => {
-  if (isReverseAuctionMethod(method)) return syncAuctionDefaults(draft, method);
-  if (isRateContractMethod(method)) return syncRateContractDefaults(draft);
-  return { ...draft, type: method };
+  let updated = { ...draft, type: method };
+  if (isReverseAuctionMethod(method)) updated = syncAuctionDefaults(updated, method);
+  else if (isRateContractMethod(method)) updated = syncRateContractDefaults(updated);
+
+  const allowed = BUYING_OPTIONS_BY_METHOD[method] || [];
+  if (allowed.length > 0 && !allowed.some(o => o.value === updated.basics.whatAreYouBuying)) {
+    updated = {
+      ...updated,
+      basics: {
+        ...updated.basics,
+        whatAreYouBuying: allowed[0].value
+      }
+    };
+  }
+  return updated;
 };
 
 const stepLibrary = {
@@ -2145,6 +2194,27 @@ function BasicsStepForm({
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
 
+  // Filter allowed buying options strictly by selected procurement method
+  const allowedBuyingOptions = useMemo(() => {
+    return BUYING_OPTIONS_BY_METHOD[draft.type] || [
+      { value: 'Product', label: 'Product / Goods' },
+      { value: 'Service', label: 'Service Contract' },
+      { value: 'Works', label: 'Works Contract' },
+      { value: 'BOQ', label: 'BOQ Sourced (Multi line)' },
+      { value: 'Catalogue item', label: 'Catalogue Standard Item' }
+    ];
+  }, [draft.type]);
+
+  useEffect(() => {
+    const isAllowed = allowedBuyingOptions.some(o => o.value === draft.basics.whatAreYouBuying);
+    if (!isAllowed && allowedBuyingOptions.length > 0) {
+      updateDraft(c => ({
+        ...c,
+        basics: { ...c.basics, whatAreYouBuying: allowedBuyingOptions[0].value }
+      }));
+    }
+  }, [allowedBuyingOptions, draft.basics.whatAreYouBuying, updateDraft]);
+
   // Dynamic categories from database
   const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
@@ -2392,11 +2462,11 @@ function BasicsStepForm({
             onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, whatAreYouBuying: e.target.value } }))}
             className={inputClass}
           >
-            <option value="Product">Product / Goods</option>
-            <option value="Service">Service Contract</option>
-            <option value="Works">Works Contract</option>
-            <option value="BOQ">BOQ Sourced (Multi line)</option>
-            <option value="Catalogue item">Catalogue Standard Item</option>
+            {allowedBuyingOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
           </select>
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
             Category of sourcing requirement (e.g. Products, Services, or Bill of Quantities).
