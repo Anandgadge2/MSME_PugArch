@@ -1037,7 +1037,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           status: requirement.status === 'APPROVED' ? 'OPEN' : requirement.status || 'OPEN',
           approvalStatus: requirement.status || 'APPROVED',
           lifecycleStage: 'SELLER_PARTICIPATION',
-          evaluationMethod: payload.evaluation?.evaluationMethod || 'L1',
+          evaluationMethod: payload.evaluation?.evaluationMethod || payload.evaluation?.method || payload.evaluationMethod || payload.rules?.evaluationMethod || 'L1',
           isEmdRequired: false,
           emdAmount: null,
           documentFee: null,
@@ -1295,19 +1295,20 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
         const reqId = Number(r.requirementId);
         const responseRequirement = buyerReqs.find((br: any) => Number(br.id) === reqId);
 
-        const isDirectSourceMatch = (bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT' || bidSourceModel === 'RFP' || bidSourceModel === 'PROCUREMENT_BID') && bidSourceIdNum > 0 && reqId === bidSourceIdNum;
-        const isReqIdMatch = (bidReqIdNum > 0 && reqId === bidReqIdNum) || (packetReqIdNum > 0 && reqId === packetReqIdNum) || Number(bid.id) === reqId;
+        const isDirectSourceMatch = (bidSourceModel === 'REQUIREMENT' || bidSourceModel === 'BUYER_REQUIREMENT') && bidSourceIdNum > 0 && reqId === bidSourceIdNum;
+        const isReqIdMatch = (bidReqIdNum > 0 && reqId === bidReqIdNum) || (packetReqIdNum > 0 && reqId === packetReqIdNum);
 
         // Check if reqId belongs to a legacyReq matching requirementNumber
         const matchedLegacyReq = legacyReqs.find(lr => lr.id === reqId && (
           (bidNumberNorm && normalizeStr(lr.requirementNumber) === bidNumberNorm) ||
           (bidReqNumNorm && normalizeStr(lr.requirementNumber) === bidReqNumNorm)
         ));
-        const responseTitleNorm = normalizeStr(responseRequirement?.title);
+        const matchedReqObj = responseRequirement || legacyReqs.find(lr => lr.id === reqId);
+        const responseTitleNorm = normalizeStr(matchedReqObj?.title);
         const titleMatchesBid = Boolean(responseTitleNorm && bidTitleNorm && responseTitleNorm === bidTitleNorm);
         const buyerMatchesBid = Boolean(
-          (bidBuyerId > 0 && Number(responseRequirement?.createdById || 0) === bidBuyerId) ||
-          (bidBuyerOrganizationId > 0 && Number(responseRequirement?.buyerOrganizationId || 0) === bidBuyerOrganizationId) ||
+          (bidBuyerId > 0 && Number((matchedReqObj as any)?.createdById || (matchedReqObj as any)?.buyerId || 0) === bidBuyerId) ||
+          (bidBuyerOrganizationId > 0 && Number((matchedReqObj as any)?.buyerOrganizationId || (matchedReqObj as any)?.organizationId || 0) === bidBuyerOrganizationId) ||
           (bidBuyerId > 0 && Number(r.buyerUserId || 0) === bidBuyerId)
         );
         const isTitleAndBuyerMatch = Boolean(titleMatchesBid && buyerMatchesBid);
@@ -1379,9 +1380,7 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
       // Match QuoteResponses for RFQ / RFP / QUOTE_REQUEST sourced bids
       for (const qr of quoteResponses) {
         const qReqId = Number(qr.quoteRequestId);
-        const isQuoteIdMatch = ((bidSourceModel === 'QUOTE_REQUEST' || bidSourceModel === 'RFP' || bidSourceModel === 'RFQ') && bidSourceIdNum > 0 && qReqId === bidSourceIdNum) || 
-                               (bidReqIdNum > 0 && qReqId === bidReqIdNum) || 
-                               (Number(bid.id) === qReqId) || 
+        const isQuoteIdMatch = (bidSourceModel === 'QUOTE_REQUEST' && bidSourceIdNum > 0 && qReqId === bidSourceIdNum) || 
                                (bidNumberNorm === `rfq${qReqId}` || bidNumberNorm === `rfp${qReqId}`);
 
         if (isQuoteIdMatch) {

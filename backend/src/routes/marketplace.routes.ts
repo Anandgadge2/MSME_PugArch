@@ -3151,11 +3151,16 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
         }
 
         const allTargetReqIds = Array.from(new Set([
-            ...candidateIds,
             linkedBuyerReq?.id,
             linkedLegacyReq?.id,
+            (linkedBid?.sourceModel === 'REQUIREMENT' || linkedBid?.sourceModel === 'BUYER_REQUIREMENT') && linkedBid?.sourceId ? Number(linkedBid.sourceId) : null,
+            Number((linkedBid?.technicalPacket as any)?.sourceRequirementId || (linkedBid?.technicalPacket as any)?.requirementId || 0) || null,
+            (!linkedBid && candidateIds.length) ? candidateIds[0] : null
+        ].filter(Boolean) as number[]));
+
+        const allTargetBidIds = Array.from(new Set([
             linkedBid?.id,
-            linkedBid?.sourceId ? Number(linkedBid.sourceId) : null
+            (candidateIds.length && linkedBid) ? candidateIds[0] : null
         ].filter(Boolean) as number[]));
 
         const allTargetReqNumbers = Array.from(new Set([
@@ -3195,10 +3200,11 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
         ]);
 
         // Fallback: If no responses in requirementResponse, check procurementBidParticipation table
-        if (responses.length === 0 && allTargetReqIds.length > 0) {
+        const candidateBidIds = allTargetBidIds.length > 0 ? allTargetBidIds : allTargetReqIds;
+        if (responses.length === 0 && candidateBidIds.length > 0) {
             const participations = await db.procurementBidParticipation.findMany({
                 where: {
-                    bidId: { in: allTargetReqIds },
+                    bidId: { in: candidateBidIds },
                     submissionStatus: { not: 'DRAFT' },
                     isWithdrawn: false
                 },

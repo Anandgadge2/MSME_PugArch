@@ -1145,7 +1145,11 @@ export default function CreateProcurementPage() {
           vendors: { ...base.vendors, ...(payload.vendors || {}) },
           schedule: { ...base.schedule, ...(payload.schedule || {}) },
           terms: { ...base.terms, ...(payload.terms || {}) },
-          evaluation: { ...base.evaluation, ...(payload.evaluation || {}) },
+          evaluation: {
+            ...base.evaluation,
+            ...(payload.evaluation || {}),
+            method: payload.evaluation?.method || payload.evaluationMethod || payload.rules?.evaluationMethod || payload.evaluation?.evaluationMethod || base.evaluation.method
+          },
           approval: { ...base.approval, ...(payload.approval || {}) },
           auctionConfig: {
             ...base.auctionConfig,
@@ -5909,106 +5913,41 @@ function CommercialTermsForm({
           </div>
         </div>
 
-        {/* Compliance Fees card & Document Cost Fee commented out completely as requested */}
-        {/*
-        <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 mb-2">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Compliance Fees</h3>
+        {/* Compliance & Penalty Terms card */}
+        <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 mb-2">
+              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Contract Penalty Clause</h3>
+            </div>
+
+            {/* Document cost fee commented out completely as requested */}
+            {/*
+            <Field label="Document cost fee (INR)">
+              <input
+                type="number"
+                value={draft.terms.documentFee || ''}
+                onChange={e => updateTerms('documentFee', Number(e.target.value || 0))}
+                className={inputClass}
+                placeholder="0"
+              />
+            </Field>
+            */}
+
+            <Field label="Late Delivery (LD) Penalty Clause" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
+              <input
+                value={draft.terms.penaltyClause}
+                onChange={e => updateTerms('penaltyClause', e.target.value)}
+                className={controlClass(fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.'))}
+                placeholder="e.g. 0.5% per week of delay up to a maximum of 10%"
+              />
+            </Field>
+            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+              Specify the standard liquidated damages or penalty clause applicable in case of delays in delivery or completion.
+            </p>
           </div>
-
-
-          <Field label="Document cost fee (INR)">
-            <input
-              type="number"
-              value={draft.terms.documentFee || ''}
-              onChange={e => updateTerms('documentFee', Number(e.target.value || 0))}
-              className={inputClass}
-              placeholder="0"
-            />
-          </Field>
-        </div>
-        */}
-
-          {/* EMD flow commented out completely as requested */}
-          {/* <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5">
-                <input
-                  type="checkbox"
-                  checked={draft.terms.emdRequired}
-                  onChange={e => updateTerms('emdRequired', e.target.checked)}
-                  className="h-4 w-4 rounded accent-[#12335f]"
-                />
-                <span>EMD deposit required?</span>
-              </label>
-
-              {draft.terms.emdRequired && (
-                <Field label="EMD Amount (INR)" required error={fieldError(showErrors && draft.terms.emdAmount <= 0, 'EMD amount must be greater than 0.')}>
-                  <input
-                    type="number"
-                    value={draft.terms.emdAmount || ''}
-                    onChange={e => updateTerms('emdAmount', Number(e.target.value || 0))}
-                    className={controlClass(fieldError(showErrors && draft.terms.emdAmount <= 0, 'EMD amount must be greater than 0.'))}
-                  />
-                </Field>
-              )}
-            </div>
-            <p className="text-[10px] text-slate-500 font-semibold leading-normal">
-              Earnest Money Deposit (Bid Security) ensures serious bidder participation.
-            </p>
-          </div> */}
-
-          {/* PBG Guarantee flow commented out completely as requested */}
-          {/* <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5 flex-shrink-0">
-                <input
-                  type="checkbox"
-                  checked={draft.terms.pbgRequired}
-                  onChange={e => updateTerms('pbgRequired', e.target.checked)}
-                  className="h-4 w-4 rounded accent-[#12335f]"
-                />
-                <span>PBG Guarantee?</span>
-              </label>
-
-              <div className="flex flex-col gap-2">
-                {draft.terms.pbgRequired && (
-                  <Field label="PBG Amount / Performance Security (INR)" required error={fieldError(showErrors && draft.terms.securityDeposit <= 0, 'PBG amount must be greater than 0.')}>
-                    <input
-                      type="number"
-                      value={draft.terms.securityDeposit || ''}
-                      onChange={e => updateTerms('securityDeposit', Number(e.target.value || 0))}
-                      className={controlClass(fieldError(showErrors && draft.terms.securityDeposit <= 0, 'PBG amount must be greater than 0.'))}
-                      placeholder="0"
-                    />
-                  </Field>
-                )}
-              </div>
-            </div>
-            <p className="text-[10px] text-slate-500 font-semibold leading-normal">
-              Performance Bank Guarantee secures contract delivery and warranty performance.
-            </p>
-          </div> */}
-
-          <Field label="Document cost fee (INR)">
-            <input
-              type="number"
-              value={draft.terms.documentFee || ''}
-              onChange={e => updateTerms('documentFee', Number(e.target.value || 0))}
-              className={inputClass}
-              placeholder="0"
-            />
-          </Field>
-
-          <Field label="Late Delivery (LD) Penalty Clause" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
-            <input
-              value={draft.terms.penaltyClause}
-              onChange={e => updateTerms('penaltyClause', e.target.value)}
-              className={controlClass(fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.'))}
-            />
-          </Field>
         </div>
       </div>
+    </div>
   );
 }
 
@@ -6036,15 +5975,22 @@ function DocumentsStepForm({
     }));
   };
 
-  const handleAddCustomDoc = (name: string, required: boolean) => {
+  const handleAddCustomDoc = (name: string, required: boolean, instructions?: string) => {
     updateDraft(c => ({
       ...c,
       requiredDocs: [
         ...c.requiredDocs,
-        { id: makeId(), name, required, fileType: 'pdf', maxSize: 5, instructions: 'Additional custom document.' }
+        { id: makeId(), name, required, fileType: 'pdf', maxSize: 5, instructions: instructions?.trim() || 'Additional custom document.' }
       ]
     }));
     toast.success('Custom document added to checklist');
+  };
+
+  const handleUpdateDocInstructions = (id: string, instructions: string) => {
+    updateDraft(c => ({
+      ...c,
+      requiredDocs: c.requiredDocs.map(d => d.id === id ? { ...d, instructions } : d)
+    }));
   };
 
   const handleUploadFile = async (id: string, file: File) => {
@@ -6085,6 +6031,7 @@ function DocumentsStepForm({
       onToggleRequired={handleToggleDocRequired}
       onRemove={handleRemoveDoc}
       onAddCustomDoc={handleAddCustomDoc}
+      onUpdateInstructions={handleUpdateDocInstructions}
       onUploadFile={handleUploadFile}
       onRemoveFile={handleRemoveFile}
     />
@@ -6440,7 +6387,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
         ? draft.items[0].specificationFileName 
         : undefined)), 'attached_doc.pdf'),
     fileAssetId: doc.fileAssetId || (doc.name.toLowerCase().includes('boq') ? draft.boqFileAssetId : null),
-    required: doc.required
+    required: doc.required,
+    instructions: doc.instructions
   }));
 
   // Map rules and timelines matching backend validator nested structures
@@ -6527,6 +6475,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     })),
   } : null;
 
+  const chosenEvaluationMethod = draft.evaluation.method || 'L1 total value';
+  tender.evaluationMethod = chosenEvaluationMethod;
+
   const rules = {
     // EMD flow commented out as requested
     // emdRequired: draft.terms.emdRequired,
@@ -6536,7 +6487,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     performanceSecurity: draft.terms.pbgRequired,
     startPrice: auctionConfigPayload?.startingBidPrice ?? draft.basics.estimatedValue ?? 0,
     minimumDecrement: auctionConfigPayload?.minimumBidDecrement ?? 0,
-    auctionConfig: auctionConfigPayload
+    auctionConfig: auctionConfigPayload,
+    evaluationMethod: chosenEvaluationMethod
   };
 
   // Run suggestion engine to capture recommendation result
@@ -6557,6 +6509,12 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const payloadJson = {
     ...draft,
+    evaluationMethod: chosenEvaluationMethod,
+    evaluation: {
+      ...draft.evaluation,
+      method: chosenEvaluationMethod,
+      evaluationMethod: chosenEvaluationMethod,
+    },
     limitedTenderJustification: draft.limitedTenderJustification || draft.basics.justification || draft.internal.justification || '',
     rfqType: draft.rfqType,
     items: draft.basics.whatAreYouBuying === 'BOQ' ? mappedItems : draft.items,
@@ -6588,6 +6546,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     draftStep,
     workflowStatus: 'DRAFT',
     approvalStatus: draft.approval?.workflow || 'DRAFT',
+    evaluationMethod: chosenEvaluationMethod,
     payload: payloadJson,
     items: mappedItems
   };

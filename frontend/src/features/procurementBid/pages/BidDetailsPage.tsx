@@ -203,24 +203,68 @@ export default function BidDetailsPage() {
   }
 
   const bidObj: any = bidData || {};
-  const pt = String(bidObj.procurementType || bidObj.bidType || bidObj.type || bidObj.method || '').toUpperCase();
+  const queryType = String(searchParams?.get('type') || searchParams?.get('method') || '').toUpperCase();
+  const rawMethod = String(
+    bidObj.procurementMethod ||
+    bidObj.sourcingMethod ||
+    bidObj.procurementType ||
+    bidObj.bidType ||
+    bidObj.type ||
+    bidObj.method ||
+    bidObj.canonicalMethod ||
+    bidObj.methodSlug ||
+    bidObj.payload?.basics?.procurementMethod ||
+    bidObj.payload?.basics?.procurementType ||
+    bidObj.payload?.type ||
+    bidObj.technicalPacket?.basics?.procurementMethod ||
+    bidObj.technicalPacket?.basics?.procurementType ||
+    queryType ||
+    ''
+  ).toUpperCase();
+  const desc = String(bidObj.description || bidObj.payload?.basics?.description || '').toUpperCase();
   const title = String(bidObj.title || bidObj.subject || '').toUpperCase();
+  const reqNum = String(bidObj.requirementNumber || bidObj.referenceNumber || bidObj.bidNumber || requestId || '').toUpperCase();
 
-  if (pt.includes('OPEN') || title.includes('OPENTENDER') || title.includes('OPEN TENDER')) {
+  if (rawMethod.includes('OPEN') || title.includes('OPENTENDER') || title.includes('OPEN TENDER')) {
     return <OpenTenderDetailPage initialData={bidObj} />;
   }
 
-  if (pt.includes('LIMITED') || title.includes('LIMITEDTENDER') || title.includes('LIMITED TENDER')) {
+  if (rawMethod.includes('LIMITED') || title.includes('LIMITEDTENDER') || title.includes('LIMITED TENDER')) {
     return <LimitedTenderDetailPage initialData={bidObj} />;
   }
 
-  if (pt.includes('RATE') || title.includes('RATE CONTRACT')) {
+  if (rawMethod.includes('RATE') || title.includes('RATE CONTRACT') || reqNum.startsWith('RC-')) {
     return <RateContractDetailPage initialData={bidObj} />;
   }
 
-  if (pt.includes('RFQ') || title.includes('RFQ')) {
+  const isRfq =
+    queryType.includes('RFQ') ||
+    rawMethod.includes('RFQ') ||
+    rawMethod.includes('QUOTATION') ||
+    title.includes('RFQ') ||
+    title.includes('REQUEST FOR QUOTATION') ||
+    desc.includes('SOURCING METHOD: RFQ') ||
+    desc.includes('METHOD: RFQ') ||
+    reqNum.startsWith('RFQ-');
+
+  if (isRfq) {
     return <RfqDetailPage initialData={bidObj} />;
   }
 
-  return <RfpDetailPage initialData={bidObj} />;
+  const isExplicitRfp =
+    (queryType.includes('RFP') ||
+      rawMethod.includes('RFP') ||
+      rawMethod.includes('REQUEST FOR PROPOSAL') ||
+      title.includes('RFP') ||
+      title.includes('REQUEST FOR PROPOSAL') ||
+      desc.includes('SOURCING METHOD: RFP') ||
+      reqNum.startsWith('RFP-')) &&
+    !rawMethod.includes('RFQ');
+
+  if (isExplicitRfp) {
+    return <RfpDetailPage initialData={bidObj} />;
+  }
+
+  // Default for standard procurement requirement/bid is Request for Quotation
+  return <RfqDetailPage initialData={bidObj} />;
 }

@@ -387,7 +387,17 @@ export default function TenderDetailPage() {
       payload={draft}
       documents={tenderDocs}
       items={tenderItems}
-      evaluationMethod={tender.evaluationMethod || 'L1 Basis'}
+      evaluationMethod={
+        [
+          draft.evaluation?.method,
+          draft.evaluation?.evaluationMethod,
+          draft.evaluationMethod,
+          draft.rules?.evaluationMethod,
+          tender.evaluationMethod,
+        ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
+        tender.evaluationMethod ||
+        'L1 Basis'
+      }
       emdAmount={tender.emdAmount}
       isEmdRequired={Boolean(tender.emdAmount && tender.emdAmount > 0)}
       backRoute={user?.role === 'seller' ? '/seller/opportunities' : '/buyer/tenders'}

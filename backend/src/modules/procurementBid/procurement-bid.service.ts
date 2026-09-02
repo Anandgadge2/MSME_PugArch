@@ -81,27 +81,47 @@ const arrayFromPacket = (...values: any[]) => {
 
 const normalizeBidItem = (item: any, index: number) => {
   const specifications = item?.specifications && typeof item.specifications === 'object' ? item.specifications : {};
-  const technicalSpecification = firstPresent(item?.technicalSpecification, item?.technicalSpecifications, item?.specification, item?.specificationsText, item?.requirements, specifications.technicalSpecification, specifications.technicalSpecifications);
-  const hsnSac = firstPresent(item?.hsn, item?.hsnCode, item?.sac, item?.sacCode, item?.hsn_sac_code, item?.product?.hsnCode, specifications.hsn, specifications.hsnCode, specifications.sac, specifications.sacCode, specifications.hsn_sac_code);
-  const unit = firstPresent(item?.unit, item?.unitOfMeasure, item?.uom, item?.unitOfMeasurement, item?.product?.unitOfMeasure);
+  const technicalSpecification = firstPresent(item?.technicalSpecification, item?.technicalSpecifications, item?.specification, item?.specificationsText, item?.requirements, specifications.technicalSpecification, specifications.technicalSpecifications, specifications.description);
+  const hsnSac = firstPresent(item?.hsn_sac_code, item?.hsnSacCode, item?.hsnSac, item?.hsn, item?.hsnCode, item?.sac, item?.sacCode, item?.product?.hsnCode, specifications.hsn_sac_code, specifications.hsnSacCode, specifications.hsnSac, specifications.hsn, specifications.hsnCode, specifications.sac, specifications.sacCode);
+  const unit = firstPresent(item?.unit, item?.unitOfMeasure, item?.uom, item?.unitOfMeasurement, item?.product?.unitOfMeasure, specifications.unit, specifications.unitOfMeasure, specifications.uom);
+  const rawUnitPrice = firstPresent(item?.estimatedUnitPrice, item?.unitPrice, item?.estimatedRate, item?.price, item?.rate, specifications.estimatedUnitPrice, specifications.unitPrice, specifications.estimatedRate, specifications.price, specifications.rate);
+  const rawBrand = firstPresent(item?.brand_preference, item?.brandPreference, item?.brandRequirement, item?.brand, item?.brandName, item?.make, item?.oemBrandName, specifications.brand_preference, specifications.brandPreference, specifications.brandRequirement, specifications.brand, specifications.brandName, specifications.make);
+  const rawFlexible = firstPresent(item?.brand_flexible, item?.brandFlexible, item?.isBrandFlexible, specifications.brand_flexible, specifications.brandFlexible, specifications.isBrandFlexible, item?.alternateBrandAllowed, specifications.alternateBrandAllowed);
+  const rawType = firstPresent(item?.itemType, item?.type, specifications.itemType, specifications.type) || 'Product';
+
   return {
     ...item,
     id: String(firstPresent(item?.id, item?.lineItemId, item?.itemId, index + 1)),
+    itemType: rawType,
     itemName: firstPresent(item?.itemName, item?.name, item?.title, item?.productName, item?.serviceName, item?.product?.name, item?.description, item?.itemDescription) || `Item ${index + 1}`,
     description: firstPresent(item?.description, item?.itemDescription, item?.scopeOfWork, item?.productDescription, item?.serviceDescription, specifications.description) || technicalSpecification || '',
     quantity: Number(firstPresent(item?.quantity, item?.qty, item?.requiredQuantity, 1)) || 1,
     unit: unit || 'Nos',
     unitOfMeasure: unit || 'Nos',
+    estimatedUnitPrice: rawUnitPrice !== undefined && rawUnitPrice !== null ? Number(rawUnitPrice) : undefined,
     technicalSpecification: technicalSpecification || '',
-    brandRequirement: firstPresent(item?.brandRequirement, item?.brand, item?.make, item?.brand_preference, item?.oemBrandName, specifications.brandRequirement, specifications.brand) || null,
+    brand_preference: rawBrand || '',
+    brandPreference: rawBrand || '',
+    brandRequirement: rawBrand || null,
+    brand_flexible: rawFlexible ?? 'Yes',
+    brandFlexible: rawFlexible ?? 'Yes',
     warrantyRequirement: firstPresent(item?.warrantyRequirement, item?.warranty, item?.warrantyRequired, item?.warrantyPeriod, specifications.warrantyRequirement, specifications.warranty) || null,
     deliveryRequirement: firstPresent(item?.deliveryRequirement, item?.deliverySchedule, item?.deliveryTimeline, item?.deliverySla, specifications.deliveryRequirement, specifications.deliverySchedule) || null,
     buyerRemarks: firstPresent(item?.buyerRemarks, item?.remarks, item?.buyerRemark, item?.notes, specifications.buyerRemarks, specifications.remarks) || null,
     hsnSac: hsnSac || '',
+    hsn_sac_code: hsnSac || '',
     hsn: firstPresent(item?.hsn, item?.hsnCode, item?.product?.hsnCode, specifications.hsn, specifications.hsnCode) || hsnSac || '',
     sac: firstPresent(item?.sac, item?.sacCode, specifications.sac, specifications.sacCode) || '',
     gstPercentage: firstPresent(item?.gstPercentage, item?.gst, item?.taxRate, specifications.gstPercentage, specifications.gst) ?? null,
-    priceQuoteBasis: firstPresent(item?.priceQuoteBasis, item?.quoteBasis) || null
+    priceQuoteBasis: firstPresent(item?.priceQuoteBasis, item?.quoteBasis) || null,
+    specifications: {
+      ...specifications,
+      itemType: rawType,
+      hsn_sac_code: hsnSac || '',
+      brand_preference: rawBrand || '',
+      brand_flexible: rawFlexible ?? 'Yes',
+      estimatedUnitPrice: rawUnitPrice !== undefined && rawUnitPrice !== null ? Number(rawUnitPrice) : undefined,
+    }
   };
 };
 
@@ -746,7 +766,10 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
         fileUrl: doc.fileUrl || (fileAssetId ? `/api/files/${fileAssetId}/view` : null)
       };
     }),
-    participantsCount: bid.participations?.length || 0,
+    participantsCount: (bid.participations || []).filter((p: any) => {
+      const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
+      return subStatus !== 'DRAFT' && !p.isWithdrawn;
+    }).length,
     participations: canSeeParticipants ? (bid.participations || []).map((p: any) => serializeParticipation(p, { canSeeFinancial, bid })) : undefined,
     clarifications: (isAdmin || isBuyerOwner)
       ? bid.clarifications
@@ -1266,7 +1289,7 @@ export const createBuyerBid = async (req: AuthRequest, body: any) => {
       technicalOpeningDate: body.technicalOpeningDate,
       financialOpeningDate: body.financialOpeningDate,
       bidValidityDate: body.bidValidityDate,
-      evaluationMethod: body.evaluationMethod || 'L1',
+      evaluationMethod: body.evaluationMethod || (body.technicalPacket as any)?.evaluation?.method || (body.technicalPacket as any)?.evaluationMethod || 'L1',
       isEmdRequired: Boolean(body.isEmdRequired),
       emdAmount: body.emdAmount,
       documentFee: body.documentFee,

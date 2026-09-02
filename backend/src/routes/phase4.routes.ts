@@ -1800,7 +1800,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     status: 'OPEN',
     approvalStatus: 'APPROVED',
     lifecycleStage: 'SELLER_PARTICIPATION',
-    evaluationMethod: payload.evaluation?.evaluationMethod || payload.evaluation?.quotationFormat || 'L1',
+    evaluationMethod: payload.evaluation?.evaluationMethod || payload.evaluation?.method || payload.evaluationMethod || payload.rules?.evaluationMethod || payload.evaluation?.quotationFormat || 'L1',
     isEmdRequired: Boolean(terms.emdRequired || tender.emdRequired),
     emdAmount: terms.emdAmount || tender.emdAmount || null,
     documentFee: tender.documentFee || null,
@@ -10293,6 +10293,7 @@ export type NormalizedProcurement = {
   documents?: any[];
   items?: any[];
   paymentTerms?: string;
+  evaluationMethod?: string;
   eligibilityCriteria?: string[];
   termsAndConditions?: string[];
   budgetDetails?: any;
@@ -10608,10 +10609,14 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       quantity: String(b.quantity || ''),
       unit: b.unit || '',
       organizationName: b.buyerOrganizationName || '',
-      participantsCount: (b.participations || []).filter((p: any) => p.submissionStatus === 'SUBMITTED' || !p.isWithdrawn).length,
+      participantsCount: (b.participations || []).filter((p: any) => {
+        const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
+        return subStatus !== 'DRAFT' && !p.isWithdrawn;
+      }).length,
       createdAt: b.createdAt?.toISOString?.() || '',
       updatedAt: b.updatedAt?.toISOString?.() || '',
       actionUrl: `/bids/${b.id}`,
+      evaluationMethod: b.evaluationMethod || (b.technicalPacket as any)?.evaluation?.method || (b.technicalPacket as any)?.evaluationMethod || (b.technicalPacket as any)?.rules?.evaluationMethod || 'L1 Basis',
       documents,
       items,
       paymentTerms: '',
@@ -10998,6 +11003,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       organizationName: (r as any).organization?.organizationName || payload.basics?.buyerOrganizationName || loggedInOrgName || '',
       createdAt: r.createdAt?.toISOString?.() || '',
       updatedAt: r.updatedAt?.toISOString?.() || '',
+      evaluationMethod: payload.evaluation?.method || payload.evaluation?.evaluationMethod || payload.evaluationMethod || payload.rules?.evaluationMethod || 'L1 Basis',
       actionUrl: (() => {
         const linkedAuction = auctionsByRequirementId[r.id];
         if (linkedAuction) {
