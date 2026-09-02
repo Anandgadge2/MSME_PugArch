@@ -161,16 +161,13 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
 
     return (
         <section id="verified-buyers" className="mt-2 border-b border-slate-100 bg-white scroll-mt-16" aria-labelledby="buyer-browser-heading">
-            <div className="mx-auto max-w-[1680px] px-4 pt-8 pb-3 sm:px-6 sm:pt-10 sm:pb-4 2xl:px-8">
+            <div className="mx-auto max-w-[1680px] px-4 pt-6 pb-3 sm:px-6 sm:pt-8 sm:pb-4 2xl:px-8">
                 <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                     <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6a2f]">Verified Buyer Strip</p>
+                    
                         <div className="flex flex-wrap items-center gap-2.5 mt-1">
                             <h2 id="buyer-browser-heading" className="text-xl font-black text-[#0b2447] sm:text-2xl">Verified buyers &amp; published requirements</h2>
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-800 border border-emerald-200 shadow-sm">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-                                {buyerSummaries.filter(b => b.verified).length} Active Buyers
-                            </span>
+                            
                         </div>
                         <p className="mt-1 max-w-2xl text-sm font-medium text-slate-600">Scroll verified buyer logos and click any buyer to list only requirements published by that buyer below.</p>
                     </div>

@@ -103,6 +103,7 @@ const ReverseAuctionDetailPage = lazy(() => import('./features/reverseAuctions/p
 const ReverseAuctionLivePage = lazy(() => import('./features/reverseAuctions/pages/ReverseAuctionLivePage'));
 const AuctionResultPage = lazy(() => import('./features/reverseAuctions/pages/AuctionResultPage'));
 const MarketplaceComparePage = lazy(() => import('./features/marketplace/pages/MarketplaceComparePage'));
+const MarketplaceBenefitsPage = lazy(() => import('./features/marketplace/pages/MarketplaceBenefitsPage'));
 const SavedSuppliersPage = lazy(() => import('./features/marketplace/pages/SavedSuppliersPage'));
 const PublicInfoPage = lazy(() => import('./features/marketplace/pages/PublicInfoPage'));
 const AdminBannerManagementPage = lazy(() => import('./features/banners/pages/AdminBannerManagementPage'));
@@ -329,6 +330,10 @@ const isPublicRoute = (route: string) => {
     '/marketplace/sellers',
     '/marketplace/cart',
     '/marketplace/compare',
+    '/marketplace/benefits',
+    '/marketplace/benifits',
+    '/benefits',
+    '/benifits',
     '/bids',
     '/tenders',
   ];
@@ -631,6 +636,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/marketplace/requirements') return <BuyerRequirementListPage />;
     
     if (pathname === '/marketplace/compare') return <MarketplaceComparePage />;
+    if (pathname === '/marketplace/benefits' || pathname === '/marketplace/benifits' || pathname === '/benefits' || pathname === '/benifits') return <MarketplaceBenefitsPage />;
     
     if (pathname === '/bids') return <Redirect to="/marketplace" />;
     if (pathname === '/tenders') return <TenderDetailPage />;

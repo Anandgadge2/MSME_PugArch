@@ -175,8 +175,13 @@ export default function MarketplaceHome() {
 
     return (
         <Suspense fallback={null}>
-                <div className="flex min-h-dvh flex-col overflow-x-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/60 via-slate-50 to-slate-100/80 text-slate-800">
-                    <main className="flex-1 overflow-x-hidden">
+                <div className="relative flex min-h-dvh flex-col overflow-x-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/60 via-slate-50 to-slate-100/80 text-slate-800">
+                    {/* Ambient floating soft glow orbs */}
+                    <div className="absolute top-[15%] left-[-5%] w-[40vw] h-[40vw] rounded-full bg-blue-400/[0.05] blur-[140px] pointer-events-none" />
+                    <div className="absolute top-[45%] right-[-5%] w-[40vw] h-[40vw] rounded-full bg-[#c8a45c]/[0.04] blur-[140px] pointer-events-none" />
+                    <div className="absolute top-[75%] left-[10%] w-[35vw] h-[35vw] rounded-full bg-emerald-400/[0.04] blur-[140px] pointer-events-none" />
+
+                    <main className="relative z-10 flex-1 overflow-x-hidden">
                 <MarketplaceNav categories={categories} />
                 <HeroBanner banners={activeBannerData?.banners?.length ? activeBannerData.banners : (data?.banners || [])} />
                 <div className="hidden md:block">
