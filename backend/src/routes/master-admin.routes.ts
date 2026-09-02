@@ -16,6 +16,7 @@ import { upload } from '../config/storage.js';
 import { uploadFile } from '../services/storage/storage.service.js';
 import { ApiError } from '../utils/ApiError.js';
 import { safeRouteMessage } from '../utils/routeHelpers.js';
+import { env } from '../config/env.js';
 
 const router = Router();
 
@@ -221,6 +222,10 @@ const withAadhaarKyc = <T extends { kycVerifications?: any[] }>(record: T) => {
 };
 
 export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number, reason: string) => {
+  if (env.NODE_ENV === 'production' && process.env.ALLOW_PROD_PURGE !== 'true') {
+    throw new Error('USER_DELETE_PRODUCTION_BLOCKED: Permanent user deletion is disabled in production to comply with statutory audit retention. Please use archive instead.');
+  }
+
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) throw new Error('User not found');
   if (user.role === 'master_admin' || user.userId === 'MASTER_ADMIN') {
@@ -523,8 +528,8 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     await rawSql('IdempotencyKey', `DELETE FROM "IdempotencyKey" WHERE "userId" ${uIn}`);
     await rawSql('ApiLog', `DELETE FROM "ApiLog" WHERE "userId" ${uIn}`);
     await rawSql('ApiVerificationLog', `DELETE FROM "ApiVerificationLog" WHERE "userId" ${uIn}`);
-    await rawSql('AuditLog', `DELETE FROM "AuditLog" WHERE "userId" ${uIn}`);
-    await rawSql('KycAuditLog', `DELETE FROM "KycAuditLog" WHERE "userId" ${uIn}`);
+    await rawSql('AuditLog_nullify', `UPDATE "AuditLog" SET "userId" = NULL WHERE "userId" ${uIn}`);
+    await rawSql('KycAuditLog_nullify', `UPDATE "KycAuditLog" SET "userId" = NULL WHERE "userId" ${uIn}`);
     await rawSql('KycAuthSession', `DELETE FROM "KycAuthSession" WHERE "userId" ${uIn}`);
     await rawSql('UserKycVerification', `DELETE FROM "UserKycVerification" WHERE "userId" ${uIn}`);
 
@@ -898,6 +903,10 @@ router.delete('/master-admin/companies/:id', ...masterOnly, requirePermission(PE
 
 // ── Cascade-delete a company and ALL related data ──────────────────────
 router.delete('/master-admin/companies/:id/cascade', ...masterOnly, requirePermission(PERMISSIONS.COMPANY_MANAGE), wrap(async (req, res) => {
+  if (env.NODE_ENV === 'production' && process.env.ALLOW_PROD_PURGE !== 'true') {
+    return jsonError(res, 403, 'Permanent cascade deletion of companies is disabled in production to comply with statutory audit retention. Please archive the company instead.', 'PURGE_NOT_PERMITTED');
+  }
+
   const id = Number(req.params.id);
   const reason = ensureReason(res, req.body, 'permanently delete company');
   if (!reason) return;
@@ -1124,7 +1133,7 @@ router.delete('/master-admin/companies/:id/cascade', ...masterOnly, requirePermi
       await del('idempotencyKey', { userId: { in: userIds } });
       await del('apiLog', { userId: { in: userIds } });
       await del('apiVerificationLog', { userId: { in: userIds } });
-      await del('auditLog', { userId: { in: userIds } });
+      await tx.auditLog.updateMany({ where: { userId: { in: userIds } }, data: { userId: null } }).catch(() => null);
       await del('fileAsset', { ownerId: { in: userIds } });
 
       const deletedUsers = await tx.user.deleteMany({ where: { id: { in: userIds } } });
@@ -2872,12 +2881,10 @@ const userStatusAction = (action: 'activate' | 'inactivate' | 'suspend' | 'react
     const reason = ensureReason(res, req.body, action);
     if (!reason) return;
     if (action === 'archive') {
-      try {
-        const deletedUser = await permanentlyDeleteUser(req, id, reason);
-        return jsonOk(res, deletedUser, 'User permanently deleted from database.');
-      } catch (err: any) {
-        return jsonError(res, 400, safeRouteMessage(err, 'User deletion failed'), 'USER_DELETE_FAILED');
-      }
+      const data: any = { accountStatus: 'DELETED' as any, sessionVersion: { increment: 1 } };
+      const user = await prisma.user.update({ where: { id }, data, select: userSelect });
+      await createAuditLog(req, { action: 'user.archive', entityType: 'user', entityId: id, metadata: { reason, accountStatus: 'DELETED' } });
+      return jsonOk(res, user, 'User archived successfully. Historical operational data preserved.');
     }
     const accountStatus = action === 'activate' || action === 'reactivate' ? 'ACTIVE' : action === 'suspend' ? 'SUSPENDED' : 'BLOCKED';
     const data: any = { accountStatus: accountStatus as any, sessionVersion: { increment: 1 } };
@@ -2895,6 +2902,9 @@ router.post('/master-admin/users/:id/archive', ...masterOnly, requirePermission(
 router.delete('/master-admin/users/:id', ...masterOnly, requirePermission(PERMISSIONS.USER_DELETE), wrap(async (req, res) => {
   const id = Number(req.params.id);
   if (!(await checkNotMasterAdmin(id, res))) return;
+  if (env.NODE_ENV === 'production' && process.env.ALLOW_PROD_PURGE !== 'true') {
+    return jsonError(res, 403, 'Permanent cascade deletion is disabled in production to comply with statutory audit retention. Please use Archive instead.', 'PURGE_NOT_PERMITTED');
+  }
   const reason = ensureReason(res, req.body, 'permanently delete user');
   if (!reason) return;
   try {
@@ -2904,34 +2914,6 @@ router.delete('/master-admin/users/:id', ...masterOnly, requirePermission(PERMIS
     jsonError(res, 400, safeRouteMessage(err, 'User deletion failed'), 'USER_DELETE_FAILED');
   }
 }));
-
-// Purge soft-deleted users on module load
-setTimeout(async () => {
-  try {
-    const deletedUsers = await prisma.user.findMany({
-      where: {
-        OR: [
-          { accountStatus: 'DELETED' as any },
-          { email: { startsWith: 'deleted_' } }
-        ]
-      },
-      select: { id: true, email: true }
-    });
-    if (deletedUsers.length > 0) {
-      console.log(`[UserPurge] Found ${deletedUsers.length} soft-deleted user(s) to purge permanently...`);
-      for (const u of deletedUsers) {
-        try {
-          await permanentlyDeleteUser(null, u.id, 'Startup purge of soft-deleted users');
-          console.log(`[UserPurge] Permanently deleted user #${u.id} (${u.email})`);
-        } catch (err: any) {
-          console.error(`[UserPurge] Failed to purge user #${u.id}:`, err?.message || err);
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[UserPurge] Purge error:', err);
-  }
-}, 1000);
 
 router.post('/master-admin/users/:id/reset-password', ...masterOnly, requirePermission(PERMISSIONS.USER_UPDATE), wrap(async (req, res) => {
   const id = Number(req.params.id);

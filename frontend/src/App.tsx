@@ -1042,7 +1042,9 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
             !isAuthOrRegisterRoute && <MarketplaceHeader user={user} />
           )}
           {showOrgApprovalBanner && <OrgApprovalBanner />}
-          <main className={cn(
+          <main
+            id="main-content"
+            className={cn(
             "flex-1 min-w-0 min-h-0",
             !showDashboardLayout ? "p-0" : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5 pb-20 sm:pb-32"
           )}>
