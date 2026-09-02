@@ -43,6 +43,7 @@ export interface MarketplaceFilterPanelProps {
     
     districtFilter: string;
     onDistrictChange: (district: string) => void;
+    availableLocations?: string[];
     
     discountFilter: string;
     onDiscountToggle: (active: boolean) => void;
@@ -90,6 +91,7 @@ export function MarketplaceFilterPanel({
     onBrandChange,
     districtFilter,
     onDistrictChange,
+    availableLocations = [],
     discountFilter,
     onDiscountToggle,
     msmeOnlyFilter,
@@ -114,10 +116,10 @@ export function MarketplaceFilterPanel({
     // Collapsible accordion state - intuitive defaults
     const [openSections, setOpenSections] = useState<Record<string, boolean>>({
         quick: true,
-        categories: true,
-        subcategories: true,
-        price: true,
-        rating: true,
+        categories: false,
+        subcategories: false,
+        price: false,
+        rating: false,
         sellers: false,
         location: false,
         condition: false
@@ -163,6 +165,18 @@ export function MarketplaceFilterPanel({
 
     const displayedSellers = showAllSellers || sellerSearch ? filteredSellers : filteredSellers.slice(0, 6);
 
+    // Dynamic Location search & show-more
+    const [locationSearch, setLocationSearch] = useState('');
+    const [showAllLocations, setShowAllLocations] = useState(false);
+
+    const filteredLocations = useMemo(() => {
+        if (!locationSearch.trim()) return availableLocations;
+        const query = locationSearch.toLowerCase().trim();
+        return availableLocations.filter(loc => loc.toLowerCase().includes(query));
+    }, [availableLocations, locationSearch]);
+
+    const displayedLocations = showAllLocations || locationSearch ? filteredLocations : filteredLocations.slice(0, 6);
+
     // Custom Min/Max price state
     const [minPriceInput, setMinPriceInput] = useState(() => {
         if (priceFilter && priceFilter.includes('-')) {
@@ -196,14 +210,6 @@ export function MarketplaceFilterPanel({
         { label: '₹1,000 – ₹5,000', val: '1K_5K' },
         { label: '₹5,000 – ₹20,000', val: '5K_20K' },
         { label: 'Above ₹20,000', val: 'ABOVE_20K' }
-    ];
-
-    const popularLocations = [
-        { label: 'All Locations', val: '' },
-        { label: 'Jharsuguda Only', val: 'Jharsuguda' },
-        { label: 'Sambalpur District', val: 'Sambalpur' },
-        { label: 'Sundargarh / Rourkela', val: 'Sundargarh' },
-        { label: 'Odisha State', val: 'Odisha' },
     ];
 
     return (
@@ -247,7 +253,7 @@ export function MarketplaceFilterPanel({
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                     {/* Fast Dispatch Toggle */}
-                    <button
+                    {/* <button
                         type="button"
                         onClick={() => onFastDispatchToggle(!fastDispatchFilter)}
                         className={cn(
@@ -261,7 +267,7 @@ export function MarketplaceFilterPanel({
                         <Zap className={cn("h-3.5 w-3.5", fastDispatchFilter ? "text-amber-600 fill-amber-500" : "text-slate-400")} />
                         <span>Fast Dispatch</span>
                         {fastDispatchFilter && <Check className="h-3 w-3 text-amber-700" />}
-                    </button>
+                    </button> */}
 
                     {/* MSME Assured Toggle */}
                     <button
@@ -317,7 +323,7 @@ export function MarketplaceFilterPanel({
                     </button>
 
                     {/* Verified Sellers Toggle */}
-                    <button
+                    {/* <button
                         type="button"
                         onClick={() => onVerificationToggle(verificationFilter === 'VERIFIED' ? '' : 'VERIFIED')}
                         className={cn(
@@ -331,7 +337,7 @@ export function MarketplaceFilterPanel({
                         <Store className={cn("h-3.5 w-3.5", verificationFilter === 'VERIFIED' ? "text-indigo-600" : "text-slate-400")} />
                         <span>Verified Vendors</span>
                         {verificationFilter === 'VERIFIED' && <Check className="h-3 w-3 text-indigo-700" />}
-                    </button>
+                    </button> */}
                 </div>
             </div>
 
@@ -869,30 +875,89 @@ export function MarketplaceFilterPanel({
                 </div>
 
                 {openSections.location && (
-                    <div className="space-y-1 pt-1 animate-in fade-in duration-200">
-                        {popularLocations.map(loc => {
-                            const isSelected = districtFilter === loc.val;
-                            return (
-                                <label
-                                    key={loc.val}
-                                    className={cn(
-                                        "flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-xs font-medium cursor-pointer transition select-none border",
-                                        isSelected
-                                            ? "bg-rose-50/80 border-rose-200 text-rose-900 font-bold"
-                                            : "border-transparent text-slate-700 hover:bg-slate-50"
-                                    )}
-                                >
-                                    <input
-                                        type="radio"
-                                        name="districtFilterOption"
-                                        checked={isSelected}
-                                        onChange={() => onDistrictChange(loc.val)}
-                                        className="text-rose-600 focus:ring-rose-500 h-4 w-4"
-                                    />
-                                    <span className="flex-1">{loc.label}</span>
-                                </label>
-                            );
-                        })}
+                    <div className="space-y-2 pt-1 animate-in fade-in duration-200">
+                        {availableLocations.length > 4 && (
+                            <div className="relative mb-2">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                                <input
+                                    type="text"
+                                    value={locationSearch}
+                                    onChange={(e) => setLocationSearch(e.target.value)}
+                                    placeholder="Search location..."
+                                    className="w-full h-8 pl-8 pr-7 text-xs rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all placeholder:text-slate-400"
+                                />
+                                {locationSearch && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setLocationSearch('')}
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="space-y-1 max-h-48 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-200">
+                            {/* All Locations option */}
+                            <label
+                                className={cn(
+                                    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-xs font-medium cursor-pointer transition select-none border",
+                                    !districtFilter
+                                        ? "bg-rose-50/80 border-rose-200 text-rose-900 font-bold shadow-2xs"
+                                        : "border-transparent text-slate-700 hover:bg-slate-50 hover:border-slate-100"
+                                )}
+                            >
+                                <input
+                                    type="radio"
+                                    name="districtFilterOption"
+                                    checked={!districtFilter}
+                                    onChange={() => onDistrictChange('')}
+                                    className="text-rose-600 focus:ring-rose-500 h-4 w-4"
+                                />
+                                <span className="flex-1">All Locations</span>
+                            </label>
+
+                            {displayedLocations.map((locName: string) => {
+                                const isSelected = districtFilter.toLowerCase() === locName.toLowerCase();
+                                return (
+                                    <label
+                                        key={locName}
+                                        className={cn(
+                                            "flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-xs font-medium cursor-pointer transition select-none border",
+                                            isSelected
+                                                ? "bg-rose-50/80 border-rose-200 text-rose-900 font-bold shadow-2xs"
+                                                : "border-transparent text-slate-700 hover:bg-slate-50 hover:border-slate-100"
+                                        )}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="districtFilterOption"
+                                            checked={isSelected}
+                                            onChange={() => onDistrictChange(isSelected ? '' : locName)}
+                                            className="text-rose-600 focus:ring-rose-500 h-4 w-4"
+                                        />
+                                        <span title={locName} className="truncate flex-1">{locName}</span>
+                                    </label>
+                                );
+                            })}
+
+                            {displayedLocations.length === 0 && (
+                                <p className="text-[11px] text-slate-400 italic py-1 px-2.5">
+                                    {availableLocations.length === 0 ? 'No location records found' : 'No locations matching search'}
+                                </p>
+                            )}
+                        </div>
+
+                        {filteredLocations.length > 6 && !locationSearch && (
+                            <button
+                                type="button"
+                                onClick={() => setShowAllLocations(!showAllLocations)}
+                                className="w-full text-left text-[11px] font-bold text-rose-600 hover:text-rose-800 transition pt-1 pl-1 cursor-pointer"
+                            >
+                                {showAllLocations ? '− Show fewer' : `+ View ${filteredLocations.length - 6} more`}
+                            </button>
+                        )}
                     </div>
                 )}
             </div>

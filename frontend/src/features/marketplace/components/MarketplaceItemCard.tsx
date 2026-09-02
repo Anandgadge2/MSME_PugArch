@@ -25,6 +25,7 @@ interface MarketplaceItemCardProps {
     showAddToCart?: boolean;
     showCompare?: boolean;
     showRequestQuote?: boolean;
+    hideSeller?: boolean;
     className?: string;
 }
 
@@ -38,6 +39,7 @@ export function MarketplaceItemCard({
     item,
     itemType,
     showAddToCart = true,
+    hideSeller = false,
     className,
 }: MarketplaceItemCardProps) {
     const type = inferItemType(item, itemType);
@@ -88,10 +90,13 @@ export function MarketplaceItemCard({
     const sellerName = (item as any).seller?.name || (item as any).organization?.name || (item as any).organization?.organizationName;
 
     const cacheDetail = () => {
-        queryClient.setQueryData(
-            [type === 'service' ? 'marketplaceService' : 'marketplaceProduct', item.id],
-            type === 'service' ? { service: item, relatedServices: [] } : { product: item, relatedProducts: [] }
-        );
+        if (item.id && typeof item.id === 'number' && item.id > 0) {
+            void queryClient.prefetchQuery({
+                queryKey: [type === 'service' ? 'marketplaceService' : 'marketplaceProduct', item.id],
+                queryFn: () => type === 'service' ? marketplaceApi.getServiceDetail(item.id) : marketplaceApi.getProductDetail(item.id),
+                staleTime: 60 * 1000,
+            });
+        }
         marketplaceApi.trackInteraction({
             itemId: item.id,
             itemType: type === 'service' ? 'SERVICE' : 'PRODUCT',
@@ -104,7 +109,7 @@ export function MarketplaceItemCard({
     return (
         <article
             className={cn(
-                'group relative flex w-[190px] sm:w-[215px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white p-3.5 border border-slate-200/80 shadow-sm hover:shadow-xl hover:border-blue-200/80 transition-all duration-300 ease-out hover:-translate-y-1',
+                'group relative flex w-[180px] sm:w-[200px] shrink-0 snap-start flex-col overflow-hidden rounded-xl bg-white p-2.5 sm:p-3 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-blue-300 transition-all duration-200 ease-out hover:-translate-y-0.5',
                 className
             )}
         >
@@ -113,7 +118,7 @@ export function MarketplaceItemCard({
                 <Link
                     href={detailHref}
                     onClick={cacheDetail}
-                    className="relative block h-[155px] sm:h-[165px] w-full overflow-hidden rounded-xl bg-gradient-to-br from-slate-50 via-blue-50/25 to-slate-100 border border-slate-100/90 flex items-center justify-center shrink-0 cursor-pointer shadow-inner transition-all duration-300 group-hover:border-blue-200"
+                    className="relative block h-32 sm:h-36 w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-100/60 border border-slate-100 flex items-center justify-center shrink-0 cursor-pointer transition-all duration-200 group-hover:border-blue-200"
                 >
                     {imageUrl ? (
                         <img
@@ -121,45 +126,45 @@ export function MarketplaceItemCard({
                             alt={item.name}
                             loading="lazy"
                             onError={() => setImageFailed(true)}
-                            className="h-full w-full object-contain p-2 mix-blend-multiply transition-transform duration-300 ease-out group-hover:scale-108"
+                            className="h-full w-full object-contain p-2 mix-blend-multiply transition-transform duration-200 ease-out group-hover:scale-105"
                         />
                     ) : (
                         <span className="flex h-full w-full items-center justify-center text-slate-300">
-                            {type === 'service' ? <Wrench className="h-10 w-10 text-indigo-400" /> : <Package className="h-10 w-10 text-blue-400" />}
+                            {type === 'service' ? <Wrench className="h-8 w-8 text-indigo-400" /> : <Package className="h-8 w-8 text-blue-400" />}
                         </span>
                     )}
                 </Link>
 
                 {/* ── Star Rating & Discount Pill Row ── */}
-                <div className="mt-3 flex items-center justify-between gap-1.5 min-h-[22px]">
+                <div className="mt-2 flex items-center justify-between gap-1 min-h-[18px]">
                     <div className="flex items-center gap-1">
                         {ratingScore && reviewCount > 0 ? (
                             <>
-                                <span className="flex items-center text-xs font-black text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200/60">
-                                    <span className="mr-0.5 text-xs leading-none">★</span> {ratingScore}
+                                <span className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-50 px-1 py-0.5 rounded border border-amber-200/60">
+                                    <span className="mr-0.5 text-[10px] leading-none">★</span> {ratingScore}
                                 </span>
-                                <span className="text-[10px] font-semibold text-slate-400">
+                                <span className="text-[9px] font-medium text-slate-400">
                                     ({reviewCount})
                                 </span>
                             </>
                         ) : (
-                            <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">
+                            <span className="text-[9px] font-medium text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded">
                                 ★ New Listing
                             </span>
                         )}
                     </div>
 
                     {user && discountPercent > 0 && (
-                        <span className="inline-flex rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
+                        <span className="inline-flex rounded bg-emerald-600 px-1.5 py-0.5 text-[8.5px] font-bold uppercase tracking-wider text-white shadow-2xs">
                             {discountPercent}% OFF
                         </span>
                     )}
                 </div>
 
                 {/* ── Product Title ── */}
-                <Link href={detailHref} onClick={cacheDetail} className="block mt-1.5 mb-2">
+                <Link href={detailHref} onClick={cacheDetail} className="block mt-1 mb-1">
                     <h3
-                        className="line-clamp-2 text-xs sm:text-[13px] font-bold leading-snug text-slate-800 transition-colors duration-200 group-hover:text-blue-600"
+                        className="line-clamp-2 text-xs font-bold leading-snug text-slate-800 transition-colors duration-150 group-hover:text-blue-600 min-h-[32px]"
                         title={item.name}
                     >
                         {item.name}
@@ -167,9 +172,29 @@ export function MarketplaceItemCard({
                 </Link>
 
                 <div className="mt-auto">
-                    {/* ── Seller Info ── */}
-                    {sellerName && (
-                        <div className="mb-2 text-[10px] font-medium text-slate-500 truncate" title={`Sold by ${sellerName}`}>
+                    {/* ── Pricing ── */}
+                    {user ? (
+                        <div className="flex items-baseline gap-1.5 flex-wrap my-1">
+                            <span className="text-xs sm:text-sm font-black text-slate-900">
+                                {effectivePrice > 0 ? `₹${effectivePrice.toLocaleString('en-IN')}` : 'Price on Request'}
+                            </span>
+                            {discountPercent > 0 && displayOriginalPrice > effectivePrice && (
+                                <span className="text-[9.5px] text-slate-400 line-through">
+                                    ₹{displayOriginalPrice.toLocaleString('en-IN')}
+                                </span>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="my-1">
+                            <span className="inline-block rounded bg-slate-100 border border-slate-200 px-1.5 py-0.5 text-[9px] font-medium text-slate-500">
+                                Login for price
+                            </span>
+                        </div>
+                    )}
+
+                    {/* ── Seller Info (optional) ── */}
+                    {!hideSeller && sellerName && (
+                        <div className="mb-1 text-[9.5px] font-medium text-slate-500 truncate" title={`Sold by ${sellerName}`}>
                             Sold by <span className="text-slate-700 font-semibold">{sellerName}</span>
                         </div>
                     )}
@@ -177,14 +202,14 @@ export function MarketplaceItemCard({
             </div>
 
             {/* ── Action Button ── */}
-            <div className="mt-1 pt-1.5 border-t border-slate-100">
+            <div className="mt-1.5 pt-1.5 border-t border-slate-100">
                 <Link
                     href={detailHref}
                     onClick={cacheDetail}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#0b2447] via-[#123668] to-[#0b2447] hover:from-blue-600 hover:via-indigo-600 hover:to-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:shadow-blue-500/25 transition-all duration-300 active:scale-[0.98]"
+                    className="flex w-full items-center justify-center gap-1 rounded-lg bg-[#0b2447] hover:bg-blue-700 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-2xs transition-colors duration-150 active:scale-[0.98]"
                 >
-                    <span>View Product</span>
-                    <span className="text-blue-200 transition-transform duration-200 group-hover:translate-x-0.5">&rarr;</span>
+                    <span>View {type === 'service' ? 'Service' : 'Product'}</span>
+                    <span className="text-blue-200 transition-transform duration-150 group-hover:translate-x-0.5">&rarr;</span>
                 </Link>
             </div>
         </article>

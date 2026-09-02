@@ -62,9 +62,9 @@ router.get('/marketplace/compare', async (req, res: Response) => {
             include: {
               organization: { select: { id: true, organizationName: true, verificationStatus: true, city: true, state: true, district: true } },
               category: { select: { id: true, name: true, slug: true } },
-              images: { include: { fileAsset: true }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }], take: 1 },
+              images: { include: { fileAsset: true }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }] },
               specifications: true,
-              certifications: true
+              certifications: { include: { fileAsset: true } }
             }
           })
         : Promise.resolve([]),
@@ -74,7 +74,8 @@ router.get('/marketplace/compare', async (req, res: Response) => {
             include: {
               organization: { select: { id: true, organizationName: true, verificationStatus: true, city: true, state: true, district: true } },
               category: { select: { id: true, name: true, slug: true } },
-              certifications: true
+              specifications: true,
+              certifications: { include: { fileAsset: true } }
             }
           })
         : Promise.resolve([])
@@ -87,6 +88,7 @@ router.get('/marketplace/compare', async (req, res: Response) => {
       name: product.name,
       description: product.description,
       imageUrl: product.images?.[0]?.fileAsset?.url || null,
+      images: product.images || [],
       sellerOrganization: product.organization,
       category: product.category,
       price: product.price,
@@ -99,6 +101,12 @@ router.get('/marketplace/compare', async (req, res: Response) => {
       sku: product.sku,
       hsnCode: product.hsnCode,
       discount: product.discount,
+      originalPrice: product.originalPrice,
+      discountPrice: product.discountPrice,
+      discountPercent: product.discountPercent,
+      offerLabel: product.offerLabel,
+      bulkDealAvailable: product.bulkDealAvailable,
+      bulkMinQuantity: product.bulkMinQuantity,
       status: product.status,
       itemCondition: product.itemCondition,
       isMsmeMade: product.isMsmeMade,
@@ -108,8 +116,21 @@ router.get('/marketplace/compare', async (req, res: Response) => {
       warranty: null,
       availableQuantity: null,
       verificationStatus: product.organization?.verificationStatus,
-      technicalSpecs: product.specifications,
-      documents: product.certifications,
+      specifications: product.specifications || [],
+      technicalSpecs: product.specifications || [],
+      certifications: product.certifications || [],
+      documents: (product.certifications || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        issuingAuthority: c.issuingAuthority,
+        certificateNumber: c.certificateNumber,
+        verificationStatus: c.verificationStatus,
+        issuedAt: c.issuedAt,
+        expiresAt: c.expiresAt,
+        fileAssetId: c.fileAssetId,
+        fileAsset: c.fileAsset,
+        url: c.fileAsset?.url || null
+      })),
       lastUpdated: product.updatedAt,
       createdAt: product.createdAt,
       detailUrl: `/marketplace/products/${product.id}`
@@ -120,6 +141,7 @@ router.get('/marketplace/compare', async (req, res: Response) => {
       name: service.name,
       description: service.description,
       imageUrl: null,
+      images: [],
       sellerOrganization: service.organization,
       category: service.category,
       price: service.basePrice,
@@ -132,18 +154,43 @@ router.get('/marketplace/compare', async (req, res: Response) => {
       sku: null,
       hsnCode: null,
       discount: service.discount,
+      originalPrice: service.originalPrice,
+      discountPrice: service.discountPrice,
+      discountPercent: service.discountPercent,
+      offerLabel: service.offerLabel,
+      bulkDealAvailable: service.bulkDealAvailable,
+      bulkMinQuantity: service.bulkMinQuantity,
       status: service.status,
       itemCondition: null,
       isMsmeMade: false,
       serviceArea: service.serviceArea,
+      scopeOfWork: service.scopeOfWork,
+      deliverables: service.deliverables,
+      inclusions: service.inclusions,
+      exclusions: service.exclusions,
+      duration: service.duration,
+      slaResponseTime: service.slaResponseTime,
       moq: null,
       deliveryTime: service.deliveryTimeline || null,
       location: service.serviceArea || locationOf(service.organization),
       warranty: null,
       availableQuantity: null,
       verificationStatus: service.organization?.verificationStatus,
-      technicalSpecs: [],
-      documents: service.certifications,
+      specifications: service.specifications || [],
+      technicalSpecs: service.specifications || [],
+      certifications: service.certifications || [],
+      documents: (service.certifications || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        issuingAuthority: c.issuingAuthority,
+        certificateNumber: c.certificateNumber,
+        verificationStatus: c.verificationStatus,
+        issuedAt: c.issuedAt,
+        expiresAt: c.expiresAt,
+        fileAssetId: c.fileAssetId,
+        fileAsset: c.fileAsset,
+        url: c.fileAsset?.url || null
+      })),
       lastUpdated: service.updatedAt,
       createdAt: service.createdAt,
       detailUrl: `/marketplace/services/${service.id}`

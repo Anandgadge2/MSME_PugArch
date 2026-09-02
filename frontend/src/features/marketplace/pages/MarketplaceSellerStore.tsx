@@ -233,9 +233,9 @@ export default function MarketplaceSellerStore() {
                 </nav>
 
                 {/* Seller Hero Header */}
-                <section aria-label="Seller Information" className="bg-white border-b border-slate-200 shadow-xs">
+                <section aria-label="Seller Information" className="bg-white border-b border-slate-200 shadow-2xs">
                     {/* Banner Area */}
-                    <div className="w-full h-44 sm:h-56 md:h-64 relative overflow-hidden bg-gradient-to-r from-[#07172e] via-[#0b2447] to-[#173a6b]">
+                    <div className="w-full h-28 sm:h-36 md:h-40 relative overflow-hidden bg-gradient-to-r from-[#07172e] via-[#0b2447] to-[#173a6b]">
                         {vendor.bannerUrl ? (
                             <img
                                 src={resolveMediaUrl(vendor.bannerUrl) || ''}
@@ -251,13 +251,13 @@ export default function MarketplaceSellerStore() {
                                 <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]" />
                             </>
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/25 to-transparent" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/20 to-transparent" />
 
                         {/* Back Button overlay */}
-                        <div className="absolute top-4 left-4 z-10">
+                        <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-10">
                             <button
                                 onClick={() => router.back()}
-                                className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-slate-900/60 hover:bg-slate-900/80 border border-white/20 px-3.5 py-1.5 rounded-xl backdrop-blur-md transition-all shadow-sm active:scale-95 cursor-pointer"
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-slate-900/60 hover:bg-slate-900/80 border border-white/20 px-3 py-1 rounded-lg backdrop-blur-md transition-all shadow-sm active:scale-95 cursor-pointer"
                                 aria-label="Go back to previous page"
                             >
                                 <ArrowLeft className="h-3.5 w-3.5" /> Back
@@ -266,68 +266,68 @@ export default function MarketplaceSellerStore() {
                     </div>
 
                     {/* Profile Header Details with Overlapping Logo */}
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-6 pt-14 sm:pt-16 relative">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-4 pt-8 sm:pt-10 md:pt-12 relative">
                         {/* Logo Box */}
-                        <div className="absolute -top-14 sm:-top-16 left-4 sm:left-6 w-24 h-24 sm:w-32 sm:h-32 rounded-2xl bg-white border-2 border-white shadow-xl flex items-center justify-center p-2 z-10">
+                        <div className="absolute -top-7 sm:-top-9 md:-top-10 left-4 sm:left-6 w-16 h-16 sm:w-20 sm:h-20 md:w-22 md:h-22 rounded-xl bg-white border-2 border-white shadow-md flex items-center justify-center p-1.5 z-10">
                             {vendor.logoUrl ? (
                                 <img
                                     src={resolveMediaUrl(vendor.logoUrl) || ''}
                                     alt={`${name} Logo`}
-                                    className="w-full h-full object-contain rounded-xl bg-white"
+                                    className="w-full h-full object-contain rounded-lg bg-white"
                                 />
                             ) : (
-                                <div className="w-full h-full rounded-xl flex items-center justify-center text-3xl sm:text-4xl font-black bg-gradient-to-br from-blue-50 to-indigo-100 text-[#0b2447] border border-blue-100 shadow-inner">
+                                <div className="w-full h-full rounded-lg flex items-center justify-center text-2xl sm:text-3xl font-black bg-gradient-to-br from-blue-50 to-indigo-100 text-[#0b2447] border border-blue-100 shadow-inner">
                                     {initial}
                                 </div>
                             )}
                         </div>
 
                         {/* Content Grid */}
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pl-0 sm:pl-36 lg:pl-40 pt-2 sm:pt-0">
-                            <div className="min-w-0 space-y-2.5 flex-1">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pl-0 sm:pl-24 md:pl-28 pt-1 sm:pt-0">
+                            <div className="min-w-0 space-y-1.5 flex-1">
                                 {/* Badges */}
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
                                     {vendor.verificationStatus === 'VERIFIED' ? (
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-700 shadow-2xs">
-                                            <ShieldCheck className="h-3.5 w-3.5 text-blue-600" /> Verified Seller
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-blue-700 shadow-2xs">
+                                            <ShieldCheck className="h-3 w-3 text-blue-600" /> Verified Seller
                                         </span>
                                     ) : (
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-700 shadow-2xs">
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-amber-700 shadow-2xs">
                                             Registered Seller
                                         </span>
                                     )}
                                     {profile.isUdyamCertified && (
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 shadow-2xs">
-                                            <BadgeCheck className="h-3.5 w-3.5 text-emerald-600" /> Udyam Certified
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-emerald-700 shadow-2xs">
+                                            <BadgeCheck className="h-3 w-3 text-emerald-600" /> Udyam Certified
                                         </span>
                                     )}
                                     {profile.msmeCategory && (
-                                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-700">
+                                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold text-slate-700">
                                             MSME: {profile.msmeCategory}
                                         </span>
                                     )}
                                 </div>
 
-                                <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-slate-900 leading-tight">
+                                <h1 className="text-lg sm:text-xl md:text-2xl font-black tracking-tight text-slate-900 leading-tight">
                                     {name}
                                 </h1>
 
-                                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 font-medium">
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 font-medium">
                                     {vendor.sellerName && (
-                                        <span className="inline-flex items-center gap-1.5 bg-slate-100/90 px-2.5 py-1 rounded-lg border border-slate-200/80">
-                                            <User className="h-3.5 w-3.5 text-blue-600" />
-                                            Representative: <strong className="text-slate-800">{vendor.sellerName}</strong>
+                                        <span className="inline-flex items-center gap-1 bg-slate-100/90 px-2 py-0.5 rounded-md border border-slate-200/80 text-[11px]">
+                                            <User className="h-3 w-3 text-blue-600" />
+                                            Representative: <strong className="text-slate-800 ml-0.5">{vendor.sellerName}</strong>
                                         </span>
                                     )}
                                     {loc && (
-                                        <span className="inline-flex items-center gap-1 bg-slate-100/90 px-2.5 py-1 rounded-lg border border-slate-200/80">
-                                            <MapPin className="h-3.5 w-3.5 text-orange-500" />
+                                        <span className="inline-flex items-center gap-1 bg-slate-100/90 px-2 py-0.5 rounded-md border border-slate-200/80 text-[11px]">
+                                            <MapPin className="h-3 w-3 text-orange-500" />
                                             {loc}
                                         </span>
                                     )}
                                     {profile.organizationType && (
-                                        <span className="inline-flex items-center gap-1 bg-slate-100/90 px-2.5 py-1 rounded-lg border border-slate-200/80">
-                                            <Building2 className="h-3.5 w-3.5 text-slate-500" />
+                                        <span className="inline-flex items-center gap-1 bg-slate-100/90 px-2 py-0.5 rounded-md border border-slate-200/80 text-[11px]">
+                                            <Building2 className="h-3 w-3 text-slate-500" />
                                             {profile.organizationType.replace(/_/g, ' ')}
                                         </span>
                                     )}
@@ -335,22 +335,22 @@ export default function MarketplaceSellerStore() {
                             </div>
 
                             {/* Right Side: Action Buttons & Stats */}
-                            <div className="flex flex-wrap items-center gap-4 shrink-0 mt-2 lg:mt-0">
+                            <div className="flex flex-wrap items-center gap-3 shrink-0">
                                 {/* Action Buttons: Message Seller and Save Supplier */}
-                                <div className="flex items-center gap-2.5">
+                                <div className="flex items-center gap-2">
                                     <button
                                         type="button"
                                         onClick={handleMessageSeller}
-                                        className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-xl bg-[#0b2447] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#12335f] active:scale-95 transition-all shadow-sm cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b2447] focus-visible:ring-offset-2"
+                                        className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 px-3.5 rounded-lg bg-[#0b2447] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#12335f] active:scale-95 transition-all shadow-2xs cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b2447] focus-visible:ring-offset-2"
                                     >
-                                        <MessageSquare className="h-4 w-4" />
+                                        <MessageSquare className="h-3.5 w-3.5" />
                                         <span>Message Seller</span>
                                     </button>
 
                                     <button
                                         type="button"
                                         onClick={handleToggleSaveSupplier}
-                                        className={`inline-flex items-center justify-center gap-2 h-10 px-4 rounded-xl border text-xs font-bold uppercase tracking-wider active:scale-95 transition-all shadow-xs cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
+                                        className={`inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 px-3.5 rounded-lg border text-xs font-bold uppercase tracking-wider active:scale-95 transition-all shadow-2xs cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                                             isSaved
                                                 ? 'bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100'
                                                 : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
@@ -358,12 +358,12 @@ export default function MarketplaceSellerStore() {
                                     >
                                         {isSaved ? (
                                             <>
-                                                <BookmarkCheck className="h-4 w-4 text-blue-600 fill-blue-600" />
+                                                <BookmarkCheck className="h-3.5 w-3.5 text-blue-600 fill-blue-600" />
                                                 <span>Saved</span>
                                             </>
                                         ) : (
                                             <>
-                                                <Bookmark className="h-4 w-4 text-slate-500" />
+                                                <Bookmark className="h-3.5 w-3.5 text-slate-500" />
                                                 <span>Save Supplier</span>
                                             </>
                                         )}
@@ -371,14 +371,14 @@ export default function MarketplaceSellerStore() {
                                 </div>
 
                                 {/* Stats Badges */}
-                                <div className="flex items-center gap-2.5 border-l border-slate-200 pl-4">
-                                    <div className="text-center min-w-[76px] px-3 py-2 bg-slate-50 border border-slate-200/90 rounded-xl shadow-2xs">
-                                        <p className="text-xl font-black text-[#0b2447] leading-none">{products.length}</p>
-                                        <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mt-1">Products</p>
+                                <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
+                                    <div className="text-center min-w-[62px] px-2 py-1 bg-slate-50 border border-slate-200/90 rounded-lg shadow-2xs">
+                                        <p className="text-base font-black text-[#0b2447] leading-none">{products.length}</p>
+                                        <p className="text-[8.5px] font-extrabold uppercase tracking-wider text-slate-400 mt-0.5">Products</p>
                                     </div>
-                                    <div className="text-center min-w-[76px] px-3 py-2 bg-slate-50 border border-slate-200/90 rounded-xl shadow-2xs">
-                                        <p className="text-xl font-black text-[#0b2447] leading-none">{services.length}</p>
-                                        <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mt-1">Services</p>
+                                    <div className="text-center min-w-[62px] px-2 py-1 bg-slate-50 border border-slate-200/90 rounded-lg shadow-2xs">
+                                        <p className="text-base font-black text-[#0b2447] leading-none">{services.length}</p>
+                                        <p className="text-[8.5px] font-extrabold uppercase tracking-wider text-slate-400 mt-0.5">Services</p>
                                     </div>
                                 </div>
                             </div>
@@ -387,7 +387,7 @@ export default function MarketplaceSellerStore() {
                 </section>
 
                 {/* Tabs Bar */}
-                <div className="bg-white border-b border-slate-200 sticky top-[45px] z-10 shadow-xs">
+                <div className="bg-white border-b border-slate-200 sticky top-[45px] z-10 shadow-2xs">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-1 overflow-x-auto scrollbar-none">
                         {([
                             ['products', `Products (${products.length})`, Package],
@@ -397,13 +397,13 @@ export default function MarketplaceSellerStore() {
                             <button
                                 key={id}
                                 onClick={() => setTab(id)}
-                                className={`relative h-12 px-5 text-xs font-black uppercase tracking-wider border-b-2 flex items-center gap-2 whitespace-nowrap transition-all duration-200 cursor-pointer ${
+                                className={`relative h-10 sm:h-11 px-4 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-all duration-150 cursor-pointer ${
                                     tab === id
                                         ? 'border-[#0b2447] text-[#0b2447]'
                                         : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
                                 }`}
                             >
-                                <Icon className={`h-4 w-4 ${tab === id ? 'text-[#0b2447]' : 'text-slate-400'}`} />
+                                <Icon className={`h-3.5 w-3.5 ${tab === id ? 'text-[#0b2447]' : 'text-slate-400'}`} />
                                 <span>{label}</span>
                             </button>
                         ))}
@@ -411,48 +411,48 @@ export default function MarketplaceSellerStore() {
                 </div>
 
                 {/* Main Content Area */}
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+                <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5">
                     {/* Search & Filter Bar Section */}
                     {tab !== 'about' && (
-                        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 mb-6 shadow-sm">
+                        <div className="bg-white rounded-xl border border-slate-200/90 p-3 sm:p-3.5 mb-4 shadow-2xs">
                             {tab === 'products' ? (
-                                <div className="space-y-4">
+                                <div className="space-y-2.5">
                                     {/* Primary Filter Row */}
-                                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+                                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2.5">
                                         {/* Search Input */}
-                                        <div className="relative flex-1 min-w-[240px]">
-                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                <Search className="h-4 w-4 text-slate-400" />
+                                        <div className="relative flex-1 min-w-[200px]">
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <Search className="h-3.5 w-3.5 text-slate-400" />
                                             </div>
                                             <input
                                                 type="text"
                                                 value={q}
                                                 onChange={e => setQ(e.target.value)}
                                                 placeholder="Search products by name, brand, or specifications..."
-                                                className="w-full h-11 pl-10 pr-9 rounded-xl border border-slate-200 bg-slate-50/60 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0b2447]/15 focus:border-[#0b2447] transition-all"
+                                                className="w-full h-9 pl-9 pr-8 rounded-lg border border-slate-200 bg-slate-50/60 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0b2447] focus:border-[#0b2447] transition-all"
                                                 aria-label="Search products"
                                             />
                                             {q && (
                                                 <button
                                                     type="button"
                                                     onClick={() => setQ('')}
-                                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition"
+                                                    className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 transition"
                                                     aria-label="Clear search query"
                                                 >
-                                                    <X className="h-4 w-4" />
+                                                    <X className="h-3.5 w-3.5" />
                                                 </button>
                                             )}
                                         </div>
 
                                         {/* Filters Cluster: Category, Price Range, Sort */}
-                                        <div className="flex flex-wrap items-center gap-2.5">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             {/* Category Filter */}
                                             {availableCategories.length > 0 && (
-                                                <div className="relative min-w-[140px] sm:min-w-[160px] flex-1 sm:flex-initial">
+                                                <div className="relative min-w-[130px] sm:min-w-[150px] flex-1 sm:flex-initial">
                                                     <select
                                                         value={catId}
                                                         onChange={e => setCatId(e.target.value)}
-                                                        className="w-full h-11 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0b2447]/15 focus:border-[#0b2447] transition-all cursor-pointer"
+                                                        className="w-full h-9 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0b2447] focus:border-[#0b2447] transition-all cursor-pointer"
                                                         aria-label="Filter by category"
                                                     >
                                                         <option value="">All Categories ({products.length})</option>
@@ -466,41 +466,41 @@ export default function MarketplaceSellerStore() {
                                             )}
 
                                             {/* Inline Price Range Inputs */}
-                                            <div className="flex items-center gap-1.5 bg-slate-50/80 border border-slate-200 rounded-xl px-2.5 py-1 h-11 shrink-0">
-                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Price:</span>
-                                                <div className="relative w-20 sm:w-24">
-                                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 h-9 shrink-0">
+                                                <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400">Price:</span>
+                                                <div className="relative w-18 sm:w-20">
+                                                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">₹</span>
                                                     <input
                                                         type="number"
                                                         min="0"
                                                         value={minP}
                                                         onChange={e => setMinP(e.target.value)}
                                                         placeholder="Min"
-                                                        className="w-full h-8 pl-5 pr-1 text-xs font-semibold bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                        className="w-full h-7 pl-4 pr-1 text-xs font-semibold bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                         aria-label="Minimum price in Rupees"
                                                     />
                                                 </div>
                                                 <span className="text-slate-300 font-bold">-</span>
-                                                <div className="relative w-20 sm:w-24">
-                                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                                                <div className="relative w-18 sm:w-20">
+                                                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">₹</span>
                                                     <input
                                                         type="number"
                                                         min="0"
                                                         value={maxP}
                                                         onChange={e => setMaxP(e.target.value)}
                                                         placeholder="Max"
-                                                        className="w-full h-8 pl-5 pr-1 text-xs font-semibold bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                        className="w-full h-7 pl-4 pr-1 text-xs font-semibold bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                         aria-label="Maximum price in Rupees"
                                                     />
                                                 </div>
                                             </div>
 
                                             {/* Sort Select */}
-                                            <div className="relative min-w-[140px] sm:min-w-[155px] flex-1 sm:flex-initial">
+                                            <div className="relative min-w-[130px] sm:min-w-[145px] flex-1 sm:flex-initial">
                                                 <select
                                                     value={sortBy}
                                                     onChange={e => setSortBy(e.target.value)}
-                                                    className="w-full h-11 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0b2447]/15 focus:border-[#0b2447] transition-all cursor-pointer"
+                                                    className="w-full h-9 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0b2447] focus:border-[#0b2447] transition-all cursor-pointer"
                                                     aria-label="Sort products by"
                                                 >
                                                     <option value="latest">Sort: Latest First</option>
@@ -515,40 +515,40 @@ export default function MarketplaceSellerStore() {
 
                                     {/* Active Filter Chips & Summary */}
                                     {hasActiveFilters && (
-                                        <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
                                             <div className="flex flex-wrap items-center gap-1.5">
-                                                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
                                                     Active Filters:
                                                 </span>
                                                 {q && (
-                                                    <span className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                                                    <span className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 text-[11px] font-semibold px-2 py-0.5 rounded">
                                                         <span>Query: &ldquo;{q}&rdquo;</span>
                                                         <button type="button" onClick={() => setQ('')} className="hover:text-blue-900 transition ml-0.5">
-                                                            <X className="h-3.5 w-3.5" />
+                                                            <X className="h-3 w-3" />
                                                         </button>
                                                     </span>
                                                 )}
                                                 {catId && (
-                                                    <span className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                                                    <span className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] font-semibold px-2 py-0.5 rounded">
                                                         <span>Category: {availableCategories.find(c => c.id === catId)?.name || catId}</span>
                                                         <button type="button" onClick={() => setCatId('')} className="hover:text-indigo-900 transition ml-0.5">
-                                                            <X className="h-3.5 w-3.5" />
+                                                            <X className="h-3 w-3" />
                                                         </button>
                                                     </span>
                                                 )}
                                                 {(minP || maxP) && (
-                                                    <span className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                                                    <span className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold px-2 py-0.5 rounded">
                                                         <span>Price: ₹{minP || 0} &ndash; ₹{maxP || '∞'}</span>
                                                         <button type="button" onClick={() => { setMinP(''); setMaxP(''); }} className="hover:text-emerald-900 transition ml-0.5">
-                                                            <X className="h-3.5 w-3.5" />
+                                                            <X className="h-3 w-3" />
                                                         </button>
                                                     </span>
                                                 )}
                                                 {sortBy !== 'latest' && (
-                                                    <span className="inline-flex items-center gap-1 bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                                                    <span className="inline-flex items-center gap-1 bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-semibold px-2 py-0.5 rounded">
                                                         <span>Sort: {sortBy.replace('_', ' ')}</span>
                                                         <button type="button" onClick={() => setSortBy('latest')} className="hover:text-slate-900 transition ml-0.5">
-                                                            <X className="h-3.5 w-3.5" />
+                                                            <X className="h-3 w-3" />
                                                         </button>
                                                     </span>
                                                 )}
@@ -557,9 +557,9 @@ export default function MarketplaceSellerStore() {
                                             <button
                                                 type="button"
                                                 onClick={handleClearFilters}
-                                                className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline transition cursor-pointer"
+                                                className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline transition cursor-pointer"
                                             >
-                                                <RotateCcw className="h-3.5 w-3.5" /> Reset all filters
+                                                <RotateCcw className="h-3 w-3" /> Reset all
                                             </button>
                                         </div>
                                     )}
@@ -567,25 +567,25 @@ export default function MarketplaceSellerStore() {
                             ) : (
                                 /* Services Search Bar */
                                 <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                        <Search className="h-4 w-4 text-slate-400" />
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Search className="h-3.5 w-3.5 text-slate-400" />
                                     </div>
                                     <input
                                         type="text"
                                         value={q}
                                         onChange={e => setQ(e.target.value)}
                                         placeholder="Search services by title, skill, or scope of work..."
-                                        className="w-full h-11 pl-10 pr-9 rounded-xl border border-slate-200 bg-slate-50/60 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0b2447]/15 focus:border-[#0b2447] transition-all"
+                                        className="w-full h-9 pl-9 pr-8 rounded-lg border border-slate-200 bg-slate-50/60 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0b2447] focus:border-[#0b2447] transition-all"
                                         aria-label="Search services"
                                     />
                                     {q && (
                                         <button
                                             type="button"
                                             onClick={() => setQ('')}
-                                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition"
+                                            className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 transition"
                                             aria-label="Clear service search"
                                         >
-                                            <X className="h-4 w-4" />
+                                            <X className="h-3.5 w-3.5" />
                                         </button>
                                     )}
                                 </div>
@@ -596,16 +596,16 @@ export default function MarketplaceSellerStore() {
                     {/* ── Products Tab View ── */}
                     {tab === 'products' && (
                         <div>
-                            <div className="flex items-center justify-between mb-4">
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            <div className="flex items-center justify-between mb-3">
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                                     Showing <span className="text-slate-800 font-extrabold">{filteredProducts.length}</span> of {products.length} product{products.length !== 1 ? 's' : ''}
                                 </p>
                             </div>
 
                             {filteredProducts.length === 0 ? (
-                                <div className="text-center py-16 px-4 bg-white rounded-2xl border border-slate-200/90 shadow-sm">
-                                    <Package className="h-12 w-12 text-slate-300 mx-auto mb-3 animate-pulse" />
-                                    <h3 className="text-base font-bold text-slate-800">No Products Matching Criteria</h3>
+                                <div className="text-center py-12 px-4 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                                    <Package className="h-10 w-10 text-slate-300 mx-auto mb-2 animate-pulse" />
+                                    <h3 className="text-sm font-bold text-slate-800">No Products Matching Criteria</h3>
                                     <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
                                         No items were found matching your current search or price filters. Try adjusting your query.
                                     </p>
@@ -613,16 +613,16 @@ export default function MarketplaceSellerStore() {
                                         <button
                                             type="button"
                                             onClick={handleClearFilters}
-                                            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0b2447] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#12335f] transition shadow-xs cursor-pointer"
+                                            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0b2447] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#12335f] transition shadow-2xs cursor-pointer"
                                         >
                                             <RotateCcw className="h-3.5 w-3.5" /> Clear All Filters
                                         </button>
                                     )}
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-3.5">
                                     {filteredProducts.map((p: any) => (
-                                        <MarketplaceItemCard key={p.id} item={p} itemType="product" className="w-full" />
+                                        <MarketplaceItemCard key={p.id} item={p} itemType="product" hideSeller={true} className="w-full" />
                                     ))}
                                 </div>
                             )}
@@ -632,16 +632,16 @@ export default function MarketplaceSellerStore() {
                     {/* ── Services Tab View ── */}
                     {tab === 'services' && (
                         <div>
-                            <div className="flex items-center justify-between mb-4">
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            <div className="flex items-center justify-between mb-3">
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                                     Showing <span className="text-slate-800 font-extrabold">{filteredServices.length}</span> of {services.length} service{services.length !== 1 ? 's' : ''}
                                 </p>
                             </div>
 
                             {filteredServices.length === 0 ? (
-                                <div className="text-center py-16 px-4 bg-white rounded-2xl border border-slate-200/90 shadow-sm">
-                                    <Wrench className="h-12 w-12 text-slate-300 mx-auto mb-3 animate-pulse" />
-                                    <h3 className="text-base font-bold text-slate-800">No Services Available</h3>
+                                <div className="text-center py-12 px-4 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                                    <Wrench className="h-10 w-10 text-slate-300 mx-auto mb-2 animate-pulse" />
+                                    <h3 className="text-sm font-bold text-slate-800">No Services Available</h3>
                                     <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
                                         This seller has not listed any services matching your search terms.
                                     </p>
@@ -649,16 +649,16 @@ export default function MarketplaceSellerStore() {
                                         <button
                                             type="button"
                                             onClick={() => setQ('')}
-                                            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0b2447] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#12335f] transition shadow-xs cursor-pointer"
+                                            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0b2447] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#12335f] transition shadow-2xs cursor-pointer"
                                         >
                                             <RotateCcw className="h-3.5 w-3.5" /> Clear Search
                                         </button>
                                     )}
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-3.5">
                                     {filteredServices.map((s: any) => (
-                                        <MarketplaceItemCard key={s.id} item={s} itemType="service" className="w-full" />
+                                        <MarketplaceItemCard key={s.id} item={s} itemType="service" hideSeller={true} className="w-full" />
                                     ))}
                                 </div>
                             )}

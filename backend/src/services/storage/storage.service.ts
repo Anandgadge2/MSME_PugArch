@@ -501,7 +501,7 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
 
   if (signed.signedUrl.startsWith('http://') || signed.signedUrl.startsWith('https://')) {
     try {
-      const response = await fetch(signed.signedUrl);
+      const response = await fetch(signed.signedUrl, { signal: AbortSignal.timeout(1500) });
       if (response.ok) {
         return {
           ...signed,
@@ -512,16 +512,24 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
     } catch {}
   }
 
-  // Fallback: If asset is on GCP, try reading stream directly via authenticated GCS client
+  // Fallback: If asset is on GCP, try reading stream directly via authenticated GCS client with timeout
   if (assetObj?.storageProvider === 'gcp' || assetObj?.storageProviderEnum === 'GCP' || assetObj?.bucket) {
     try {
-      const gcpStream = gcpStorageProvider.createReadStream(assetObj.key);
-      const chunks: Buffer[] = [];
-      for await (const chunk of gcpStream) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const buffer = Buffer.concat(chunks);
-      if (buffer.length > 0) {
+      const readGcpStream = async () => {
+        const gcpStream = gcpStorageProvider.createReadStream(assetObj.key);
+        const chunks: Buffer[] = [];
+        for await (const chunk of gcpStream) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        return Buffer.concat(chunks);
+      };
+
+      const buffer = await Promise.race([
+        readGcpStream(),
+        new Promise<Buffer>((_, reject) => setTimeout(() => reject(new Error('GCS read timeout')), 1500))
+      ]);
+
+      if (buffer && buffer.length > 0) {
         return {
           ...signed,
           buffer,

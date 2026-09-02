@@ -58,6 +58,7 @@ import {
 import { cn } from '../../lib/utils';
 import { routeForNotification, type PortalNotification } from '../../lib/notifications';
 import { isShgUser, getSellerPortalPath } from '../../lib/shg';
+import { useMarketplaceCart } from '../../features/marketplace/hooks/useMarketplaceCart';
 
 interface SidebarItem {
   label: string;
@@ -811,6 +812,7 @@ interface HeaderProps {
 
 export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: HeaderProps) {
   const { user, token: authToken, logout, login } = useAuth();
+  const { count: cartCount } = useMarketplaceCart();
   const { orgStatus } = useOrgRole();
   const orgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
   const pathname = usePathname();

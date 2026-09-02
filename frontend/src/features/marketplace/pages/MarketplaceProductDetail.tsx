@@ -16,6 +16,7 @@ import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { openFileAsset } from '../../../lib/files';
 import { getMarketplaceImageCandidates, resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { CompareToggleButton } from '../components/CompareToggleButton';
+import { CompareTray } from '../components/CompareTray';
 import { saveSupplier } from '../utils/savedSuppliers';
 import { formatCatalogueDate } from '../../catalogue/utils/catalogueDetailUtils';
 import { useQuery as useTanstackQuery } from '@tanstack/react-query';
@@ -94,8 +95,8 @@ export default function MarketplaceProductDetail() {
             return res as { product: MarketplaceProduct; relatedProducts?: MarketplaceProduct[] };
         },
         enabled: productId > 0,
-        staleTime: 5 * 1000,
-        refetchOnMount: true,
+        staleTime: 30 * 1000,
+        refetchOnMount: 'always',
     });
 
     const product = (detailData as any)?.product || (detailData as any);
@@ -306,6 +307,21 @@ export default function MarketplaceProductDetail() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                            {user?.role === 'buyer' && (
+                                <Link
+                                    href="/cart"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-[#0b2447] transition shadow-2xs cursor-pointer"
+                                    title="View Shopping Cart"
+                                >
+                                    <ShoppingCart className="h-3.5 w-3.5 text-[#0b2447]" />
+                                    <span>Cart</span>
+                                    {cartItems.length > 0 && (
+                                        <span className="flex items-center justify-center min-w-[18px] h-4.5 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-black leading-none">
+                                            {cartItems.length}
+                                        </span>
+                                    )}
+                                </Link>
+                            )}
                             <button
                                 onClick={handleShare}
                                 className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 font-semibold text-xs hover:bg-slate-50 hover:text-[#0b2447] transition shadow-2xs cursor-pointer"
@@ -318,28 +334,7 @@ export default function MarketplaceProductDetail() {
                 </div>
 
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 pb-20">
-                    {/* Top Navigation Strip */}
-                    <div className="flex items-center justify-between mb-5">
-                        <button
-                            onClick={() => window.history.back()}
-                            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-[#0b2447] bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs hover:shadow-xs transition cursor-pointer"
-                        >
-                            <ArrowLeft className="h-3.5 w-3.5" /> Back
-                        </button>
-                        <div className="flex items-center gap-2">
-                            {productAny.isMsmeMade && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                    <Award className="h-3 w-3" /> Certified MSME
-                                </span>
-                            )}
-                            {isVerified && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
-                                    <BadgeCheck className="h-3 w-3" /> Verified Supplier
-                                </span>
-                            )}
-                        </div>
-                    </div>
-
+                   
                     {/* MOGLIX-STYLE 3-COLUMN ENTERPRISE LAYOUT */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                         
@@ -366,11 +361,11 @@ export default function MarketplaceProductDetail() {
                                                         className="w-full h-full object-contain p-1"
                                                         onError={(e) => { e.currentTarget.src = resolveMarketplaceImage(product, 'product'); }}
                                                     />
-                                                    {idx === 0 && (
+                                                    {/* {idx === 0 && (
                                                         <span className="absolute bottom-0 inset-x-0 bg-emerald-600 text-[7px] font-black text-white text-center py-0.2 uppercase">
                                                             Cover
                                                         </span>
-                                                    )}
+                                                    )} */}
                                                 </button>
                                             ))}
                                         </div>
@@ -393,11 +388,11 @@ export default function MarketplaceProductDetail() {
                                                 >
                                                     <Eye className="h-4 w-4" />
                                                 </button>
-                                                {selectedImage === 0 && (
+                                                {/* {selectedImage === 0 && (
                                                     <div className="absolute top-3 left-3 bg-emerald-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-xs flex items-center gap-1">
                                                         ★ Primary Photo
                                                     </div>
-                                                )}
+                                                )} */}
                                             </>
                                         ) : (
                                             <div className="flex flex-col items-center justify-center p-8 text-center">
@@ -796,11 +791,11 @@ export default function MarketplaceProductDetail() {
                                                     <MapPin className="h-3 w-3 text-slate-400 shrink-0" /> {location}
                                                 </p>
                                             )}
-                                            {isVerified && (
+                                            {/* {isVerified && (
                                                 <span className="inline-flex items-center gap-0.5 text-emerald-700 font-extrabold text-[10px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 mt-1">
                                                     <BadgeCheck className="h-3 w-3" /> Verified MSME
                                                 </span>
-                                            )}
+                                            )} */}
                                         </div>
                                     </div>
                                     {sellerOrgId && (
@@ -808,7 +803,7 @@ export default function MarketplaceProductDetail() {
                                             href={`/marketplace/sellers/${sellerOrgId}`}
                                             className="block text-center text-[11px] font-bold text-[#0b2447] hover:underline bg-slate-50 py-1.5 rounded-lg border border-slate-200/60 transition"
                                         >
-                                            Visit Supplier Storefront →
+                                            Visit Supplier Storefront
                                         </Link>
                                     )}
                                 </div>
@@ -892,6 +887,7 @@ export default function MarketplaceProductDetail() {
             )}
 
             {!useDashboardShell && <MarketplaceFooter />}
+            <CompareTray />
         </div>
     );
 }
