@@ -40,6 +40,13 @@ const generateSecureCaptchaString = () => {
   return result;
 };
 
+const FEATURE_PILLS = [
+  { label: 'MSME Direct Linkage', icon: Building2, desc: 'Direct access to industrial enterprise demand' },
+  { label: 'Smart Escrow & Settlements', icon: ShieldCheck, desc: 'Idempotency protected milestone payments' },
+  { label: 'Instant Reverse Bidding', icon: Zap, desc: 'Real-time competitive procurement auctions' },
+  { label: 'SHG Empowerment & Linkage', icon: UsersRound, desc: 'Inclusive clusters & transparent market linkage' }
+];
+
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -71,7 +78,7 @@ export default function Login() {
   // Dynamic feature ticker
   useEffect(() => {
     const timer = setInterval(() => {
-      setActiveFeatureIndex(prev => (prev + 1) % 4);
+      setActiveFeatureIndex(prev => (prev + 1) % FEATURE_PILLS.length);
     }, 3200);
     return () => clearInterval(timer);
   }, []);
@@ -378,10 +385,7 @@ export default function Login() {
     }
   };
 
-  const featurePills = [
-    { label: 'MSME Direct Linkage', icon: Building2, desc: 'Direct access to industrial enterprise demand' },
-    { label: 'Smart Escrow & Settlements', icon: ShieldCheck, desc: 'Idempotency protected milestone payments' },
-    { label: 'Instant Reverse Bidding', icon: Zap, desc: 'Real-time competitive procurement auctions' }  ];
+  const activePill = FEATURE_PILLS[activeFeatureIndex % FEATURE_PILLS.length] || FEATURE_PILLS[0];
 
   return (
     <div className="relative flex min-h-dvh w-full overflow-hidden bg-slate-950 font-sans selection:bg-[#c8a45c]/30 selection:text-white">
@@ -475,24 +479,24 @@ export default function Login() {
           {/* Dynamic Interactive Feature Carousel Pill */}
           <div className="mt-6 w-full max-w-sm">
             <div className="flex items-center gap-3 rounded-2xl bg-white/[0.07] border border-white/15 px-4 py-3 backdrop-blur-md shadow-lg transition-all duration-500 hover:bg-white/[0.1] hover:border-[#c8a45c]/40">
-              {React.createElement(featurePills[activeFeatureIndex].icon, {
+              {React.createElement(activePill.icon, {
                 className: "h-5 w-5 text-[#c8a45c] shrink-0 animate-bounce",
                 style: { animationDuration: '2s' }
               })}
               <div className="text-left min-w-0 flex-1">
                 <div className="text-xs font-black text-white tracking-wide truncate">
-                  {featurePills[activeFeatureIndex].label}
+                  {activePill.label}
                 </div>
                 <div className="text-[10px] font-medium text-slate-300 truncate">
-                  {featurePills[activeFeatureIndex].desc}
+                  {activePill.desc}
                 </div>
               </div>
               <div className="flex gap-1 shrink-0">
-                {featurePills.map((_, i) => (
+                {FEATURE_PILLS.map((_, i) => (
                   <span
                     key={i}
                     className={`h-1.5 rounded-full transition-all duration-300 ${
-                      i === activeFeatureIndex ? 'w-4 bg-[#c8a45c]' : 'w-1.5 bg-white/20'
+                      i === (activeFeatureIndex % FEATURE_PILLS.length) ? 'w-4 bg-[#c8a45c]' : 'w-1.5 bg-white/20'
                     }`}
                   />
                 ))}
