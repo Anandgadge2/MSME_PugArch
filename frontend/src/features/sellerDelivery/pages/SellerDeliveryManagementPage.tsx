@@ -9,7 +9,8 @@
  *   READY_FOR_PICKUP   → Save Dispatch Details
  *   Delivery Tracking  → Picked Up → In Transit → Out for Delivery → Delivered
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
     AlertCircle, ArrowRight, Calendar, Check, CheckCircle2, ChevronDown, ChevronUp,
@@ -95,14 +96,71 @@ const readableStatus = (status: string) => status.replace(/_/g, ' ');
 function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction: (kind: string) => void }) {
     const router = useRouter();
     const [open, setOpen] = useState(false);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
     const status = String(delivery.status);
+
+    const updatePosition = useCallback(() => {
+        if (!buttonRef.current) return;
+        const rect = buttonRef.current.getBoundingClientRect();
+        const menuWidth = 192; // 12rem / w-48
+        const menuEstimatedHeight = 220;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const shouldOpenUp = spaceBelow < menuEstimatedHeight && rect.top > menuEstimatedHeight;
+
+        let left = rect.right - menuWidth;
+        if (left < 8) left = 8;
+        if (left + menuWidth > window.innerWidth - 8) {
+            left = window.innerWidth - menuWidth - 8;
+        }
+
+        setCoords({
+            top: shouldOpenUp ? undefined : rect.bottom + 4,
+            bottom: shouldOpenUp ? window.innerHeight - rect.top + 4 : undefined,
+            left,
+        });
+    }, []);
 
     useEffect(() => {
         if (!open) return;
-        const handleClickOutside = () => setOpen(false);
-        window.addEventListener('click', handleClickOutside);
-        return () => window.removeEventListener('click', handleClickOutside);
-    }, [open]);
+        updatePosition();
+
+        const handleScroll = (e: Event) => {
+            if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+            updatePosition();
+        };
+
+        const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+            if (
+                menuRef.current && !menuRef.current.contains(e.target as Node) &&
+                buttonRef.current && !buttonRef.current.contains(e.target as Node)
+            ) {
+                setOpen(false);
+            }
+        };
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setOpen(false);
+                buttonRef.current?.focus();
+            }
+        };
+
+        window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+        window.addEventListener('resize', updatePosition);
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('touchstart', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            window.removeEventListener('scroll', handleScroll, { capture: true });
+            window.removeEventListener('resize', updatePosition);
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('touchstart', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [open, updatePosition]);
 
     const poId = delivery.purchaseOrder?.id || delivery.purchaseOrderId;
     const amount = delivery.purchaseOrder?.amount;
@@ -110,23 +168,57 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
     return (
         <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
             <button
+                ref={buttonRef}
                 type="button"
+                aria-label={`Actions for delivery DLV-${delivery.id}`}
+                aria-haspopup="menu"
+                aria-expanded={open}
                 onClick={(e) => {
                     e.stopPropagation();
                     setOpen(!open);
                 }}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+                className={cn(
+                    "h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#12335f]/20",
+                    open && "bg-slate-100 border-slate-300 text-slate-900"
+                )}
                 title="Actions"
             >
                 <MoreVertical className="h-4 w-4" />
             </button>
 
-            {open && (
-                <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+            {open && coords && typeof document !== 'undefined' && createPortal(
+                <div
+                    ref={menuRef}
+                    style={{
+                        position: 'fixed',
+                        top: coords.top !== undefined ? `${coords.top}px` : undefined,
+                        bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+                        left: `${coords.left}px`,
+                        zIndex: 99999,
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+                    role="menu"
+                    aria-label="Delivery actions"
+                >
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                            setOpen(false);
+                            router.push(`/delivery/${delivery.id}`);
+                        }}
+                        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                    >
+                        <Eye className="h-3.5 w-3.5 text-slate-500" />
+                        <span>View Details</span>
+                    </button>
+
                     {(status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && (
                         <>
                             <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => { setOpen(false); onAction('accept'); }}
                                 className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
                             >
@@ -135,6 +227,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             </button>
                             <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => { setOpen(false); onAction('reject'); }}
                                 className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
                             >
@@ -147,6 +240,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                     {status === 'SELLER_ACCEPTED' && (
                         <button
                             type="button"
+                            role="menuitem"
                             onClick={() => { setOpen(false); onAction('packed'); }}
                             className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
                         >
@@ -158,6 +252,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                     {status === 'PACKED' && (
                         <button
                             type="button"
+                            role="menuitem"
                             onClick={() => { setOpen(false); onAction('ready'); }}
                             className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left"
                         >
@@ -171,6 +266,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             {status === 'READY_FOR_PICKUP' && (
                                 <button
                                     type="button"
+                                    role="menuitem"
                                     onClick={() => { setOpen(false); onAction('dispatch-details'); }}
                                     className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
                                 >
@@ -180,6 +276,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             )}
                             <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => { setOpen(false); onAction('track-info'); }}
                                 className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
                             >
@@ -194,6 +291,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             {poId && (
                                 <button
                                     type="button"
+                                    role="menuitem"
                                     onClick={() => {
                                         setOpen(false);
                                         router.push(`/seller/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`);
@@ -206,6 +304,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             )}
                             <button
                                 type="button"
+                                role="menuitem"
                                 onClick={() => { setOpen(false); onAction('upload-pod'); }}
                                 className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
                             >
@@ -214,7 +313,8 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             </button>
                         </>
                     )}
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

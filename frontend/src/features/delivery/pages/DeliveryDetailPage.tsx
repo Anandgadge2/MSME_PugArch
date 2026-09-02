@@ -73,8 +73,8 @@ import {
   useRequestDpExtension,
   useRespondDpExtension,
   useResolveDispute,
-  useSendDeliveryOtp,
-  useVerifyDeliveryOtp,
+  // useSendDeliveryOtp,
+  // useVerifyDeliveryOtp,
   useVerifyInvoice
 } from '../hooks';
 import { uploadDeliveryFile } from '../upload';
@@ -279,13 +279,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
 
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2 md:self-start">
-            <Button
-              variant="outline"
-              onClick={() => copyToClipboard(window.location.href, 'Tracking Link')}
-              className="h-9.5 rounded-xl border-slate-200 bg-white px-3 text-xs font-black uppercase text-slate-700 hover:bg-slate-50 shadow-2xs"
-            >
-              <Share2 className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Share Link
-            </Button>
+           
             <Button
               variant="outline"
               onClick={onClose || (() => window.history.back())}
@@ -672,7 +666,7 @@ function ManualTrackingActions({
     runWithToast(
       () => updateMut.mutateAsync({ status: nextStatus }),
       {
-        loading: `Advancing to ${DELIVERY_STATUS_LABELS[nextStatus]}...`,
+        loading: `Advancing status to ${DELIVERY_STATUS_LABELS[nextStatus]}...`,
         success: `Status advanced to ${DELIVERY_STATUS_LABELS[nextStatus]}!`,
         error: (err: any) => err?.message || 'Status update failed'
       }
@@ -686,7 +680,7 @@ function ManualTrackingActions({
       <SectionHeading
         icon={Truck}
         title="Shipment Controls"
-        meta={<span className="rounded-full bg-teal-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#0f766e]">Seller Rail</span>}
+        meta={<span className="rounded-full bg-teal-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#0f766e]">Seller Actions</span>}
       />
       <div className="space-y-4">
         {/* Current State Showcase */}
@@ -706,16 +700,16 @@ function ManualTrackingActions({
             </div>
             <div className="flex items-center justify-between text-[11px]">
               <span className="font-semibold text-slate-500">Carrier:</span>
-              <span className="font-bold text-slate-900">{delivery.carrierName || delivery.logisticsPartnerName || 'Standard'}</span>
+              <span className="font-bold text-slate-900">{delivery.carrierName || delivery.logisticsPartnerName || 'Standard Delivery'}</span>
             </div>
             <div className="flex items-center justify-between text-[11px]">
-              <span className="font-semibold text-slate-500">ETA:</span>
+              <span className="font-semibold text-slate-500">Expected Date:</span>
               <span className="font-bold text-slate-900">{formatDate(delivery.expectedDelivery || delivery.purchaseOrder?.expectedDelivery)}</span>
             </div>
           </div>
         </div>
 
-        {/* Latest Seller Update */}
+        {/* Previous Update Log */}
         <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
           <p className={fieldLabel}>Previous Milestone Log</p>
           {latest ? (
@@ -729,7 +723,7 @@ function ManualTrackingActions({
               </p>
             </div>
           ) : (
-            <p className="mt-1 text-xs font-semibold text-slate-400">No previous manual updates recorded.</p>
+            <p className="mt-1 text-xs font-semibold text-slate-400">No previous milestone updates recorded.</p>
           )}
         </div>
 
@@ -743,7 +737,7 @@ function ManualTrackingActions({
 
           {!isCompleted && nextStatus ? (
             <div className="rounded-lg bg-white p-2.5 border border-teal-100 shadow-2xs">
-              <p className="text-[10px] font-bold text-slate-500">Milestone Target:</p>
+              <p className="text-[10px] font-bold text-slate-500">Advancing To:</p>
               <p className="text-xs font-black text-slate-900 flex items-center gap-1.5 mt-0.5">
                 <ArrowRight className="h-3.5 w-3.5 text-[#0f766e]" />
                 {DELIVERY_STATUS_LABELS[nextStatus]}
@@ -771,9 +765,15 @@ function ManualTrackingActions({
             {isCompleted
               ? 'Delivery Completed'
               : nextStatus
-              ? `Advance: ${DELIVERY_STATUS_LABELS[nextStatus]}`
-              : 'Status Updated'}
+              ? `Advance To: ${DELIVERY_STATUS_LABELS[nextStatus]}`
+              : 'Status Up to Date'}
           </Button>
+
+          {!isCompleted && nextStatus && (
+            <p className="text-[10px] text-center text-slate-500 font-medium">
+              Clicking updates the tracking timeline and notifies the buyer in real time.
+            </p>
+          )}
         </div>
       </div>
     </section>
@@ -1530,6 +1530,8 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
   );
 }
 
+/* ================== Handover OTP Verification (Temporarily Commented Out) ================== */
+/*
 function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: DeliveryDetailDto; accessRole: string | null }) {
   const sendOtpMut = useSendDeliveryOtp(delivery.id);
   const verifyOtpMut = useVerifyDeliveryOtp(delivery.id);
@@ -1643,5 +1645,6 @@ function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: Delivery
     </CollapsibleSection>
   );
 }
+*/
 
 export default DeliveryDetailPage;
