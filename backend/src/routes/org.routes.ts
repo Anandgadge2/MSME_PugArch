@@ -690,26 +690,13 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                                     OR: [{ endDate: null }, { endDate: { gt: new Date() } }]
                                 }
                             }).catch(() => 0),
-                            prisma.quoteRequest.count({ where: { ...sellerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0),
-                            prisma.buyerRequirement.count({
+                            prisma.tender.count({
                                 where: {
-                                    status: { in: ['PUBLISHED', 'OPEN'] },
-                                    lastDate: { gte: new Date() }
-                                }
-                            }).catch(() => 0),
-                            prisma.requirement.count({
-                                where: {
-                                    status: { in: ['APPROVED', 'SOURCING'] },
-                                    procurementMethod: { not: 'DIRECT_PURCHASE' },
-                                    AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
-                                }
-                            }).catch(() => 0),
-                            prisma.auction.count({
-                                where: {
-                                    status: { in: ['SCHEDULED', 'LIVE', 'PAUSED', 'scheduled', 'live', 'paused', 'active', 'ACTIVE'] }
+                                    status: { in: openTenderStatuses as any },
+                                    OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }]
                                 }
                             }).catch(() => 0)
-                        ]).then(([pb, qr, br, req, auc]) => pb + qr + br + req + auc).catch(() => 0)
+                        ]).then(([pb, t]) => pb + t).catch(() => 0)
                         : Promise.resolve(0),
                     // Live / Active reverse auctions
                     isSeller

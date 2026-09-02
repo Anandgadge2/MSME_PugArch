@@ -132,14 +132,99 @@ export const listProcurementOrders = async (actor: AuthenticatedUser, query: any
       throw new ApiError(403, 'Access denied', 'FORBIDDEN_ROLE');
     }
   }
+
+  // Parse filters
   if (query.status) where.status = String(query.status);
+  if (query.buyerId) where.buyerId = Number(query.buyerId);
+  if (query.sellerId) where.sellerId = Number(query.sellerId);
+
+  if (query.minAmount || query.maxAmount) {
+    where.amount = {};
+    if (query.minAmount) where.amount.gte = Number(query.minAmount);
+    if (query.maxAmount) where.amount.lte = Number(query.maxAmount);
+  }
+
+  if (query.dateFrom || query.dateTo) {
+    where.createdAt = {};
+    if (query.dateFrom) where.createdAt.gte = new Date(query.dateFrom);
+    if (query.dateTo) {
+      const dateTo = new Date(query.dateTo);
+      dateTo.setUTCHours(23, 59, 59, 999);
+      where.createdAt.lte = dateTo;
+    }
+  }
+
+  if (query.search) {
+    const s = String(query.search).trim();
+    where.OR = [
+      { poNumber: { contains: s, mode: 'insensitive' } },
+      { title: { contains: s, mode: 'insensitive' } },
+      { buyer: { name: { contains: s, mode: 'insensitive' } } },
+      { seller: { name: { contains: s, mode: 'insensitive' } } },
+    ];
+  }
+
+  const orderBy: any = {};
+  if (query.sort) {
+    const parts = String(query.sort).split('_');
+    if (parts.length === 2) {
+      const field = parts[0];
+      const dir = parts[1] === 'asc' ? 'asc' : 'desc';
+      if (['poNumber', 'title', 'amount', 'createdAt', 'status'].includes(field)) {
+        orderBy[field] = dir;
+      } else if (field === 'buyer') {
+        orderBy.buyer = { name: dir };
+      } else if (field === 'seller') {
+        orderBy.seller = { name: dir };
+      } else {
+        orderBy.updatedAt = 'desc';
+      }
+    } else {
+      orderBy.updatedAt = 'desc';
+    }
+  } else {
+    orderBy.updatedAt = 'desc';
+  }
+
   const take = Math.min(100, Math.max(1, Number(query.pageSize || query.take || 50)));
   const skip = query.page ? (Math.max(1, Number(query.page)) - 1) * take : Math.max(0, Number(query.skip || 0));
+
   const [items, total] = await Promise.all([
-    db.purchaseOrder.findMany({ where, include: poInclude, orderBy: { updatedAt: 'desc' }, skip, take }),
+    db.purchaseOrder.findMany({ where, include: poInclude, orderBy, skip, take }),
     db.purchaseOrder.count({ where })
   ]);
-  return { items, total, skip, take };
+
+  let metadata: any = undefined;
+  if (query.withMetadata === 'true') {
+    const baseWhere: any = { sourceType: 'procurement_bid_award' };
+    if (!isAdmin(actor)) {
+      if (actor.role === 'buyer') baseWhere.buyerId = Number(actor.id);
+      else if (actor.role === 'seller') baseWhere.sellerId = { in: await getSellerUserIdsForActor(actor) };
+    }
+    
+    // Use groupBy for speed instead of distinct + joins
+    const [buyerGroups, sellerGroups, statusGroups] = await Promise.all([
+      db.purchaseOrder.groupBy({ by: ['buyerId'], where: baseWhere }),
+      db.purchaseOrder.groupBy({ by: ['sellerId'], where: baseWhere }),
+      db.purchaseOrder.groupBy({ by: ['status'], where: baseWhere })
+    ]);
+
+    const buyerIds = buyerGroups.map(g => g.buyerId);
+    const sellerIds = sellerGroups.map(g => g.sellerId);
+
+    const [buyers, sellers] = await Promise.all([
+      db.user.findMany({ where: { id: { in: buyerIds } }, select: { id: true, name: true } }),
+      db.user.findMany({ where: { id: { in: sellerIds } }, select: { id: true, name: true } })
+    ]);
+
+    metadata = {
+      buyers: buyers.sort((a, b) => a.name.localeCompare(b.name)),
+      sellers: sellers.sort((a, b) => a.name.localeCompare(b.name)),
+      statuses: statusGroups.map(s => s.status).sort()
+    };
+  }
+
+  return { items, total, skip, take, metadata };
 };
 
 export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award: any, bid: any) => {

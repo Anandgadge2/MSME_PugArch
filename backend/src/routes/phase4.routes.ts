@@ -8413,8 +8413,22 @@ router.put('/admin/fraud-alerts/:id', authenticate, authorizeAdmin, asyncRoute(a
 router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const kpiOnly = req.query.kpiOnly === 'true';
   const detailsOnly = req.query.detailsOnly === 'true';
+  const timeframe = (req.query.timeframe as string) || 'all';
+  const role = (req.query.role as string) || 'all';
 
-  const pendingOnboardingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review'];
+  let startDate: Date | undefined;
+  if (timeframe === '7d') startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  else if (timeframe === '30d') startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  else if (timeframe === '90d') startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  else if (timeframe === '1y') startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+
+  const globalWhere: any = {};
+  if (startDate) globalWhere.createdAt = { gte: startDate };
+
+  const userRoleWhere: any = {};
+  if (role !== 'all') userRoleWhere.role = role;
+
+  const pendingOnboardingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review', 'resubmission_required'];
 
   // 1. If detailsOnly is not true, we fetch the counts and KPIs (wrapped in cache)
   let totalNetwork = 0;
@@ -8433,49 +8447,59 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
 
   if (!detailsOnly) {
     const cachedKpis = await getOrSetCache(
-      redisKeys.cacheAdminKpiSummary(),
+      redisKeys.cacheAdminKpiSummary(timeframe, role),
       async () => {
         const countsPromise = Promise.all([
-          db.user.count(),
-          db.organization.count({ where: { verificationStatus: 'VERIFIED', organizationType: 'SELLER' } }).catch(() => db.user.count({ where: { role: 'seller', onboardingStatus: 'approved_for_procurement' } })),
-          db.organization.count({ where: { verificationStatus: 'VERIFIED', organizationType: { in: ['BUYER', 'GOVERNMENT', 'PSU', 'PUBLIC_LIMITED', 'PRIVATE_LIMITED'] } } }).catch(() => db.user.count({ where: { role: 'buyer', onboardingStatus: 'approved_for_procurement' } })),
-          db.user.count({ where: { role: { in: ['seller', 'buyer'] }, onboardingStatus: { in: pendingOnboardingStatuses } } }),
-          db.tender.count(),
-          db.bid.count(),
-          db.purchaseOrder.count(),
-          db.paymentTransaction.count(),
-          db.dispute.count()
+          db.user.count({ where: { ...globalWhere, ...userRoleWhere } }),
+          db.user.count({ where: { role: 'seller', onboardingStatus: 'approved_for_procurement', ...globalWhere, ...userRoleWhere } }),
+          db.user.count({ where: { role: 'buyer', onboardingStatus: 'approved_for_procurement', ...globalWhere, ...userRoleWhere } }),
+          db.user.count({ where: { role: { in: ['seller', 'buyer'] }, onboardingStatus: { in: pendingOnboardingStatuses }, ...globalWhere, ...userRoleWhere } }),
+          db.tender.count({ where: globalWhere }),
+          db.bid.count({ where: globalWhere }),
+          db.purchaseOrder.count({ where: globalWhere }),
+          db.paymentTransaction.count({ where: globalWhere }),
+          db.dispute.count({ where: globalWhere })
         ]);
 
         const aggregatesPromise = (async () => {
           // Active PO Sum
           const activePOs = await db.purchaseOrder.aggregate({
-            where: { status: { in: ['accepted', 'in_progress', 'delivered'] } },
+            where: { status: { in: ['accepted', 'in_progress', 'delivered'] }, ...globalWhere },
             _sum: { amount: true }
           });
           const activeVal = '₹' + (Number(activePOs._sum.amount || 0) / 10000000).toFixed(2) + 'Cr';
 
           // Tender metrics
           const [closedTenders, awardedTenders] = await Promise.all([
-            db.tender.count({ where: { status: 'closed' } }),
-            db.tender.count({ where: { status: 'closed', awardedBidId: { not: null } } })
+            db.tender.count({ where: { status: 'closed', ...globalWhere } }),
+            db.tender.count({ where: { status: 'closed', awardedBidId: { not: null }, ...globalWhere } })
           ]);
           const successRate = closedTenders > 0 ? ((awardedTenders / closedTenders) * 100).toFixed(1) + '%' : '0%';
 
           // Optimized Avg Onboarding Time using queryRaw with a fallback
           let onboardingTime = '0 Days';
           try {
-            const rawResult = await db.$queryRaw<any[]>`
+            let filterSql = `WHERE "onboardingStatus" = 'approved_for_procurement'`;
+            const args: any[] = [];
+            if (startDate) {
+              args.push(startDate);
+              filterSql += ` AND "createdAt" >= $${args.length}`;
+            }
+            if (role !== 'all') {
+              args.push(role);
+              filterSql += ` AND "role" = $${args.length}`;
+            }
+            const rawResult = await db.$queryRawUnsafe<any[]>(`
               SELECT AVG(EXTRACT(EPOCH FROM ("updatedAt" - "createdAt")) / 86400) as "avgDays"
               FROM "User"
-              WHERE "onboardingStatus" = 'approved_for_procurement'
-            `;
+              ${filterSql}
+            `, ...args);
             const avgDays = rawResult?.[0]?.avgDays ?? rawResult?.[0]?.avgdays;
             onboardingTime = avgDays ? Number(avgDays).toFixed(1) + ' Days' : '0 Days';
           } catch (e) {
             // Fallback to sample logic
             const approvedUsers = await db.user.findMany({
-              where: { onboardingStatus: 'approved_for_procurement' },
+              where: { onboardingStatus: 'approved_for_procurement', ...globalWhere, ...userRoleWhere },
               select: { createdAt: true, updatedAt: true },
               take: 1000,
               orderBy: { updatedAt: 'desc' }
@@ -8505,7 +8529,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
         const tenderSuccessRate_val = aggregates.successRate;
         const avgOnboardingTime_val = aggregates.onboardingTime;
 
-        const totalOnboarded = await db.user.count({ where: { onboardingStatus: { not: 'pending' } } });
+        const totalOnboarded = await db.user.count({ where: { onboardingStatus: { not: 'pending' }, ...globalWhere, ...userRoleWhere } });
         const approvalRate_val = totalOnboarded > 0 ? ((activeSellers_val + activeBuyers_val) / totalOnboarded * 100).toFixed(1) + '%' : '0%';
 
         return {
@@ -8571,7 +8595,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       const recentUsers = await db.user.findMany({
-        where: { createdAt: { gte: sixMonthsAgo } },
+        where: { createdAt: { gte: sixMonthsAgo }, ...globalWhere, ...userRoleWhere },
         select: { createdAt: true, role: true }
       });
 
@@ -8599,7 +8623,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       const recentPayments = await db.paymentTransaction.findMany({
-        where: { createdAt: { gte: sevenDaysAgo } },
+        where: { createdAt: { gte: sevenDaysAgo }, ...globalWhere },
         select: { createdAt: true, amount: true }
       });
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
