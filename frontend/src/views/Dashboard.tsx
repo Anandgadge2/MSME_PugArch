@@ -155,99 +155,99 @@ const AdminModuleLink = React.memo(function AdminModuleLink({ module }: { module
   );
 });
 
-const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery({
-  data,
-  isLoading
-}: {
-  data: any;
-  isLoading: boolean;
-}) {
-  const sections = Array.isArray(data?.sections) ? data.sections.filter((section: any) => section.items?.length) : [];
-  const categories = Array.isArray(data?.categories) ? data.categories.slice(0, 8) : [];
-  const items = sections.flatMap((section: any) =>
-    (section.items || []).map((item: any) => ({
-      ...item,
-      sectionTitle: section.title,
-      itemType: item.itemType || (item.pricingModel || item.basePrice ? 'SERVICE' : 'PRODUCT')
-    }))
-  ).slice(0, 4);
+// const BuyerMarketplaceDiscovery = React.memo(function BuyerMarketplaceDiscovery({
+//   data,
+//   isLoading
+// }: {
+//   data: any;
+//   isLoading: boolean;
+// }) {
+//   const sections = Array.isArray(data?.sections) ? data.sections.filter((section: any) => section.items?.length) : [];
+//   const categories = Array.isArray(data?.categories) ? data.categories.slice(0, 8) : [];
+//   const items = sections.flatMap((section: any) =>
+//     (section.items || []).map((item: any) => ({
+//       ...item,
+//       sectionTitle: section.title,
+//       itemType: item.itemType || (item.pricingModel || item.basePrice ? 'SERVICE' : 'PRODUCT')
+//     }))
+//   ).slice(0, 4);
 
-  return (
-    <section className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 transition-all">
-      <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between rounded-t-xl">
-        <div>
-          <h2 className="text-sm font-bold text-slate-900">Quick Supplier Discovery</h2>
-          <p className="text-[11px] font-medium text-slate-500">Shortcuts for products, services, and requirements.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/buyer/marketplace">
-            <Button variant="outline" className="h-8 rounded-md px-3 text-[10px] font-bold uppercase tracking-wide bg-white">
-              Browse Market
-              <ArrowRight className="ml-1.5 h-3 w-3" />
-            </Button>
-          </Link>
-        </div>
-      </div>
+//   return (
+//     <section className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 transition-all">
+//       <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between rounded-t-xl">
+//         <div>
+//           <h2 className="text-sm font-bold text-slate-900">Quick Supplier Discovery</h2>
+//           <p className="text-[11px] font-medium text-slate-500">Shortcuts for products, services, and requirements.</p>
+//         </div>
+//         <div className="flex flex-wrap gap-2">
+//           <Link href="/buyer/marketplace">
+//             <Button variant="outline" className="h-8 rounded-md px-3 text-[10px] font-bold uppercase tracking-wide bg-white">
+//               Browse Market
+//               <ArrowRight className="ml-1.5 h-3 w-3" />
+//             </Button>
+//           </Link>
+//         </div>
+//       </div>
 
-      {categories.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-4 py-3 no-scrollbar">
-          {categories.map((category: any) => (
-            <Link
-              key={category.id || category.name}
-              href={category.id ? `/buyer/marketplace?categoryId=${category.id}` : `/buyer/marketplace?q=${encodeURIComponent(category.name)}`}
-              className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-700 transition hover:border-[#12335f]/40 hover:text-[#12335f]"
-            >
-              {category.name}
-            </Link>
-          ))}
-        </div>
-      )}
+//       {categories.length > 0 && (
+//         <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-4 py-3 no-scrollbar">
+//           {categories.map((category: any) => (
+//             <Link
+//               key={category.id || category.name}
+//               href={category.id ? `/buyer/marketplace?categoryId=${category.id}` : `/buyer/marketplace?q=${encodeURIComponent(category.name)}`}
+//               className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-700 transition hover:border-[#12335f]/40 hover:text-[#12335f]"
+//             >
+//               {category.name}
+//             </Link>
+//           ))}
+//         </div>
+//       )}
 
-      {isLoading && items.length === 0 ? (
-        <div className="grid gap-2 p-3 sm:grid-cols-2 md:grid-cols-4">
-          {[1, 2, 3, 4].map((item) => (
-            <div key={item} className="flex gap-2.5 rounded-lg bg-slate-50/60 p-2.5 ring-1 ring-slate-200/50 animate-pulse">
-              <div className="h-12 w-12 shrink-0 rounded-md bg-slate-200/60" />
-              <div className="flex-1 space-y-2 py-1">
-                <div className="h-2 w-1/3 rounded bg-slate-200/60" />
-                <div className="h-2.5 w-4/5 rounded bg-slate-200/60" />
-                <div className="h-2 w-1/2 rounded bg-slate-200/60" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : items.length > 0 ? (
-        <div className="grid gap-2 p-3 sm:grid-cols-2 md:grid-cols-4">
-          {items.map((item: any, idx: number) => {
-            const type = String(item.itemType || '').toUpperCase() === 'SERVICE' ? 'service' : 'product';
-            const imageUrl = resolveMarketplaceImage(item, type);
-            const href = item.detailUrl || `/marketplace/${type === 'service' ? 'services' : 'products'}/${item.id}`;
-            const price = Number(type === 'service' ? item.basePrice || item.price || item.discountPrice || 0 : item.price || item.discountPrice || 0);
-            return (
-              <Link key={`${type}-${item.id || 'item'}-${idx}`} href={href} className="group flex gap-2.5 rounded-lg bg-white p-2.5 ring-1 ring-slate-200/70 transition hover:shadow-md hover:ring-[#12335f]/20">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-100 bg-slate-50">
-                  {imageUrl ? (
-                    <img src={imageUrl} alt={item.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                  ) : type === 'service' ? (
-                    <Wrench className="h-5 w-5 text-[#12335f]/45" />
-                  ) : (
-                    <Package className="h-5 w-5 text-slate-300" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1 flex flex-col justify-center">
-                  <p className="text-[8px] font-bold uppercase tracking-wider text-[#12335f]/70">{type === 'service' ? 'Service' : 'Product'}</p>
-                  <h3 className="mt-0.5 truncate text-[11px] font-bold leading-tight text-slate-900 group-hover:text-[#12335f]">{item.name}</h3>
-                  <p className="mt-0.5 truncate text-[9px] font-medium text-slate-500">{item.sellerName || item.organization?.organizationName || 'Verified seller'}</p>
-                  <p className="mt-0.5 text-[10px] font-bold text-[#12335f]">{price > 0 ? `Rs. ${price.toLocaleString('en-IN')}` : 'Quote based'}</p>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      ) : null}
-    </section>
-  );
-});
+//       {isLoading && items.length === 0 ? (
+//         <div className="grid gap-2 p-3 sm:grid-cols-2 md:grid-cols-4">
+//           {[1, 2, 3, 4].map((item) => (
+//             <div key={item} className="flex gap-2.5 rounded-lg bg-slate-50/60 p-2.5 ring-1 ring-slate-200/50 animate-pulse">
+//               <div className="h-12 w-12 shrink-0 rounded-md bg-slate-200/60" />
+//               <div className="flex-1 space-y-2 py-1">
+//                 <div className="h-2 w-1/3 rounded bg-slate-200/60" />
+//                 <div className="h-2.5 w-4/5 rounded bg-slate-200/60" />
+//                 <div className="h-2 w-1/2 rounded bg-slate-200/60" />
+//               </div>
+//             </div>
+//           ))}
+//         </div>
+//       ) : items.length > 0 ? (
+//         <div className="grid gap-2 p-3 sm:grid-cols-2 md:grid-cols-4">
+//           {items.map((item: any, idx: number) => {
+//             const type = String(item.itemType || '').toUpperCase() === 'SERVICE' ? 'service' : 'product';
+//             const imageUrl = resolveMarketplaceImage(item, type);
+//             const href = item.detailUrl || `/marketplace/${type === 'service' ? 'services' : 'products'}/${item.id}`;
+//             const price = Number(type === 'service' ? item.basePrice || item.price || item.discountPrice || 0 : item.price || item.discountPrice || 0);
+//             return (
+//               <Link key={`${type}-${item.id || 'item'}-${idx}`} href={href} className="group flex gap-2.5 rounded-lg bg-white p-2.5 ring-1 ring-slate-200/70 transition hover:shadow-md hover:ring-[#12335f]/20">
+//                 <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-100 bg-slate-50">
+//                   {imageUrl ? (
+//                     <img src={imageUrl} alt={item.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+//                   ) : type === 'service' ? (
+//                     <Wrench className="h-5 w-5 text-[#12335f]/45" />
+//                   ) : (
+//                     <Package className="h-5 w-5 text-slate-300" />
+//                   )}
+//                 </div>
+//                 <div className="min-w-0 flex-1 flex flex-col justify-center">
+//                   <p className="text-[8px] font-bold uppercase tracking-wider text-[#12335f]/70">{type === 'service' ? 'Service' : 'Product'}</p>
+//                   <h3 className="mt-0.5 truncate text-[11px] font-bold leading-tight text-slate-900 group-hover:text-[#12335f]">{item.name}</h3>
+//                   <p className="mt-0.5 truncate text-[9px] font-medium text-slate-500">{item.sellerName || item.organization?.organizationName || 'Verified seller'}</p>
+//                   <p className="mt-0.5 text-[10px] font-bold text-[#12335f]">{price > 0 ? `Rs. ${price.toLocaleString('en-IN')}` : 'Quote based'}</p>
+//                 </div>
+//               </Link>
+//             );
+//           })}
+//         </div>
+//       ) : null}
+//     </section>
+//   );
+// });
 
 export default function Dashboard() {
   const { user, token, logout, refreshUser, isLoggingOut } = useAuth();
@@ -826,10 +826,7 @@ export default function Dashboard() {
             <div className="lg:col-span-8 space-y-3.5">
               <BuyerProcurementMonitor />
               <RecentOrdersSnapshot />
-              <BuyerMarketplaceDiscovery
-                data={marketplaceRecommendations}
-                isLoading={isMarketplaceRecommendationsLoading}
-              />
+             
             </div>
 
             {/* Right Column (35% on large screens) */}
@@ -878,25 +875,9 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70">
-                  <div className="flex items-start gap-2.5">
-                    <div className="h-7 w-7 shrink-0 rounded-full bg-blue-50 text-[#12335f] flex items-center justify-center">
-                      <Info className="h-3.5 w-3.5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h5 className="font-bold text-slate-900 uppercase text-[10px] tracking-wide">Need Help?</h5>
-                      <p className="text-[9px] font-medium text-slate-500 mt-0.5 leading-snug">Support team is available for procurement assistance.</p>
-                      <button
-                        type="button"
-                        onClick={() => toast.info('Support request noted. Email support@msme-portal.gov.in.')}
-                        className="mt-1 text-[#12335f] font-bold uppercase text-[9px] hover:underline"
-                      >
-                        Contact Support →
-                      </button>
-                    </div>
-                  </div>
-                </Card>
+                
               </div>
+              
             </div>
           </div>
         ) : (

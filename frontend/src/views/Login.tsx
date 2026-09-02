@@ -381,9 +381,7 @@ export default function Login() {
   const featurePills = [
     { label: 'MSME Direct Linkage', icon: Building2, desc: 'Direct access to industrial enterprise demand' },
     { label: 'Smart Escrow & Settlements', icon: ShieldCheck, desc: 'Idempotency protected milestone payments' },
-    { label: 'Instant Reverse Bidding', icon: Zap, desc: 'Real-time competitive procurement auctions' },
-    { label: 'District GeM Integration', icon: CheckCircle2, desc: 'Integrated state & district level verification' }
-  ];
+    { label: 'Instant Reverse Bidding', icon: Zap, desc: 'Real-time competitive procurement auctions' }  ];
 
   return (
     <div className="relative flex min-h-dvh w-full overflow-hidden bg-slate-950 font-sans selection:bg-[#c8a45c]/30 selection:text-white">
