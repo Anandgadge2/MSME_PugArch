@@ -2,7 +2,7 @@
  * VendorStorefrontPage — public-style profile of a single seller with their
  * catalogue, certifications, ratings, and key stats.
  *
- * Route: /vendors/:id
+ * Route: /seller/:id, /sellers/:id, /marketplace/sellers/:id
  */
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -28,7 +28,7 @@ export default function VendorStorefrontPage({ id }: Props) {
 
     const vendor = useQuery({
         queryKey: ['vendor', id] as const,
-        queryFn: () => getApi<any>(`/api/vendors/${id}`),
+        queryFn: () => getApi<any>(`/api/sellers/${id}`),
         enabled: id > 0,
         refetchInterval: 15000,
     });

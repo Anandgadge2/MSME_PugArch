@@ -343,7 +343,7 @@ const isPublicRoute = (route: string) => {
   if (route.startsWith('/marketplace')) return true;
   if (/^\/bids\/[^/]+$/.test(route)) return true;
   if (route.startsWith('/tenders')) return true;
-  if (/^\/vendors\/-?\d+$/.test(route)) return true;
+  if (/^\/vendors\/-?\d+$/.test(route) || /^\/sellers\/-?\d+$/.test(route) || /^\/seller\/-?\d+$/.test(route)) return true;
   if (/^\/buyer-requirements\/-?\d+$/.test(route)) return true;
   return false;
 };
@@ -666,8 +666,8 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (/^\/marketplace\/services\/-?\d+$/.test(pathname)) return <MarketplaceServiceDetail />;
     if (/^\/marketplace\/requirements\/-?\d+$/.test(pathname)) return <BuyerRequirementDetailsPage />;
 
-    // Public vendor store — accessible to everyone
-    if (/^\/vendors\/-?\d+$/.test(pathname) || /^\/marketplace\/sellers\/-?\d+$/.test(pathname) || /^\/marketplace\/vendors\/-?\d+$/.test(pathname)) return <MarketplaceSellerStore />;
+    // Public seller/vendor store — accessible to everyone
+    if (/^\/vendors\/-?\d+$/.test(pathname) || /^\/sellers\/-?\d+$/.test(pathname) || /^\/seller\/-?\d+$/.test(pathname) || /^\/marketplace\/sellers\/-?\d+$/.test(pathname) || /^\/marketplace\/vendors\/-?\d+$/.test(pathname)) return <MarketplaceSellerStore />;
     {
       const buyerRequirementsMatch = pathname.match(/^\/buyer-requirements\/(-?\d+)$/);
       if (buyerRequirementsMatch) {
@@ -844,7 +844,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/buyer/procurement/checkout' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="cart.view"><ProcurementCheckoutPage /></PermissionRouteGuard>;
     if (pathname === '/buyer/address-book' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="organization.view"><AddressBookPage /></PermissionRouteGuard>;
 
-    if (pathname === '/buyer/vendors' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="vendor.view"><Vendors /></PermissionRouteGuard>;
+    if ((pathname === '/buyer/vendors' || pathname === '/buyer/sellers') && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="vendor.view"><Vendors /></PermissionRouteGuard>;
     if (pathname === '/buyer/saved-suppliers' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="vendor.view"><SavedSuppliersPage /></PermissionRouteGuard>;
     
     if (pathname === '/buyer/orders' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
@@ -969,7 +969,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     /^\/marketplace\/products\/-?\d+$/.test(pathname) ||
     /^\/marketplace\/services\/-?\d+$/.test(pathname) ||
     /^\/marketplace\/requirements\/-?\d+$/.test(pathname);
-  const isMarketplaceRoute = (pathname.startsWith('/marketplace') && !useDashboardShellForMarketplace) || pathname === '/buyer/publish-bid' || /^\/vendors\/-?\d+$/.test(pathname) || /^\/buyer-requirements\/-?\d+$/.test(pathname);
+  const isMarketplaceRoute = (pathname.startsWith('/marketplace') && !useDashboardShellForMarketplace) || pathname === '/buyer/publish-bid' || /^\/vendors\/-?\d+$/.test(pathname) || /^\/sellers\/-?\d+$/.test(pathname) || /^\/seller\/-?\d+$/.test(pathname) || /^\/buyer-requirements\/-?\d+$/.test(pathname);
   const showDashboardLayout = user && !fixedAuthRoutes.includes(pathname) && !isMarketplaceRoute && !publicInfoRoutes.includes(pathname);
   const showOrgApprovalBanner = showDashboardLayout && !['master_admin', 'super_admin'].includes(user?.role || '');
 

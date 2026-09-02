@@ -52,7 +52,7 @@ export default function SavedSuppliersPage() {
                             Keep verified suppliers ready for RFQ, direct purchase, and secure platform messaging.
                         </p> */}
                     </div>
-                    <Link href="/buyer/vendors" className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-black uppercase tracking-wide text-[#12335f] shadow-sm hover:bg-slate-50 transition">
+                    <Link href="/buyer/sellers" className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-black uppercase tracking-wide text-[#12335f] shadow-sm hover:bg-slate-50 transition">
                         Supplier Directory
                     </Link>
                 </div>
@@ -109,7 +109,7 @@ export default function SavedSuppliersPage() {
                                     </span>
                                 </div>
                                 <div className="mt-4 flex flex-wrap gap-2">
-                                    <Link href={`/vendors/${supplier.id}`} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 transition">
+                                    <Link href={`/marketplace/sellers/${supplier.id}`} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 transition">
                                         <ExternalLink className="h-3.5 w-3.5" /> View Store
                                     </Link>
                                     <Link

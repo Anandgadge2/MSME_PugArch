@@ -136,7 +136,7 @@ export function SellerStrip({ sellers }: Props) {
                                 return (
                                     <Link
                                         key={seller.id}
-                                        href={`/vendors/${seller.id}`}
+                                        href={`/marketplace/sellers/${seller.id}`}
                                         className="group flex flex-col items-center gap-2.5 w-[125px] sm:w-[145px] shrink-0 text-center cursor-pointer transition-transform duration-200"
                                         role="listitem"
                                     >

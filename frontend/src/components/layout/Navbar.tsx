@@ -111,6 +111,7 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/seller/delivery': () => import('../../views/ParcelTracking'),
   '/seller/delivery-management': () => import('../../features/sellerDelivery/pages/SellerDeliveryManagementPage'),
   '/seller/ratings': () => import('../../features/ratings/pages/RatingsPage'),
+  '/buyer/sellers': () => import('../../views/Vendors'),
   '/buyer/vendors': () => import('../../views/Vendors'),
   '/buyer/saved-suppliers': () => import('../../features/marketplace/pages/SavedSuppliersPage'),
   '/buyer/messages': () => import('../../features/messages/pages/MessagesPage'),
@@ -562,7 +563,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     ] },
     // Buyer Suppliers
     { label: 'Suppliers', icon: Users, roles: ['buyer'], children: [
-      { label: 'Supplier Directory', path: '/buyer/vendors', icon: Users, roles: ['buyer'], permission: 'vendor.view' },
+      { label: 'Supplier Directory', path: '/buyer/sellers', icon: Users, roles: ['buyer'], permission: 'vendor.view' },
       { label: 'Saved Suppliers', path: '/buyer/saved-suppliers', icon: CheckCircle2, roles: ['buyer'], permission: 'vendor.view' },
       { label: 'Messages', path: '/buyer/messages', icon: MessageSquare, roles: ['buyer'], permission: 'vendor.view' }
     ] },
