@@ -1512,6 +1512,15 @@ const categoryCache = new Map<string, number>();
 const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procurementDraftBody>) => {
   const methodSlug = methodSlugForDraft(body);
   const methodCode = procurementMethodCodeFor(methodSlug);
+  if (body.payload && typeof body.payload === 'object') {
+    const payloadObj = body.payload as any;
+    if (payloadObj.vendors) {
+      const inv = Array.isArray(payloadObj.vendors.invitedSellers) ? payloadObj.vendors.invitedSellers : [];
+      if (inv.length > 0) {
+        payloadObj.vendors.inviteCount = Math.max(inv.length, Number(payloadObj.vendors.inviteCount) || 0);
+      }
+    }
+  }
   const draftMeta = {
     methodSlug,
     draftStep: body.draftStep ?? null,
@@ -1750,7 +1759,15 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   const schedule = payload.schedule || {};
   const terms = payload.terms || {};
   const internal = payload.internal || {};
-  const vendors = payload.vendors || {};
+  const rawVendors = payload.vendors || {};
+  const rawInvitedSellers = Array.isArray(rawVendors.invitedSellers)
+    ? rawVendors.invitedSellers
+    : (Array.isArray(payload.qualifiedVendors) ? payload.qualifiedVendors : []);
+  const vendors = {
+    ...rawVendors,
+    invitedSellers: rawInvitedSellers,
+    inviteCount: Math.max(rawInvitedSellers.length, Number(rawVendors.inviteCount) || 0)
+  };
   const rateContractConfig = payload.rateContractConfig || payload.rateContract || {};
   const canonicalMethod = String(draftBody.canonicalMethod || requirement.canonicalMethod || methodSlug.toUpperCase()).toUpperCase();
   const isLimitedRfq = methodSlug === 'rfq' && String(payload.rfqType || '').toUpperCase() === 'LIMITED';

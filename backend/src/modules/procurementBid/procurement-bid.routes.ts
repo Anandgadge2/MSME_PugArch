@@ -584,6 +584,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             msmePreference: srcPayload?.vendors?.msmePreference ?? false,
             excludeBlacklisted: srcPayload?.vendors?.excludeBlacklisted ?? true,
             invitedSellers: meta.selectedSuppliers || srcPayload?.vendors?.invitedSellers || [],
+            inviteCount: (meta.selectedSuppliers || srcPayload?.vendors?.invitedSellers || []).length,
           },
           evaluation: {
             method: srcPayload?.evaluation?.method || 'L1',

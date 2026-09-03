@@ -578,7 +578,10 @@ function DocumentsPanel({
             ))}
           </div>
         )}
-        {accessRole && accessRole !== 'dispute' && <DocumentUploadForm deliveryId={deliveryId} />}
+        {/* Document upload form commented out on buyer side as requested */}
+        {accessRole && accessRole !== 'dispute' && accessRole !== 'buyer' && accessRole !== 'consignee' && (
+          <DocumentUploadForm deliveryId={deliveryId} />
+        )}
       </div>
     </section>
   );

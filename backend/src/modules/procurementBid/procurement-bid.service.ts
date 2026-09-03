@@ -684,8 +684,31 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     return isAdmin || isBuyerOwner;
   });
 
+  const dbInvitations = Array.isArray(bid.invitations) ? bid.invitations : [];
+  const rawTechnicalPacket = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? (bid.technicalPacket as any) : {};
+  const packetVendors = rawTechnicalPacket.vendors || rawTechnicalPacket.wizardData?.vendors || {};
+  const packetInvitedSellers = Array.isArray(packetVendors.invitedSellers)
+    ? packetVendors.invitedSellers
+    : (Array.isArray(rawTechnicalPacket.qualifiedVendors) ? rawTechnicalPacket.qualifiedVendors : []);
+
+  const effectiveInviteCount = Math.max(
+    dbInvitations.length,
+    packetInvitedSellers.length,
+    Number(packetVendors.inviteCount) || 0
+  );
+
+  const enrichedVendors = {
+    ...packetVendors,
+    inviteCount: effectiveInviteCount,
+    invitedSellers: packetInvitedSellers.length > 0
+      ? packetInvitedSellers
+      : dbInvitations.map((i: any) => i.sellerOrgId || i.sellerUserId).filter(Boolean)
+  };
+
   const tenderItems = normalizeBidItems(bid);
-  const sellerTechnicalPacket = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? { ...(bid.technicalPacket as any), items: tenderItems } : (tenderItems.length ? { items: tenderItems } : bid.technicalPacket);
+  const sellerTechnicalPacket = bid.technicalPacket && typeof bid.technicalPacket === 'object'
+    ? { ...(bid.technicalPacket as any), items: tenderItems, vendors: enrichedVendors }
+    : (tenderItems.length ? { items: tenderItems, vendors: enrichedVendors } : { vendors: enrichedVendors });
 
   return {
     id: bid.id,
@@ -810,7 +833,11 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
           })
         : undefined,
     evaluations: isAdmin || isBuyerOwner ? bid.evaluations : undefined,
-    awards: bid.awards
+    awards: bid.awards,
+    invitations: canSeeParticipants ? dbInvitations : undefined,
+    invitedCount: effectiveInviteCount,
+    invitationsCount: effectiveInviteCount,
+    invitedSellers: enrichedVendors.invitedSellers
   };
 };
 

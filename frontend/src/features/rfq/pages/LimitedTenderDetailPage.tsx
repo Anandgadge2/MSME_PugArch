@@ -138,12 +138,32 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
 
   const participationsList = bid.participations || reqObj.participations || reqObj.responses || [];
 
+  const invitedSellersList =
+    bid.invitedSellers ||
+    payload?.vendors?.invitedSellers ||
+    reqObj?.invitedSellers ||
+    reqObj?.payload?.vendors?.invitedSellers ||
+    [];
+
+  const invitationsList = bid.invitations || reqObj?.invitations || [];
+
+  const computedInviteCount = Math.max(
+    Number(bid.invitedCount) || 0,
+    Number(bid.invitationsCount) || 0,
+    Array.isArray(invitationsList) ? invitationsList.length : 0,
+    Array.isArray(invitedSellersList) ? invitedSellersList.length : 0,
+    Number(payload?.vendors?.inviteCount) || 0
+  );
+
   return (
     <ProcurementDetailUnifiedView
       procurementType="LIMITED_TENDER"
       procurementLabel="Limited Tender"
       id={bid.id || reqObj.id || requestId}
       displayId={limitedTenderNumber}
+      invitedCount={computedInviteCount}
+      invitedSellers={invitedSellersList}
+      invitations={invitationsList}
       subject={title}
       status={bid.status || reqObj.status || 'OPEN'}
       buyerName={bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name}

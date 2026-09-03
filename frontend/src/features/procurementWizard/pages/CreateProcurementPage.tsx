@@ -1141,8 +1141,18 @@ export default function CreateProcurementPage() {
             email: internalPayload.email || email,
             mobile: internalPayload.mobile || mobile,
           },
-          serviceDetails: { ...base.serviceDetails, ...(payload.serviceDetails || {}) },
-          vendors: { ...base.vendors, ...(payload.vendors || {}) },
+          serviceDetails: {
+            ...base.serviceDetails,
+            ...(payload.serviceDetails || {}),
+            serviceTitle: payload.serviceDetails?.serviceTitle || payload.basics?.title || res.title || base.serviceDetails.serviceTitle || '',
+          },
+          vendors: {
+            ...base.vendors,
+            ...(payload.vendors || {}),
+            inviteCount: Array.isArray(payload.vendors?.invitedSellers)
+              ? Math.max(payload.vendors.invitedSellers.length, Number(payload.vendors?.inviteCount) || 0)
+              : (Number(payload.vendors?.inviteCount) || 0)
+          },
           schedule: { ...base.schedule, ...(payload.schedule || {}) },
           terms: { ...base.terms, ...(payload.terms || {}) },
           evaluation: {
@@ -1242,6 +1252,8 @@ export default function CreateProcurementPage() {
       }
       list.push({ label: 'Total BOQ quantity must be greater than 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     } else if (d.basics.whatAreYouBuying === 'Service') {
+      const serviceTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
+      list.push({ label: 'Service Contract Title is required', ok: serviceTitle.length > 0, severity: 'error', stepIdx: 3 });
       list.push({ label: 'Service Contract SOW is required (min 10 chars)', ok: d.serviceDetails.scopeOfWork.trim().length >= 10, severity: 'error', stepIdx: 3 });
       list.push({ label: 'Service Deliverables list is required (min 5 chars)', ok: d.serviceDetails.deliverables.trim().length >= 5, severity: 'error', stepIdx: 3 });
       list.push({ label: 'Service Duration is required', ok: d.serviceDetails.duration.trim().length > 0, severity: 'error', stepIdx: 3 });
@@ -1388,7 +1400,8 @@ export default function CreateProcurementPage() {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) return false;
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) return false;
       } else if (d.basics.whatAreYouBuying === 'Service') {
-        if (!d.serviceDetails.serviceTitle.trim()) return false;
+        const title = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
+        if (!title) return false;
         if (d.serviceDetails.scopeOfWork.trim().length < 10) return false;
         if (d.serviceDetails.deliverables.trim().length < 5) return false;
         if (!d.serviceDetails.duration.trim()) return false;
@@ -1594,9 +1607,13 @@ export default function CreateProcurementPage() {
           return false;
         }
       } else if (d.basics.whatAreYouBuying === 'Service') {
-        if (!d.serviceDetails.serviceTitle.trim()) {
+        const effectiveTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
+        if (!effectiveTitle) {
           toast.error('Service Contract Title is required.');
           return false;
+        }
+        if (!d.serviceDetails.serviceTitle?.trim()) {
+          d.serviceDetails.serviceTitle = effectiveTitle;
         }
         if (d.serviceDetails.scopeOfWork.trim().length < 10) {
           toast.error('Scope of Work is required (min 10 chars).');
@@ -2454,7 +2471,19 @@ function BasicsStepForm({
         <Field label="Procurement title" required>
           <input
             value={draft.basics.title}
-            onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, title: e.target.value } }))}
+            onChange={e => {
+              const val = e.target.value;
+              updateDraft(c => ({
+                ...c,
+                basics: { ...c.basics, title: val },
+                serviceDetails: {
+                  ...c.serviceDetails,
+                  serviceTitle: (!c.serviceDetails.serviceTitle || c.serviceDetails.serviceTitle === c.basics.title)
+                    ? val
+                    : c.serviceDetails.serviceTitle
+                }
+              }));
+            }}
             className={inputClass}
             placeholder="Office computers, AMC maintenance, raw supply..."
           />
@@ -4158,6 +4187,12 @@ function ItemsDetailsForm({
     }));
   };
 
+  useEffect(() => {
+    if (whatBuying === 'Service' && !draft.serviceDetails.serviceTitle?.trim() && draft.basics.title?.trim()) {
+      updateService('serviceTitle', draft.basics.title.trim());
+    }
+  }, [whatBuying, draft.basics.title, draft.serviceDetails.serviceTitle]);
+
   const handleBOQUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -4342,6 +4377,15 @@ function ItemsDetailsForm({
       </div>
 
       <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+        <Field label="Service Contract Title" required className="sm:col-span-2">
+          <input
+            value={draft.serviceDetails.serviceTitle || draft.basics.title || ''}
+            onChange={e => updateService('serviceTitle', e.target.value)}
+            className={inputClass}
+            placeholder="e.g. Master Service Agreement for Facility Management, Annual Maintenance Contract..."
+          />
+        </Field>
+
         <Field label="Scope of Work (SOW)" required className="sm:col-span-2">
           <textarea
             value={draft.serviceDetails.scopeOfWork}
@@ -4876,6 +4920,7 @@ function VendorsStepForm({
         vendors: {
           ...current.vendors,
           invitedSellers: nextInvites,
+          inviteCount: nextInvites.length,
           selectedSellerId: nextInvites[0] || null,
           selectedSellerName: nextInvites[0] ? name : '',
         }
@@ -4916,7 +4961,7 @@ function VendorsStepForm({
               <option value="Open">Open Advertised / Public Sourcing</option>
               <option value="Selected">Invite selected verified suppliers pool</option>
               <option value="Category">Invite category-matched registered vendors</option>
-              <option value="Past">Invite prior order vendors</option>
+              {/* <option value="Past">Invite prior order vendors</option> */}
             </select>
           )}
         </Field>
@@ -6509,6 +6554,10 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const payloadJson = {
     ...draft,
+    serviceDetails: {
+      ...draft.serviceDetails,
+      serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),
+    },
     evaluationMethod: chosenEvaluationMethod,
     evaluation: {
       ...draft.evaluation,
@@ -6527,7 +6576,13 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     tender,
     rules,
     basics,
-    vendors: draft.vendors,
+    vendors: {
+      ...draft.vendors,
+      invitedSellers: draft.vendors.invitedSellers || [],
+      inviteCount: Array.isArray(draft.vendors.invitedSellers) && draft.vendors.invitedSellers.length > 0
+        ? draft.vendors.invitedSellers.length
+        : (Number(draft.vendors.inviteCount) || 0)
+    },
     auctionConfig: auctionConfigPayload,
     rateContractConfig: rateContractConfigPayload,
     rateContract: rateContractConfigPayload

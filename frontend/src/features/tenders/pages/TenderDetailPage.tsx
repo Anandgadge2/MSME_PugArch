@@ -377,6 +377,9 @@ export default function TenderDetailPage() {
       closingDate={closesAtFormatted}
       clarificationDate={schedule.clarificationDeadline ? formatDateString(schedule.clarificationDeadline, true) : undefined}
       technicalDate={schedule.technicalOpeningDate ? formatDateString(schedule.technicalOpeningDate, true) : undefined}
+      financialDate={schedule.financialOpeningDate ? formatDateString(schedule.financialOpeningDate, true) : undefined}
+      bidValidityDate={schedule.bidValidityDate ? formatDateString(schedule.bidValidityDate) : undefined}
+      requiredByDate={basics.requiredByDate ? formatDateString(basics.requiredByDate) : ((tender as any).deliveryDate ? formatDateString((tender as any).deliveryDate) : undefined)}
       category={tender.category}
       procurementMethod={tender.visibility === 'LIMITED' ? 'Limited Tender' : 'Open Tender'}
       buyingType={basics.buyingType || 'Goods'}

@@ -176,6 +176,21 @@ const noisyDetailKeys = new Set([
   'costFee',
   'docCost',
   'performanceSecurity',
+  'retentionAmount',
+  'retention_amount',
+  'retention',
+  'retentionPercentage',
+  'retention_percentage',
+  'isRetentionApplicable',
+  'retentionApplicable',
+  'securityDeposit',
+  'security_deposit',
+  'securityDepositAmount',
+  'security_deposit_amount',
+  'securityDepositPercentage',
+  'security_deposit_percentage',
+  'securityDepositRequired',
+  'security_deposit_required',
 ]);
 
 function humanizeKey(key: string): string {
@@ -264,8 +279,23 @@ function formatPrimitiveValue(val: any, valueKey?: string): string {
   if (val === null || val === undefined || val === '') return 'N/A';
   if (typeof val === 'boolean') return val ? 'Yes' : 'No';
   if (typeof val === 'number') {
-    if (valueKey && (valueKey.toLowerCase().includes('amount') || valueKey.toLowerCase().includes('budget') || valueKey.toLowerCase().includes('val') || valueKey.toLowerCase().includes('rate') || valueKey.toLowerCase().includes('price') || valueKey.toLowerCase().includes('cost') || valueKey.toLowerCase().includes('fee') || valueKey.toLowerCase().includes('deposit'))) {
+    const lk = (valueKey || '').toLowerCase();
+    const isCurrency = (
+      lk.includes('amount') ||
+      lk.includes('budget') ||
+      lk.includes('value') ||
+      lk.includes('price') ||
+      lk.includes('cost') ||
+      lk.includes('fee') ||
+      lk.includes('deposit') ||
+      (lk.includes('rate') && !lk.includes('contract') && !lk.includes('rating'))
+    ) && !lk.includes('day') && !lk.includes('period') && !lk.includes('validity') && !lk.includes('count') && !lk.includes('qty') && !lk.includes('quantity') && !lk.includes('percent');
+
+    if (isCurrency) {
       return formatCurrency(val);
+    }
+    if (lk.includes('day') || lk.includes('period') || lk.includes('validity')) {
+      return `${val} Days`;
     }
     return val.toLocaleString('en-IN');
   }
@@ -503,6 +533,18 @@ function PropertyGrid({
   );
 }
 
+interface BuyerSideContextValue {
+  isBuyer: boolean;
+  isOpenTender: boolean;
+  isLimitedTender: boolean;
+}
+
+const BuyerSideContext = React.createContext<BuyerSideContextValue>({
+  isBuyer: false,
+  isOpenTender: false,
+  isLimitedTender: false,
+});
+
 function PropertyItem({
   label,
   value,
@@ -520,7 +562,35 @@ function PropertyItem({
   highlight?: boolean;
   mono?: boolean;
 }) {
+  const ctx = React.useContext(BuyerSideContext);
+  const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
+  const isOpenTender = typeof ctx === 'boolean' ? false : ctx.isOpenTender;
+  const isLimitedTender = typeof ctx === 'boolean' ? false : (ctx.isLimitedTender || false);
   if (!hasDetailData(value)) return null;
+
+  if (isBuyer && label) {
+    const lower = label.toLowerCase().replace(/[^a-z]/g, '');
+    if (
+      // Warranty Terms strictly commented out / hidden on buyer side in open and limited tender
+      ((isOpenTender || isLimitedTender) && (
+        lower === 'warrantyterms' ||
+        lower === 'warranty' ||
+        lower === 'warrantyperiod' ||
+        lower.includes('warranty')
+      )) ||
+      lower === 'retentionamount' ||
+      lower === 'securitydeposit' ||
+      lower === 'retention' ||
+      lower === 'securitydepositamount' ||
+      lower === 'retentionpercentage' ||
+      lower === 'securitydepositpercentage' ||
+      lower === 'securitydepositrequired' ||
+      lower.includes('retention') ||
+      lower.includes('securitydeposit')
+    ) {
+      return null;
+    }
+  }
 
   return (
     <div
@@ -1044,12 +1114,19 @@ function ScopeSummaryCard({
       const k = line.slice(0, colonIdx).trim();
       const v = line.slice(colonIdx + 1).trim();
       if (k && v) {
-        parsedKeyValues.push({ label: humanizeKey(k), val: v });
+        const lk = k.toLowerCase();
+        if (!lk.includes('sourcing') && !lk.includes('method')) {
+          parsedKeyValues.push({ label: humanizeKey(k), val: v });
+        }
       } else if (line) {
-        textParts.push(line);
+        if (!line.toLowerCase().includes('sourcing method')) {
+          textParts.push(line);
+        }
       }
     } else if (line) {
-      textParts.push(line);
+      if (!line.toLowerCase().includes('sourcing method')) {
+        textParts.push(line);
+      }
     }
   }
 
@@ -1061,10 +1138,11 @@ function ScopeSummaryCard({
     <div className="space-y-4">
       {/* Top Scope Highlights Ribbon */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+        {/* Sourcing Method - commented out */}
+        {/* <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Sourcing Method:</span>
           <span className="text-xs font-black text-slate-900">{procurementMethod || procurementTypeLabel}</span>
-        </div>
+        </div> */}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Estimated Value:</span>
           <span className="text-xs font-black text-emerald-700">{formatCurrency(estimatedValue)}</span>
@@ -1144,7 +1222,13 @@ function MilestonesTable({ milestones }: { milestones: any }) {
 }
 
 function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
-  if (!serviceDetails || !isPlainObject(serviceDetails)) return null;
+  const ctx = React.useContext(BuyerSideContext);
+  const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
+  const isOpenTender = typeof ctx === 'boolean' ? false : ctx.isOpenTender;
+  const isLimitedTender = typeof ctx === 'boolean' ? false : (ctx.isLimitedTender || false);
+
+  // Strictly hide Service Details & Parameters on buyer side for limited tender, open tender, etc.
+  if ((isBuyer && (isLimitedTender || isOpenTender)) || !serviceDetails || !isPlainObject(serviceDetails)) return null;
 
   const { duration, penaltyClause, slaResponseTime, manpowerRequired, experienceRequired, milestones, ...rest } = serviceDetails;
 
@@ -1820,9 +1904,12 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
   );
 }
 
-function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq }: { data: any; deliveryLocation?: any; deliveryTerms?: any; isBuyerRfq?: boolean }) {
+function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq, isBuyerSide }: { data: any; deliveryLocation?: any; deliveryTerms?: any; isBuyerRfq?: boolean; isBuyerSide?: boolean }) {
+  const ctx = React.useContext(BuyerSideContext);
+  const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
+  const isHiddenOnBuyer = Boolean(isBuyer || isBuyerSide || isBuyerRfq);
   const items = asArray(data).filter(hasDetailData);
-  const showDeliveryMeta = !isBuyerRfq && (hasDetailData(deliveryLocation) || hasDetailData(deliveryTerms));
+  const showDeliveryMeta = !isHiddenOnBuyer && (hasDetailData(deliveryLocation) || hasDetailData(deliveryTerms));
 
   if (!showDeliveryMeta && items.length === 0) {
     return null;
@@ -1832,7 +1919,7 @@ function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq 
     <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
       <SectionHeader title="Consignee & Delivery Information" icon={MapPin} />
 
-      {/* General Delivery Location & Delivery Terms - commented out / hidden in RFQ on buyer side */}
+      {/* General Delivery Location & Delivery Terms - commented out / hidden on buyer side */}
       {showDeliveryMeta && (
         <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
           <PropertyGrid columns={2}>
@@ -1921,6 +2008,12 @@ export interface ProcurementDetailUnifiedViewProps {
   presentationDate?: string;
   financialDate?: string;
   awardDate?: string;
+  requiredByDate?: string;
+  requiredBy?: string;
+  expectedDeliveryDate?: string;
+  bidValidityDate?: string;
+  validityDays?: number | string;
+  preBidDate?: string;
   category?: string;
   subCategory?: string;
   projectDuration?: string;
@@ -1965,6 +2058,11 @@ export interface ProcurementDetailUnifiedViewProps {
   invoiceStatus?: { exists: boolean; invoiceId?: number; loading?: boolean } | null;
   isConvertingInvoice?: boolean;
   onConvertToInvoiceClick?: () => void;
+  
+  // Invitations
+  invitedCount?: number;
+  invitedSellers?: any[];
+  invitations?: any[];
 }
 
 export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedViewProps) {
@@ -2278,19 +2376,64 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     String(props.procurementLabel || '').toUpperCase().includes('RFQ');
   const isBuyerRfq = isBuyerSide && (isRfqType || pathname.includes('/rfq'));
 
-  const cleanRfqTerms = (val: any) => {
-    if (!isBuyerRfq || !val || typeof val !== 'object') return val;
-    if (Array.isArray(val)) return val.map(cleanRfqTerms);
+  const isOpenTenderType =
+    props.procurementType === 'OPEN_TENDER' ||
+    String(props.procurementType || '').toUpperCase().includes('OPEN_TENDER') ||
+    String(props.procurementType || '').toUpperCase().includes('OPEN TENDER') ||
+    String(props.procurementLabel || '').toUpperCase().includes('OPEN TENDER') ||
+    String(props.procurementMethod || '').toUpperCase().includes('OPEN TENDER') ||
+    pathname.includes('/open-tender') ||
+    (pathname.includes('/tender') && !pathname.includes('/limited'));
+  const isBuyerOpenTender = isBuyerSide && isOpenTenderType;
+
+  const isLimitedTenderType =
+    props.procurementType === 'LIMITED_TENDER' ||
+    String(props.procurementType || '').toUpperCase().includes('LIMITED_TENDER') ||
+    String(props.procurementType || '').toUpperCase().includes('LIMITED TENDER') ||
+    String(props.procurementLabel || '').toUpperCase().includes('LIMITED TENDER') ||
+    String(props.procurementMethod || '').toUpperCase().includes('LIMITED TENDER') ||
+    pathname.includes('/limited-tender') ||
+    pathname.includes('/limited');
+  const isBuyerLimitedTender = isBuyerSide && isLimitedTenderType;
+
+  const cleanBuyerTerms = (val: any): any => {
+    if (!isBuyerSide || !val) return val;
+    if (typeof val === 'string') {
+      if ((isBuyerOpenTender || isBuyerLimitedTender) && val.toLowerCase().includes('warranty')) {
+        return null;
+      }
+      return val;
+    }
+    if (typeof val !== 'object') return val;
+    if (Array.isArray(val)) {
+      return val
+        .map(cleanBuyerTerms)
+        .filter(item => {
+          if (item === null || item === undefined || item === '') return false;
+          if (typeof item === 'string' && (isBuyerOpenTender || isBuyerLimitedTender) && item.toLowerCase().includes('warranty')) return false;
+          return true;
+        });
+    }
     const clean: Record<string, any> = {};
     for (const [k, v] of Object.entries(val)) {
       const lower = k.toLowerCase().replace(/[^a-z]/g, '');
       if (
+        // Warranty terms strictly commented out / hidden on buyer side in open and limited tender
+        ((isBuyerOpenTender || isBuyerLimitedTender) && (
+          lower === 'warrantyterms' ||
+          lower === 'warranty' ||
+          lower === 'warrantyperiod' ||
+          lower.includes('warranty')
+        )) ||
         lower === 'retentionamount' ||
         lower === 'securitydeposit' ||
         lower === 'retention' ||
         lower === 'securitydepositamount' ||
         lower === 'retentionpercentage' ||
         lower === 'securitydepositpercentage' ||
+        lower === 'securitydepositrequired' ||
+        lower === 'isretentionapplicable' ||
+        lower === 'retentionapplicable' ||
         lower === 'advanceallowed' ||
         lower === 'advance' ||
         lower === 'advancepayment' ||
@@ -2299,11 +2442,13 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         lower === 'advancepercentage' ||
         lower === 'advanceamount' ||
         lower === 'mobilizationadvance' ||
-        lower.includes('advance')
+        lower.includes('advance') ||
+        lower.includes('retention') ||
+        lower.includes('securitydeposit')
       ) {
         continue;
       }
-      clean[k] = v;
+      clean[k] = cleanBuyerTerms(v);
     }
     return clean;
   };
@@ -2398,16 +2543,98 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     tender.awardDate,
     schedule.awardDate,
     schedule.awardingDate,
+    schedule.expectedAwardDate,
     props.awardDate
   );
+
+  const submissionStartDateValue = firstPresent(
+    schedule.submissionStartDate,
+    schedule.startDate,
+    tender.bidStartDate,
+    props.createdAt,
+    publishedDateValue
+  );
+
+  const clarificationDeadlineValue = firstPresent(
+    schedule.clarificationDeadline,
+    schedule.clarificationEndDate,
+    schedule.clarificationDate,
+    tender.clarificationDeadline,
+    tender.clarificationEndDate,
+    props.clarificationDate
+  );
+
+  const preBidDateValue = firstPresent(
+    schedule.preBidMeetingDate,
+    schedule.preBidDate,
+    tender.preBidMeetingDate,
+    tender.preBidDate,
+    props.preBidDate
+  );
+
+  const requiredByDateValue = firstPresent(
+    basics.requiredByDate,
+    basics.requiredBy,
+    basics.expectedDeliveryDate,
+    basics.deliveryDate,
+    schedule.requiredByDate,
+    schedule.deliveryDate,
+    schedule.expectedDeliveryDate,
+    payload.requiredByDate,
+    payload.requiredBy,
+    tender.requiredByDate,
+    tender.requiredBy,
+    tender.deliveryDate,
+    props.requiredByDate,
+    props.requiredBy,
+    props.expectedDeliveryDate
+  );
+
+  const rawValidityDays = firstPresent(
+    schedule.validityDays,
+    tender.validityDays,
+    rules.validityDays,
+    payload.validityDays,
+    props.validityDays,
+    90
+  );
+  const validityDaysDisplay = rawValidityDays
+    ? (String(rawValidityDays).toLowerCase().includes('day') ? String(rawValidityDays) : `${rawValidityDays} Days`)
+    : '90 Days';
+
+  const bidValidityDateValue = firstPresent(
+    schedule.bidValidityDate,
+    tender.bidValidityDate,
+    schedule.bidValidityDeadline,
+    props.bidValidityDate
+  );
+
+  const bidValidityDateComputed = bidValidityDateValue
+    ? bidValidityDateValue
+    : (closingDateValue ? (() => {
+        try {
+          const cDate = new Date(closingDateValue);
+          if (!isNaN(cDate.getTime())) {
+            const daysToAdd = Number(rawValidityDays) || 90;
+            const computed = new Date(cDate.getTime() + daysToAdd * 86_400_000);
+            return computed.toISOString();
+          }
+        } catch {}
+        return undefined;
+      })() : undefined);
 
   const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue) : (props.publishedDate ? formatDateString(props.publishedDate) : 'N/A');
   const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue) : (props.closingDate ? formatDateString(props.closingDate) : 'N/A');
   const clarificationDateFormatted = clarificationDateValue ? formatDateString(clarificationDateValue, true) : (props.clarificationDate ? formatDateString(props.clarificationDate, true) : 'N/A');
+  const clarificationDeadlineFormatted = clarificationDeadlineValue ? formatDateString(clarificationDeadlineValue, true) : (clarificationDateFormatted !== 'N/A' ? clarificationDateFormatted : undefined);
   const technicalDateFormatted = technicalDateValue ? formatDateString(technicalDateValue, true) : (props.technicalDate || props.technicalOpeningDate ? formatDateString(props.technicalDate || props.technicalOpeningDate, true) : 'N/A');
   const presentationDateFormatted = presentationDateValue ? formatDateString(presentationDateValue, true) : (props.presentationDate ? formatDateString(props.presentationDate, true) : 'N/A');
   const financialDateFormatted = financialDateValue ? formatDateString(financialDateValue, true) : (props.financialDate || props.financialOpeningDate ? formatDateString(props.financialDate || props.financialOpeningDate, true) : 'N/A');
   const awardDateFormatted = awardDateValue ? formatDateString(awardDateValue, true) : (props.awardDate ? formatDateString(props.awardDate, true) : 'N/A');
+  const submissionStartDateFormatted = submissionStartDateValue ? formatDateString(submissionStartDateValue, true) : publishedDateFormatted;
+  const requiredByDateFormatted = requiredByDateValue ? formatDateString(requiredByDateValue) : undefined;
+  const preBidDateFormatted = preBidDateValue ? formatDateString(preBidDateValue, true) : undefined;
+  const bidValidityDateFormatted = bidValidityDateComputed ? formatDateString(bidValidityDateComputed) : undefined;
 
   const deliveryLocation = firstPresent(
     props.deliveryLocation && props.deliveryLocation !== '—' && props.deliveryLocation !== 'N/A' && props.deliveryLocation !== 'Delivery location not specified' ? props.deliveryLocation : undefined,
@@ -2459,7 +2686,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     buyerProfile.companyName,
     props.buyer?.buyerProfile?.organizationName,
     props.buyer?.name
-  ) || 'PROAID';
+  ) || 'Buyer Organization';
 
   const contactPerson = firstPresent(
     props.buyerName && props.buyerName !== '—' && props.buyerName !== 'N/A' ? props.buyerName : undefined,
@@ -2475,7 +2702,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.buyer?.buyerProfile?.representativeName,
     props.buyer?.buyerProfile?.contactPersonName,
     props.buyer?.buyerProfile?.contactPerson
-  ) || (buyerOrgName !== 'N/A' && buyerOrgName !== 'PROAID' ? `${buyerOrgName} Purchase Officer` : 'Authorized Procurement Officer');
+  ) || (buyerOrgName && buyerOrgName !== 'N/A' && buyerOrgName !== 'Buyer Organization' ? `${buyerOrgName} Purchase Officer` : 'Authorized Procurement Officer');
 
   const email = firstPresent(
     props.buyerEmail && props.buyerEmail !== 'N/A' && props.buyerEmail !== '' ? props.buyerEmail : undefined,
@@ -2487,7 +2714,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     buyerProfile.email,
     props.buyer?.buyerProfile?.contactPersonEmail,
     props.buyer?.buyerProfile?.email
-  ) || (buyerOrgName !== 'N/A' && buyerOrgName !== 'PROAID' ? `procurement@${buyerOrgName.toLowerCase().replace(/[^a-z0-9]/g, '')}.gov.in` : 'procurement@proaid.org');
+  ) || '';
 
   const phone = firstPresent(
     props.buyerMobile && props.buyerMobile !== 'N/A' && props.buyerMobile !== '' ? props.buyerMobile : undefined,
@@ -2502,7 +2729,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     buyerProfile.phone,
     props.buyer?.buyerProfile?.contactPersonMobile,
     props.buyer?.buyerProfile?.mobile
-  ) || '+91 1800-425-0010';
+  ) || '';
 
   const addressParts = [
     buyerOrg.registeredAddress || buyerOrg.address || buyerProfile.registeredAddress || buyerProfile.address,
@@ -2515,7 +2742,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.buyerAddress,
     addressParts.length ? addressParts.join(', ') : undefined,
     props.buyer?.buyerProfile?.address
-  ) || 'Jharsuguda, Jharsuguda, ODISHA';
+  ) || '';
 
   const department = firstPresent(
     props.department && props.department !== 'N/A' && props.department !== '—' ? props.department : undefined,
@@ -2588,12 +2815,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     tender.evaluationMethod
   ) || 'L1 Basis';
 
-  const requireDemo = firstPresent(
-    payload.requireDemo,
-    evaluation.requireDemo,
-    rules.requireDemo,
-    'No'
-  );
+  const requireDemo = payload.requireDemo === true || evaluation.requireDemo === true || String(payload.requireDemo).toLowerCase() === 'true'
+    ? 'Yes'
+    : firstPresent(
+        payload.requireDemo,
+        evaluation.requireDemo,
+        rules.requireDemo,
+        'No'
+      );
 
   const qcbsRatio = firstPresent(
     evaluation.qcbsRatio,
@@ -2643,9 +2872,72 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     evaluation.questionnaire
   );
 
+  const effectiveInviteCount = useMemo(() => {
+    // 1. Check array candidates for real invited seller records
+    const arrayCandidates = [
+      props.invitations,
+      props.invitedSellers,
+      vendors.invitedSellers,
+      vendors.invitedSuppliers,
+      payload.invitedSellers,
+      payload.invitations,
+      payload.invitedSuppliers,
+      payload.rateContractConfig?.selectedSuppliers,
+      payload.rateContract?.selectedSuppliers,
+      payload.auctionConfig?.qualifiedVendors,
+      rules.invitedSellers,
+    ];
+
+    let maxFromArrays = 0;
+    for (const arr of arrayCandidates) {
+      if (Array.isArray(arr) && arr.length > maxFromArrays) {
+        maxFromArrays = arr.length;
+      }
+    }
+    if (maxFromArrays > 0) return maxFromArrays;
+
+    // 2. Check numeric candidates if array is not populated
+    const numericCandidates = [
+      props.invitedCount,
+      (props as any).invitationsCount,
+      vendors.inviteCount,
+      vendors.invitedCount,
+      payload.inviteCount,
+      payload.invitedCount,
+      rules.inviteCount,
+    ];
+
+    for (const val of numericCandidates) {
+      const num = Number(val);
+      if (Number.isFinite(num) && num > 0) {
+        return num;
+      }
+    }
+    return 0;
+  }, [
+    props.invitedCount,
+    (props as any).invitationsCount,
+    props.invitations,
+    props.invitedSellers,
+    vendors.inviteCount,
+    vendors.invitedCount,
+    vendors.invitedSellers,
+    vendors.invitedSuppliers,
+    payload.inviteCount,
+    payload.invitedCount,
+    payload.invitedSellers,
+    payload.invitations,
+    payload.invitedSuppliers,
+    payload.rateContractConfig?.selectedSuppliers,
+    payload.rateContract?.selectedSuppliers,
+    payload.auctionConfig?.qualifiedVendors,
+    rules.inviteCount,
+    rules.invitedSellers,
+  ]);
+
   const supplierControlsData = compactObject({
     selectionMode: firstPresent(vendors.selectionMode, vendors.selection, vendors.type, rules.selectionMode, 'Open'),
-    inviteCount: firstPresent(vendors.inviteCount, vendors.invitedCount, '0'),
+    inviteCount: String(effectiveInviteCount),
     msmePreference: firstPresent(vendors.msmePreference, rules.msmePreference, 'Yes'),
     excludeBlacklisted: firstPresent(vendors.excludeBlacklisted, rules.excludeBlacklisted, 'Yes'),
     localVendorPreference: firstPresent(vendors.localVendorPreference, rules.localVendorPreference, 'Yes'),
@@ -2680,6 +2972,65 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       return statusStr !== 'DRAFT' && statusStr !== 'CANCELLED';
     });
   }, [allParticipationsList]);
+
+  const proposalStatusDisplay = useMemo(() => {
+    // If current user is explicitly a seller and not viewing as buyer, show their submission status
+    if (currentUser?.role === 'seller' && !isBuyerSide) {
+      return props.hasSubmittedProposal ? 'Submitted' : 'Not submitted';
+    }
+
+    // For buyer, admin, or general viewer, derive authentic status from real database records
+    const rawStatus = String(props.status || '').toUpperCase();
+    const count = Math.max(props.participantsCount || 0, submittedParticipations.length);
+    const isDeadlinePassed = props.deadlineDate ? new Date(props.deadlineDate).getTime() < nowMs : false;
+
+    // 1. Awarded / Completed
+    const hasAwarded = submittedParticipations.some((p: any) => {
+      const s = String(p.finalStatus || p.status || p.submissionStatus || '').toUpperCase();
+      return s === 'AWARDED' || s === 'ACCEPTED' || s === 'PO_GENERATED';
+    });
+    if (hasAwarded || rawStatus === 'AWARDED' || rawStatus === 'PO_GENERATED' || rawStatus === 'AWARD_RECOMMENDED') {
+      return 'Awarded';
+    }
+
+    // 2. Under Evaluation
+    const hasEvaluation = submittedParticipations.some((p: any) => {
+      const ts = String(p.technicalStatus || '').toUpperCase();
+      const fs = String(p.financialStatus || '').toUpperCase();
+      const s = String(p.status || p.submissionStatus || '').toUpperCase();
+      return ts === 'QUALIFIED' || ts === 'UNDER_EVALUATION' || fs === 'OPENED' || s === 'UNDER_REVIEW' || s === 'SHORTLISTED';
+    });
+    if (
+      hasEvaluation ||
+      rawStatus === 'TECHNICAL_EVALUATION' ||
+      rawStatus === 'FINANCIAL_EVALUATION' ||
+      rawStatus === 'UNDER_EVALUATION' ||
+      rawStatus === 'TECHNICAL_EVALUATION_COMPLETED' ||
+      rawStatus === 'L1_GENERATED' ||
+      rawStatus === 'NEGOTIATION'
+    ) {
+      return 'Under Evaluation';
+    }
+
+    // 3. Proposals received
+    if (count > 0) {
+      if (isDeadlinePassed || rawStatus === 'CLOSED') {
+        return `${count} Received (Under Review)`;
+      }
+      return `${count} ${count === 1 ? (isRfqType ? 'Quotation' : 'Proposal') : (isRfqType ? 'Quotations' : 'Proposals')} Received`;
+    }
+
+    // 4. No proposals received
+    if (isDeadlinePassed || rawStatus === 'CLOSED' || rawStatus === 'EXPIRED') {
+      return isRfqType ? 'No Quotations Received' : 'No Proposals Received';
+    }
+    if (rawStatus === 'CANCELLED') {
+      return 'Cancelled';
+    }
+
+    // 5. Open / active awaiting submissions
+    return isRfqType ? 'Awaiting Quotations' : 'Awaiting Proposals';
+  }, [currentUser?.role, isBuyerSide, props.hasSubmittedProposal, props.status, props.participantsCount, submittedParticipations, props.deadlineDate, nowMs, isRfqType]);
 
   const buyerContactPerson = contactPerson && contactPerson !== 'N/A' && contactPerson !== '—' ? contactPerson : (buyerOrgName !== 'N/A' ? buyerOrgName : 'Procurement Officer');
   const buyerPhoneNum = phone && phone !== 'N/A' && phone !== '—' ? phone : (props.buyerMobile && props.buyerMobile !== 'N/A' ? props.buyerMobile : '');
@@ -2775,7 +3126,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <BuyerSideContext.Provider value={{ isBuyer: isBuyerSide, isOpenTender: isBuyerOpenTender, isLimitedTender: isBuyerLimitedTender }}>
+      <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6 lg:px-8">
         {/* Navigation Breadcrumb & Back Button */}
         <div className="flex flex-wrap items-center gap-3">
@@ -2997,8 +3349,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   <PropertyItem label="Procurement Method" value={procurementMethod} />
                   <PropertyItem label="Buying Type" value={buyingType} />
                   <PropertyItem label="Category" value={category} />
-                  {/* Sub Category - commented out / hidden in RFQ on buyer side */}
-                  {!isBuyerRfq && (
+                  {/* Sub Category - hidden on buyer side */}
+                  {!isBuyerSide && (
                     <PropertyItem label="Sub Category" value={subCategory} />
                   )}
                   <PropertyItem label="Published Date" value={publishedDateFormatted} />
@@ -3007,8 +3359,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   {!isBuyerSide && (
                     <PropertyItem label="Delivery Location" value={deliveryLocation} />
                   )}
-                  {/* Project Duration - commented out / hidden in RFQ on buyer side */}
-                  {!isBuyerRfq && (
+                  {/* Project Duration - commented out / hidden on buyer side */}
+                  {!isBuyerSide && (
                     <PropertyItem label="Project Duration" value={projectDuration} />
                   )}
                   {/* Payment Terms - hidden on buyer side */}
@@ -3043,12 +3395,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               ]}
             />
 
-            {/* Clarification Threads & Status grid - commented out / hidden in RFQ on buyer side */}
-            {!isBuyerRfq && (
+            {/* Clarification Threads & Status grid - commented out strictly in RFQ, Open Tender, and Limited Tender on buyer side */}
+            {!isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
               <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
                 <PropertyGrid columns={4}>
                   <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
-                  <PropertyItem label="Proposal Status" value={props.hasSubmittedProposal ? 'Submitted' : currentUser?.role === 'seller' ? 'Not submitted' : 'N/A'} />
+                  <PropertyItem label={isRfqType ? 'Quotation Status' : 'Proposal Status'} value={proposalStatusDisplay} />
                   <PropertyItem label="Deadline Status" value={props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs ? 'Closed' : 'Open'} />
                   <PropertyItem label="Source Record" value={procurementTypeLabel} />
                 </PropertyGrid>
@@ -3069,8 +3421,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 procurementMethod={procurementMethod}
               />
 
-              {/* Service Details & Parameters - commented out / hidden in RFQ on buyer side */}
-              {hasDetailData(serviceDetails) && !(isBuyerSide && (isRfqType || pathname.includes('/rfq'))) && (
+              {/* Service Details & Parameters - commented out strictly in Open Tender, Limited Tender, and RFQ on buyer side */}
+              {hasDetailData(serviceDetails) && !isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
                 <ServiceDetailsSection serviceDetails={serviceDetails} />
               )}
 
@@ -3078,8 +3430,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 <LineItemsTable items={lineItems} defaultSubject={resolvedSubject} isBuyer={isBuyerSide} />
               )}
 
-              {/* BOQ Table - commented out / hidden in RFQ on buyer side */}
-              {hasDetailData(boqTable) && !(isBuyerSide && (isRfqType || pathname.includes('/rfq'))) && (
+              {/* BOQ Table - hidden on buyer side */}
+              {hasDetailData(boqTable) && !isBuyerSide && (
                 <BoqTableList data={boqTable} defaultSubject={resolvedSubject} defaultCategory={category} defaultEstimatedValue={props.estimatedValue} />
               )}
             </DataCard>
@@ -3158,12 +3510,22 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
                     <PropertyGrid columns={3}>
                       <PropertyItem label="Publish Date" value={firstPresent(schedule.publishDate, schedule.publishedDate, publishedDateFormatted, props.publishedDate)} />
-                      <PropertyItem label="Submission Start Date" value={firstPresent(schedule.submissionStartDate, schedule.startDate, publishedDateFormatted)} />
+                      <PropertyItem label="Submission Start Date" value={submissionStartDateFormatted} />
+                      <PropertyItem label="Clarification Deadline" value={firstPresent(schedule.clarificationDeadline, schedule.clarificationEndDate, clarificationDeadlineFormatted, props.clarificationDate)} />
                       <PropertyItem label="Submission Deadline" value={firstPresent(schedule.submissionDate, closingDateFormatted, props.closingDate)} highlight />
-                      <PropertyItem label="Financial Opening Date" value={firstPresent(schedule.financialOpeningDate, tender.financialEvaluationDate, props.financialOpeningDate, financialDateFormatted)} />
                       <PropertyItem label="Technical Opening Date" value={firstPresent(schedule.technicalOpeningDate, tender.technicalEvaluationDate, props.technicalOpeningDate, technicalDateFormatted)} />
-                      <PropertyItem label="Validity Days" value={firstPresent(schedule.validityDays, tender.validityDays, rules.validityDays, '90 Days')} />
-                      <PropertyItem label="Bid Validity Date" value={firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline)} />
+                      <PropertyItem label="Financial Opening Date" value={firstPresent(schedule.financialOpeningDate, tender.financialEvaluationDate, props.financialOpeningDate, financialDateFormatted)} />
+                      <PropertyItem label="Bid Validity Date" value={firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline, bidValidityDateFormatted)} />
+                      <PropertyItem label="Validity Days" value={validityDaysDisplay} />
+                      {requiredByDateFormatted && (
+                        <PropertyItem label="Required By Date" value={requiredByDateFormatted} />
+                      )}
+                      {preBidDateFormatted && (
+                        <PropertyItem label="Pre-Bid Meeting Date" value={preBidDateFormatted} />
+                      )}
+                      {awardDateFormatted && awardDateFormatted !== 'N/A' && (
+                        <PropertyItem label="Expected Award Date" value={awardDateFormatted} />
+                      )}
                     </PropertyGrid>
                   </div>
                 </div>
@@ -3200,13 +3562,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 {/* Payment Terms and Delivery Terms commented out as they already appear in Terms & Conditions */}
                 {/* <PropertyItem label="Payment Terms" value={paymentTerms} /> */}
                 {/* <PropertyItem label="Delivery Terms" value={deliveryTerms} /> */}
-                {/* Contract Period commented out / hidden in RFQ on buyer side */}
-                {!isBuyerRfq && (
+                {/* Contract Period commented out / hidden on buyer side */}
+                {!isBuyerSide && (
                   <PropertyItem label="Contract Period" value={firstPresent(terms.contractPeriod, terms.projectDuration, projectDuration)} />
                 )}
-                {/* Retention Amount & Security Deposit commented out / hidden in RFQ on buyer side */}
-                <PropertyItem label="Terms & Conditions" value={cleanRfqTerms(terms.termsAndConditions || terms.terms || payload.terms)} fullWidth />
-                <PropertyItem label="Eligibility Criteria" value={cleanRfqTerms(terms.eligibilityCriteria || basics.eligibilityCriteria || payload.eligibility)} fullWidth />
+                {/* Retention Amount & Security Deposit commented out / hidden on buyer side */}
+                {/* Warranty Terms strictly commented out / hidden on buyer side in open tender */}
+                <PropertyItem label="Terms & Conditions" value={cleanBuyerTerms(terms.termsAndConditions || terms.terms || payload.terms)} fullWidth />
+                <PropertyItem label="Eligibility Criteria" value={cleanBuyerTerms(terms.eligibilityCriteria || basics.eligibilityCriteria || payload.eligibility)} fullWidth />
               </PropertyGrid>
             </DataCard>
 
@@ -3214,6 +3577,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               data={consigneeDetails}
               deliveryLocation={deliveryLocation}
               deliveryTerms={deliveryTerms}
+              isBuyerSide={isBuyerSide}
               isBuyerRfq={isBuyerRfq}
             />
           </div>
@@ -3226,8 +3590,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
                 <PropertyGrid columns={4}>
                   <PropertyItem label="Evaluation Method" value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')} highlight />
-                  {/* <PropertyItem label="Require Demo" value={formatPrimitiveValue(requireDemo)} /> */}
-                  {/* {hasDetailData(qcbsRatio) && <PropertyItem label="QCBS Ratio" value={qcbsRatio} />} */}
+                  {requireDemo && requireDemo !== 'No' && <PropertyItem label="Require Demo" value={formatPrimitiveValue(requireDemo)} />}
+                  {hasDetailData(qcbsRatio) && <PropertyItem label="QCBS Ratio" value={qcbsRatio} />}
                   {hasDetailData(passingScore) && <PropertyItem label="Passing Score" value={passingScore} />}
                 </PropertyGrid>
               </div>
@@ -3250,9 +3614,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               <div className="space-y-5">
                 <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
                   <PropertyGrid columns={3}>
-                    <PropertyItem label="Selection Mode" value={payload.selectionMode || rules.selectionMode || 'Open'} />
-                    <PropertyItem label="Invite Count" value={payload.inviteCount !== undefined ? payload.inviteCount : '0'} />
-                    <PropertyItem label="Workflow" value={payload.workflow || 'Finance + Procurement'} />
+                    <PropertyItem label="Selection Mode" value={vendors.selection || payload.selectionMode || rules.selectionMode || 'Open'} />
+                    <PropertyItem label="Invite Count" value={String(effectiveInviteCount)} />
+                    <PropertyItem label="Workflow" value={approval.workflow || payload.workflow || 'Finance + Procurement'} />
                   </PropertyGrid>
                 </div>
 
@@ -3263,17 +3627,17 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   </h3>
                   <PolicyRulesMatrix
                     rules={[
-                      { label: 'MSME Preference', value: payload.msmePreference !== undefined ? (payload.msmePreference ? 'Yes' : 'No') : 'Yes' },
-                      { label: 'Exclude Blacklisted', value: payload.excludeBlacklisted !== undefined ? (payload.excludeBlacklisted ? 'Yes' : 'No') : 'Yes' },
-                      { label: 'Local Vendor Preference', value: payload.localVendorPreference !== undefined ? (payload.localVendorPreference ? 'Yes' : 'No') : 'Yes' },
+                      { label: 'MSME Preference', value: (vendors.msmePreference !== undefined ? vendors.msmePreference : payload.msmePreference) !== undefined ? ((vendors.msmePreference ?? payload.msmePreference) ? 'Yes' : 'No') : 'Yes' },
+                      { label: 'Exclude Blacklisted', value: (vendors.excludeBlacklisted !== undefined ? vendors.excludeBlacklisted : payload.excludeBlacklisted) !== undefined ? ((vendors.excludeBlacklisted ?? payload.excludeBlacklisted) ? 'Yes' : 'No') : 'Yes' },
+                      { label: 'Local Vendor Preference', value: (vendors.localVendorPreference !== undefined ? vendors.localVendorPreference : payload.localVendorPreference) !== undefined ? ((vendors.localVendorPreference ?? payload.localVendorPreference) ? 'Yes' : 'No') : 'Yes' },
                     ]}
                   />
                 </div>
 
-                {payload.approvalNotes && (
+                {(approval.notes || payload.approvalNotes) && isBuyerOrAdmin && (
                   <div className="rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Approval Notes:</span>
-                    <p className="text-xs font-semibold text-slate-700">{payload.approvalNotes}</p>
+                    <p className="text-xs font-semibold text-slate-700">{approval.notes || payload.approvalNotes}</p>
                   </div>
                 )}
               </div>
@@ -3291,7 +3655,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-black text-slate-900 tracking-tight">{isRfqType ? 'Seller Submitted Quotations' : 'Seller Proposals & Submitted Quotations'}</h3>
                       <span className="rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black text-blue-700">
-                        {submittedParticipations.length} {submittedParticipations.length === 1 ? 'Quotation' : 'Quotations'} Received
+                        {submittedParticipations.length} {submittedParticipations.length === 1 ? (isRfqType ? 'Quotation' : 'Proposal') : (isRfqType ? 'Quotations' : 'Proposals')} Received
                       </span>
                     </div>
                     <p className="text-xs font-medium text-slate-500 mt-0.5">
@@ -3521,6 +3885,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         </div>
       </div>
     </div>
+    </BuyerSideContext.Provider>
   );
 }
 
