@@ -265,7 +265,40 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
     }
   }
 
-  if (!asset.entityId) return false;
+  if (!asset.entityId) {
+    if (['procurement_bid', 'procurement_draft'].includes(asset.entityType) && user.role === 'seller') {
+      try {
+        // Check QuoteRequestItems
+        const reqItems = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT quoteRequestId FROM QuoteRequestItem WHERE CAST(attachments AS CHAR) LIKE '%"id":${asset.id}%' OR CAST(attachments AS CHAR) LIKE '%"fileAssetId":${asset.id}%' LIMIT 1`
+        );
+        if (reqItems && reqItems.length > 0) {
+          const req = await prisma.quoteRequest.findUnique({ where: { id: reqItems[0].quoteRequestId } });
+          if (req) {
+            const bid = await prisma.procurementBid.findFirst({
+              where: { bidReference: req.quoteRequestNumber },
+              include: { invitations: true, participations: true }
+            });
+            if (bid && canSellerViewBid(user.id, bid)) return true;
+          }
+        }
+        // Check ProcurementBidItems
+        const bidItems = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT bidId FROM ProcurementBidItem WHERE CAST(attachments AS CHAR) LIKE '%"id":${asset.id}%' OR CAST(attachments AS CHAR) LIKE '%"fileAssetId":${asset.id}%' LIMIT 1`
+        );
+        if (bidItems && bidItems.length > 0) {
+          const bid = await prisma.procurementBid.findUnique({
+            where: { id: bidItems[0].bidId },
+            include: { invitations: true, participations: true }
+          });
+          if (bid && canSellerViewBid(user.id, bid)) return true;
+        }
+      } catch (e) {
+        // Suppress raw query errors in fallback
+      }
+    }
+    return false;
+  }
 
   if (asset.entityType === 'tender') return checkOwnership('tender', asset.entityId, user);
   if (asset.entityType === 'bid') return checkOwnership('bid', asset.entityId, user);

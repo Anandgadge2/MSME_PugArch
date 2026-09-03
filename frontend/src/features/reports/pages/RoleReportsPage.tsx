@@ -228,27 +228,52 @@ export default function RoleReportsPage() {
     };
 
     return (
-        <div className="space-y-5">
-            <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-black text-slate-950">{user?.role === 'seller' ? 'Seller Performance Reports' : 'Buyer Procurement Reports'}</h1>
+        <div className="space-y-4">
+            <section className="flex flex-col gap-3 pb-2">
+                <div>
+                    <h1 className="text-xl sm:text-2xl font-black text-slate-950">{user?.role === 'seller' ? 'Seller Performance Reports' : 'Buyer Procurement Reports'}</h1>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">Executive dashboard for network health, onboarding metrics, and transaction analytics.</p>
+                </div>
+                
+                {/* Compact Filter Bar */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
+                    <div className="flex flex-1 flex-wrap items-center gap-2">
+                        <div className="relative w-full sm:w-64">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Search orders..."
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                            />
+                        </div>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="h-9 rounded-md border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]"
+                        >
+                            <option value="">All Statuses</option>
+                            {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <div className="flex items-center gap-1.5 px-1">
+                            <span className="text-[10px] font-black uppercase text-slate-400">Date Range:</span>
+                            <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded">All Time</span>
+                        </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" onClick={() => handleExport('excel')} className="h-10 gap-2 text-xs font-black uppercase bg-[#12335f] text-white hover:bg-[#0b2447] hover:text-white border-transparent">
-                            <FileSpreadsheet className="h-4 w-4" /> Excel Report
+                    
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button type="button" variant="outline" onClick={() => handleExport('excel')} className="h-9 gap-1.5 px-3 text-[10px] font-black uppercase bg-[#12335f] text-white hover:bg-[#0b2447] hover:text-white border-transparent" title="Export Excel">
+                            <FileSpreadsheet className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Excel</span>
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => handleExport('csv')} className="h-10 gap-2 text-xs font-black uppercase">
-                            <FileSpreadsheet className="h-4 w-4" /> CSV
+                        <Button type="button" variant="outline" onClick={() => handleExport('csv')} className="h-9 gap-1.5 px-3 text-[10px] font-black uppercase bg-white" title="Export CSV">
+                            <FileSpreadsheet className="h-3.5 w-3.5" /> <span className="hidden xl:inline">CSV</span>
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => handleExport('json')} className="h-10 gap-2 text-xs font-black uppercase">
-                            <Download className="h-4 w-4" /> JSON
+                        <Button type="button" variant="outline" onClick={() => handleExport('print')} className="h-9 gap-1.5 px-3 text-[10px] font-black uppercase bg-white" title="Print/PDF">
+                            <FileText className="h-3.5 w-3.5" /> <span className="hidden xl:inline">Print</span>
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => handleExport('print')} className="h-10 gap-2 text-xs font-black uppercase">
-                            <FileText className="h-4 w-4" /> Print / PDF
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => { summary.refetch(); procurementOrders.refetch(); purchaseOrders.refetch(); }} className="h-10 gap-2 text-xs font-black uppercase">
-                            <RefreshCw className={`h-4 w-4 ${summary.isFetching || procurementOrders.isFetching || purchaseOrders.isFetching ? 'animate-spin' : ''}`} /> Refresh
+                        <Button type="button" variant="outline" onClick={() => { summary.refetch(); procurementOrders.refetch(); purchaseOrders.refetch(); }} className="h-9 gap-1.5 px-3 text-[10px] font-black uppercase bg-white">
+                            <RefreshCw className={`h-3.5 w-3.5 ${summary.isFetching || procurementOrders.isFetching || purchaseOrders.isFetching ? 'animate-spin' : ''}`} /> <span className="hidden sm:inline">Refresh</span>
                         </Button>
                     </div>
                 </div>
@@ -256,13 +281,18 @@ export default function RoleReportsPage() {
 
             {error ? <InlineError message={(error as Error).message} onRetry={() => { summary.refetch(); procurementOrders.refetch(); purchaseOrders.refetch(); }} /> : isLoading ? <LoadingState label="Loading analytical reports..." /> : (
                 <>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                         {analytics.kpis.map((kpi) => <KpiCard key={kpi.label} {...kpi} />)}
                     </div>
 
-                    <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+                    <section className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
                         <ReportCard title="Monthly Order Value" subtitle="PO value based on order creation month.">
-                            <ResponsiveContainer width="100%" height={300}>
+                            {analytics.monthlyValue.length === 1 && (
+                                <div className="mb-2 rounded bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700">
+                                    Limited data for selected period (Only 1 month available)
+                                </div>
+                            )}
+                            <ResponsiveContainer width="100%" height={220}>
                                 <AreaChart data={analytics.monthlyValue}>
                                     <defs>
                                         <linearGradient id="valueFill" x1="0" x2="0" y1="0" y2="1">
@@ -271,27 +301,27 @@ export default function RoleReportsPage() {
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
-                                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                    <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} width={45} />
                                     <Tooltip formatter={(value) => money(Number(value || 0))} />
-                                    <Area type="monotone" dataKey="value" stroke="#12335f" strokeWidth={3} fill="url(#valueFill)" name="Order value" />
+                                    <Area type="monotone" dataKey="value" stroke="#12335f" strokeWidth={3} fill="url(#valueFill)" name="Order value" dot={analytics.monthlyValue.length === 1 ? { r: 4, fill: '#12335f' } : false} activeDot={{ r: 6 }} />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </ReportCard>
 
                         <ReportCard title="Order Status Distribution" subtitle="Current status of filtered procurement orders.">
-                            <ResponsiveContainer width="100%" height={300}>
+                            <ResponsiveContainer width="100%" height={200}>
                                 <PieChart>
-                                    <Pie data={analytics.statusDistribution} dataKey="value" nameKey="name" innerRadius={64} outerRadius={92} paddingAngle={3}>
+                                    <Pie data={analytics.statusDistribution} dataKey="value" nameKey="name" innerRadius={50} outerRadius={76} paddingAngle={3}>
                                         {analytics.statusDistribution.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}
                                     </Pie>
                                     <Tooltip />
                                 </PieChart>
                             </ResponsiveContainer>
-                            <div className="mt-2 grid gap-2">
+                            <div className="mt-3 grid gap-1.5 grid-cols-2 sm:grid-cols-3 xl:grid-cols-2">
                                 {analytics.statusDistribution.map((item, index) => (
-                                    <div key={item.name} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-xs font-bold">
-                                        <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />{item.name}</span>
+                                    <div key={item.name} className="flex items-center justify-between rounded-md bg-slate-50 px-2.5 py-1.5 text-[10px] font-bold">
+                                        <span className="inline-flex items-center gap-1.5 truncate pr-2" title={item.name}><span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />{item.name}</span>
                                         <span>{item.value}</span>
                                     </div>
                                 ))}
@@ -299,28 +329,28 @@ export default function RoleReportsPage() {
                         </ReportCard>
                     </section>
 
-                    <section className="grid gap-5 xl:grid-cols-2">
+                    <section className="grid gap-4 xl:grid-cols-2">
                         <ReportCard title="Lifecycle Readiness" subtitle="Delivery, GRN, invoice, and payment progress.">
-                            <ResponsiveContainer width="100%" height={280}>
+                            <ResponsiveContainer width="100%" height={240}>
                                 <BarChart data={analytics.lifecycle}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
-                                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                    <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} width={30} />
                                     <Tooltip />
-                                    <Bar dataKey="completed" name="Completed / ready" fill="#0f766e" radius={[5, 5, 0, 0]} />
-                                    <Bar dataKey="pending" name="Pending" fill="#c86413" radius={[5, 5, 0, 0]} />
+                                    <Bar dataKey="completed" name="Completed / ready" fill="#0f766e" radius={[4, 4, 0, 0]} maxBarSize={60} />
+                                    <Bar dataKey="pending" name="Pending" fill="#c86413" radius={[4, 4, 0, 0]} maxBarSize={60} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </ReportCard>
 
                         <ReportCard title="Procurement Aging" subtitle="Open order age from creation date.">
-                            <ResponsiveContainer width="100%" height={280}>
+                            <ResponsiveContainer width="100%" height={240}>
                                 <BarChart data={analytics.aging}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
-                                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                    <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} width={30} />
                                     <Tooltip />
-                                    <Bar dataKey="value" name="Orders" fill="#12335f" radius={[5, 5, 0, 0]} />
+                                    <Bar dataKey="value" name="Orders" fill="#12335f" radius={[4, 4, 0, 0]} maxBarSize={80} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </ReportCard>
@@ -385,10 +415,12 @@ function buildAnalytics(orders: any[], summary: any, role?: string) {
 
 function ReportCard({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
     return (
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-black text-slate-950">{title}</h2>
-            <p className="mt-1 text-xs font-semibold text-slate-500">{subtitle}</p>
-            <div className="mt-4">{children}</div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4 shadow-sm flex flex-col h-full">
+            <div>
+                <h2 className="text-[15px] leading-tight font-black text-slate-950">{title}</h2>
+                <p className="mt-0.5 text-[11px] font-semibold text-slate-500">{subtitle}</p>
+            </div>
+            <div className="mt-4 flex-1">{children}</div>
         </div>
     );
 }

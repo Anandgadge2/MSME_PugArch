@@ -16,6 +16,7 @@ import {
   Download,
   ExternalLink,
   Eye,
+  Paperclip,
   FileSpreadsheet,
   FileText,
   IndianRupee,
@@ -1262,10 +1263,39 @@ function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?
                     <td className="px-4 py-3 text-slate-700">{rawBrand ? formatPrimitiveValue(rawBrand) : '-'}</td>
                     <td className="px-4 py-3">
                       {fileCount > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200/60 px-2.5 py-0.5 text-[10px] font-bold text-indigo-700">
-                          <FileText className="h-3 w-3" />
-                          {fileCount} File(s)
-                        </span>
+                        <button 
+                          type="button"
+                          onClick={(e) => {
+                             e.preventDefault();
+                             e.stopPropagation();
+                             
+                             let targetFileId = null;
+                             let targetUrl = null;
+                             let targetName = name || 'Attachment';
+
+                             if (attachedFiles.length > 0) {
+                               const doc = attachedFiles[0];
+                               targetFileId = doc.fileAssetId || doc.assetId;
+                               targetUrl = doc.url || doc.fileUrl || doc.documentUrl;
+                               targetName = doc.name || doc.originalName || doc.fileName || targetName;
+                             } else {
+                               targetFileId = item.fileAssetId || sp.fileAssetId;
+                               targetUrl = item.fileUrl || item.url || sp.fileUrl || sp.url;
+                             }
+
+                             if (targetFileId || targetUrl) {
+                                openFileAsset({ id: targetFileId, fileAssetId: targetFileId, url: targetUrl }, targetName).catch(() => {});
+                             } else {
+                                toast.error('This attachment has no linked file on the server.');
+                             }
+                          }}
+                          className="inline-flex cursor-pointer hover:bg-emerald-100 transition-colors items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200/60 px-2.5 py-1 text-[10px] font-bold text-emerald-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                          title="Click to view attachment"
+                        >
+                          <Paperclip className="h-3 w-3" />
+                          {fileCount} {fileCount === 1 ? 'file' : 'files'}
+                          <Eye className="h-3 w-3 ml-0.5 opacity-80" />
+                        </button>
                       ) : (
                         <span className="text-slate-400">-</span>
                       )}
@@ -2599,58 +2629,58 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               const validDownloadableDocs = documents.filter(doc => doc && (doc.fileAssetId || doc.url));
 
               return (
-                <DataCard title={`${procurementTypeLabel} Attached Documents`} icon={FileSpreadsheet}>
+                <div className="space-y-5">
                   {validDownloadableDocs.length > 0 && (
-                    <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-                      {validDownloadableDocs.map((doc, index) => {
-                        const isGenericName = !doc.name || doc.name.toLowerCase().startsWith('attached_doc');
-                        const docDisplayName = isGenericName
-                          ? (doc.meta || `${procurementTypeLabel} Document ${index + 1}`)
-                          : doc.name;
+                    <DataCard title={`${procurementTypeLabel} Attached Documents`} icon={FileSpreadsheet}>
+                      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                        {validDownloadableDocs.map((doc, index) => {
+                          const isGenericName = !doc.name || doc.name.toLowerCase().startsWith('attached_doc');
+                          const docDisplayName = isGenericName
+                            ? (doc.meta || `${procurementTypeLabel} Document ${index + 1}`)
+                            : doc.name;
 
-                        return (
-                          <article key={doc.id ? `doc-${doc.id}-${index}` : `doc-idx-${index}`} className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 shadow-xs flex flex-col justify-between hover:bg-slate-50 transition-colors">
-                            <div className="flex items-start gap-3">
-                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                <FileText className="h-5 w-5" />
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="break-words text-xs font-bold text-slate-900 leading-snug">{docDisplayName}</p>
-                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                  <span className={cn(
-                                    'rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
-                                    doc.required ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-600'
-                                  )}>
-                                    {doc.required ? 'Required' : doc.meta || 'Document'}
-                                  </span>
+                          return (
+                            <article key={doc.id ? `doc-${doc.id}-${index}` : `doc-idx-${index}`} className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 shadow-xs flex flex-col justify-between hover:bg-slate-50 transition-colors">
+                              <div className="flex items-start gap-3">
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                  <FileText className="h-5 w-5" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="break-words text-xs font-bold text-slate-900 leading-snug">{docDisplayName}</p>
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                    <span className={cn(
+                                      'rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
+                                      doc.required ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-600'
+                                    )}>
+                                      {doc.required ? 'Required' : doc.meta || 'Document'}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                if (doc.fileAssetId || doc.url) {
-                                  openFileAsset({ fileAssetId: doc.fileAssetId, url: doc.url, originalName: docDisplayName }, docDisplayName);
-                                }
-                              }}
-                              disabled={!doc.fileAssetId && !doc.url}
-                              className="mt-3.5 w-full text-xs h-8.5 rounded-lg border-slate-250 bg-white hover:bg-slate-100 font-bold"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                              Open Document
-                            </Button>
-                          </article>
-                        );
-                      })}
-                    </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (doc.fileAssetId || doc.url) {
+                                    openFileAsset({ fileAssetId: doc.fileAssetId, url: doc.url, originalName: docDisplayName }, docDisplayName);
+                                  }
+                                }}
+                                disabled={!doc.fileAssetId && !doc.url}
+                                className="mt-3.5 w-full text-xs h-8.5 rounded-lg border-slate-250 bg-white hover:bg-slate-100 font-bold"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                                Open Document
+                              </Button>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </DataCard>
                   )}
 
-                  <div className="pt-2">
-                    <RequiredDocumentsList data={requiredDocuments} />
-                  </div>
-                </DataCard>
+                  <RequiredDocumentsList data={requiredDocuments} />
+                </div>
               );
             })()}
           </div>

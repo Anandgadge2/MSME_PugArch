@@ -144,7 +144,8 @@ export const useFeatureQuery = <T,>(endpoint: string, initialValue: T) => {
   // `loading` should only be true when we have no data at all. Background
   // refetches must not blank the UI - that's the whole point of caching.
   const hasData = data !== undefined && data !== null;
-  const loading = query.isLoading && !hasData && override === null;
+  const isFallback = data === initialValueRef.current;
+  const loading = (query.isLoading || query.isFetching) && (!hasData || isFallback) && override === null;
   const error = query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null;
 
   return useMemo(() => ({ data, loading, refreshing: query.isFetching, error, reload, setData }), [data, loading, query.isFetching, error, reload, setData]);

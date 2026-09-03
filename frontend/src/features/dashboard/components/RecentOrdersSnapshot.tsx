@@ -132,7 +132,7 @@ export function RecentOrdersSnapshot() {
           href={isBuyer ? '/orders' : prefix}
           className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#12335f] hover:text-[#0b2445] transition shrink-0"
         >
-          All Orders ({orders.length})
+          View All Orders
           <ArrowRight className="h-3 w-3" />
         </Link>
       </div>

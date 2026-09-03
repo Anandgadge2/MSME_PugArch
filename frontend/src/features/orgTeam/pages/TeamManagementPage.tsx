@@ -91,6 +91,103 @@ type TeamTab = 'members' | 'invitations' | 'roles' | 'transfers';
 
 const roleBadgeClass = 'border-slate-200 bg-slate-50 text-slate-700';
 
+// ─── Skeletons ────────────────────────────────────────────────────────────────
+
+const MemberGridSkeleton = () => (
+    <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm animate-pulse">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-2 w-full">
+                        <div className="h-4 w-16 bg-slate-200 rounded" />
+                        <div className="h-5 w-3/4 bg-slate-200 rounded" />
+                        <div className="h-3 w-1/2 bg-slate-100 rounded" />
+                    </div>
+                    <div className="h-5 w-16 bg-slate-100 rounded" />
+                </div>
+                <div className="mt-4 space-y-3">
+                    <div className="h-3 w-full bg-slate-100 rounded" />
+                    <div className="h-3 w-4/5 bg-slate-100 rounded" />
+                    <div className="h-3 w-3/4 bg-slate-100 rounded" />
+                </div>
+                <div className="mt-4 flex justify-end border-t border-slate-100 pt-3 gap-2">
+                    <div className="h-8 w-8 rounded-md bg-slate-100" />
+                    <div className="h-8 w-8 rounded-md bg-slate-100" />
+                </div>
+            </div>
+        ))}
+    </div>
+);
+
+const MemberTableSkeleton = () => (
+    <div className="overflow-x-auto">
+        <table className="w-full min-w-[800px] text-sm">
+            <thead className="border-b border-slate-100 bg-slate-50/60">
+                <tr>
+                    {Array.from({ length: 8 }).map((_, i) => (
+                        <th key={i} className="px-4 py-3"><div className="h-3 w-16 bg-slate-200 rounded animate-pulse" /></th>
+                    ))}
+                </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+                {Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                        <td className="px-4 py-3"><div className="h-3 w-6 bg-slate-100 rounded" /></td>
+                        <td className="px-4 py-3 space-y-2"><div className="h-4 w-24 bg-slate-200 rounded" /><div className="h-3 w-32 bg-slate-100 rounded" /></td>
+                        <td className="px-4 py-3"><div className="h-3 w-40 bg-slate-100 rounded" /></td>
+                        <td className="px-4 py-3"><div className="h-5 w-20 bg-slate-100 rounded-md" /></td>
+                        <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-md" /></td>
+                        <td className="px-4 py-3 space-y-2"><div className="h-3 w-20 bg-slate-100 rounded" /><div className="h-2 w-16 bg-slate-50 rounded" /></td>
+                        <td className="px-4 py-3 space-y-2"><div className="h-3 w-20 bg-slate-100 rounded" /><div className="h-2 w-16 bg-slate-50 rounded" /></td>
+                        <td className="px-4 py-3 text-right"><div className="inline-flex gap-2"><div className="h-8 w-8 bg-slate-100 rounded-md" /><div className="h-8 w-8 bg-slate-100 rounded-md" /></div></td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    </div>
+);
+
+const ListSkeleton = ({ count = 3 }: { count?: number }) => (
+    <div className="divide-y divide-slate-100">
+        {Array.from({ length: count }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between gap-4 px-4 py-4 animate-pulse">
+                <div className="flex items-center gap-3 w-full">
+                    <div className="h-6 w-6 shrink-0 rounded-full bg-slate-200" />
+                    <div className="space-y-2 w-full max-w-sm">
+                        <div className="h-4 w-3/4 bg-slate-200 rounded" />
+                        <div className="h-3 w-1/2 bg-slate-100 rounded" />
+                    </div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                    <div className="h-8 w-16 bg-slate-100 rounded-md" />
+                    <div className="h-8 w-8 bg-slate-100 rounded-md" />
+                </div>
+            </div>
+        ))}
+    </div>
+);
+
+const RoleCardSkeleton = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 items-start">
+        {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-sm animate-pulse">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-2 w-full">
+                        <div className="h-4 w-1/3 bg-slate-200 rounded" />
+                        <div className="h-3 w-2/3 bg-slate-100 rounded" />
+                    </div>
+                    <div className="h-5 w-16 bg-slate-100 rounded-md shrink-0" />
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                    {Array.from({ length: 5 }).map((_, j) => (
+                        <div key={j} className="h-6 w-20 bg-slate-100 rounded-md" />
+                    ))}
+                </div>
+            </div>
+        ))}
+    </div>
+);
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TeamManagementPage() {
@@ -118,7 +215,7 @@ export default function TeamManagementPage() {
         useFeatureQuery<OrgCustomRole[]>('/api/org/roles', []);
     const { data: catalogData } =
         useFeatureQuery<{ catalog: OrgPermission[]; grouped: Record<string, OrgPermission[]>; templates: Array<{ roleKey: string; name: string }> }>('/api/org/permissions/catalog', { catalog: [], grouped: {}, templates: [] });
-    const { data: transfersData, reload: reloadTransfers } =
+    const { data: transfersData, loading: transfersLoading, reload: reloadTransfers } =
         useFeatureQuery<AccessTransfer[]>('/api/org/access-transfer/logs', []);
 
     const members = Array.isArray(membersData) ? membersData : [];
@@ -361,6 +458,7 @@ export default function TeamManagementPage() {
                     tone="blue"
                     active={activeTab === 'members' && !statusFilter}
                     onClick={() => { setActiveTab('members'); setStatusFilter(''); }}
+                    loading={membersLoading}
                 />
                 <KpiCard
                     label="Active Members"
@@ -370,6 +468,7 @@ export default function TeamManagementPage() {
                     tone="green"
                     active={activeTab === 'members' && statusFilter === 'active'}
                     onClick={() => { setActiveTab('members'); setStatusFilter('active'); }}
+                    loading={membersLoading}
                 />
                 <KpiCard
                     label="Pending Invites"
@@ -379,6 +478,7 @@ export default function TeamManagementPage() {
                     tone="amber"
                     active={activeTab === 'invitations'}
                     onClick={() => setActiveTab('invitations')}
+                    loading={invitesLoading}
                 />
                 <KpiCard
                     label="Org Role"
@@ -388,6 +488,7 @@ export default function TeamManagementPage() {
                     tone="purple"
                     active={activeTab === 'roles'}
                     onClick={() => setActiveTab('roles')}
+                    loading={permissionsLoading}
                 />
             </div>
 
@@ -491,7 +592,7 @@ export default function TeamManagementPage() {
                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Team Members ({total} shown of {members.length})</p>
                     </div>
                     {membersLoading ? (
-                        <LoadingState label="Loading members..." />
+                        viewMode === 'grid' ? <MemberGridSkeleton /> : <MemberTableSkeleton />
                     ) : members.length === 0 ? (
                         <EmptyState title="No members yet" description="Invite your first team member to get started." />
                     ) : pageItems.length === 0 ? (
@@ -598,7 +699,7 @@ export default function TeamManagementPage() {
                         <div className="border-b border-slate-100 bg-amber-50/60 px-4 py-3">
                             <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Pending Invitations ({invitations.length})</p>
                         </div>
-                        {invitations.length === 0 ? <EmptyState title="No pending invitations" description="Send an invite when a team member needs access." /> : <div className="divide-y divide-slate-100">
+                        {invitesLoading ? <ListSkeleton count={3} /> : invitations.length === 0 ? <EmptyState title="No pending invitations" description="Send an invite when a team member needs access." /> : <div className="divide-y divide-slate-100">
                             {invitations.map(invite => (
                                 <div key={invite.id} className="flex items-center justify-between gap-4 px-4 py-3">
                                     <div className="flex items-center gap-3 min-w-0">
@@ -648,7 +749,7 @@ export default function TeamManagementPage() {
                                 <Plus className="mr-2 h-4 w-4" /> Create Role
                             </Button>
                         </div>
-                        {rolesLoading ? <LoadingState label="Loading roles..." /> : (
+                        {rolesLoading ? <RoleCardSkeleton /> : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 items-start">
                                 {roles.map(role => {
                                     const permissions = (role.permissions || []).filter(p => p.allowed).map(p => p.permissionKey);
@@ -690,7 +791,7 @@ export default function TeamManagementPage() {
                         <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-3">
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Access Transfers ({transfers.length})</p>
                         </div>
-                        {transfers.length === 0 ? <EmptyState title="No access transfers" description="Transfer a member role when an employee moves out of this organization." /> : (
+                        {transfersLoading ? <ListSkeleton count={4} /> : transfers.length === 0 ? <EmptyState title="No access transfers" description="Transfer a member role when an employee moves out of this organization." /> : (
                             <div className="divide-y divide-slate-100">
                                 {transfers.map(row => (
                                     <div key={row.id} className="grid gap-2 px-4 py-3 md:grid-cols-[1fr_auto]">
