@@ -21,7 +21,8 @@ import {
   Clock,
   ExternalLink,
   Award,
-  Globe
+  Globe,
+  Pencil
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../../components/ui/button';
@@ -640,11 +641,11 @@ export function SupplierSelector({
               <tr>
                 <th className="px-3 py-2 w-14 text-center">Select</th>
                 <th className="px-3 py-2">Supplier Name</th>
-                <th className="px-3 py-2">MSME / Udyam</th>
+                {/* <th className="px-3 py-2">MSME / Udyam</th> */}
                 <th className="px-3 py-2">Location</th>
-                <th className="px-3 py-2">Rating</th>
+                {/* <th className="px-3 py-2">Rating</th>
                 <th className="px-3 py-2">On-Time</th>
-                <th className="px-3 py-2">Compliance</th>
+                <th className="px-3 py-2">Compliance</th> */}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-750">
@@ -661,9 +662,9 @@ export function SupplierSelector({
                       />
                     </td>
                     <td className="px-3 py-2 font-extrabold text-slate-900">{seller.organizationName}</td>
-                    <td className="px-3 py-2">{seller.msmeCategory || 'General'}</td>
+                    {/* <td className="px-3 py-2">{seller.msmeCategory || 'General'}</td> */}
                     <td className="px-3 py-2 truncate max-w-[150px]">{seller.officeCity || 'N/A'}</td>
-                    <td className="px-3 py-2">
+                    {/* <td className="px-3 py-2">
                       <span className="text-amber-500">&#9733; {seller.rating || '4.0'}</span>
                     </td>
                     <td className="px-3 py-2">{seller.onTimeDeliveryRate ? `${seller.onTimeDeliveryRate}%` : 'N/A'}</td>
@@ -671,7 +672,7 @@ export function SupplierSelector({
                       <span className="bg-emerald-50 text-emerald-700 text-[8px] font-black uppercase px-2 py-0.5 rounded border border-emerald-100">
                         GST Verified
                       </span>
-                    </td>
+                    </td> */}
                   </tr>
                 );
               })}
@@ -702,7 +703,8 @@ interface DocumentRequirementBuilderProps {
   documents: SourcingDoc[];
   onToggleRequired: (id: string) => void;
   onRemove: (id: string) => void;
-  onAddCustomDoc: (name: string, required: boolean) => void;
+  onAddCustomDoc: (name: string, required: boolean, instructions?: string) => void;
+  onUpdateInstructions?: (id: string, instructions: string) => void;
   onUploadFile?: (id: string, file: File) => Promise<void>;
   onRemoveFile?: (id: string) => void;
 }
@@ -712,46 +714,61 @@ export function DocumentRequirementBuilder({
   onToggleRequired,
   onRemove,
   onAddCustomDoc,
+  onUpdateInstructions,
   onUploadFile,
   onRemoveFile
 }: DocumentRequirementBuilderProps) {
   const [docName, setDocName] = React.useState('');
+  const [docInstructions, setDocInstructions] = React.useState('');
   const [docReq, setDocReq] = React.useState(true);
   const [uploadingIds, setUploadingIds] = React.useState<Record<string, boolean>>({});
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!docName.trim()) return;
-    onAddCustomDoc(docName.trim(), docReq);
+    onAddCustomDoc(docName.trim(), docReq, docInstructions.trim() || undefined);
     setDocName('');
+    setDocInstructions('');
   };
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border border-slate-200 rounded-xl p-3 sm:p-4 bg-slate-50/50">
-        <label className="w-full flex-1 block space-y-1">
-          <span className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Add Custom Document Request</span>
+      <form onSubmit={handleSubmit} className="flex flex-col md:flex-row md:items-end justify-between gap-3 border border-slate-200 rounded-xl p-3 sm:p-4 bg-slate-50/50">
+        <label className="w-full md:w-5/12 block space-y-1">
+          <span className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Document Name</span>
           <input
             value={docName}
             onChange={e => setDocName(e.target.value)}
-            className="h-8 sm:h-9 w-full min-w-0 border border-slate-200 rounded-lg px-2.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+            className="h-8 sm:h-9 w-full min-w-0 border border-slate-200 rounded-lg px-2.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f] bg-white"
             placeholder="ISO/BIS standard, balance sheet..."
+            aria-label="Custom document name"
           />
         </label>
-        <div className="w-full sm:w-auto flex flex-wrap items-center justify-between sm:justify-start gap-3 sm:gap-4 text-[10px] sm:text-xs font-semibold">
+        <label className="w-full md:w-5/12 block space-y-1">
+          <span className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Custom Instruction / Guidelines</span>
+          <input
+            value={docInstructions}
+            onChange={e => setDocInstructions(e.target.value)}
+            className="h-8 sm:h-9 w-full min-w-0 border border-slate-200 rounded-lg px-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#12335f] bg-white"
+            placeholder="e.g. Upload certified copy for current FY..."
+            aria-label="Custom document instruction"
+          />
+        </label>
+        <div className="w-full md:w-auto flex items-center justify-between md:justify-start gap-3 sm:gap-4 text-[10px] sm:text-xs font-semibold shrink-0">
           <label className="flex items-center gap-1.5 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={docReq}
               onChange={e => setDocReq(e.target.checked)}
               className="h-4 w-4 rounded accent-[#12335f]"
+              aria-label="Is mandatory document"
             />
-            <span>Mandatory?</span>
+            <span className="text-slate-700">Mandatory?</span>
           </label>
           <Button
             type="submit"
             disabled={!docName.trim()}
-            className="flex-1 sm:flex-none h-8 sm:h-9 bg-[#12335f] text-white hover:bg-[#0b2445] text-xs"
+            className="flex-1 md:flex-none h-8 sm:h-9 bg-[#12335f] text-white hover:bg-[#0b2445] text-xs font-bold px-4"
           >
             Add Document
           </Button>
@@ -762,31 +779,43 @@ export function DocumentRequirementBuilder({
         <table className="w-full border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
-              <th className="px-3 py-2">Document Name</th>
-              <th className="px-3 py-2 w-28">Requirement</th>
-              <th className="px-3 py-2 w-40">Instructions</th>
+              <th className="px-3 py-2.5 w-1/4">Document Name</th>
+              <th className="px-3 py-2.5 w-28">Requirement</th>
+              <th className="px-3 py-2.5">Instructions</th>
               {/* <th className="px-3 py-2 w-48">Buyer Reference / Template</th> */}
-              <th className="px-3 py-2 w-16 text-right">Action</th>
+              <th className="px-3 py-2.5 w-16 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
             {documents.map(doc => (
               <tr key={doc.id} className="align-middle hover:bg-slate-50/50">
-                <td className="px-3 py-3 font-extrabold text-slate-900">{doc.name}</td>
-                <td className="px-3 py-3">
+                <td className="px-3 py-2.5 font-extrabold text-slate-900">{doc.name}</td>
+                <td className="px-3 py-2.5">
                   <button
                     type="button"
                     onClick={() => onToggleRequired(doc.id)}
                     className={cn(
-                      "text-[9px] font-black uppercase px-2 py-0.5 rounded border transition-all",
+                      "text-[9px] font-black uppercase px-2 py-0.5 rounded border transition-all cursor-pointer",
                       doc.required ? "bg-rose-55 bg-rose-50 text-rose-800 border-rose-200" : "bg-slate-50 text-slate-500 border-slate-200"
                     )}
+                    aria-label={`Toggle requirement for ${doc.name}, currently ${doc.required ? 'Mandatory' : 'Optional'}`}
                   >
                     {doc.required ? 'Mandatory' : 'Optional'}
                   </button>
                 </td>
-                <td className="px-3 py-3 text-slate-450 truncate max-w-[220px] font-medium">
-                  {doc.instructions || 'Standard verification file.'}
+                <td className="px-3 py-2.5">
+                  <div className="relative flex items-center group">
+                    <input
+                      type="text"
+                      value={doc.instructions ?? ''}
+                      onChange={(e) => onUpdateInstructions?.(doc.id, e.target.value)}
+                      placeholder="Enter instructions for supplier..."
+                      className="h-8 w-full border border-slate-200 hover:border-slate-300 focus:border-[#12335f] bg-white rounded-lg px-2.5 pr-7 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all"
+                      title="Edit instructions"
+                      aria-label={`Instructions for ${doc.name}`}
+                    />
+                    <Pencil className="h-3 w-3 text-slate-400 absolute right-2.5 pointer-events-none group-focus-within:text-[#12335f] transition-colors" aria-hidden="true" />
+                  </div>
                 </td>
                 {/* Buyer Reference / Template Upload option commented out as requested */}
                 {/*
@@ -861,11 +890,25 @@ export function DocumentRequirementBuilder({
         {documents.map(doc => (
           <div key={doc.id} className="border border-slate-200 rounded-xl p-3 bg-white space-y-3">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h4 className="font-extrabold text-slate-900 text-xs truncate max-w-[220px]" title={doc.name}>{doc.name}</h4>
-                <p className="text-[10px] text-slate-500 font-medium mt-0.5 line-clamp-2" title={doc.instructions || ''}>
-                  {doc.instructions || 'Standard verification file.'}
-                </p>
+              <div className="min-w-0 flex-1">
+                <h4 className="font-extrabold text-slate-900 text-xs truncate" title={doc.name}>{doc.name}</h4>
+                <div className="mt-2">
+                  <label htmlFor={`mobile-doc-inst-${doc.id}`} className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    Instructions / Guidelines
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      id={`mobile-doc-inst-${doc.id}`}
+                      type="text"
+                      value={doc.instructions ?? ''}
+                      onChange={(e) => onUpdateInstructions?.(doc.id, e.target.value)}
+                      placeholder="Add instructions for supplier..."
+                      className="h-8 w-full border border-slate-200 bg-slate-50 focus:bg-white rounded-lg px-2.5 pr-7 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#12335f] transition-all"
+                      aria-label={`Instructions for ${doc.name}`}
+                    />
+                    <Pencil className="h-3 w-3 text-slate-400 absolute right-2.5 pointer-events-none" aria-hidden="true" />
+                  </div>
+                </div>
               </div>
               <button
                 type="button"
@@ -1153,25 +1196,28 @@ export function ProcurementSummaryPanel({
 }: ProcurementSummaryPanelProps) {
   return (
     <div className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 font-bold text-xs">
-      <SummaryItem label="Sourcing Title" value={title} />
+      <SummaryItem label="Sourcing Title" value={title} className="sm:col-span-2 xl:col-span-2" />
       <SummaryItem label="Workflow Type" value={buyerType === 'GOVERNMENT_BUYER' ? 'Government Buyer' : 'Private Buyer'} />
-      <SummaryItem label="Sourcing Method" value={method.replace(/_/g, ' ')} />
+      <SummaryItem label="Sourcing Method" value={method ? method.replace(/_/g, ' ') : 'N/A'} />
       <SummaryItem label="Estimated Budget" value={formatCurrency(estimatedValue)} />
-      <SummaryItem label="Priority Level" value={priority} />
+      <SummaryItem label="Priority Level" value={priority || 'Normal'} />
       <SummaryItem label="Required By" value={requiredBy || 'N/A'} />
-      <SummaryItem label="Delivery Location" value={location || 'N/A'} />
       <SummaryItem label="Line Items" value={`${itemsCount} line items scheduled`} />
+      <SummaryItem label="Delivery Location" value={location || 'N/A'} className="sm:col-span-2 xl:col-span-2" />
       <SummaryItem label="Invited Bidders" value={`${suppliersCount} suppliers invited`} />
       <SummaryItem label="Required Checklists" value={`${docsCount} documents required`} />
     </div>
   );
 }
 
-function SummaryItem({ label, value }: { label: string; value: string }) {
+function SummaryItem({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+    <div className={cn("border border-slate-200 rounded-lg p-3 bg-slate-50/50 flex flex-col justify-between min-h-[64px]", className)}>
       <p className="text-[8.5px] font-black uppercase text-slate-400 tracking-wider leading-none">{label}</p>
-      <p className="mt-1.5 text-slate-900 font-extrabold tracking-tight truncate leading-none">{value}</p>
+      <p className="mt-1.5 text-slate-900 font-extrabold tracking-tight break-words text-xs leading-snug" title={value}>
+        {value || 'N/A'}
+      </p>
     </div>
   );
 }
+

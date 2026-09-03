@@ -185,7 +185,17 @@ export default function SellerEventDetailPage({ id }: PageProps) {
         required: true,
       }))}
       items={(bid as any).items || bid.technicalPacket?.items || []}
-      evaluationMethod={bid.evaluationMethod || 'L1 Basis'}
+      evaluationMethod={
+        [
+          bid.technicalPacket?.evaluation?.method,
+          bid.technicalPacket?.evaluation?.evaluationMethod,
+          bid.technicalPacket?.evaluationMethod,
+          bid.technicalPacket?.rules?.evaluationMethod,
+          bid.evaluationMethod,
+        ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
+        bid.evaluationMethod ||
+        'L1 Basis'
+      }
       participations={bid.participations || []}
       participantsCount={bid.participantsCount || bid.participations?.length || 0}
       hasSubmittedProposal={isSubmitted}

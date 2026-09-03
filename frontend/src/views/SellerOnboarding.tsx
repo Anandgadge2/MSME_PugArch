@@ -78,6 +78,8 @@ const matchesDocumentType = (typeA?: string, typeB?: string) => {
     bankpassbook: ['bankpassbookcancelledcheque', 'bankpassbook', 'bankpassbookcheque'],
     shgregistrationcertificate: ['shgregistrationcertificate', 'registrationcertificate'],
     registrationcertificate: ['shgregistrationcertificate', 'registrationcertificate'],
+    udyamcertificate: ['udyamcertificate', 'udyamregistrationcertificate', 'udyam'],
+    udyamregistrationcertificate: ['udyamcertificate', 'udyamregistrationcertificate', 'udyam'],
   };
 
   return Boolean(aliases[normA]?.includes(normB) || aliases[normB]?.includes(normA));
@@ -91,16 +93,16 @@ const ACCOUNT_SETTINGS_ITEMS = [
 ];
 
 const SHG_MANDATORY_DOCUMENTS = [
-  { id: 'shg_registration_certificate', label: 'SHG Registration Certificate' },
+  { id: 'udyam_certificate', label: 'Udyam Registration Certificate' },
   { id: 'group_leader_aadhaar', label: 'Aadhaar of Group Leader' },
   { id: 'bank_passbook_cancelled_cheque', label: 'Bank Passbook / Cancelled Cheque' },
   { id: 'member_list', label: 'Member List' },
-  { id: 'address_proof', label: 'Address Proof' }
+  { id: 'shg_registration_certificate', label: 'SHG Registration Certificate / Formation Resolution' }
 ];
 
 const SHG_OPTIONAL_DOCUMENTS = [
   { id: 'pan_card_group_representative', label: 'PAN Card (Group or Representative)' },
-  { id: 'udyam_registration_certificate', label: 'Udyam Registration Certificate' },
+  { id: 'address_proof', label: 'Address Proof' },
   { id: 'gst_certificate', label: 'GST Certificate (if applicable)' },
   { id: 'product_images', label: 'Product Images' },
   { id: 'training_skill_certificates', label: 'Training/Skill Certificates' }
@@ -108,37 +110,46 @@ const SHG_OPTIONAL_DOCUMENTS = [
 
 const SHG_TYPE_OPTIONAL_DOCUMENTS: Record<string, { id: string; label: string }[]> = {
   'Women SHG (Mahila Bachat Gat)': [
-    { id: 'nrlm_mission_certificate', label: 'NRLM Mission Certificate' },
-    { id: 'women_empowerment_training_certificate', label: 'Women Empowerment Training Certificate' }
+    { id: 'nrlm_mission_certificate', label: 'NRLM / SRLM Mission Letter (Optional)' }
   ],
   'Farmer SHG': [
-    { id: 'farmer_id_card', label: 'Farmer ID Card' },
-    { id: 'land_record_7_12', label: 'Land Record (7/12)' },
-    { id: 'fpo_fpc_certificate', label: 'FPO/FPC Certificate' }
+    { id: 'produce_details', label: 'Produce / Crop Details (Optional)' }
+  ],
+  'Farmer SHG (Agriculture & Allied)': [
+    { id: 'produce_details', label: 'Produce / Crop Details (Optional)' }
   ],
   'Artisan / Handicraft SHG': [
-    { id: 'artisan_card', label: 'Artisan Card' },
-    { id: 'handicraft_certification', label: 'Handicraft Certification' },
-    { id: 'product_catalogue', label: 'Product Catalogue' }
+    { id: 'product_catalogue', label: 'Product Catalogue / Craft Photos (Optional)' }
   ],
   'Dairy SHG': [
-    { id: 'dairy_cooperative_membership_certificate', label: 'Dairy Cooperative Membership Certificate' },
-    { id: 'livestock_ownership_proof', label: 'Livestock Ownership Proof' }
+    { id: 'dairy_linkage_details', label: 'Dairy Society Linkage Details (Optional)' }
+  ],
+  'Dairy / Livestock SHG': [
+    { id: 'dairy_linkage_details', label: 'Dairy Society Linkage Details (Optional)' }
   ],
   'Livelihood SHG': [
-    { id: 'skill_development_certificates', label: 'Skill Development Certificates' },
-    { id: 'business_activity_proof', label: 'Business Activity Proof' }
+    { id: 'business_activity_proof', label: 'Business Activity Proof (Optional)' }
+  ],
+  'Livelihood & Processing SHG': [
+    { id: 'business_activity_proof', label: 'Business Activity Proof (Optional)' }
   ],
   'Tribal SHG': [
-    { id: 'tribal_community_certificate', label: 'Tribal Community Certificate' },
-    { id: 'tribal_development_scheme_registration', label: 'Tribal Development Scheme Registration' }
+    { id: 'activity_details', label: 'Activity Details (Optional)' }
+  ],
+  'Tribal Community SHG': [
+    { id: 'activity_details', label: 'Activity Details (Optional)' }
   ],
   'Youth SHG': [
-    { id: 'skill_training_certificate', label: 'Skill Training Certificate' },
-    { id: 'startup_entrepreneurship_training_certificate', label: 'Startup/Entrepreneurship Training Certificate' }
+    { id: 'skill_training_certificate', label: 'Skill Training Certificate (Optional)' }
+  ],
+  'Youth Enterprise SHG': [
+    { id: 'skill_training_certificate', label: 'Skill Training Certificate (Optional)' }
   ],
   'Other SHG': [
-    { id: 'activity_specific_supporting_documents', label: 'Activity-specific Supporting Documents' }
+    { id: 'activity_specific_supporting_documents', label: 'Activity-specific Supporting Documents (Optional)' }
+  ],
+  'Other Enterprise SHG': [
+    { id: 'activity_specific_supporting_documents', label: 'Activity-specific Supporting Documents (Optional)' }
   ]
 };
 
@@ -382,11 +393,20 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     };
   });
 
+  const shgType = String(regDetails.shgType || formData.shgType || cachedRegDetails.shgType || cachedProfile.shgType || '').trim();
   const isHerShg = isShgUser(user)
+    || isShgUser(cachedMe?.user)
+    || user?.role === 'shg'
+    || Boolean(user?.shgProfile)
     || isShgBusinessType(regDetails.businessType)
     || isShgBusinessType(regDetails.stakeholderCategory)
-    || isShgBusinessType(formData.organizationType);
-  const shgType = String(regDetails.shgType || formData.shgType || cachedRegDetails.shgType || cachedProfile.shgType || '').trim();
+    || isShgBusinessType(regDetails.shgType)
+    || isShgBusinessType(formData.organizationType)
+    || isShgBusinessType(formData.businessType)
+    || isShgBusinessType(formData.shgType)
+    || isShgBusinessType(cachedRegDetails.businessType)
+    || isShgBusinessType(cachedRegDetails.stakeholderCategory)
+    || isShgBusinessType(shgType);
 
   const getRequiredDocuments = useCallback(() => {
     if (isHerShg) {
@@ -492,13 +512,19 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   const areAllDocumentsUploaded = useCallback(() => {
     const required = getRequiredDocuments();
     const uploadedTypes = (Array.isArray(sellerDocuments) ? sellerDocuments : []).map((d: any) => d.documentType);
-    return required.filter(doc => doc.required).every(reqDoc => {
-      if (orgVerified && ['pan_copy', 'gst_certificate', 'address_proof', 'business_registration_proof'].includes(reqDoc.id)) {
+    return required
+      .filter(doc => {
+        if (!doc.required) return false;
+        if (isHerShg && doc.category === 'optional') return false;
         return true;
-      }
-      return uploadedTypes.some(uploadedType => matchesDocumentType(uploadedType, reqDoc.id));
-    });
-  }, [getRequiredDocuments, sellerDocuments, orgVerified]);
+      })
+      .every(reqDoc => {
+        if (orgVerified && ['pan_copy', 'gst_certificate', 'address_proof', 'business_registration_proof'].includes(reqDoc.id)) {
+          return true;
+        }
+        return uploadedTypes.some(uploadedType => matchesDocumentType(uploadedType, reqDoc.id));
+      });
+  }, [getRequiredDocuments, sellerDocuments, orgVerified, isHerShg]);
 
   const submittedOnboardingDocuments = useMemo(() => {
     const allDocs = getRequiredDocuments();

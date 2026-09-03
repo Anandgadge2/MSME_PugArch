@@ -38,6 +38,7 @@ const maxFileSize = 10 * 1024 * 1024;
 
 const shgTypes = [
   'WOMEN_SHG',
+  'FARMER_SHG',
   'FARMER_PRODUCER_GROUP',
   'ARTISAN_HANDICRAFT_SHG',
   'DAIRY_COOPERATIVE_SHG',
@@ -100,7 +101,7 @@ const safeShgInclude = {
 };
 
 const requiredDocumentTypes = (registrationStatus?: string) => {
-  const base = ['LEADER_KYC', 'BANK_PASSBOOK', 'MEMBER_LIST', 'ADDRESS_PROOF', 'FORMATION_RESOLUTION', 'AUTHORIZATION_LETTER'];
+  const base = ['UDYAM_CERTIFICATE', 'LEADER_KYC', 'BANK_PASSBOOK', 'MEMBER_LIST'];
   if (registrationStatus === 'REGISTERED') base.push('REGISTRATION_CERTIFICATE');
   return base;
 };
@@ -165,7 +166,7 @@ const organizationSchema = z.object({
   mainActivity: z.string().min(2),
   provideAdditionalDetails: z.boolean().optional().default(false),
   gstin: z.string().optional().nullable(),
-  udyamNumber: z.string().optional().nullable(),
+  udyamNumber: z.string().min(1, 'Udyam number is required').regex(udyamRegex, 'Invalid Udyam number format. Expected UDYAM-XX-00-0000000'),
   website: z.string().url().optional().or(z.literal('')).nullable()
 }).superRefine((value, ctx) => {
   if (value.registrationStatus === 'REGISTERED' && !clean(value.registrationNumber)) {
@@ -174,8 +175,8 @@ const organizationSchema = z.object({
   if (clean(value.gstin) && !gstinRegex.test(upper(value.gstin))) {
     ctx.addIssue({ code: 'custom', path: ['gstin'], message: 'Invalid GSTIN format' });
   }
-  if (clean(value.udyamNumber) && !udyamRegex.test(upper(value.udyamNumber))) {
-    ctx.addIssue({ code: 'custom', path: ['udyamNumber'], message: 'Invalid Udyam number format' });
+  if (!clean(value.udyamNumber) || !udyamRegex.test(upper(value.udyamNumber))) {
+    ctx.addIssue({ code: 'custom', path: ['udyamNumber'], message: 'Invalid Udyam number format. Expected UDYAM-XX-00-0000000' });
   }
 });
 
@@ -216,7 +217,7 @@ router.post('/shg/registration/prerequisites', (req, res) => {
   return apiResponse.success(res, {
     selectedType,
     requiredDocuments: requiredDocumentTypes(req.body?.registrationStatus),
-    optionalDocuments: ['PAN_CARD', 'UDYAM_CERTIFICATE', 'GST_CERTIFICATE', 'NRLM_SRLM_CERTIFICATE', 'TRAINING_CERTIFICATE', 'PRODUCT_CATALOGUE']
+    optionalDocuments: ['PAN_CARD', 'ADDRESS_PROOF', 'FORMATION_RESOLUTION', 'AUTHORIZATION_LETTER', 'GST_CERTIFICATE', 'NRLM_SRLM_CERTIFICATE', 'TRAINING_CERTIFICATE', 'PRODUCT_CATALOGUE']
   });
 });
 
@@ -719,9 +720,16 @@ router.post('/shg/submit', authenticate, authorize('shg'), async (req: AuthReque
 
   const otpRecord = await assertOtpVerified('ownership_submission', identity);
   if (!otpRecord.ok) return apiResponse.error(res, 400, 'Final submission OTP must be verified', 'FINAL_OTP_REQUIRED');
-  const missingDocuments = requiredDocumentTypes(profile.registrationStatus).filter(type =>
-    !(profile.documents || []).some((doc: any) => doc.documentType === type && ['UPLOADED', 'UNDER_REVIEW', 'VERIFIED'].includes(doc.status))
-  );
+  const optionalDocTypes = new Set([
+    'PAN_CARD', 'ADDRESS_PROOF', 'GST_CERTIFICATE', 'PRODUCT_CATALOGUE',
+    'TRAINING_CERTIFICATE', 'ACTIVITY_CERTIFICATE', 'MEETING_REGISTER',
+    'BANK_STATEMENT', 'OTHER', 'NRLM_SRLM_CERTIFICATE'
+  ]);
+  const missingDocuments = requiredDocumentTypes(profile.registrationStatus)
+    .filter(type => !optionalDocTypes.has(type))
+    .filter(type =>
+      !(profile.documents || []).some((doc: any) => doc.documentType === type && ['UPLOADED', 'UNDER_REVIEW', 'VERIFIED'].includes(doc.status))
+    );
   const hasPrimaryBank = (profile.bankAccounts || []).some((bank: any) => bank.isPrimary);
   if (!hasPrimaryBank || missingDocuments.length) {
     return apiResponse.error(res, 400, 'Mandatory SHG onboarding data is incomplete', 'ONBOARDING_INCOMPLETE', { hasPrimaryBank, missingDocuments });

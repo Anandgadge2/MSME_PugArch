@@ -69,7 +69,10 @@ const rowIdLabel = (kind: AdminKind, record: RecordMap) => {
 };
 
 const rowSubtitle = (kind: AdminKind, record: RecordMap) => {
-  if (kind === 'users') return [record.email, record.mobile, record.organization?.name, record.registrationStatus && `registration: ${record.registrationStatus}`, record.onboardingStatus && `onboarding: ${record.onboardingStatus}`].filter(Boolean).join(' | ');
+  if (kind === 'users') {
+    const orgOrShg = record.organization?.organizationName || record.organization?.name || record.shgProfile?.shgName || record.profile?.businessName;
+    return [record.email, record.mobile, orgOrShg, record.registrationStatus && `registration: ${record.registrationStatus}`, record.onboardingStatus && `onboarding: ${record.onboardingStatus}`].filter(Boolean).join(' | ');
+  }
   if (kind === 'audit') return [record.User?.email, record.entityType && `${record.entityType} #${record.entityId || '-'}`].filter(Boolean).join(' | ');
   if (kind === 'fraud') return [record.user?.email, record.entityType && `${record.entityType} #${record.entityId || '-'}`].filter(Boolean).join(' | ');
   return record.description || record.code || '-';
@@ -90,6 +93,21 @@ const severityClass = (value: unknown) => {
   if (['medium', 'pending', 'under_compliance_review'].includes(normalized)) return 'border-amber-200 bg-amber-50 text-amber-700';
   if (['active', 'approved_for_procurement', 'low', 'closed', 'resolved'].includes(normalized)) return 'border-emerald-200 bg-emerald-50 text-emerald-700';
   return 'border-blue-200 bg-slate-50 text-[#12335f]';
+};
+
+const roleLabel = (role?: string) => {
+  if (!role) return '-';
+  if (role.toLowerCase() === 'shg') return 'SHG';
+  return label(role);
+};
+
+const roleBadgeClass = (role?: string) => {
+  const normalized = String(role || '').toLowerCase();
+  if (normalized === 'admin') return 'border-purple-200 bg-purple-50 text-purple-700';
+  if (normalized === 'seller') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (normalized === 'buyer') return 'border-blue-200 bg-blue-50 text-blue-700';
+  if (normalized === 'shg') return 'border-amber-300 bg-amber-50 text-amber-900';
+  return 'border-slate-200 bg-slate-50 text-slate-700';
 };
 
 export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
@@ -363,8 +381,34 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
               "flex-col sm:flex-row gap-2 w-full lg:w-auto shrink-0",
               showMobileFilters ? "flex" : "hidden lg:flex"
             )}>
-              <select value={role} onChange={event => setRole(event.target.value)} disabled={kind !== 'users'} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold disabled:bg-slate-50 disabled:text-slate-300 w-full lg:w-[160px] bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"><option value="">All roles</option><option value="admin">Admin</option><option value="buyer">Buyer</option><option value="seller">Seller</option></select>
-              <select value={status} onChange={event => setStatus(event.target.value)} className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold w-full lg:w-[160px] bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"><option value="">All statuses</option><option value="completed">Registration completed</option><option value="incomplete">Registration incomplete</option><option value="approved_for_procurement">Approved onboarding</option><option value="PENDING">Pending account</option><option value="ACTIVE">Active account</option><option value="OPEN">Open</option><option value="CLOSED">Closed</option></select>
+              <select
+                value={role}
+                onChange={event => setRole(event.target.value)}
+                disabled={kind !== 'users'}
+                aria-label="Filter records by role"
+                className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold disabled:bg-slate-50 disabled:text-slate-300 w-full lg:w-[160px] bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"
+              >
+                <option value="">All roles</option>
+                <option value="admin">Admin</option>
+                <option value="buyer">Buyer</option>
+                <option value="seller">Seller</option>
+                <option value="shg">SHG</option>
+              </select>
+              <select
+                value={status}
+                onChange={event => setStatus(event.target.value)}
+                aria-label="Filter records by status"
+                className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold w-full lg:w-[160px] bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"
+              >
+                <option value="">All statuses</option>
+                <option value="completed">Registration completed</option>
+                <option value="incomplete">Registration incomplete</option>
+                <option value="approved_for_procurement">Approved onboarding</option>
+                <option value="PENDING">Pending account</option>
+                <option value="ACTIVE">Active account</option>
+                <option value="OPEN">Open</option>
+                <option value="CLOSED">Closed</option>
+              </select>
             </div>
 
             <div className="flex items-center gap-2 w-full lg:w-auto">
@@ -476,7 +520,17 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
                         <span className={`rounded-lg border px-3 py-1 text-[10px] font-black uppercase ${severityClass(statusOf(kind, record))}`}>{label(statusOf(kind, record))}</span>
                       )}
                     </td>
-                    <td className="p-3 text-xs font-black uppercase text-slate-700">{label(record.severity || record.role || record.alertType || '-')}</td>
+                    <td className="p-3">
+                      {kind === 'users' ? (
+                        <span className={cn("inline-flex items-center rounded-md border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider", roleBadgeClass(record.role))}>
+                          {roleLabel(record.role)}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-black uppercase text-slate-700">
+                          {label(record.severity || record.role || record.alertType || '-')}
+                        </span>
+                      )}
+                    </td>
                     <td className="p-3 text-xs font-bold text-slate-500">{formatDateTime(record.createdAt || record.updatedAt)}</td>
                     <td className="p-3">
                       <div className="flex items-center gap-1.5">
@@ -629,13 +683,13 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
           <div className="flex items-start justify-between relative z-10">
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 border border-white/20 text-2xl font-black text-emerald-300 backdrop-blur-md shadow-inner">
-                {(record.name || '?').charAt(0).toUpperCase()}
+                {(record.name || record.shgProfile?.shgName || '?').charAt(0).toUpperCase()}
               </div>
               <div>
                 <div className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200 backdrop-blur-sm">
                   <User className="h-3 w-3" /> User Detail • {rowIdLabel('users', record)}
                 </div>
-                <h2 className="mt-1.5 text-2xl font-extrabold tracking-tight text-white">{record.name || 'Unnamed User'}</h2>
+                <h2 className="mt-1.5 text-2xl font-extrabold tracking-tight text-white">{record.name || record.shgProfile?.shgName || 'Unnamed User'}</h2>
                 <p className="mt-0.5 text-xs font-medium text-blue-100/90">{record.email || 'No email registered'}</p>
               </div>
             </div>
@@ -657,7 +711,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
           {/* Quick Status Cards */}
           <div className="grid gap-3 sm:grid-cols-3">
             <DetailMetric label="Account Status" value={label(record.accountStatus || record.onboardingStatus || 'pending')} statusTag={record.accountStatus === 'ACTIVE' ? 'active' : 'pending'} />
-            <DetailMetric label="Role" value={label(record.role || '-')} />
+            <DetailMetric label="Role" value={roleLabel(record.role)} />
             <DetailMetric label="Registered Date" value={formatDate(record.createdAt)} />
           </div>
 
@@ -692,6 +746,30 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
                 {record.organization?.id && <DetailField label="Org ID" value={`ORG-${record.organization.id}`} />}
                 <DetailField label="GSTIN" value={record.organization?.gstin || record.profile?.gst} />
                 <DetailField label="Verification Status" value={record.organization?.verificationStatus} />
+              </div>
+            </DetailSection>
+          )}
+
+          {/* SHG (Self Help Group) Profile */}
+          {(record.role === 'shg' || record.shgProfile) && (
+            <DetailSection title="SHG (Self Help Group) Profile" icon={Users}>
+              <div className="grid gap-3.5 sm:grid-cols-2">
+                <DetailField label="SHG Name" value={record.shgProfile?.shgName || record.profile?.businessName || record.name} />
+                <DetailField label="SHG Type" value={label(record.shgProfile?.shgType || 'WOMEN_SHG')} />
+                <DetailField label="Registration Status" value={label(record.shgProfile?.registrationStatus)} />
+                <DetailField label="Registration Number" value={record.shgProfile?.registrationNumber} />
+                <DetailField label="NRLM ID" value={record.shgProfile?.nrlmId} />
+                <DetailField label="Member Count" value={record.shgProfile?.memberCount ? `${record.shgProfile.memberCount} members` : undefined} />
+                <DetailField label="State" value={record.shgProfile?.state} />
+                <DetailField label="District" value={record.shgProfile?.district} />
+                <DetailField label="Block / Taluka" value={record.shgProfile?.block} />
+                <DetailField label="Gram Panchayat / Village" value={[record.shgProfile?.gramPanchayat, record.shgProfile?.village].filter(Boolean).join(', ')} />
+                <DetailField label="Formation Year" value={record.shgProfile?.formationYear} />
+                <DetailField label="Promoted By" value={record.shgProfile?.promotedBy} />
+                <DetailField label="Main Activity" value={record.shgProfile?.mainActivity} />
+                <DetailField label="GSTIN" value={record.shgProfile?.gstin || record.profile?.gst} />
+                <DetailField label="Udyam Number" value={record.shgProfile?.udyamNumber || record.profile?.udyamNumber} />
+                <DetailField label="Application Status" value={label(record.shgProfile?.applicationStatus || record.onboardingStatus)} />
               </div>
             </DetailSection>
           )}
@@ -1015,10 +1093,13 @@ const AdminUserCard = memo(function AdminUserCard({
 
         <div className="p-4 flex-1 flex flex-col space-y-4">
           <div>
-            <h3 className="text-sm font-black text-slate-900 truncate">{record.name || 'Unnamed User'}</h3>
+            <h3 className="text-sm font-black text-slate-900 truncate">{record.name || record.shgProfile?.shgName || 'Unnamed User'}</h3>
             <div className="mt-1.5 flex items-center gap-2">
-              <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-700 border border-blue-100">
-                {record.role || 'User'}
+              <span className={cn(
+                "rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                roleBadgeClass(record.role)
+              )}>
+                {roleLabel(record.role)}
               </span>
             </div>
           </div>
@@ -1115,8 +1196,9 @@ function UserEditModal({
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Full Name</label>
+            <label htmlFor="user-full-name" className="text-[10px] font-black uppercase tracking-wider text-slate-400">Full Name</label>
             <input
+              id="user-full-name"
               type="text"
               value={name}
               onChange={e => setName(sanitizePersonNameInput(e.target.value))}
@@ -1128,8 +1210,9 @@ function UserEditModal({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Email Address</label>
+            <label htmlFor="user-email-address" className="text-[10px] font-black uppercase tracking-wider text-slate-400">Email Address</label>
             <input
+              id="user-email-address"
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -1140,8 +1223,9 @@ function UserEditModal({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Mobile Number</label>
+            <label htmlFor="user-mobile-number" className="text-[10px] font-black uppercase tracking-wider text-slate-400">Mobile Number</label>
             <input
+              id="user-mobile-number"
               type="text"
               value={mobile}
               onChange={e => setMobile(sanitizeIndianMobileInput(e.target.value))}
@@ -1153,8 +1237,9 @@ function UserEditModal({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">System Role</label>
+            <label htmlFor="user-system-role" className="text-[10px] font-black uppercase tracking-wider text-slate-400">System Role</label>
             <select
+              id="user-system-role"
               value={role}
               onChange={e => setRole(e.target.value)}
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-bold bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"
@@ -1162,6 +1247,7 @@ function UserEditModal({
               <option value="admin">Administrator</option>
               <option value="buyer">Buyer</option>
               <option value="seller">Seller</option>
+              <option value="shg">SHG (Self Help Group)</option>
             </select>
           </div>
 

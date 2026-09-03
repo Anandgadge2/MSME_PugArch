@@ -586,6 +586,12 @@ export const marketplaceApi = {
         return unwrapApiData<MarketplaceHomeSectionConfig>(body);
     },
 
+    resetAdminHomeSections: async (): Promise<{ sections: MarketplaceHomeSectionConfig[] }> => {
+        const res = await api.post('/api/admin/marketplace/home-sections/reset-defaults', {}, { headers: headers() });
+        const body = await readJsonResponse(res);
+        return unwrapApiData(body);
+    },
+
     getActiveBanners: async (location = 'HOME_HERO') => {
         const res = await api.get(`/api/banners/active?location=${encodeURIComponent(location)}`);
         const body = await readJsonResponse(res);

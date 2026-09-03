@@ -37,6 +37,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="format-detection" content="telephone=no" />
       </head>
       <body suppressHydrationWarning>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[99999] focus:px-4 focus:py-2.5 focus:bg-[#0b2447] focus:text-white focus:rounded-xl focus:shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#c8a45c] font-black text-xs uppercase tracking-wider transition-all"
+        >
+          Skip to Main Content
+        </a>
         <Providers>
           {children}
           <DevelopmentAgentation />

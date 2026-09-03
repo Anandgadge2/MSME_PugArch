@@ -87,19 +87,8 @@ export default function MessageAttachmentView({
   const [loadingPreview, setLoadingPreview] = useState(() => !imageBlobUrlCache.has(fileAsset.id) && isImageMime(fileAsset.mimeType));
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
-  // If this is a voice note / audio, render the audio player directly!
-  if (isAudioAttachment(fileAsset)) {
-    return (
-      <VoiceNotePlayer
-        fileAssetId={fileAsset.id}
-        originalName={fileAsset.originalName}
-        isMe={isMe}
-      />
-    );
-  }
-
   useEffect(() => {
-    if (!isImageMime(fileAsset.mimeType)) return;
+    if (isAudioAttachment(fileAsset) || !isImageMime(fileAsset.mimeType)) return;
     if (imageBlobUrlCache.has(fileAsset.id)) {
       setPreviewUrl(imageBlobUrlCache.get(fileAsset.id)!);
       setLoadingPreview(false);
@@ -134,6 +123,17 @@ export default function MessageAttachmentView({
       cancelled = true;
     };
   }, [fileAsset.id, fileAsset.mimeType]);
+
+  // If this is a voice note / audio, render the audio player directly!
+  if (isAudioAttachment(fileAsset)) {
+    return (
+      <VoiceNotePlayer
+        fileAssetId={fileAsset.id}
+        originalName={fileAsset.originalName}
+        isMe={isMe}
+      />
+    );
+  }
 
   const handleOpen = async () => {
     try {

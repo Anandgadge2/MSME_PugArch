@@ -30,6 +30,7 @@ interface BuyerSummary {
 interface Props {
     buyers?: MarketplaceOrganization[];
     requirements?: BuyerRequirement[];
+    title?: string;
 }
 
 function organizationLogo(org?: Partial<MarketplaceOrganization> | null) {
@@ -92,7 +93,7 @@ function BuyerStripSkeleton() {
     );
 }
 
-export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Props) {
+export function BuyerRequirementBrowser({ buyers = [], requirements = [], title }: Props) {
     const buyerSummaries = useMemo<BuyerSummary[]>(() => {
         const requirementCounts = new Map<number, number>();
         requirements.forEach(requirement => {
@@ -166,7 +167,7 @@ export function BuyerRequirementBrowser({ buyers = [], requirements = [] }: Prop
                     <div>
                     
                         <div className="flex flex-wrap items-center gap-2.5 mt-1">
-                            <h2 id="buyer-browser-heading" className="text-xl font-black text-[#0b2447] sm:text-2xl">Verified buyers &amp; published requirements</h2>
+                            <h2 id="buyer-browser-heading" className="text-xl font-black text-[#0b2447] sm:text-2xl">{title || 'Verified buyers & published requirements'}</h2>
                             
                         </div>
                         <p className="mt-1 max-w-2xl text-sm font-medium text-slate-600">Scroll verified buyer logos and click any buyer to list only requirements published by that buyer below.</p>

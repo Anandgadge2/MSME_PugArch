@@ -41,6 +41,7 @@ import {
   Tag,
   AlertCircle,
   HelpCircle,
+  Paperclip,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -168,7 +169,28 @@ const noisyDetailKeys = new Set([
   'documentFeeAmount',
   'documentFeeRequired',
   'docFee',
+  'documentCost',
+  'documentCostFee',
+  'document_cost_fee',
+  'document_cost',
+  'costFee',
+  'docCost',
   'performanceSecurity',
+  'retentionAmount',
+  'retention_amount',
+  'retention',
+  'retentionPercentage',
+  'retention_percentage',
+  'isRetentionApplicable',
+  'retentionApplicable',
+  'securityDeposit',
+  'security_deposit',
+  'securityDepositAmount',
+  'security_deposit_amount',
+  'securityDepositPercentage',
+  'security_deposit_percentage',
+  'securityDepositRequired',
+  'security_deposit_required',
 ]);
 
 function humanizeKey(key: string): string {
@@ -257,8 +279,23 @@ function formatPrimitiveValue(val: any, valueKey?: string): string {
   if (val === null || val === undefined || val === '') return 'N/A';
   if (typeof val === 'boolean') return val ? 'Yes' : 'No';
   if (typeof val === 'number') {
-    if (valueKey && (valueKey.toLowerCase().includes('amount') || valueKey.toLowerCase().includes('budget') || valueKey.toLowerCase().includes('val') || valueKey.toLowerCase().includes('rate') || valueKey.toLowerCase().includes('price') || valueKey.toLowerCase().includes('cost') || valueKey.toLowerCase().includes('fee') || valueKey.toLowerCase().includes('deposit'))) {
+    const lk = (valueKey || '').toLowerCase();
+    const isCurrency = (
+      lk.includes('amount') ||
+      lk.includes('budget') ||
+      lk.includes('value') ||
+      lk.includes('price') ||
+      lk.includes('cost') ||
+      lk.includes('fee') ||
+      lk.includes('deposit') ||
+      (lk.includes('rate') && !lk.includes('contract') && !lk.includes('rating'))
+    ) && !lk.includes('day') && !lk.includes('period') && !lk.includes('validity') && !lk.includes('count') && !lk.includes('qty') && !lk.includes('quantity') && !lk.includes('percent');
+
+    if (isCurrency) {
       return formatCurrency(val);
+    }
+    if (lk.includes('day') || lk.includes('period') || lk.includes('validity')) {
+      return `${val} Days`;
     }
     return val.toLocaleString('en-IN');
   }
@@ -272,6 +309,33 @@ function formatPrimitiveValue(val: any, valueKey?: string): string {
     // Format ALL_CAPS_WITH_UNDERSCORE enums to title case (e.g. ON_DELIVERY -> On Delivery)
     if (/^[A-Z0-9_ -]+$/.test(trimmed) && trimmed.includes('_')) {
       return humanizeKey(trimmed.toLowerCase());
+    }
+    if (valueKey && valueKey.toLowerCase().includes('evaluation')) {
+      const lower = trimmed.toLowerCase();
+      if (lower.includes('qcbs') || lower.includes('quality and cost') || lower.includes('weighted technical')) {
+        return 'Quality and Cost Based Selection (QCBS)';
+      }
+      if (lower === 'l1' || lower === 'l1 basis') {
+        return 'L1 Basis';
+      }
+      if (lower.includes('item-wise') || lower.includes('item wise')) {
+        return 'Item-wise L1';
+      }
+      if (lower.includes('package-wise') || lower.includes('package wise')) {
+        return 'Package-wise L1';
+      }
+      if (lower.includes('technical qualification then l1') || lower.includes('technical then l1')) {
+        return 'Technical Qualification then L1';
+      }
+      if (lower.includes('reverse auction')) {
+        return 'Reverse Auction Final Bid Rank';
+      }
+      if (lower.includes('lowest landed cost')) {
+        return 'Lowest Landed Cost';
+      }
+      if (lower.includes('l1 total value') || lower.includes('l1 total')) {
+        return 'L1 Total Value';
+      }
     }
     return trimmed;
   }
@@ -469,6 +533,18 @@ function PropertyGrid({
   );
 }
 
+interface BuyerSideContextValue {
+  isBuyer: boolean;
+  isOpenTender: boolean;
+  isLimitedTender: boolean;
+}
+
+const BuyerSideContext = React.createContext<BuyerSideContextValue>({
+  isBuyer: false,
+  isOpenTender: false,
+  isLimitedTender: false,
+});
+
 function PropertyItem({
   label,
   value,
@@ -486,7 +562,35 @@ function PropertyItem({
   highlight?: boolean;
   mono?: boolean;
 }) {
+  const ctx = React.useContext(BuyerSideContext);
+  const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
+  const isOpenTender = typeof ctx === 'boolean' ? false : ctx.isOpenTender;
+  const isLimitedTender = typeof ctx === 'boolean' ? false : (ctx.isLimitedTender || false);
   if (!hasDetailData(value)) return null;
+
+  if (isBuyer && label) {
+    const lower = label.toLowerCase().replace(/[^a-z]/g, '');
+    if (
+      // Warranty Terms strictly commented out / hidden on buyer side in open and limited tender
+      ((isOpenTender || isLimitedTender) && (
+        lower === 'warrantyterms' ||
+        lower === 'warranty' ||
+        lower === 'warrantyperiod' ||
+        lower.includes('warranty')
+      )) ||
+      lower === 'retentionamount' ||
+      lower === 'securitydeposit' ||
+      lower === 'retention' ||
+      lower === 'securitydepositamount' ||
+      lower === 'retentionpercentage' ||
+      lower === 'securitydepositpercentage' ||
+      lower === 'securitydepositrequired' ||
+      lower.includes('retention') ||
+      lower.includes('securitydeposit')
+    ) {
+      return null;
+    }
+  }
 
   return (
     <div
@@ -617,7 +721,7 @@ function BuyerProfileSection({
           )}
 
           {address && (
-            <div className="space-y-0.5 sm:col-span-2">
+            <div className="space-y-0.5">
               <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 <MapPin className="h-3.5 w-3.5 text-slate-400" />
                 <span>Registered Location</span>
@@ -798,27 +902,51 @@ function MetricCard({
   icon: Icon,
   tone,
   subtext,
+  isBuyer,
 }: {
   label: string;
   value: React.ReactNode;
   icon: IconComponent;
   tone: Tone;
   subtext?: string;
+  isBuyer?: boolean;
 }) {
   const styles = toneStyles[tone] || toneStyles.slate;
   return (
-    <article className={cn('flex flex-col justify-between rounded-2xl border p-4 shadow-xs h-full min-h-[110px] transition-all hover:shadow-sm', styles.card)}>
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-black uppercase tracking-wider text-slate-500 line-clamp-1 flex-1">{label}</p>
-        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg shadow-2xs', styles.icon)}>
-          <Icon className="h-4 w-4" />
+    <article
+      className={cn(
+        'flex flex-col rounded-xl border shadow-2xs transition-all hover:shadow-sm',
+        isBuyer ? 'p-3 gap-1 min-h-0' : 'p-4 justify-between h-full min-h-[110px]',
+        styles.card
+      )}
+    >
+      <div className="flex items-center justify-between gap-1.5">
+        <p className={cn('font-black uppercase tracking-wider text-slate-500 line-clamp-1 flex-1', isBuyer ? 'text-[10px]' : 'text-[11px]')}>
+          {label}
+        </p>
+        <span
+          className={cn(
+            'flex shrink-0 items-center justify-center shadow-2xs',
+            isBuyer ? 'h-6 w-6 rounded-md' : 'h-8 w-8 rounded-lg',
+            styles.icon
+          )}
+        >
+          <Icon className={isBuyer ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
         </span>
       </div>
-      <div className="mt-1 min-w-0">
-        <div className="text-lg lg:text-xl font-black text-slate-950 leading-tight truncate" title={typeof value === 'string' ? value : undefined}>
+      <div className={cn('min-w-0', isBuyer ? 'mt-0.5' : 'mt-1')}>
+        <div
+          className={cn(
+            'leading-tight truncate',
+            isBuyer
+              ? 'text-sm sm:text-base font-bold text-slate-900'
+              : 'text-lg lg:text-xl font-black text-slate-950'
+          )}
+          title={typeof value === 'string' ? value : undefined}
+        >
           {value}
         </div>
-        <p className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 truncate">
+        <p className={cn('flex items-center gap-1 font-semibold text-slate-500 truncate', isBuyer ? 'mt-0.5 text-[10px]' : 'mt-1 text-[11px]')}>
           <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" />
           {subtext || 'Procurement details'}
         </p>
@@ -986,12 +1114,19 @@ function ScopeSummaryCard({
       const k = line.slice(0, colonIdx).trim();
       const v = line.slice(colonIdx + 1).trim();
       if (k && v) {
-        parsedKeyValues.push({ label: humanizeKey(k), val: v });
+        const lk = k.toLowerCase();
+        if (!lk.includes('sourcing') && !lk.includes('method')) {
+          parsedKeyValues.push({ label: humanizeKey(k), val: v });
+        }
       } else if (line) {
-        textParts.push(line);
+        if (!line.toLowerCase().includes('sourcing method')) {
+          textParts.push(line);
+        }
       }
     } else if (line) {
-      textParts.push(line);
+      if (!line.toLowerCase().includes('sourcing method')) {
+        textParts.push(line);
+      }
     }
   }
 
@@ -1003,10 +1138,11 @@ function ScopeSummaryCard({
     <div className="space-y-4">
       {/* Top Scope Highlights Ribbon */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+        {/* Sourcing Method - commented out */}
+        {/* <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Sourcing Method:</span>
           <span className="text-xs font-black text-slate-900">{procurementMethod || procurementTypeLabel}</span>
-        </div>
+        </div> */}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Estimated Value:</span>
           <span className="text-xs font-black text-emerald-700">{formatCurrency(estimatedValue)}</span>
@@ -1086,7 +1222,13 @@ function MilestonesTable({ milestones }: { milestones: any }) {
 }
 
 function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
-  if (!serviceDetails || !isPlainObject(serviceDetails)) return null;
+  const ctx = React.useContext(BuyerSideContext);
+  const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
+  const isOpenTender = typeof ctx === 'boolean' ? false : ctx.isOpenTender;
+  const isLimitedTender = typeof ctx === 'boolean' ? false : (ctx.isLimitedTender || false);
+
+  // Strictly hide Service Details & Parameters on buyer side for limited tender, open tender, etc.
+  if ((isBuyer && (isLimitedTender || isOpenTender)) || !serviceDetails || !isPlainObject(serviceDetails)) return null;
 
   const { duration, penaltyClause, slaResponseTime, manpowerRequired, experienceRequired, milestones, ...rest } = serviceDetails;
 
@@ -1120,8 +1262,129 @@ function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
     </div>
   );
 }
+function getUniqueItemFiles(item: any, sp: any = {}, defaultName: string = 'Item'): any[] {
+  if (!item && !sp) return [];
 
-function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?: string }) {
+  const rawCandidates: any[] = [
+    ...asArray(item?.attachments),
+    ...asArray(item?.files),
+    ...asArray(item?.documents),
+    ...asArray(item?.itemFiles),
+    ...asArray(sp?.attachments),
+    ...asArray(sp?.files),
+    ...asArray(sp?.documents),
+    ...asArray(sp?.uploadedSpecificationFiles),
+  ];
+
+  // Include individual file fields if present
+  if (item?.fileAssetId || item?.url || item?.fileUrl || item?.specificationFileName || item?.attachmentUrl || item?.attachmentName) {
+    rawCandidates.push({
+      fileAssetId: item.fileAssetId,
+      url: item.url || item.fileUrl || item.attachmentUrl,
+      fileName: item.fileName || item.originalName || item.specificationFileName || item.attachmentName,
+      name: item.fileName || item.originalName || item.specificationFileName || item.attachmentName,
+    });
+  }
+  if (sp?.fileAssetId || sp?.url || sp?.fileUrl || sp?.specificationFileName || sp?.attachmentUrl || sp?.attachmentName) {
+    rawCandidates.push({
+      fileAssetId: sp.fileAssetId,
+      url: sp.url || sp.fileUrl || sp.attachmentUrl,
+      fileName: sp.fileName || sp.originalName || sp.specificationFileName || sp.attachmentName,
+      name: sp.fileName || sp.originalName || sp.specificationFileName || sp.attachmentName,
+    });
+  }
+
+  const seenIds = new Set<string>();
+  const seenUrls = new Set<string>();
+  const seenNames = new Set<string>();
+  const result: any[] = [];
+
+  for (const raw of rawCandidates) {
+    if (!raw) continue;
+    let fileObj: any = raw;
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === '[]' || trimmed === '{}' || trimmed === 'null' || trimmed === 'undefined') continue;
+      try {
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+          fileObj = JSON.parse(trimmed);
+        } else {
+          fileObj = { url: trimmed, name: trimmed.split('/').pop()?.split('?')[0] || trimmed };
+        }
+      } catch {
+        fileObj = { url: trimmed, name: trimmed.split('/').pop()?.split('?')[0] || trimmed };
+      }
+    } else if (typeof raw === 'number') {
+      fileObj = { fileAssetId: raw, fid: raw, name: `File #${raw}`, url: `/api/files/${raw}/view` };
+    }
+
+    if (!fileObj || typeof fileObj !== 'object') continue;
+
+    const fileAssetId = fileObj.fileAssetId ?? fileObj.fid ?? fileObj.id ?? (typeof fileObj.fileId === 'number' ? fileObj.fileId : undefined);
+    const rawUrl = fileObj.url || fileObj.fileUrl || fileObj.attachmentUrl || (fileAssetId ? `/api/files/${fileAssetId}/view` : undefined);
+    const cleanUrl = rawUrl ? String(rawUrl).split('?')[0].trim().toLowerCase() : '';
+
+    let extractedId = fileAssetId ? String(fileAssetId) : undefined;
+    if (!extractedId && cleanUrl) {
+      const match = cleanUrl.match(/\/files\/(\d+)/i);
+      if (match) extractedId = match[1];
+    }
+
+    const rawName = fileObj.fileName || fileObj.name || fileObj.originalName || fileObj.documentName || fileObj.specificationFileName || fileObj.title;
+    const derivedName = rawName && String(rawName).trim()
+      ? String(rawName).trim()
+      : (cleanUrl ? cleanUrl.split('/').pop()?.split('?')[0] : (extractedId ? `File #${extractedId}` : `${defaultName} Attachment`));
+
+    const lowerName = String(derivedName || '').toLowerCase().trim();
+    const isGenericName = !lowerName ||
+      lowerName === 'document' ||
+      lowerName === 'attachment' ||
+      lowerName === 'specification' ||
+      lowerName === 'specification file' ||
+      lowerName === 'procurement document' ||
+      lowerName === `${defaultName.toLowerCase()} specification` ||
+      lowerName === `${defaultName.toLowerCase()} attachment`;
+
+    // Deduplication checks:
+    if (extractedId && seenIds.has(extractedId)) {
+      continue;
+    }
+    if (cleanUrl && seenUrls.has(cleanUrl)) {
+      continue;
+    }
+    if (!isGenericName && lowerName && seenNames.has(lowerName)) {
+      continue;
+    }
+
+    if (extractedId) seenIds.add(extractedId);
+    if (cleanUrl) seenUrls.add(cleanUrl);
+    if (!isGenericName && lowerName) seenNames.add(lowerName);
+
+    result.push({
+      ...fileObj,
+      fileAssetId: extractedId ? Number(extractedId) : fileAssetId,
+      fid: extractedId ? Number(extractedId) : fileAssetId,
+      id: extractedId ? Number(extractedId) : (fileObj.id ?? fileAssetId),
+      fileName: derivedName,
+      name: derivedName,
+      originalName: fileObj.originalName || derivedName,
+      url: rawUrl || (extractedId ? `/api/files/${extractedId}/view` : undefined),
+    });
+  }
+
+  return result;
+}
+
+function LineItemsTable({
+  items,
+  defaultSubject,
+  isBuyer,
+}: {
+  items: any;
+  defaultSubject?: string;
+  isBuyer?: boolean;
+}) {
+  const [viewingItemFiles, setViewingItemFiles] = useState<{ title: string; files: any[] } | null>(null);
   const list = asArray(items).filter(hasDetailData);
   if (!list.length) return null;
 
@@ -1133,22 +1396,36 @@ function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?
           Line Items ({list.length})
         </h3>
       </div>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-3xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+          <table className="w-full min-w-[1000px] border-collapse text-left text-xs">
+            <thead className="bg-slate-50/90 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200 tracking-wider">
               <tr>
-                <th className="px-4 py-3">#</th>
-                <th className="px-4 py-3">Item Name</th>
-                <th className="px-4 py-3">Qty &amp; Unit</th>
-                <th className="px-4 py-3">Specification</th>
-                <th className="px-4 py-3">Brand / Policy</th>
-                <th className="px-4 py-3">Attachments</th>
+                <th className="px-3.5 py-3 w-12 text-center">#</th>
+                <th className="px-3.5 py-3 w-24">Type</th>
+                <th className="px-3.5 py-3 min-w-[160px]">Item / Service Name</th>
+                <th className="px-3.5 py-3 min-w-[200px]">Specifications / Scope</th>
+                <th className="px-3.5 py-3 w-28 text-center">Qty &amp; UOM</th>
+                <th className="px-3.5 py-3 w-28 text-right">Est. Unit Rate</th>
+                <th className="px-3.5 py-3 w-24 text-center">HSN / SAC</th>
+                <th className="px-3.5 py-3 w-32">Brand &amp; Policy</th>
+                <th className="px-3.5 py-3 w-36">Documents &amp; Specs</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
               {list.map((item: any, idx: number) => {
                 const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
+
+                const rawType = firstPresent(
+                  item.itemType,
+                  item.type,
+                  item.categoryType,
+                  sp.itemType,
+                  sp.type,
+                  sp.categoryType
+                );
+                const isService = String(rawType || '').toLowerCase().includes('service');
+                const itemType = isService ? 'Service' : 'Product';
 
                 const rawName = firstPresent(
                   item.name,
@@ -1158,7 +1435,8 @@ function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?
                   item.materialName,
                   item.serviceName,
                   sp.itemName,
-                  sp.name
+                  sp.name,
+                  sp.title
                 );
 
                 const isGeneric = !rawName || /^item\s*#?\d+$/i.test(String(rawName).trim()) || String(rawName).trim().toLowerCase() === 'item';
@@ -1187,19 +1465,58 @@ function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?
                   item.unitType,
                   item.measuringUnit,
                   sp.unit,
-                  sp.uom
-                ) || '';
+                  sp.uom,
+                  sp.unitOfMeasure
+                ) || 'NOS.';
 
                 const qtyDisplay = (rawQty !== undefined && rawQty !== null && rawQty !== '' && rawQty !== '-')
                   ? String(rawQty)
-                  : (unit ? '1' : null);
+                  : (unit ? '1' : '-');
+
+                const rawRate = firstPresent(
+                  item.estimatedUnitPrice,
+                  item.unitPrice,
+                  item.estimatedRate,
+                  item.price,
+                  item.rate,
+                  item.targetRate,
+                  sp.estimatedUnitPrice,
+                  sp.unitPrice,
+                  sp.estimatedRate,
+                  sp.price,
+                  sp.rate
+                );
+                const rateNumber = (rawRate !== undefined && rawRate !== null && rawRate !== '' && !isNaN(Number(rawRate)) && Number(rawRate) > 0)
+                  ? Number(rawRate)
+                  : null;
+
+                const rawHsn = firstPresent(
+                  item.hsn_sac_code,
+                  item.hsnSacCode,
+                  item.hsnSac,
+                  item.hsn,
+                  item.hsnCode,
+                  item.sac,
+                  item.sacCode,
+                  sp.hsn_sac_code,
+                  sp.hsnSacCode,
+                  sp.hsnSac,
+                  sp.hsn,
+                  sp.hsnCode,
+                  sp.sac,
+                  sp.sacCode
+                );
 
                 const rawSpec = firstPresent(
                   item.specification,
                   item.technicalSpecification,
                   item.spec,
                   typeof item.specifications === 'string' ? item.specifications : null,
-                  sp.text || sp.description || sp.specification || sp.details,
+                  sp.text,
+                  sp.description,
+                  sp.specification,
+                  sp.technicalSpecification,
+                  sp.details,
                   item.description,
                   item.desc,
                   item.details,
@@ -1208,22 +1525,33 @@ function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?
                 );
 
                 const itemBrand = firstPresent(
+                  item.brand_preference,
                   item.brandPreference,
+                  item.preferredBrand,
                   item.brand,
                   item.brandName,
                   item.make,
-                  item.preferredBrand,
                   item.manufacturer,
                   item.makeModel,
                   item.model,
+                  item.brandRequirement,
+                  sp.brand_preference,
+                  sp.brandPreference,
+                  sp.preferredBrand,
                   sp.brand,
                   sp.brandName,
-                  sp.brandPreference,
                   sp.make,
-                  sp.manufacturer
+                  sp.manufacturer,
+                  sp.brandRequirement
                 );
 
                 const itemPolicy = firstPresent(
+                  item.brand_flexible,
+                  item.brandFlexible,
+                  item.isBrandFlexible,
+                  sp.brand_flexible,
+                  sp.brandFlexible,
+                  sp.isBrandFlexible,
                   item.brandPolicy,
                   item.policy,
                   item.brandRule,
@@ -1231,43 +1559,121 @@ function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?
                   sp.policy
                 );
 
-                const rawBrand = itemBrand
-                  ? (itemPolicy ? `${itemBrand} (${itemPolicy})` : itemBrand)
-                  : (itemPolicy || 'Any Brand / Open');
+                const isLocked = itemPolicy === 'No' ||
+                                 itemPolicy === false ||
+                                 String(itemPolicy).toLowerCase() === 'no' ||
+                                 String(itemPolicy).toLowerCase() === 'lock' ||
+                                 String(itemPolicy).toLowerCase() === 'locked' ||
+                                 String(itemPolicy).toLowerCase() === 'strict';
 
-                const attachedFiles = [
-                  ...asArray(item.attachments),
-                  ...asArray(item.files),
-                  ...asArray(item.documents),
-                  ...asArray(item.itemFiles),
-                  ...asArray(sp.attachments),
-                  ...asArray(sp.files),
-                ];
-                const fileCount = attachedFiles.length || (item.fileAssetId || item.url || item.fileUrl || sp.fileAssetId || sp.url ? 1 : 0);
+                const brandDisplayName = itemBrand && String(itemBrand).trim() && String(itemBrand).trim() !== '-'
+                  ? String(itemBrand).trim()
+                  : 'Any Brand';
+
+                const allFiles = getUniqueItemFiles(item, sp, name);
+                const fileCount = allFiles.length;
 
                 return (
-                  <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
-                    <td className="px-4 py-3 font-black text-slate-900">{formatPrimitiveValue(name)}</td>
-                    <td className="px-4 py-3">
-                      {qtyDisplay ? (
-                        <span className="inline-block rounded-md bg-indigo-50 border border-indigo-200/60 px-2.5 py-0.5 font-bold text-indigo-700">
-                          {qtyDisplay} {unit}
-                        </span>
+                  <tr key={idx} className="align-middle hover:bg-slate-50/70 transition-colors">
+                    {/* # Index */}
+                    <td className="px-3.5 py-3.5 text-center font-bold text-slate-400">
+                      {idx + 1}
+                    </td>
+
+                    {/* Type */}
+                    <td className="px-3.5 py-3.5">
+                      <span className={cn(
+                        "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
+                        isService
+                          ? "border border-purple-200 bg-purple-50 text-purple-700"
+                          : "border border-blue-200 bg-blue-50 text-blue-700"
+                      )}>
+                        {itemType}
+                      </span>
+                    </td>
+
+                    {/* Name */}
+                    <td className="px-3.5 py-3.5">
+                      <div className="font-black text-slate-900 text-xs">
+                        {formatPrimitiveValue(name)}
+                      </div>
+                    </td>
+
+                    {/* Specification / Scope */}
+                    <td className="px-3.5 py-3.5 text-slate-600 font-medium max-w-[240px]">
+                      <span className="line-clamp-2" title={rawSpec ? String(rawSpec) : undefined}>
+                        {rawSpec ? formatPrimitiveValue(rawSpec) : <span className="text-slate-400 italic">No description</span>}
+                      </span>
+                    </td>
+
+                    {/* Qty & UOM */}
+                    <td className="px-3.5 py-3.5 text-center whitespace-nowrap">
+                      <span className="font-extrabold text-slate-900">{qtyDisplay}</span>{' '}
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">{unit}</span>
+                    </td>
+
+                    {/* Est. Unit Rate */}
+                    <td className="px-3.5 py-3.5 text-right font-extrabold text-slate-900 whitespace-nowrap">
+                      {rateNumber !== null ? (
+                        <span>₹{rateNumber.toLocaleString('en-IN')}</span>
                       ) : (
-                        <span className="text-slate-400">-</span>
+                        <span className="text-slate-400 font-normal">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-medium text-slate-600 max-w-xs">{rawSpec ? formatPrimitiveValue(rawSpec) : '-'}</td>
-                    <td className="px-4 py-3 text-slate-700">{rawBrand ? formatPrimitiveValue(rawBrand) : '-'}</td>
-                    <td className="px-4 py-3">
+
+                    {/* HSN / SAC */}
+                    <td className="px-3.5 py-3.5 text-center font-mono text-[11px] font-semibold text-slate-600">
+                      {rawHsn ? String(rawHsn) : <span className="text-slate-400">-</span>}
+                    </td>
+
+                    {/* Brand & Policy */}
+                    <td className="px-3.5 py-3.5">
+                      <div className="text-slate-800 text-[11px] font-bold truncate max-w-[130px]" title={brandDisplayName}>
+                        {brandDisplayName}
+                      </div>
+                      <div className="mt-0.5">
+                        {isLocked ? (
+                          <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
+                            Lock
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                            Flexible
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Documents & Specs */}
+                    <td className="px-3.5 py-3.5">
                       {fileCount > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200/60 px-2.5 py-0.5 text-[10px] font-bold text-indigo-700">
-                          <FileText className="h-3 w-3" />
-                          {fileCount} File(s)
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (allFiles.length === 1) {
+                              const f = allFiles[0];
+                              const fname = f.fileName || f.name || f.originalName || `${name} Attachment`;
+                              openFileAsset(
+                                {
+                                  fileAssetId: f.fileAssetId || f.id || (typeof f === 'number' ? f : undefined),
+                                  url: f.url || f.fileUrl || (typeof f === 'string' ? f : undefined),
+                                  originalName: fname,
+                                },
+                                fname
+                              );
+                            } else {
+                              setViewingItemFiles({ title: name, files: allFiles });
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 px-2 py-1 text-[10px] font-extrabold transition-colors cursor-pointer shadow-2xs"
+                          title="Click to view attachment"
+                        >
+                          <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
+                          <span>{fileCount} file{fileCount === 1 ? '' : 's'}</span>
+                          <Eye className="h-3 w-3 text-emerald-700 shrink-0 ml-0.5" />
+                        </button>
                       ) : (
-                        <span className="text-slate-400">-</span>
+                        <span className="text-slate-400 font-normal">-</span>
                       )}
                     </td>
                   </tr>
@@ -1277,6 +1683,59 @@ function LineItemsTable({ items, defaultSubject }: { items: any; defaultSubject?
           </table>
         </div>
       </div>
+
+      {viewingItemFiles && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-indigo-600" />
+                  Item Attachments
+                </h4>
+                <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{viewingItemFiles.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingItemFiles(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
+              {viewingItemFiles.files.map((file: any, fIdx: number) => {
+                const fName = file.fileName || file.name || file.originalName || `Attachment #${fIdx + 1}`;
+                return (
+                  <div key={fIdx} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-2.5">
+                    <span className="text-xs font-semibold text-slate-800 truncate max-w-[220px]" title={fName}>
+                      {fName}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        openFileAsset(
+                          {
+                            fileAssetId: file.fileAssetId || file.id || (typeof file === 'number' ? file : undefined),
+                            url: file.url || file.fileUrl || (typeof file === 'string' ? file : undefined),
+                            originalName: fName,
+                          },
+                          fName
+                        );
+                      }}
+                      className="h-7 text-[11px] gap-1 bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <Eye className="h-3 w-3" />
+                      View
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1445,14 +1904,23 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
   );
 }
 
-function ConsigneeTableList({ data, deliveryLocation, deliveryTerms }: { data: any; deliveryLocation?: any; deliveryTerms?: any }) {
+function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq, isBuyerSide }: { data: any; deliveryLocation?: any; deliveryTerms?: any; isBuyerRfq?: boolean; isBuyerSide?: boolean }) {
+  const ctx = React.useContext(BuyerSideContext);
+  const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
+  const isHiddenOnBuyer = Boolean(isBuyer || isBuyerSide || isBuyerRfq);
   const items = asArray(data).filter(hasDetailData);
+  const showDeliveryMeta = !isHiddenOnBuyer && (hasDetailData(deliveryLocation) || hasDetailData(deliveryTerms));
+
+  if (!showDeliveryMeta && items.length === 0) {
+    return null;
+  }
 
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
       <SectionHeader title="Consignee & Delivery Information" icon={MapPin} />
 
-      {(hasDetailData(deliveryLocation) || hasDetailData(deliveryTerms)) && (
+      {/* General Delivery Location & Delivery Terms - commented out / hidden on buyer side */}
+      {showDeliveryMeta && (
         <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
           <PropertyGrid columns={2}>
             {hasDetailData(deliveryLocation) && (
@@ -1540,6 +2008,12 @@ export interface ProcurementDetailUnifiedViewProps {
   presentationDate?: string;
   financialDate?: string;
   awardDate?: string;
+  requiredByDate?: string;
+  requiredBy?: string;
+  expectedDeliveryDate?: string;
+  bidValidityDate?: string;
+  validityDays?: number | string;
+  preBidDate?: string;
   category?: string;
   subCategory?: string;
   projectDuration?: string;
@@ -1584,6 +2058,11 @@ export interface ProcurementDetailUnifiedViewProps {
   invoiceStatus?: { exists: boolean; invoiceId?: number; loading?: boolean } | null;
   isConvertingInvoice?: boolean;
   onConvertToInvoiceClick?: () => void;
+  
+  // Invitations
+  invitedCount?: number;
+  invitedSellers?: any[];
+  invitations?: any[];
 }
 
 export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedViewProps) {
@@ -1602,6 +2081,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const targetId = String(props.id);
   const userRoleStr = String(currentUser?.role || '').toLowerCase();
   const isBuyerOrAdmin = userRoleStr === 'buyer' || userRoleStr === 'admin' || userRoleStr === 'master_admin' || (!!currentUser?.id && String(currentUser?.id) === String(props.buyer?.id));
+  const isBuyerSide = userRoleStr === 'buyer' || pathname.startsWith('/buyer') || (isBuyerOrAdmin && !pathname.startsWith('/seller') && !pathname.startsWith('/shg'));
 
   const { data: fetchedParticipants } = useQuery({
     queryKey: ['buyer-unified-participations', props.procurementType, targetId],
@@ -1781,22 +2261,33 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     payload.rateContractConfig?.requiredDocuments
   );
   const rawLineItems = asArray(props.items || payload.items || payload.lineItems);
+  const fallbackLineItems = asArray(payload.items || payload.lineItems || payload.wizardData?.items);
   const lineItems = useMemo(() => {
     const seen = new Set<string>();
     const res: any[] = [];
-    for (const item of rawLineItems) {
+    for (let i = 0; i < rawLineItems.length; i++) {
+      const item = rawLineItems[i];
       if (!item) continue;
-      const name = item.name || item.itemName || item.description || item.title || '';
-      const qty = item.quantity || item.qty || 0;
-      const uom = item.unitOfMeasure || item.unit || item.uom || '';
-      const key = `${String(name).trim().toLowerCase()}_${qty}_${String(uom).trim().toLowerCase()}`;
+      const fallback = fallbackLineItems[i] || {};
+      const mergedItem = {
+        ...fallback,
+        ...item,
+        specifications: {
+          ...(typeof fallback.specifications === 'object' ? fallback.specifications : {}),
+          ...(typeof item.specifications === 'object' ? item.specifications : {}),
+        }
+      };
+      const name = mergedItem.name || mergedItem.itemName || mergedItem.description || mergedItem.title || '';
+      const qty = mergedItem.quantity || mergedItem.qty || 0;
+      const uom = mergedItem.unitOfMeasure || mergedItem.unit || mergedItem.uom || '';
+      const key = `${String(name).trim().toLowerCase()}_${qty}_${String(uom).trim().toLowerCase()}_${i}`;
       if (!seen.has(key)) {
         seen.add(key);
-        res.push(item);
+        res.push(mergedItem);
       }
     }
     return res;
-  }, [rawLineItems]);
+  }, [rawLineItems, fallbackLineItems]);
 
   const rawBoqTable = asArray(props.boqTable || payload.boqTable || payload.boq);
   const boqTable = useMemo(() => {
@@ -1878,13 +2369,101 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.id && Number(props.id) > 0 ? `${procurementTypeLabel.toUpperCase().replace(/\s+/g, '_')}-${props.id}` : undefined
   ) || `RFQ-${Math.abs(Number(props.id || 1))}`;
 
-  const procurementMethod = firstPresent(
+  const isRfqType =
+    props.procurementType === 'RFQ' ||
+    String(props.procurementType || '').toUpperCase().includes('RFQ') ||
+    String(props.procurementLabel || '').toUpperCase().includes('QUOTATION') ||
+    String(props.procurementLabel || '').toUpperCase().includes('RFQ');
+  const isBuyerRfq = isBuyerSide && (isRfqType || pathname.includes('/rfq'));
+
+  const isOpenTenderType =
+    props.procurementType === 'OPEN_TENDER' ||
+    String(props.procurementType || '').toUpperCase().includes('OPEN_TENDER') ||
+    String(props.procurementType || '').toUpperCase().includes('OPEN TENDER') ||
+    String(props.procurementLabel || '').toUpperCase().includes('OPEN TENDER') ||
+    String(props.procurementMethod || '').toUpperCase().includes('OPEN TENDER') ||
+    pathname.includes('/open-tender') ||
+    (pathname.includes('/tender') && !pathname.includes('/limited'));
+  const isBuyerOpenTender = isBuyerSide && isOpenTenderType;
+
+  const isLimitedTenderType =
+    props.procurementType === 'LIMITED_TENDER' ||
+    String(props.procurementType || '').toUpperCase().includes('LIMITED_TENDER') ||
+    String(props.procurementType || '').toUpperCase().includes('LIMITED TENDER') ||
+    String(props.procurementLabel || '').toUpperCase().includes('LIMITED TENDER') ||
+    String(props.procurementMethod || '').toUpperCase().includes('LIMITED TENDER') ||
+    pathname.includes('/limited-tender') ||
+    pathname.includes('/limited');
+  const isBuyerLimitedTender = isBuyerSide && isLimitedTenderType;
+
+  const cleanBuyerTerms = (val: any): any => {
+    if (!isBuyerSide || !val) return val;
+    if (typeof val === 'string') {
+      if ((isBuyerOpenTender || isBuyerLimitedTender) && val.toLowerCase().includes('warranty')) {
+        return null;
+      }
+      return val;
+    }
+    if (typeof val !== 'object') return val;
+    if (Array.isArray(val)) {
+      return val
+        .map(cleanBuyerTerms)
+        .filter(item => {
+          if (item === null || item === undefined || item === '') return false;
+          if (typeof item === 'string' && (isBuyerOpenTender || isBuyerLimitedTender) && item.toLowerCase().includes('warranty')) return false;
+          return true;
+        });
+    }
+    const clean: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) {
+      const lower = k.toLowerCase().replace(/[^a-z]/g, '');
+      if (
+        // Warranty terms strictly commented out / hidden on buyer side in open and limited tender
+        ((isBuyerOpenTender || isBuyerLimitedTender) && (
+          lower === 'warrantyterms' ||
+          lower === 'warranty' ||
+          lower === 'warrantyperiod' ||
+          lower.includes('warranty')
+        )) ||
+        lower === 'retentionamount' ||
+        lower === 'securitydeposit' ||
+        lower === 'retention' ||
+        lower === 'securitydepositamount' ||
+        lower === 'retentionpercentage' ||
+        lower === 'securitydepositpercentage' ||
+        lower === 'securitydepositrequired' ||
+        lower === 'isretentionapplicable' ||
+        lower === 'retentionapplicable' ||
+        lower === 'advanceallowed' ||
+        lower === 'advance' ||
+        lower === 'advancepayment' ||
+        lower === 'advancepaymentallowed' ||
+        lower === 'advanceallowedflag' ||
+        lower === 'advancepercentage' ||
+        lower === 'advanceamount' ||
+        lower === 'mobilizationadvance' ||
+        lower.includes('advance') ||
+        lower.includes('retention') ||
+        lower.includes('securitydeposit')
+      ) {
+        continue;
+      }
+      clean[k] = cleanBuyerTerms(v);
+    }
+    return clean;
+  };
+
+  const rawMethod = firstPresent(
     props.procurementMethod,
     payload.fullProcurementMethod,
     payload.type,
     props.procurementLabel,
     props.procurementType
   ) || procurementTypeLabel;
+
+  const procurementMethod = isRfqType
+    ? 'Request for Quotation'
+    : (rawMethod === 'RFQ' ? 'Request for Quotation' : rawMethod);
 
   const buyingType = firstPresent(
     props.buyingType,
@@ -1964,16 +2543,98 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     tender.awardDate,
     schedule.awardDate,
     schedule.awardingDate,
+    schedule.expectedAwardDate,
     props.awardDate
   );
+
+  const submissionStartDateValue = firstPresent(
+    schedule.submissionStartDate,
+    schedule.startDate,
+    tender.bidStartDate,
+    props.createdAt,
+    publishedDateValue
+  );
+
+  const clarificationDeadlineValue = firstPresent(
+    schedule.clarificationDeadline,
+    schedule.clarificationEndDate,
+    schedule.clarificationDate,
+    tender.clarificationDeadline,
+    tender.clarificationEndDate,
+    props.clarificationDate
+  );
+
+  const preBidDateValue = firstPresent(
+    schedule.preBidMeetingDate,
+    schedule.preBidDate,
+    tender.preBidMeetingDate,
+    tender.preBidDate,
+    props.preBidDate
+  );
+
+  const requiredByDateValue = firstPresent(
+    basics.requiredByDate,
+    basics.requiredBy,
+    basics.expectedDeliveryDate,
+    basics.deliveryDate,
+    schedule.requiredByDate,
+    schedule.deliveryDate,
+    schedule.expectedDeliveryDate,
+    payload.requiredByDate,
+    payload.requiredBy,
+    tender.requiredByDate,
+    tender.requiredBy,
+    tender.deliveryDate,
+    props.requiredByDate,
+    props.requiredBy,
+    props.expectedDeliveryDate
+  );
+
+  const rawValidityDays = firstPresent(
+    schedule.validityDays,
+    tender.validityDays,
+    rules.validityDays,
+    payload.validityDays,
+    props.validityDays,
+    90
+  );
+  const validityDaysDisplay = rawValidityDays
+    ? (String(rawValidityDays).toLowerCase().includes('day') ? String(rawValidityDays) : `${rawValidityDays} Days`)
+    : '90 Days';
+
+  const bidValidityDateValue = firstPresent(
+    schedule.bidValidityDate,
+    tender.bidValidityDate,
+    schedule.bidValidityDeadline,
+    props.bidValidityDate
+  );
+
+  const bidValidityDateComputed = bidValidityDateValue
+    ? bidValidityDateValue
+    : (closingDateValue ? (() => {
+        try {
+          const cDate = new Date(closingDateValue);
+          if (!isNaN(cDate.getTime())) {
+            const daysToAdd = Number(rawValidityDays) || 90;
+            const computed = new Date(cDate.getTime() + daysToAdd * 86_400_000);
+            return computed.toISOString();
+          }
+        } catch {}
+        return undefined;
+      })() : undefined);
 
   const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue) : (props.publishedDate ? formatDateString(props.publishedDate) : 'N/A');
   const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue) : (props.closingDate ? formatDateString(props.closingDate) : 'N/A');
   const clarificationDateFormatted = clarificationDateValue ? formatDateString(clarificationDateValue, true) : (props.clarificationDate ? formatDateString(props.clarificationDate, true) : 'N/A');
+  const clarificationDeadlineFormatted = clarificationDeadlineValue ? formatDateString(clarificationDeadlineValue, true) : (clarificationDateFormatted !== 'N/A' ? clarificationDateFormatted : undefined);
   const technicalDateFormatted = technicalDateValue ? formatDateString(technicalDateValue, true) : (props.technicalDate || props.technicalOpeningDate ? formatDateString(props.technicalDate || props.technicalOpeningDate, true) : 'N/A');
   const presentationDateFormatted = presentationDateValue ? formatDateString(presentationDateValue, true) : (props.presentationDate ? formatDateString(props.presentationDate, true) : 'N/A');
   const financialDateFormatted = financialDateValue ? formatDateString(financialDateValue, true) : (props.financialDate || props.financialOpeningDate ? formatDateString(props.financialDate || props.financialOpeningDate, true) : 'N/A');
   const awardDateFormatted = awardDateValue ? formatDateString(awardDateValue, true) : (props.awardDate ? formatDateString(props.awardDate, true) : 'N/A');
+  const submissionStartDateFormatted = submissionStartDateValue ? formatDateString(submissionStartDateValue, true) : publishedDateFormatted;
+  const requiredByDateFormatted = requiredByDateValue ? formatDateString(requiredByDateValue) : undefined;
+  const preBidDateFormatted = preBidDateValue ? formatDateString(preBidDateValue, true) : undefined;
+  const bidValidityDateFormatted = bidValidityDateComputed ? formatDateString(bidValidityDateComputed) : undefined;
 
   const deliveryLocation = firstPresent(
     props.deliveryLocation && props.deliveryLocation !== '—' && props.deliveryLocation !== 'N/A' && props.deliveryLocation !== 'Delivery location not specified' ? props.deliveryLocation : undefined,
@@ -2025,7 +2686,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     buyerProfile.companyName,
     props.buyer?.buyerProfile?.organizationName,
     props.buyer?.name
-  ) || 'PROAID';
+  ) || 'Buyer Organization';
 
   const contactPerson = firstPresent(
     props.buyerName && props.buyerName !== '—' && props.buyerName !== 'N/A' ? props.buyerName : undefined,
@@ -2041,7 +2702,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.buyer?.buyerProfile?.representativeName,
     props.buyer?.buyerProfile?.contactPersonName,
     props.buyer?.buyerProfile?.contactPerson
-  ) || (buyerOrgName !== 'N/A' && buyerOrgName !== 'PROAID' ? `${buyerOrgName} Purchase Officer` : 'Authorized Procurement Officer');
+  ) || (buyerOrgName && buyerOrgName !== 'N/A' && buyerOrgName !== 'Buyer Organization' ? `${buyerOrgName} Purchase Officer` : 'Authorized Procurement Officer');
 
   const email = firstPresent(
     props.buyerEmail && props.buyerEmail !== 'N/A' && props.buyerEmail !== '' ? props.buyerEmail : undefined,
@@ -2053,7 +2714,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     buyerProfile.email,
     props.buyer?.buyerProfile?.contactPersonEmail,
     props.buyer?.buyerProfile?.email
-  ) || (buyerOrgName !== 'N/A' && buyerOrgName !== 'PROAID' ? `procurement@${buyerOrgName.toLowerCase().replace(/[^a-z0-9]/g, '')}.gov.in` : 'procurement@proaid.org');
+  ) || '';
 
   const phone = firstPresent(
     props.buyerMobile && props.buyerMobile !== 'N/A' && props.buyerMobile !== '' ? props.buyerMobile : undefined,
@@ -2068,7 +2729,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     buyerProfile.phone,
     props.buyer?.buyerProfile?.contactPersonMobile,
     props.buyer?.buyerProfile?.mobile
-  ) || '+91 1800-425-0010';
+  ) || '';
 
   const addressParts = [
     buyerOrg.registeredAddress || buyerOrg.address || buyerProfile.registeredAddress || buyerProfile.address,
@@ -2081,7 +2742,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.buyerAddress,
     addressParts.length ? addressParts.join(', ') : undefined,
     props.buyer?.buyerProfile?.address
-  ) || 'Jharsuguda, Jharsuguda, ODISHA';
+  ) || '';
 
   const department = firstPresent(
     props.department && props.department !== 'N/A' && props.department !== '—' ? props.department : undefined,
@@ -2128,25 +2789,47 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const vendors = payload.vendors || {};
   const approval = payload.approval || {};
 
-  const evaluationMethod = firstPresent(
+  const rawSpecificEvalMethod = [
+    evaluation.method,
+    evaluation.evaluationMethod,
+    evaluation.type,
+    evaluation.name,
+    payload.evaluationMethod,
+    payload.evaluation_method,
+    rules.evaluationMethod,
+    tender.evaluationMethod,
+    (props as any).payload?.evaluation?.method,
+    (props as any).payload?.evaluation?.evaluationMethod,
+    (props as any).payload?.evaluationMethod,
+    (props as any).payload?.rules?.evaluationMethod,
+    (props as any).evaluation?.method,
+    (props as any).evaluationMethod,
+  ].find(v => typeof v === 'string' && v.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(v.trim().toLowerCase()));
+
+  const evaluationMethod = rawSpecificEvalMethod || firstPresent(
     props.evaluationMethod,
     evaluation.evaluationMethod,
     evaluation.method,
     rules.evaluationMethod,
-    payload.evaluationMethod
+    payload.evaluationMethod,
+    tender.evaluationMethod
   ) || 'L1 Basis';
 
-  const requireDemo = firstPresent(
-    payload.requireDemo,
-    evaluation.requireDemo,
-    rules.requireDemo,
-    'No'
-  );
+  const requireDemo = payload.requireDemo === true || evaluation.requireDemo === true || String(payload.requireDemo).toLowerCase() === 'true'
+    ? 'Yes'
+    : firstPresent(
+        payload.requireDemo,
+        evaluation.requireDemo,
+        rules.requireDemo,
+        'No'
+      );
 
   const qcbsRatio = firstPresent(
     evaluation.qcbsRatio,
     payload.qcbsRatio,
-    rules.qcbsRatio
+    rules.qcbsRatio,
+    (evaluation.techWeight && evaluation.commWeight ? `${evaluation.techWeight}:${evaluation.commWeight}` : undefined),
+    (payload.techWeight && payload.commWeight ? `${payload.techWeight}:${payload.commWeight}` : undefined)
   );
 
   const passingScore = firstPresent(
@@ -2189,9 +2872,72 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     evaluation.questionnaire
   );
 
+  const effectiveInviteCount = useMemo(() => {
+    // 1. Check array candidates for real invited seller records
+    const arrayCandidates = [
+      props.invitations,
+      props.invitedSellers,
+      vendors.invitedSellers,
+      vendors.invitedSuppliers,
+      payload.invitedSellers,
+      payload.invitations,
+      payload.invitedSuppliers,
+      payload.rateContractConfig?.selectedSuppliers,
+      payload.rateContract?.selectedSuppliers,
+      payload.auctionConfig?.qualifiedVendors,
+      rules.invitedSellers,
+    ];
+
+    let maxFromArrays = 0;
+    for (const arr of arrayCandidates) {
+      if (Array.isArray(arr) && arr.length > maxFromArrays) {
+        maxFromArrays = arr.length;
+      }
+    }
+    if (maxFromArrays > 0) return maxFromArrays;
+
+    // 2. Check numeric candidates if array is not populated
+    const numericCandidates = [
+      props.invitedCount,
+      (props as any).invitationsCount,
+      vendors.inviteCount,
+      vendors.invitedCount,
+      payload.inviteCount,
+      payload.invitedCount,
+      rules.inviteCount,
+    ];
+
+    for (const val of numericCandidates) {
+      const num = Number(val);
+      if (Number.isFinite(num) && num > 0) {
+        return num;
+      }
+    }
+    return 0;
+  }, [
+    props.invitedCount,
+    (props as any).invitationsCount,
+    props.invitations,
+    props.invitedSellers,
+    vendors.inviteCount,
+    vendors.invitedCount,
+    vendors.invitedSellers,
+    vendors.invitedSuppliers,
+    payload.inviteCount,
+    payload.invitedCount,
+    payload.invitedSellers,
+    payload.invitations,
+    payload.invitedSuppliers,
+    payload.rateContractConfig?.selectedSuppliers,
+    payload.rateContract?.selectedSuppliers,
+    payload.auctionConfig?.qualifiedVendors,
+    rules.inviteCount,
+    rules.invitedSellers,
+  ]);
+
   const supplierControlsData = compactObject({
     selectionMode: firstPresent(vendors.selectionMode, vendors.selection, vendors.type, rules.selectionMode, 'Open'),
-    inviteCount: firstPresent(vendors.inviteCount, vendors.invitedCount, '0'),
+    inviteCount: String(effectiveInviteCount),
     msmePreference: firstPresent(vendors.msmePreference, rules.msmePreference, 'Yes'),
     excludeBlacklisted: firstPresent(vendors.excludeBlacklisted, rules.excludeBlacklisted, 'Yes'),
     localVendorPreference: firstPresent(vendors.localVendorPreference, rules.localVendorPreference, 'Yes'),
@@ -2227,6 +2973,65 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     });
   }, [allParticipationsList]);
 
+  const proposalStatusDisplay = useMemo(() => {
+    // If current user is explicitly a seller and not viewing as buyer, show their submission status
+    if (currentUser?.role === 'seller' && !isBuyerSide) {
+      return props.hasSubmittedProposal ? 'Submitted' : 'Not submitted';
+    }
+
+    // For buyer, admin, or general viewer, derive authentic status from real database records
+    const rawStatus = String(props.status || '').toUpperCase();
+    const count = Math.max(props.participantsCount || 0, submittedParticipations.length);
+    const isDeadlinePassed = props.deadlineDate ? new Date(props.deadlineDate).getTime() < nowMs : false;
+
+    // 1. Awarded / Completed
+    const hasAwarded = submittedParticipations.some((p: any) => {
+      const s = String(p.finalStatus || p.status || p.submissionStatus || '').toUpperCase();
+      return s === 'AWARDED' || s === 'ACCEPTED' || s === 'PO_GENERATED';
+    });
+    if (hasAwarded || rawStatus === 'AWARDED' || rawStatus === 'PO_GENERATED' || rawStatus === 'AWARD_RECOMMENDED') {
+      return 'Awarded';
+    }
+
+    // 2. Under Evaluation
+    const hasEvaluation = submittedParticipations.some((p: any) => {
+      const ts = String(p.technicalStatus || '').toUpperCase();
+      const fs = String(p.financialStatus || '').toUpperCase();
+      const s = String(p.status || p.submissionStatus || '').toUpperCase();
+      return ts === 'QUALIFIED' || ts === 'UNDER_EVALUATION' || fs === 'OPENED' || s === 'UNDER_REVIEW' || s === 'SHORTLISTED';
+    });
+    if (
+      hasEvaluation ||
+      rawStatus === 'TECHNICAL_EVALUATION' ||
+      rawStatus === 'FINANCIAL_EVALUATION' ||
+      rawStatus === 'UNDER_EVALUATION' ||
+      rawStatus === 'TECHNICAL_EVALUATION_COMPLETED' ||
+      rawStatus === 'L1_GENERATED' ||
+      rawStatus === 'NEGOTIATION'
+    ) {
+      return 'Under Evaluation';
+    }
+
+    // 3. Proposals received
+    if (count > 0) {
+      if (isDeadlinePassed || rawStatus === 'CLOSED') {
+        return `${count} Received (Under Review)`;
+      }
+      return `${count} ${count === 1 ? (isRfqType ? 'Quotation' : 'Proposal') : (isRfqType ? 'Quotations' : 'Proposals')} Received`;
+    }
+
+    // 4. No proposals received
+    if (isDeadlinePassed || rawStatus === 'CLOSED' || rawStatus === 'EXPIRED') {
+      return isRfqType ? 'No Quotations Received' : 'No Proposals Received';
+    }
+    if (rawStatus === 'CANCELLED') {
+      return 'Cancelled';
+    }
+
+    // 5. Open / active awaiting submissions
+    return isRfqType ? 'Awaiting Quotations' : 'Awaiting Proposals';
+  }, [currentUser?.role, isBuyerSide, props.hasSubmittedProposal, props.status, props.participantsCount, submittedParticipations, props.deadlineDate, nowMs, isRfqType]);
+
   const buyerContactPerson = contactPerson && contactPerson !== 'N/A' && contactPerson !== '—' ? contactPerson : (buyerOrgName !== 'N/A' ? buyerOrgName : 'Procurement Officer');
   const buyerPhoneNum = phone && phone !== 'N/A' && phone !== '—' ? phone : (props.buyerMobile && props.buyerMobile !== 'N/A' ? props.buyerMobile : '');
 
@@ -2241,8 +3046,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     },
     { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' },
     { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactPerson, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: buyerPhoneNum || 'Procurement officer' },
-    { label: 'Evaluation', value: formatPrimitiveValue(props.evaluationMethod || 'L1', 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone, subtext: 'Selection criteria' },
-    ...(isBuyerOrAdmin ? [{ label: 'Responses', value: Math.max(props.participantsCount || 0, submittedParticipations.length).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone, subtext: 'Proposals submitted' }] : []),
+    { label: 'Evaluation', value: formatPrimitiveValue(evaluationMethod, 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone, subtext: 'Selection criteria' },
+    ...(isBuyerOrAdmin ? [{ label: 'Responses', value: Math.max(props.participantsCount || 0, submittedParticipations.length).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone, subtext: isRfqType ? 'Quotations submitted' : 'Proposals submitted' }] : []),
   ];
 
   const tabs = [
@@ -2250,7 +3055,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     { id: 'scope_docs', label: 'Scope & Documents', icon: FileText, count: documents.length },
     { id: 'terms_schedule', label: 'Terms & Schedule', icon: CalendarDays },
     { id: 'evaluation', label: 'Evaluation & Controls', icon: ClipboardCheck },
-    { id: 'clarifications', label: 'Clarifications & Proposals', icon: MessageSquare, count: (props.totalClarifications || 0) + (isBuyerOrAdmin ? (submittedParticipations.length || 0) : 0) },
+    { id: 'clarifications', label: isRfqType ? 'Clarifications & Quotations' : 'Clarifications & Proposals', icon: MessageSquare, count: (props.totalClarifications || 0) + (isBuyerOrAdmin ? (submittedParticipations.length || 0) : 0) },
   ];
 
   const defaultSubmitBtnLabel = props.hasSubmittedProposal
@@ -2321,7 +3126,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <BuyerSideContext.Provider value={{ isBuyer: isBuyerSide, isOpenTender: isBuyerOpenTender, isLimitedTender: isBuyerLimitedTender }}>
+      <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6 lg:px-8">
         {/* Navigation Breadcrumb & Back Button */}
         <div className="flex flex-wrap items-center gap-3">
@@ -2376,29 +3182,43 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         )}
 
         {/* Header */}
-        <header className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-2xs">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="flex flex-wrap items-center gap-1.5">
+        <header className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={statusLabel} />
-                {buyerOrgName !== 'N/A' && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-indigo-700">
-                    <Building2 className="h-3 w-3" />
+                {!isBuyerSide && buyerOrgName !== 'N/A' && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-indigo-700">
+                    <Building2 className="h-3.5 w-3.5" />
                     {formatPrimitiveValue(buyerOrgName, 'organization')}
                   </span>
                 )}
                 {props.deadlineDate && <DeadlineCountdown targetDate={props.deadlineDate} />}
                 {props.hasSubmittedProposal && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">
-                    <ShieldCheck className="h-3 w-3" />
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-700">
+                    <ShieldCheck className="h-3.5 w-3.5" />
                     {props.procurementType === 'RFQ' ? 'Quotation Submitted' : 'Proposal Submitted'}
                   </span>
                 )}
               </div>
-              <h1 className="text-[20px] md:text-[24px] lg:text-[28px] font-black leading-tight tracking-tight text-slate-950 break-words mt-1">{resolvedSubject}</h1>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800 text-[10px]">{displayIdStr}</span>
-                <span>•</span>
+              <h1
+                className={cn(
+                  'leading-tight tracking-tight text-slate-900 font-black break-words',
+                  isBuyerSide
+                    ? 'text-lg sm:text-xl md:text-2xl'
+                    : 'text-xl sm:text-2xl lg:text-3xl'
+                )}
+              >
+                {resolvedSubject}
+              </h1>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                {/* Requisition ID badge - hidden on buyer side */}
+                {!isBuyerSide && (
+                  <>
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-700 text-[11px] font-bold">{displayIdStr}</span>
+                    <span>•</span>
+                  </>
+                )}
                 <span>{formatPrimitiveValue(procurementMethod, 'procurementMethod')}</span>
                 {category !== 'N/A' && (
                   <>
@@ -2409,7 +3229,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2 mt-2 lg:mt-0">
+            <div className="flex shrink-0 flex-wrap items-center gap-2.5 lg:self-center">
               <Button
                 type="button"
                 variant="outline"
@@ -2421,8 +3241,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     handleDefaultPdfDownload();
                   }
                 }}
+                className="h-9 px-3.5 text-xs font-bold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
               >
-                <Download className="h-4 w-4" />
+                <Download className="h-4 w-4 text-slate-600" />
                 Download
               </Button>
               {props.invoiceStatus && props.onConvertToInvoiceClick && (
@@ -2430,9 +3251,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   <Button
                     type="button"
                     onClick={() => router.push(`/seller/invoices/${props.invoiceStatus!.invoiceId}`)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 h-9 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                   >
-                    <Eye className="h-4 w-4 mr-1" />
+                    <Eye className="h-4 w-4 mr-0.5" />
                     View Invoice
                   </Button>
                 ) : (
@@ -2440,9 +3261,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     type="button"
                     disabled={props.isConvertingInvoice || props.invoiceStatus.loading}
                     onClick={props.onConvertToInvoiceClick}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 h-9 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                   >
-                    {props.isConvertingInvoice ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileText className="h-4 w-4 mr-1" />}
+                    {props.isConvertingInvoice ? <Loader2 className="h-4 w-4 mr-0.5 animate-spin" /> : <FileText className="h-4 w-4 mr-0.5" />}
                     {props.isConvertingInvoice ? 'Converting...' : 'Convert to Invoice'}
                   </Button>
                 )
@@ -2453,9 +3274,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   variant="outline"
                   size="sm"
                   onClick={props.onDiscardClick}
-                  className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-2xs"
+                  className="h-9 px-3.5 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
                 >
-                  <Trash2 className="mr-1.5 h-3.5 w-3.5 text-rose-600" />
+                  <Trash2 className="h-3.5 w-3.5 text-rose-600" />
                   Discard Draft
                 </Button>
               )}
@@ -2465,12 +3286,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   size="sm"
                   onClick={handleActionSubmit}
                   className={cn(
-                    'text-white text-xs font-bold bg-[#12335f] hover:bg-[#0b2445] cursor-pointer shadow-xs active:scale-95 transition-all',
+                    'h-9 px-4 text-white text-xs font-extrabold rounded-lg bg-[#0b2447] hover:bg-[#12335f] cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5',
                     isEmdGated ? 'bg-amber-600 hover:bg-amber-700' : ''
                   )}
                 >
-                  {isEmdGated ? 'Pay EMD to Submit' : (props.submitButtonLabel || defaultSubmitBtnLabel)}
-                  <ArrowRight className="h-4 w-4 ml-1" />
+                  <span>{isEmdGated ? 'Pay EMD to Submit' : (props.submitButtonLabel || defaultSubmitBtnLabel)}</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
               )}
             </div>
@@ -2482,7 +3303,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         {/* Summary Metrics */}
         <section className={cn('grid gap-3', summaryCards.length === 6 ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5')}>
           {summaryCards.map(card => (
-            <MetricCard key={card.label} {...card} />
+            <MetricCard key={card.label} {...card} isBuyer={isBuyerSide} />
           ))}
         </section>
 
@@ -2528,13 +3349,28 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   <PropertyItem label="Procurement Method" value={procurementMethod} />
                   <PropertyItem label="Buying Type" value={buyingType} />
                   <PropertyItem label="Category" value={category} />
-                  <PropertyItem label="Sub Category" value={subCategory} />
+                  {/* Sub Category - hidden on buyer side */}
+                  {!isBuyerSide && (
+                    <PropertyItem label="Sub Category" value={subCategory} />
+                  )}
                   <PropertyItem label="Published Date" value={publishedDateFormatted} />
                   <PropertyItem label="Submission Deadline" value={closingDateFormatted} />
-                  <PropertyItem label="Delivery Location" value={deliveryLocation} />
-                  <PropertyItem label="Project Duration" value={projectDuration} />
-                  <PropertyItem label="Payment Terms" value={paymentTerms} />
-                  <PropertyItem label="Procurement Brief" value={props.description && props.description.length < 160 && !props.description.includes('\n') ? props.description : (basics.description && basics.description.length < 160 ? basics.description : `${resolvedSubject} (${category})`)} fullWidth />
+                  {/* Delivery Location - hidden on buyer side */}
+                  {!isBuyerSide && (
+                    <PropertyItem label="Delivery Location" value={deliveryLocation} />
+                  )}
+                  {/* Project Duration - commented out / hidden on buyer side */}
+                  {!isBuyerSide && (
+                    <PropertyItem label="Project Duration" value={projectDuration} />
+                  )}
+                  {/* Payment Terms - hidden on buyer side */}
+                  {!isBuyerSide && (
+                    <PropertyItem label="Payment Terms" value={paymentTerms} />
+                  )}
+                  {/* Procurement Brief - hidden on buyer side */}
+                  {!isBuyerSide && (
+                    <PropertyItem label="Procurement Brief" value={props.description && props.description.length < 160 && !props.description.includes('\n') ? props.description : (basics.description && basics.description.length < 160 ? basics.description : `${resolvedSubject} (${category})`)} fullWidth />
+                  )}
                 </PropertyGrid>
               </DataCard>
 
@@ -2559,14 +3395,17 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               ]}
             />
 
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
-              <PropertyGrid columns={4}>
-                <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
-                <PropertyItem label="Proposal Status" value={props.hasSubmittedProposal ? 'Submitted' : currentUser?.role === 'seller' ? 'Not submitted' : 'N/A'} />
-                <PropertyItem label="Deadline Status" value={props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs ? 'Closed' : 'Open'} />
-                <PropertyItem label="Source Record" value={procurementTypeLabel} />
-              </PropertyGrid>
-            </div>
+            {/* Clarification Threads & Status grid - commented out strictly in RFQ, Open Tender, and Limited Tender on buyer side */}
+            {!isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
+                <PropertyGrid columns={4}>
+                  <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
+                  <PropertyItem label={isRfqType ? 'Quotation Status' : 'Proposal Status'} value={proposalStatusDisplay} />
+                  <PropertyItem label="Deadline Status" value={props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs ? 'Closed' : 'Open'} />
+                  <PropertyItem label="Source Record" value={procurementTypeLabel} />
+                </PropertyGrid>
+              </div>
+            )}
           </div>
         )}
 
@@ -2582,15 +3421,17 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 procurementMethod={procurementMethod}
               />
 
-              {hasDetailData(serviceDetails) && (
+              {/* Service Details & Parameters - commented out strictly in Open Tender, Limited Tender, and RFQ on buyer side */}
+              {hasDetailData(serviceDetails) && !isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
                 <ServiceDetailsSection serviceDetails={serviceDetails} />
               )}
 
               {hasDetailData(lineItems) && (
-                <LineItemsTable items={lineItems} defaultSubject={resolvedSubject} />
+                <LineItemsTable items={lineItems} defaultSubject={resolvedSubject} isBuyer={isBuyerSide} />
               )}
 
-              {hasDetailData(boqTable) && (
+              {/* BOQ Table - hidden on buyer side */}
+              {hasDetailData(boqTable) && !isBuyerSide && (
                 <BoqTableList data={boqTable} defaultSubject={resolvedSubject} defaultCategory={category} defaultEstimatedValue={props.estimatedValue} />
               )}
             </DataCard>
@@ -2669,12 +3510,22 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
                     <PropertyGrid columns={3}>
                       <PropertyItem label="Publish Date" value={firstPresent(schedule.publishDate, schedule.publishedDate, publishedDateFormatted, props.publishedDate)} />
-                      <PropertyItem label="Submission Start Date" value={firstPresent(schedule.submissionStartDate, schedule.startDate, publishedDateFormatted)} />
+                      <PropertyItem label="Submission Start Date" value={submissionStartDateFormatted} />
+                      <PropertyItem label="Clarification Deadline" value={firstPresent(schedule.clarificationDeadline, schedule.clarificationEndDate, clarificationDeadlineFormatted, props.clarificationDate)} />
                       <PropertyItem label="Submission Deadline" value={firstPresent(schedule.submissionDate, closingDateFormatted, props.closingDate)} highlight />
-                      <PropertyItem label="Financial Opening Date" value={firstPresent(schedule.financialOpeningDate, tender.financialEvaluationDate, props.financialOpeningDate, financialDateFormatted)} />
                       <PropertyItem label="Technical Opening Date" value={firstPresent(schedule.technicalOpeningDate, tender.technicalEvaluationDate, props.technicalOpeningDate, technicalDateFormatted)} />
-                      <PropertyItem label="Validity Days" value={firstPresent(schedule.validityDays, tender.validityDays, rules.validityDays, '90 Days')} />
-                      <PropertyItem label="Bid Validity Date" value={firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline)} />
+                      <PropertyItem label="Financial Opening Date" value={firstPresent(schedule.financialOpeningDate, tender.financialEvaluationDate, props.financialOpeningDate, financialDateFormatted)} />
+                      <PropertyItem label="Bid Validity Date" value={firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline, bidValidityDateFormatted)} />
+                      <PropertyItem label="Validity Days" value={validityDaysDisplay} />
+                      {requiredByDateFormatted && (
+                        <PropertyItem label="Required By Date" value={requiredByDateFormatted} />
+                      )}
+                      {preBidDateFormatted && (
+                        <PropertyItem label="Pre-Bid Meeting Date" value={preBidDateFormatted} />
+                      )}
+                      {awardDateFormatted && awardDateFormatted !== 'N/A' && (
+                        <PropertyItem label="Expected Award Date" value={awardDateFormatted} />
+                      )}
                     </PropertyGrid>
                   </div>
                 </div>
@@ -2708,11 +3559,17 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
             <DataCard title="Commercial & Payment Terms" icon={IndianRupee}>
               <PropertyGrid columns={3}>
-                <PropertyItem label="Payment Terms" value={paymentTerms} />
-                <PropertyItem label="Delivery Terms" value={deliveryTerms} />
-                <PropertyItem label="Contract Period" value={firstPresent(terms.contractPeriod, terms.projectDuration, projectDuration)} />
-                <PropertyItem label="Terms & Conditions" value={terms.termsAndConditions || terms.terms || payload.terms} fullWidth />
-                <PropertyItem label="Eligibility Criteria" value={terms.eligibilityCriteria || basics.eligibilityCriteria || payload.eligibility} fullWidth />
+                {/* Payment Terms and Delivery Terms commented out as they already appear in Terms & Conditions */}
+                {/* <PropertyItem label="Payment Terms" value={paymentTerms} /> */}
+                {/* <PropertyItem label="Delivery Terms" value={deliveryTerms} /> */}
+                {/* Contract Period commented out / hidden on buyer side */}
+                {!isBuyerSide && (
+                  <PropertyItem label="Contract Period" value={firstPresent(terms.contractPeriod, terms.projectDuration, projectDuration)} />
+                )}
+                {/* Retention Amount & Security Deposit commented out / hidden on buyer side */}
+                {/* Warranty Terms strictly commented out / hidden on buyer side in open tender */}
+                <PropertyItem label="Terms & Conditions" value={cleanBuyerTerms(terms.termsAndConditions || terms.terms || payload.terms)} fullWidth />
+                <PropertyItem label="Eligibility Criteria" value={cleanBuyerTerms(terms.eligibilityCriteria || basics.eligibilityCriteria || payload.eligibility)} fullWidth />
               </PropertyGrid>
             </DataCard>
 
@@ -2720,6 +3577,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               data={consigneeDetails}
               deliveryLocation={deliveryLocation}
               deliveryTerms={deliveryTerms}
+              isBuyerSide={isBuyerSide}
+              isBuyerRfq={isBuyerRfq}
             />
           </div>
         )}
@@ -2731,7 +3590,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
                 <PropertyGrid columns={4}>
                   <PropertyItem label="Evaluation Method" value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')} highlight />
-                  <PropertyItem label="Require Demo" value={formatPrimitiveValue(requireDemo)} />
+                  {requireDemo && requireDemo !== 'No' && <PropertyItem label="Require Demo" value={formatPrimitiveValue(requireDemo)} />}
                   {hasDetailData(qcbsRatio) && <PropertyItem label="QCBS Ratio" value={qcbsRatio} />}
                   {hasDetailData(passingScore) && <PropertyItem label="Passing Score" value={passingScore} />}
                 </PropertyGrid>
@@ -2755,9 +3614,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               <div className="space-y-5">
                 <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
                   <PropertyGrid columns={3}>
-                    <PropertyItem label="Selection Mode" value={payload.selectionMode || rules.selectionMode || 'Open'} />
-                    <PropertyItem label="Invite Count" value={payload.inviteCount !== undefined ? payload.inviteCount : '0'} />
-                    <PropertyItem label="Workflow" value={payload.workflow || 'Finance + Procurement'} />
+                    <PropertyItem label="Selection Mode" value={vendors.selection || payload.selectionMode || rules.selectionMode || 'Open'} />
+                    <PropertyItem label="Invite Count" value={String(effectiveInviteCount)} />
+                    <PropertyItem label="Workflow" value={approval.workflow || payload.workflow || 'Finance + Procurement'} />
                   </PropertyGrid>
                 </div>
 
@@ -2768,17 +3627,17 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   </h3>
                   <PolicyRulesMatrix
                     rules={[
-                      { label: 'MSME Preference', value: payload.msmePreference !== undefined ? (payload.msmePreference ? 'Yes' : 'No') : 'Yes' },
-                      { label: 'Exclude Blacklisted', value: payload.excludeBlacklisted !== undefined ? (payload.excludeBlacklisted ? 'Yes' : 'No') : 'Yes' },
-                      { label: 'Local Vendor Preference', value: payload.localVendorPreference !== undefined ? (payload.localVendorPreference ? 'Yes' : 'No') : 'Yes' },
+                      { label: 'MSME Preference', value: (vendors.msmePreference !== undefined ? vendors.msmePreference : payload.msmePreference) !== undefined ? ((vendors.msmePreference ?? payload.msmePreference) ? 'Yes' : 'No') : 'Yes' },
+                      { label: 'Exclude Blacklisted', value: (vendors.excludeBlacklisted !== undefined ? vendors.excludeBlacklisted : payload.excludeBlacklisted) !== undefined ? ((vendors.excludeBlacklisted ?? payload.excludeBlacklisted) ? 'Yes' : 'No') : 'Yes' },
+                      { label: 'Local Vendor Preference', value: (vendors.localVendorPreference !== undefined ? vendors.localVendorPreference : payload.localVendorPreference) !== undefined ? ((vendors.localVendorPreference ?? payload.localVendorPreference) ? 'Yes' : 'No') : 'Yes' },
                     ]}
                   />
                 </div>
 
-                {payload.approvalNotes && (
+                {(approval.notes || payload.approvalNotes) && isBuyerOrAdmin && (
                   <div className="rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Approval Notes:</span>
-                    <p className="text-xs font-semibold text-slate-700">{payload.approvalNotes}</p>
+                    <p className="text-xs font-semibold text-slate-700">{approval.notes || payload.approvalNotes}</p>
                   </div>
                 )}
               </div>
@@ -2794,13 +3653,15 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-black text-slate-900 tracking-tight">Seller Proposals & Submitted Quotations</h3>
+                      <h3 className="text-sm font-black text-slate-900 tracking-tight">{isRfqType ? 'Seller Submitted Quotations' : 'Seller Proposals & Submitted Quotations'}</h3>
                       <span className="rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black text-blue-700">
-                        {submittedParticipations.length} {submittedParticipations.length === 1 ? 'Quotation' : 'Quotations'} Received
+                        {submittedParticipations.length} {submittedParticipations.length === 1 ? (isRfqType ? 'Quotation' : 'Proposal') : (isRfqType ? 'Quotations' : 'Proposals')} Received
                       </span>
                     </div>
                     <p className="text-xs font-medium text-slate-500 mt-0.5">
-                      Review seller proposal details, financial quotes, line item rates, and attached technical specifications.
+                      {isRfqType
+                        ? 'Review seller quotation details, financial quotes, line item rates, and attached technical specifications.'
+                        : 'Review seller proposal details, financial quotes, line item rates, and attached technical specifications.'}
                     </p>
                   </div>
 
@@ -2825,9 +3686,11 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-2">
                       <Users className="h-5 w-5" />
                     </div>
-                    <h4 className="text-xs font-extrabold text-slate-700">No seller quotations submitted yet</h4>
+                    <h4 className="text-xs font-extrabold text-slate-700">{isRfqType ? 'No seller quotations submitted yet' : 'No seller proposals submitted yet'}</h4>
                     <p className="text-[11px] font-medium text-slate-400 max-w-sm mt-0.5">
-                      As soon as suppliers submit their technical and financial proposals for this procurement, their quotations will appear here for your review.
+                      {isRfqType
+                        ? 'As soon as suppliers submit their quotations for this RFQ, their responses will appear here for your review.'
+                        : 'As soon as suppliers submit their technical and financial proposals for this procurement, their quotations will appear here for your review.'}
                     </p>
                   </div>
                 ) : (
@@ -3022,6 +3885,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         </div>
       </div>
     </div>
+    </BuyerSideContext.Provider>
   );
 }
 

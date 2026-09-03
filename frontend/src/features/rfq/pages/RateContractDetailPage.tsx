@@ -254,7 +254,13 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     allowReverseAuction: bid.allowReverseAuction,
     isEmdRequired: bid.isEmdRequired,
     emdAmount: bid.emdAmount,
-    evaluationMethod: bid.evaluationMethod,
+    evaluationMethod: [
+      bid.technicalPacket?.evaluation?.method,
+      bid.technicalPacket?.evaluation?.evaluationMethod,
+      bid.technicalPacket?.evaluationMethod,
+      bid.technicalPacket?.rules?.evaluationMethod,
+      bid.evaluationMethod,
+    ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) || bid.evaluationMethod,
     // Preserve top-level date fields
     startDate: bid.startDate,
     endDate: bid.endDate,
@@ -659,7 +665,18 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       }))}
       requiredDocuments={reqDocsList.length ? reqDocsList : defaultRcReqDocs}
       items={itemsList}
-      evaluationMethod={rcData.evaluationMethod || 'Rate Contract L1'}
+      evaluationMethod={
+        [
+          payload.evaluation?.method,
+          payload.evaluation?.evaluationMethod,
+          payload.evaluationMethod,
+          payload.rules?.evaluationMethod,
+          reqObj?.payload?.evaluation?.method,
+          rcData.evaluationMethod,
+        ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
+        rcData.evaluationMethod ||
+        'Rate Contract L1'
+      }
       participations={bid?.participations || []}
       participantsCount={bid?.participations?.length || 0}
       hasSubmittedProposal={isRateQuotationSubmitted}

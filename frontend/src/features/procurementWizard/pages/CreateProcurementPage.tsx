@@ -1141,11 +1141,25 @@ export default function CreateProcurementPage() {
             email: internalPayload.email || email,
             mobile: internalPayload.mobile || mobile,
           },
-          serviceDetails: { ...base.serviceDetails, ...(payload.serviceDetails || {}) },
-          vendors: { ...base.vendors, ...(payload.vendors || {}) },
+          serviceDetails: {
+            ...base.serviceDetails,
+            ...(payload.serviceDetails || {}),
+            serviceTitle: payload.serviceDetails?.serviceTitle || payload.basics?.title || res.title || base.serviceDetails.serviceTitle || '',
+          },
+          vendors: {
+            ...base.vendors,
+            ...(payload.vendors || {}),
+            inviteCount: Array.isArray(payload.vendors?.invitedSellers)
+              ? Math.max(payload.vendors.invitedSellers.length, Number(payload.vendors?.inviteCount) || 0)
+              : (Number(payload.vendors?.inviteCount) || 0)
+          },
           schedule: { ...base.schedule, ...(payload.schedule || {}) },
           terms: { ...base.terms, ...(payload.terms || {}) },
-          evaluation: { ...base.evaluation, ...(payload.evaluation || {}) },
+          evaluation: {
+            ...base.evaluation,
+            ...(payload.evaluation || {}),
+            method: payload.evaluation?.method || payload.evaluationMethod || payload.rules?.evaluationMethod || payload.evaluation?.evaluationMethod || base.evaluation.method
+          },
           approval: { ...base.approval, ...(payload.approval || {}) },
           auctionConfig: {
             ...base.auctionConfig,
@@ -1238,6 +1252,8 @@ export default function CreateProcurementPage() {
       }
       list.push({ label: 'Total BOQ quantity must be greater than 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     } else if (d.basics.whatAreYouBuying === 'Service') {
+      const serviceTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
+      list.push({ label: 'Service Contract Title is required', ok: serviceTitle.length > 0, severity: 'error', stepIdx: 3 });
       list.push({ label: 'Service Contract SOW is required (min 10 chars)', ok: d.serviceDetails.scopeOfWork.trim().length >= 10, severity: 'error', stepIdx: 3 });
       list.push({ label: 'Service Deliverables list is required (min 5 chars)', ok: d.serviceDetails.deliverables.trim().length >= 5, severity: 'error', stepIdx: 3 });
       list.push({ label: 'Service Duration is required', ok: d.serviceDetails.duration.trim().length > 0, severity: 'error', stepIdx: 3 });
@@ -1384,7 +1400,8 @@ export default function CreateProcurementPage() {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) return false;
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) return false;
       } else if (d.basics.whatAreYouBuying === 'Service') {
-        if (!d.serviceDetails.serviceTitle.trim()) return false;
+        const title = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
+        if (!title) return false;
         if (d.serviceDetails.scopeOfWork.trim().length < 10) return false;
         if (d.serviceDetails.deliverables.trim().length < 5) return false;
         if (!d.serviceDetails.duration.trim()) return false;
@@ -1590,9 +1607,13 @@ export default function CreateProcurementPage() {
           return false;
         }
       } else if (d.basics.whatAreYouBuying === 'Service') {
-        if (!d.serviceDetails.serviceTitle.trim()) {
+        const effectiveTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
+        if (!effectiveTitle) {
           toast.error('Service Contract Title is required.');
           return false;
+        }
+        if (!d.serviceDetails.serviceTitle?.trim()) {
+          d.serviceDetails.serviceTitle = effectiveTitle;
         }
         if (d.serviceDetails.scopeOfWork.trim().length < 10) {
           toast.error('Scope of Work is required (min 10 chars).');
@@ -2450,7 +2471,19 @@ function BasicsStepForm({
         <Field label="Procurement title" required>
           <input
             value={draft.basics.title}
-            onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, title: e.target.value } }))}
+            onChange={e => {
+              const val = e.target.value;
+              updateDraft(c => ({
+                ...c,
+                basics: { ...c.basics, title: val },
+                serviceDetails: {
+                  ...c.serviceDetails,
+                  serviceTitle: (!c.serviceDetails.serviceTitle || c.serviceDetails.serviceTitle === c.basics.title)
+                    ? val
+                    : c.serviceDetails.serviceTitle
+                }
+              }));
+            }}
             className={inputClass}
             placeholder="Office computers, AMC maintenance, raw supply..."
           />
@@ -4154,6 +4187,12 @@ function ItemsDetailsForm({
     }));
   };
 
+  useEffect(() => {
+    if (whatBuying === 'Service' && !draft.serviceDetails.serviceTitle?.trim() && draft.basics.title?.trim()) {
+      updateService('serviceTitle', draft.basics.title.trim());
+    }
+  }, [whatBuying, draft.basics.title, draft.serviceDetails.serviceTitle]);
+
   const handleBOQUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -4338,6 +4377,15 @@ function ItemsDetailsForm({
       </div>
 
       <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+        <Field label="Service Contract Title" required className="sm:col-span-2">
+          <input
+            value={draft.serviceDetails.serviceTitle || draft.basics.title || ''}
+            onChange={e => updateService('serviceTitle', e.target.value)}
+            className={inputClass}
+            placeholder="e.g. Master Service Agreement for Facility Management, Annual Maintenance Contract..."
+          />
+        </Field>
+
         <Field label="Scope of Work (SOW)" required className="sm:col-span-2">
           <textarea
             value={draft.serviceDetails.scopeOfWork}
@@ -4872,6 +4920,7 @@ function VendorsStepForm({
         vendors: {
           ...current.vendors,
           invitedSellers: nextInvites,
+          inviteCount: nextInvites.length,
           selectedSellerId: nextInvites[0] || null,
           selectedSellerName: nextInvites[0] ? name : '',
         }
@@ -4912,7 +4961,7 @@ function VendorsStepForm({
               <option value="Open">Open Advertised / Public Sourcing</option>
               <option value="Selected">Invite selected verified suppliers pool</option>
               <option value="Category">Invite category-matched registered vendors</option>
-              <option value="Past">Invite prior order vendors</option>
+              {/* <option value="Past">Invite prior order vendors</option> */}
             </select>
           )}
         </Field>
@@ -5909,106 +5958,41 @@ function CommercialTermsForm({
           </div>
         </div>
 
-        {/* Compliance Fees card & Document Cost Fee commented out completely as requested */}
-        {/*
-        <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 mb-2">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Compliance Fees</h3>
+        {/* Compliance & Penalty Terms card */}
+        <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 mb-2">
+              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Contract Penalty Clause</h3>
+            </div>
+
+            {/* Document cost fee commented out completely as requested */}
+            {/*
+            <Field label="Document cost fee (INR)">
+              <input
+                type="number"
+                value={draft.terms.documentFee || ''}
+                onChange={e => updateTerms('documentFee', Number(e.target.value || 0))}
+                className={inputClass}
+                placeholder="0"
+              />
+            </Field>
+            */}
+
+            <Field label="Late Delivery (LD) Penalty Clause" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
+              <input
+                value={draft.terms.penaltyClause}
+                onChange={e => updateTerms('penaltyClause', e.target.value)}
+                className={controlClass(fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.'))}
+                placeholder="e.g. 0.5% per week of delay up to a maximum of 10%"
+              />
+            </Field>
+            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+              Specify the standard liquidated damages or penalty clause applicable in case of delays in delivery or completion.
+            </p>
           </div>
-
-
-          <Field label="Document cost fee (INR)">
-            <input
-              type="number"
-              value={draft.terms.documentFee || ''}
-              onChange={e => updateTerms('documentFee', Number(e.target.value || 0))}
-              className={inputClass}
-              placeholder="0"
-            />
-          </Field>
-        </div>
-        */}
-
-          {/* EMD flow commented out completely as requested */}
-          {/* <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5">
-                <input
-                  type="checkbox"
-                  checked={draft.terms.emdRequired}
-                  onChange={e => updateTerms('emdRequired', e.target.checked)}
-                  className="h-4 w-4 rounded accent-[#12335f]"
-                />
-                <span>EMD deposit required?</span>
-              </label>
-
-              {draft.terms.emdRequired && (
-                <Field label="EMD Amount (INR)" required error={fieldError(showErrors && draft.terms.emdAmount <= 0, 'EMD amount must be greater than 0.')}>
-                  <input
-                    type="number"
-                    value={draft.terms.emdAmount || ''}
-                    onChange={e => updateTerms('emdAmount', Number(e.target.value || 0))}
-                    className={controlClass(fieldError(showErrors && draft.terms.emdAmount <= 0, 'EMD amount must be greater than 0.'))}
-                  />
-                </Field>
-              )}
-            </div>
-            <p className="text-[10px] text-slate-500 font-semibold leading-normal">
-              Earnest Money Deposit (Bid Security) ensures serious bidder participation.
-            </p>
-          </div> */}
-
-          {/* PBG Guarantee flow commented out completely as requested */}
-          {/* <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none mt-3.5 flex-shrink-0">
-                <input
-                  type="checkbox"
-                  checked={draft.terms.pbgRequired}
-                  onChange={e => updateTerms('pbgRequired', e.target.checked)}
-                  className="h-4 w-4 rounded accent-[#12335f]"
-                />
-                <span>PBG Guarantee?</span>
-              </label>
-
-              <div className="flex flex-col gap-2">
-                {draft.terms.pbgRequired && (
-                  <Field label="PBG Amount / Performance Security (INR)" required error={fieldError(showErrors && draft.terms.securityDeposit <= 0, 'PBG amount must be greater than 0.')}>
-                    <input
-                      type="number"
-                      value={draft.terms.securityDeposit || ''}
-                      onChange={e => updateTerms('securityDeposit', Number(e.target.value || 0))}
-                      className={controlClass(fieldError(showErrors && draft.terms.securityDeposit <= 0, 'PBG amount must be greater than 0.'))}
-                      placeholder="0"
-                    />
-                  </Field>
-                )}
-              </div>
-            </div>
-            <p className="text-[10px] text-slate-500 font-semibold leading-normal">
-              Performance Bank Guarantee secures contract delivery and warranty performance.
-            </p>
-          </div> */}
-
-          <Field label="Document cost fee (INR)">
-            <input
-              type="number"
-              value={draft.terms.documentFee || ''}
-              onChange={e => updateTerms('documentFee', Number(e.target.value || 0))}
-              className={inputClass}
-              placeholder="0"
-            />
-          </Field>
-
-          <Field label="Late Delivery (LD) Penalty Clause" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
-            <input
-              value={draft.terms.penaltyClause}
-              onChange={e => updateTerms('penaltyClause', e.target.value)}
-              className={controlClass(fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.'))}
-            />
-          </Field>
         </div>
       </div>
+    </div>
   );
 }
 
@@ -6036,15 +6020,22 @@ function DocumentsStepForm({
     }));
   };
 
-  const handleAddCustomDoc = (name: string, required: boolean) => {
+  const handleAddCustomDoc = (name: string, required: boolean, instructions?: string) => {
     updateDraft(c => ({
       ...c,
       requiredDocs: [
         ...c.requiredDocs,
-        { id: makeId(), name, required, fileType: 'pdf', maxSize: 5, instructions: 'Additional custom document.' }
+        { id: makeId(), name, required, fileType: 'pdf', maxSize: 5, instructions: instructions?.trim() || 'Additional custom document.' }
       ]
     }));
     toast.success('Custom document added to checklist');
+  };
+
+  const handleUpdateDocInstructions = (id: string, instructions: string) => {
+    updateDraft(c => ({
+      ...c,
+      requiredDocs: c.requiredDocs.map(d => d.id === id ? { ...d, instructions } : d)
+    }));
   };
 
   const handleUploadFile = async (id: string, file: File) => {
@@ -6085,6 +6076,7 @@ function DocumentsStepForm({
       onToggleRequired={handleToggleDocRequired}
       onRemove={handleRemoveDoc}
       onAddCustomDoc={handleAddCustomDoc}
+      onUpdateInstructions={handleUpdateDocInstructions}
       onUploadFile={handleUploadFile}
       onRemoveFile={handleRemoveFile}
     />
@@ -6440,7 +6432,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
         ? draft.items[0].specificationFileName 
         : undefined)), 'attached_doc.pdf'),
     fileAssetId: doc.fileAssetId || (doc.name.toLowerCase().includes('boq') ? draft.boqFileAssetId : null),
-    required: doc.required
+    required: doc.required,
+    instructions: doc.instructions
   }));
 
   // Map rules and timelines matching backend validator nested structures
@@ -6527,6 +6520,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     })),
   } : null;
 
+  const chosenEvaluationMethod = draft.evaluation.method || 'L1 total value';
+  tender.evaluationMethod = chosenEvaluationMethod;
+
   const rules = {
     // EMD flow commented out as requested
     // emdRequired: draft.terms.emdRequired,
@@ -6536,7 +6532,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     performanceSecurity: draft.terms.pbgRequired,
     startPrice: auctionConfigPayload?.startingBidPrice ?? draft.basics.estimatedValue ?? 0,
     minimumDecrement: auctionConfigPayload?.minimumBidDecrement ?? 0,
-    auctionConfig: auctionConfigPayload
+    auctionConfig: auctionConfigPayload,
+    evaluationMethod: chosenEvaluationMethod
   };
 
   // Run suggestion engine to capture recommendation result
@@ -6557,6 +6554,16 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const payloadJson = {
     ...draft,
+    serviceDetails: {
+      ...draft.serviceDetails,
+      serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),
+    },
+    evaluationMethod: chosenEvaluationMethod,
+    evaluation: {
+      ...draft.evaluation,
+      method: chosenEvaluationMethod,
+      evaluationMethod: chosenEvaluationMethod,
+    },
     limitedTenderJustification: draft.limitedTenderJustification || draft.basics.justification || draft.internal.justification || '',
     rfqType: draft.rfqType,
     items: draft.basics.whatAreYouBuying === 'BOQ' ? mappedItems : draft.items,
@@ -6569,7 +6576,13 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     tender,
     rules,
     basics,
-    vendors: draft.vendors,
+    vendors: {
+      ...draft.vendors,
+      invitedSellers: draft.vendors.invitedSellers || [],
+      inviteCount: Array.isArray(draft.vendors.invitedSellers) && draft.vendors.invitedSellers.length > 0
+        ? draft.vendors.invitedSellers.length
+        : (Number(draft.vendors.inviteCount) || 0)
+    },
     auctionConfig: auctionConfigPayload,
     rateContractConfig: rateContractConfigPayload,
     rateContract: rateContractConfigPayload
@@ -6588,6 +6601,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     draftStep,
     workflowStatus: 'DRAFT',
     approvalStatus: draft.approval?.workflow || 'DRAFT',
+    evaluationMethod: chosenEvaluationMethod,
     payload: payloadJson,
     items: mappedItems
   };

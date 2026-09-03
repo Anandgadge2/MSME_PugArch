@@ -2,5 +2,7 @@
 export const ROLES = {
   ADMIN: 'admin',
   BUYER: 'buyer',
-  SELLER: 'seller'
+  SELLER: 'seller',
+  SHG: 'shg'
 } as const;
+

@@ -1475,7 +1475,17 @@ function DraftDetailView({
       boqTable={boqTable}
       serviceDetails={serviceDetails}
       consigneeDetails={consigneeDetails}
-      evaluationMethod={evaluation.method || tender.evaluationMethod || 'L1 Evaluation'}
+      evaluationMethod={
+        [
+          evaluation.method,
+          evaluation.evaluationMethod,
+          tender.evaluationMethod,
+        ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
+        evaluation.method ||
+        evaluation.evaluationMethod ||
+        tender.evaluationMethod ||
+        'L1 Evaluation'
+      }
       emdAmount={terms.emdAmount || basics.emdAmount || 0}
       isEmdRequired={Boolean(terms.emdRequired || basics.emdRequired)}
       backRoute="/buyer/procurement/drafts"

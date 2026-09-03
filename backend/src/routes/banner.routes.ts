@@ -49,7 +49,7 @@ const bannerFieldsSchema = z.object({
   targetUrl: z.string().trim().max(1000).optional(),
   ctaText: z.string().trim().max(100).optional(),
   ctaLink: z.string().trim().max(1000).optional(),
-  bannerType: z.enum(['DEFAULT_ADMIN', 'TOP_BUYER_PROMOTION', 'TOP_SELLER_PROMOTION', 'ANNOUNCEMENT']).default('DEFAULT_ADMIN'),
+  bannerType: z.enum(['DEFAULT_ADMIN', 'TOP_BUYER_PROMOTION', 'TOP_SELLER_PROMOTION', 'TOP_SHG_PROMOTION', 'ANNOUNCEMENT']).default('DEFAULT_ADMIN'),
   status: z.enum(['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'HIDDEN']).optional(),
   startAt: z.coerce.date().optional(),
   endAt: z.coerce.date().optional(),
@@ -67,7 +67,7 @@ const requireBannerImage = <T extends z.ZodTypeAny>(schema: T) => schema.refine(
 const bannerInputSchema = requireBannerImage(bannerFieldsSchema);
 
 const orgBannerInputSchema = requireBannerImage(bannerFieldsSchema.omit({ bannerType: true, status: true, priority: true }).extend({
-  bannerType: z.enum(['TOP_BUYER_PROMOTION', 'TOP_SELLER_PROMOTION']).optional()
+  bannerType: z.enum(['TOP_BUYER_PROMOTION', 'TOP_SELLER_PROMOTION', 'TOP_SHG_PROMOTION']).optional()
 }));
 
 const rejectSchema = z.object({ reason: z.string().trim().min(5).max(500) });
@@ -77,7 +77,7 @@ const rankingQuerySchema = z.object({
 });
 const grantSchema = z.object({
   organizationId: z.coerce.number().int().positive(),
-  eligibilityType: z.enum(['TOP_BUYER', 'TOP_SELLER', 'MANUAL']).default('MANUAL'),
+  eligibilityType: z.enum(['TOP_BUYER', 'TOP_SELLER', 'TOP_SHG', 'MANUAL']).default('MANUAL'),
   month: z.coerce.number().int().min(1).max(12),
   year: z.coerce.number().int().min(2020).max(2100),
   expiresAt: z.coerce.date().optional()
@@ -214,7 +214,7 @@ router.post('/my-org/banner-upload', authenticate, authorize('buyer', 'seller', 
         documentId: payload.documentId || null,
         targetUrl: payload.targetUrl || null,
         ctaLink: payload.targetUrl || null,
-        bannerType: payload.bannerType || (eligibility?.eligibilityType === 'TOP_SELLER' ? 'TOP_SELLER_PROMOTION' : 'TOP_BUYER_PROMOTION'),
+        bannerType: payload.bannerType || (eligibility?.eligibilityType === 'TOP_SELLER' ? 'TOP_SELLER_PROMOTION' : eligibility?.eligibilityType === 'TOP_SHG' ? 'TOP_SHG_PROMOTION' : 'TOP_BUYER_PROMOTION'),
         status: 'PENDING_APPROVAL',
         startAt,
         endAt,
@@ -380,8 +380,22 @@ const computeRankings = async (month: number, year: number, adminUserId?: number
       payee: { select: { organizationId: true } }
     }
   });
+
+  const payeeOrgIds = Array.from(new Set(payments.map(p => Number(p.payee?.organizationId)).filter(Boolean)));
+  const payeeOrgs = payeeOrgIds.length > 0 ? await db.organization.findMany({
+    where: { id: { in: payeeOrgIds } },
+    select: { id: true, organizationType: true, shgProfiles: { select: { id: true } } }
+  }) : [];
+  const shgOrgIdSet = new Set(
+    payeeOrgs
+      .filter((o: any) => o.organizationType === 'SHG' || Boolean(o.shgProfiles))
+      .map((o: any) => o.id)
+  );
+
   const buyerTotals = new Map<number, { total: number; count: number }>();
   const sellerTotals = new Map<number, { total: number; count: number }>();
+  const shgTotals = new Map<number, { total: number; count: number }>();
+
   for (const payment of payments) {
     const amount = Number(payment.amount || 0);
     const buyerOrgId = Number(payment.payer?.organizationId || 0);
@@ -391,18 +405,24 @@ const computeRankings = async (month: number, year: number, adminUserId?: number
       buyerTotals.set(buyerOrgId, { total: current.total + amount, count: current.count + 1 });
     }
     if (sellerOrgId) {
-      const current = sellerTotals.get(sellerOrgId) || { total: 0, count: 0 };
-      sellerTotals.set(sellerOrgId, { total: current.total + amount, count: current.count + 1 });
+      if (shgOrgIdSet.has(sellerOrgId)) {
+        const current = shgTotals.get(sellerOrgId) || { total: 0, count: 0 };
+        shgTotals.set(sellerOrgId, { total: current.total + amount, count: current.count + 1 });
+      } else {
+        const current = sellerTotals.get(sellerOrgId) || { total: 0, count: 0 };
+        sellerTotals.set(sellerOrgId, { total: current.total + amount, count: current.count + 1 });
+      }
     }
   }
-  const persist = async (type: 'BUYER' | 'SELLER', rows: Array<[number, { total: number; count: number }]>) => {
+
+  const persist = async (type: 'BUYER' | 'SELLER' | 'SHG', rows: Array<[number, { total: number; count: number }]>) => {
     const ranked = rows.sort((a, b) => b[1].total - a[1].total).map(([organizationId, value], index) => ({ organizationId, value, rank: index + 1 }));
     for (const row of ranked) {
       const rank = await db.organizationMonthlyRank.upsert({
         where: { organizationId_organizationType_month_year: { organizationId: row.organizationId, organizationType: type, month, year } },
         update: {
           totalPurchaseValue: type === 'BUYER' ? row.value.total : 0,
-          totalSalesValue: type === 'SELLER' ? row.value.total : 0,
+          totalSalesValue: type !== 'BUYER' ? row.value.total : 0,
           orderCount: row.value.count,
           rank: row.rank,
           computedAt: new Date()
@@ -413,26 +433,27 @@ const computeRankings = async (month: number, year: number, adminUserId?: number
           month,
           year,
           totalPurchaseValue: type === 'BUYER' ? row.value.total : 0,
-          totalSalesValue: type === 'SELLER' ? row.value.total : 0,
+          totalSalesValue: type !== 'BUYER' ? row.value.total : 0,
           orderCount: row.value.count,
           rank: row.rank
         }
       });
       if (row.rank <= 3) {
+        const eligibilityType = type === 'BUYER' ? 'TOP_BUYER' : type === 'SHG' ? 'TOP_SHG' : 'TOP_SELLER';
         await db.bannerEligibility.upsert({
           where: {
             organizationId_month_year_eligibilityType: {
               organizationId: row.organizationId,
               month,
               year,
-              eligibilityType: type === 'BUYER' ? 'TOP_BUYER' : 'TOP_SELLER'
+              eligibilityType
             }
           },
           update: { isEligible: true, rankId: rank.id, revokedByUserId: null, expiresAt: new Date(Date.UTC(year, month, 15)) },
           create: {
             organizationId: row.organizationId,
             rankId: rank.id,
-            eligibilityType: type === 'BUYER' ? 'TOP_BUYER' : 'TOP_SELLER',
+            eligibilityType,
             month,
             year,
             grantedByUserId: adminUserId || null,
@@ -443,11 +464,45 @@ const computeRankings = async (month: number, year: number, adminUserId?: number
     }
     return ranked;
   };
+
   return {
     buyers: await persist('BUYER', Array.from(buyerTotals.entries())),
-    sellers: await persist('SELLER', Array.from(sellerTotals.entries()))
+    sellers: await persist('SELLER', Array.from(sellerTotals.entries())),
+    shgs: await persist('SHG', Array.from(shgTotals.entries()))
   };
 };
+
+router.get('/admin/banner-eligibility/organizations', authenticate, authorize('admin', 'master_admin'), async (_req: AuthRequest, res: Response) => {
+  try {
+    const orgs = await db.organization.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        organizationName: true,
+        organizationType: true,
+        district: true,
+        state: true,
+        verificationStatus: true,
+        shgProfiles: { select: { id: true, shgType: true } }
+      },
+      orderBy: { organizationName: 'asc' }
+    });
+
+    const sanitized = orgs.map((o: any) => ({
+      id: o.id,
+      organizationName: o.organizationName,
+      organizationType: o.organizationType,
+      district: o.district,
+      state: o.state,
+      verificationStatus: o.verificationStatus,
+      isShg: o.organizationType === 'SHG' || Boolean(o.shgProfiles)
+    }));
+
+    return apiResponse.success(res, { organizations: maskSensitive(sanitized) });
+  } catch (error: any) {
+    return apiResponse.error(res, 500, 'Unable to load organizations', 'ORGS_LOAD_ERROR');
+  }
+});
 
 router.get('/admin/rankings/monthly', authenticate, authorize('admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
   try {
@@ -455,8 +510,100 @@ router.get('/admin/rankings/monthly', authenticate, authorize('admin', 'master_a
     const query = rankingQuerySchema.parse(req.query);
     const month = query.month || fallback.month;
     const year = query.year || fallback.year;
-    const rankings = await db.organizationMonthlyRank.findMany({ where: { month, year }, orderBy: [{ organizationType: 'asc' }, { rank: 'asc' }] });
-    return apiResponse.success(res, { month, year, rankings: maskSensitive(rankings) });
+    const rankings = await db.organizationMonthlyRank.findMany({
+      where: { month, year },
+      orderBy: [{ organizationType: 'asc' }, { rank: 'asc' }]
+    });
+
+    const orgIds = Array.from(new Set(rankings.map(r => r.organizationId)));
+    const orgs = orgIds.length > 0 ? await db.organization.findMany({
+      where: { id: { in: orgIds } },
+      select: {
+        id: true,
+        organizationName: true,
+        organizationType: true,
+        district: true,
+        state: true,
+        verificationStatus: true,
+        gstin: true,
+        udyamNumber: true,
+        shgProfiles: { select: { id: true, shgType: true } }
+      }
+    }) : [];
+    const orgMap = new Map<number, any>(orgs.map((o: any) => [o.id, o]));
+
+    const eligibilities = orgIds.length > 0 ? await db.bannerEligibility.findMany({
+      where: {
+        organizationId: { in: orgIds },
+        month,
+        year
+      }
+    }) : [];
+    const eligibilityMap = new Map<number, any>(eligibilities.map((e: any) => [e.organizationId, e]));
+
+    const banners = orgIds.length > 0 ? await db.marketplaceBanner.findMany({
+      where: {
+        uploadedByOrgId: { in: orgIds },
+        deletedAt: null
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        isActive: true,
+        uploadedByOrgId: true,
+        imageUrl: true,
+        documentId: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'desc' }
+    }) : [];
+    const bannerMap = new Map<number, any>();
+    for (const b of banners) {
+      if (!bannerMap.has(b.uploadedByOrgId)) {
+        bannerMap.set(b.uploadedByOrgId, {
+          ...b,
+          imageUrl: formatBannerImageUrl(b.imageUrl, b.documentId)
+        });
+      }
+    }
+
+    const enrichedRankings = rankings.map((r: any) => {
+      const org = orgMap.get(r.organizationId);
+      const elig = eligibilityMap.get(r.organizationId);
+      const banner = bannerMap.get(r.organizationId);
+
+      return {
+        ...r,
+        organization: org ? {
+          id: org.id,
+          organizationName: org.organizationName,
+          organizationType: org.organizationType,
+          district: org.district,
+          state: org.state,
+          verificationStatus: org.verificationStatus,
+          gstin: org.gstin,
+          udyamNumber: org.udyamNumber,
+          isShg: org.organizationType === 'SHG' || Boolean(org.shgProfiles)
+        } : null,
+        eligibility: elig ? {
+          id: elig.id,
+          isEligible: elig.isEligible,
+          eligibilityType: elig.eligibilityType,
+          usedAt: elig.usedAt,
+          expiresAt: elig.expiresAt
+        } : null,
+        banner: banner ? {
+          id: banner.id,
+          title: banner.title,
+          status: banner.status,
+          isActive: banner.isActive,
+          imageUrl: banner.imageUrl
+        } : null
+      };
+    });
+
+    return apiResponse.success(res, { month, year, rankings: maskSensitive(enrichedRankings) });
   } catch (error: any) {
     return apiResponse.error(res, 500, 'Unable to load monthly rankings', 'MONTHLY_RANKINGS_ERROR');
   }

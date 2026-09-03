@@ -837,7 +837,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
         toast.error('Please enter Organization Name');
         return;
       }
-      if (role === 'seller' && !isHerShg && !formData.udyamNumber) {
+      if (role === 'seller' && !formData.udyamNumber) {
         toast.error('Please enter Udyam Number');
         return;
       }
@@ -1455,7 +1455,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
                       <div className="space-y-2">
                         <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                          {isHerShg ? 'Udyam Number (Optional)' : 'Udyam Number *'} <Info className="h-3.5 w-3.5 text-slate-400" />
+                          Udyam Number * <Info className="h-3.5 w-3.5 text-slate-400" />
                         </label>
                         <Input
                           placeholder="e.g., UDYAM-MH-12-0123456"
@@ -1477,7 +1477,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">
                             {validateUdyam(formData.udyamNumber)}
                           </p>
-                        ) : !formData.udyamNumber && !isHerShg ? (
+                        ) : !formData.udyamNumber ? (
                           <p className="text-[10px] text-red-500 mt-1 font-medium tracking-tight">Please enter valid Udyam Number.</p>
                         ) : null}
                       </div>

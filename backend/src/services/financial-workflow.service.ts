@@ -4,7 +4,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { randomToken } from '../utils/crypto.js';
 import { maskSensitive } from '../utils/maskSensitive.js';
 import { quotedBidTotal } from '../utils/bidPricing.js';
-import { notifyPaymentReceiptEmail } from './invoice-pdf.service.js';
+import { notifyPaymentReceiptEmail, notifyPurchaseOrderCreated } from './invoice-pdf.service.js';
 
 type Actor = {
   id: number;
@@ -103,6 +103,8 @@ export const acceptBidAndGeneratePurchaseOrder = async (bidId: number, actor: Ac
     status: result.purchaseOrder.status,
     reused: result.reused
   });
+
+  notifyPurchaseOrderCreated(result.purchaseOrder.id).catch(() => undefined);
 
   return result;
 };

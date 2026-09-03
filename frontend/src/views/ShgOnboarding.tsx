@@ -21,12 +21,10 @@ const steps = [
 ];
 
 const requiredDocs = [
+  ['UDYAM_CERTIFICATE', 'Udyam Registration Certificate'],
   ['LEADER_KYC', 'Group Leader Aadhaar/KYC or digital verification proof'],
   ['BANK_PASSBOOK', 'Bank Passbook / Cancelled Cheque'],
   ['MEMBER_LIST', 'Member List'],
-  ['ADDRESS_PROOF', 'Address Proof'],
-  ['FORMATION_RESOLUTION', 'SHG Formation Resolution'],
-  ['AUTHORIZATION_LETTER', 'Authorization Letter'],
 ] as const;
 
 export default function ShgOnboarding({ section = 'onboarding' }: { section?: string }) {
@@ -322,7 +320,7 @@ function NativeShgOnboarding({ section = 'onboarding' }: { section?: string }) {
               <div className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-4">
                   <Select label="Document Type" value={documentDraft.documentType} onChange={e => setDocumentDraft(prev => ({ ...prev, documentType: e.target.value }))}>
-                    {[...requiredDocs.map(([type]) => type), 'REGISTRATION_CERTIFICATE', 'PAN_CARD', 'UDYAM_CERTIFICATE', 'GST_CERTIFICATE', 'NRLM_SRLM_CERTIFICATE', 'TRAINING_CERTIFICATE', 'PRODUCT_CATALOGUE', 'OTHER'].map(type => <option key={type}>{type}</option>)}
+                    {Array.from(new Set([...requiredDocs.map(([type]) => type), 'REGISTRATION_CERTIFICATE', 'ADDRESS_PROOF', 'FORMATION_RESOLUTION', 'AUTHORIZATION_LETTER', 'PAN_CARD', 'GST_CERTIFICATE', 'NRLM_SRLM_CERTIFICATE', 'TRAINING_CERTIFICATE', 'PRODUCT_CATALOGUE', 'OTHER'])).map(type => <option key={type}>{type}</option>)}
                   </Select>
                   <Input label="File Name" value={documentDraft.fileName} onChange={e => setDocumentDraft(prev => ({ ...prev, fileName: e.target.value }))} />
                   <Select label="MIME Type" value={documentDraft.mimeType} onChange={e => setDocumentDraft(prev => ({ ...prev, mimeType: e.target.value }))}><option value="application/pdf">PDF</option><option value="image/jpeg">JPG/JPEG</option><option value="image/png">PNG</option></Select>

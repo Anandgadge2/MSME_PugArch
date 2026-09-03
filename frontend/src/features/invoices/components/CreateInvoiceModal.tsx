@@ -104,8 +104,6 @@ export function CreateInvoiceModal({
   invoiceInterstate,
   onInvoiceInterstateChange,
 }: CreateInvoiceModalProps) {
-  if (!open) return null;
-
   // Live Financial Computations
   const numAmount = useMemo(() => {
     const parsed = parseFloat(invoiceAmount);
@@ -132,6 +130,8 @@ export function CreateInvoiceModal({
   const tdsAmount = useMemo(() => (numAmount * numTdsRate) / 100, [numAmount, numTdsRate]);
   const grossInvoiceTotal = useMemo(() => numAmount + gstAmount + otherTaxAmount, [numAmount, gstAmount, otherTaxAmount]);
   const netReceivable = useMemo(() => grossInvoiceTotal - tdsAmount, [grossInvoiceTotal, tdsAmount]);
+
+  if (!open) return null;
 
   const hasSelectedDocument = sourceType === 'po' ? Boolean(selectedPurchaseOrderId) : Boolean(selectedQuotationId);
 

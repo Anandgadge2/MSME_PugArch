@@ -2421,6 +2421,8 @@ model DeliveryDpExtension {
   @@index([deliveryTrackingId])
   @@index([purchaseOrderId])
   @@index([status])
+  @@index([requestedById])
+  @@index([respondedById])
 }
 
 model DeliveryTrackingEvent {
@@ -4799,6 +4801,7 @@ enum BannerType {
   DEFAULT_ADMIN
   TOP_BUYER_PROMOTION
   TOP_SELLER_PROMOTION
+  TOP_SHG_PROMOTION
   ANNOUNCEMENT
 }
 
@@ -4822,11 +4825,13 @@ enum BannerDisplayLocation {
 enum OrganizationRankType {
   BUYER
   SELLER
+  SHG
 }
 
 enum BannerEligibilityType {
   TOP_BUYER
   TOP_SELLER
+  TOP_SHG
   MANUAL
 }
 
