@@ -101,6 +101,10 @@ export interface ProcurementBid {
   version?: number;
   buyer?: any;
   buyerOrganization?: any;
+  invitations?: any[];
+  invitedCount?: number;
+  invitationsCount?: number;
+  invitedSellers?: any[];
 }
 
 export interface ProcurementBidDocument {

@@ -138,12 +138,32 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
 
   const participationsList = bid.participations || reqObj.participations || reqObj.responses || [];
 
+  const invitedSellersList =
+    bid.invitedSellers ||
+    payload?.vendors?.invitedSellers ||
+    reqObj?.invitedSellers ||
+    reqObj?.payload?.vendors?.invitedSellers ||
+    [];
+
+  const invitationsList = bid.invitations || reqObj?.invitations || [];
+
+  const computedInviteCount = Math.max(
+    Number(bid.invitedCount) || 0,
+    Number(bid.invitationsCount) || 0,
+    Array.isArray(invitationsList) ? invitationsList.length : 0,
+    Array.isArray(invitedSellersList) ? invitedSellersList.length : 0,
+    Number(payload?.vendors?.inviteCount) || 0
+  );
+
   return (
     <ProcurementDetailUnifiedView
       procurementType="LIMITED_TENDER"
       procurementLabel="Limited Tender"
       id={bid.id || reqObj.id || requestId}
       displayId={limitedTenderNumber}
+      invitedCount={computedInviteCount}
+      invitedSellers={invitedSellersList}
+      invitations={invitationsList}
       subject={title}
       status={bid.status || reqObj.status || 'OPEN'}
       buyerName={bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name}
@@ -172,7 +192,20 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
       payload={payload}
       documents={bid.documents || bid.bidDocuments || reqObj.documents || payload.documents || []}
       items={bid.items || payload.items || reqObj.items || payload.boqTable || []}
-      evaluationMethod={bid.evaluationMethod || payload.evaluationMethod || 'Selective Evaluation'}
+      evaluationMethod={
+        [
+          payload.evaluation?.method,
+          payload.evaluation?.evaluationMethod,
+          payload.evaluationMethod,
+          payload.rules?.evaluationMethod,
+          reqObj?.payload?.evaluation?.method,
+          bid.technicalPacket?.evaluation?.method,
+          bid.evaluationMethod,
+        ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
+        bid.evaluationMethod ||
+        payload.evaluationMethod ||
+        'Selective Evaluation'
+      }
       participations={participationsList}
       participantsCount={bid.participantsCount ?? participationsList.length}
       emdAmount={bid.emdAmount || reqObj.emdAmount || basics.emdAmount}

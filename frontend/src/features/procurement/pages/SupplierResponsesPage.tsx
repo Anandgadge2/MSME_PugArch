@@ -187,6 +187,17 @@ const CLOSING_FILTERS = [
 type SortKey = 'index' | 'type' | 'title' | 'status' | 'estimatedValue' | 'responses' | 'closingDate' | 'startDate';
 type SortDir = 'asc' | 'desc';
 
+const getBidResponseCount = (bid: any): number => {
+  if (typeof bid?.participantsCount === 'number') return bid.participantsCount;
+  if (Array.isArray(bid?.participations)) {
+    return bid.participations.filter((part: any) => {
+      const status = String(part.submissionStatus || part.status || '').toUpperCase();
+      return status !== 'DRAFT' && !part.isWithdrawn;
+    }).length;
+  }
+  return Number(bid?.responsesCount || 0);
+};
+
 export default function SupplierResponsesPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -264,9 +275,16 @@ export default function SupplierResponsesPage() {
         statusStr = 'Open';
       }
 
+      const legacySubmittedCount = Array.isArray(legacy?.participations)
+        ? legacy.participations.filter((part: any) => {
+            const status = String(part.submissionStatus || part.status || '').toUpperCase();
+            return status !== 'DRAFT' && !part.isWithdrawn;
+          }).length
+        : Number(legacy?.participantsCount || 0);
+
       const participantsCount = Math.max(
         Number(p.participantsCount || 0),
-        Number(legacy?.participantsCount || legacy?.participations?.length || 0)
+        legacySubmittedCount
       );
 
       return {
@@ -366,7 +384,7 @@ export default function SupplierResponsesPage() {
     const underEval = bids.filter(b => isStatusMatch(b.status, 'Under Evaluation')).length;
     const awarded = bids.filter(b => isStatusMatch(b.status, 'Awarded')).length;
     const closed = bids.filter(b => isStatusMatch(b.status, 'Closed')).length;
-    const totalParticipants = bids.reduce((s, b) => s + (b.participantsCount || b.participations?.length || b.responsesCount || 0), 0);
+    const totalParticipants = bids.reduce((s, b) => s + getBidResponseCount(b), 0);
     const totalValue = bids.reduce((s, b) => s + (b.estimatedValue || 0), 0);
     return { total, open, underEval, awarded, closed, totalParticipants, totalValue };
   }, [bids]);
@@ -419,7 +437,7 @@ export default function SupplierResponsesPage() {
       if (categoryFilter && bid.category !== categoryFilter) return false;
 
       // Response count filter
-      const respCount = Number(bid.participantsCount || bid.participations?.length || bid.responsesCount || 0);
+      const respCount = getBidResponseCount(bid);
       if (responseFilter === 'has_responses' && respCount <= 0) return false;
       if (responseFilter === 'no_responses' && respCount > 0) return false;
       if (responseFilter === 'multiple' && respCount < 2) return false;
@@ -494,8 +512,8 @@ export default function SupplierResponsesPage() {
           return (valA - valB) * dir;
         }
         case 'responses': {
-          const countA = Number(a.participantsCount || a.participations?.length || a.responsesCount || 0);
-          const countB = Number(b.participantsCount || b.participations?.length || b.responsesCount || 0);
+          const countA = getBidResponseCount(a);
+          const countB = getBidResponseCount(b);
           return (countA - countB) * dir;
         }
         case 'closingDate': {
@@ -919,7 +937,7 @@ export default function SupplierResponsesPage() {
                         {/* Responses */}
                         <td className="px-4 py-4">
                           {(() => {
-                            const count = bid.participantsCount || bid.participations?.length || bid.responsesCount || 0;
+                            const count = getBidResponseCount(bid);
                             return (
                               <span className={cn(
                                 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-black border transition-colors',
@@ -1021,7 +1039,7 @@ export default function SupplierResponsesPage() {
                         <div>
                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Responses</p>
                           <span className="text-xs font-extrabold text-slate-800 block mt-0.5">
-                            {bid.participantsCount || bid.participations?.length || bid.responsesCount || 0}
+                            {getBidResponseCount(bid)}
                           </span>
                         </div>
                         <div>

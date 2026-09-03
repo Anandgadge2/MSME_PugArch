@@ -523,6 +523,10 @@ export default function MyProcurementsPage() {
       const consolidated = getConsolidatedType(p);
       if (consolidated === 'OpenTender' || consolidated === 'Limited Tender') {
         route = `/tenders?tender=${p.id}`;
+      } else if (consolidated === 'RFQ' || methodLower === 'rfq') {
+        route = `/bids/${p.id}?type=RFQ`;
+      } else if (consolidated === 'RFP' || methodLower === 'rfp') {
+        route = `/bids/${p.id}?type=RFP`;
       } else {
         route = `/bids/${p.id}`;
       }
@@ -1711,20 +1715,45 @@ export function ProcurementDetailView({
           <div className="space-y-2 text-xs">
             <div className="bg-white/80 p-2 rounded-lg border border-purple-100/60 flex justify-between items-center">
               <span className="text-[10px] font-bold text-slate-400 uppercase">Method</span>
-              <span className="font-bold text-purple-950 text-xs">L1 Total Value</span>
-            </div>
-            <div className="flex justify-between items-center py-1 border-b border-slate-100 text-[11px]">
-              <span className="text-slate-500 font-medium">Technical Weight</span>
-              <span className="font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
-                70%
+              <span className="font-bold text-purple-950 text-xs">
+                {(() => {
+                  const raw = (p as any).evaluationMethod || (p as any).payload?.evaluation?.method || (p as any).payload?.evaluationMethod || (p as any).payload?.rules?.evaluationMethod;
+                  if (!raw) return 'L1 Total Value';
+                  const lower = String(raw).toLowerCase();
+                  if (lower.includes('qcbs') || lower.includes('quality and cost') || lower.includes('weighted technical')) return 'Quality and Cost Based Selection (QCBS)';
+                  if (lower.includes('item-wise') || lower.includes('item wise')) return 'Item-wise L1';
+                  if (lower.includes('package-wise') || lower.includes('package wise')) return 'Package-wise L1';
+                  if (lower.includes('technical qualification')) return 'Technical Qualification then L1';
+                  if (lower.includes('reverse auction')) return 'Reverse Auction Final Bid Rank';
+                  if (lower.includes('lowest landed cost')) return 'Lowest Landed Cost';
+                  if (lower === 'l1' || lower === 'l1 basis') return 'L1 Basis';
+                  return String(raw);
+                })()}
               </span>
             </div>
-            <div className="flex justify-between items-center py-1 text-[11px]">
-              <span className="text-slate-500 font-medium">Commercial Weight</span>
-              <span className="font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
-                30%
-              </span>
-            </div>
+            {String((p as any).evaluationMethod || (p as any).payload?.evaluation?.method || '').toLowerCase().includes('qcbs') ? (
+              <>
+                <div className="flex justify-between items-center py-1 border-b border-slate-100 text-[11px]">
+                  <span className="text-slate-500 font-medium">Technical Weight</span>
+                  <span className="font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
+                    {(p as any).payload?.evaluation?.techWeight ?? 70}%
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-1 text-[11px]">
+                  <span className="text-slate-500 font-medium">Commercial Weight</span>
+                  <span className="font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
+                    {(p as any).payload?.evaluation?.commWeight ?? 30}%
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-between items-center py-1 text-[11px]">
+                <span className="text-slate-500 font-medium">Selection Rule</span>
+                <span className="font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
+                  Lowest Landed Cost (L1)
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

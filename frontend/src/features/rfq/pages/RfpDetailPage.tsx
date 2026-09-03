@@ -9,6 +9,7 @@ import { Button } from '../../../components/ui/button';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import RfqDetailPage from './RfqDetailPage';
 import { toast } from 'sonner';
 
 function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
@@ -134,6 +135,33 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
 
   const title = bid.title || bid.subject || reqObj.title || basics.title || 'Request for Proposal';
   const rfpNumber = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber || bid.id || `RFP-${requestId}`;
+
+  const methodUpper = String(
+    bid.procurementType ||
+    bid.bidType ||
+    bid.procurementMethod ||
+    bid.sourcingMethod ||
+    reqObj.procurementMethod ||
+    reqObj.type ||
+    searchParams?.get('type') ||
+    ''
+  ).toUpperCase();
+  const descUpper = String(bid.description || reqObj.description || basics.description || '').toUpperCase();
+  const titleUpper = String(bid.title || reqObj.title || basics.title || '').toUpperCase();
+
+  const isActuallyRfq =
+    methodUpper.includes('RFQ') ||
+    methodUpper.includes('QUOTATION') ||
+    titleUpper.includes('RFQ') ||
+    titleUpper.includes('REQUEST FOR QUOTATION') ||
+    descUpper.includes('SOURCING METHOD: RFQ') ||
+    descUpper.includes('METHOD: RFQ') ||
+    String(rfpNumber).toUpperCase().startsWith('RFQ-');
+
+  if (isActuallyRfq && !methodUpper.includes('RFP')) {
+    return <RfqDetailPage initialData={initialData || bidData || reqData} />;
+  }
+
   const participationsList = bid.participations || reqObj.participations || reqObj.responses || [];
 
   const ownParticipation = participationsList.find(
@@ -214,7 +242,22 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       boqTable={payload.boqTable || payload.boq}
       serviceDetails={serviceDetails}
       consigneeDetails={payload.consigneeDetails}
-      evaluationMethod={bid.evaluationMethod || evaluation.method || payload.evaluationMethod || 'QCBS (Quality & Cost Based Selection)'}
+      evaluationMethod={
+        [
+          evaluation.method,
+          evaluation.evaluationMethod,
+          payload.evaluation?.method,
+          payload.evaluation?.evaluationMethod,
+          payload.evaluationMethod,
+          reqObj?.payload?.evaluation?.method,
+          bid.technicalPacket?.evaluation?.method,
+          bid.evaluationMethod,
+        ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
+        bid.evaluationMethod ||
+        evaluation.method ||
+        payload.evaluationMethod ||
+        'QCBS (Quality & Cost Based Selection)'
+      }
       participations={participationsList}
       participantsCount={bid.participantsCount ?? participationsList.length}
       hasSubmittedProposal={hasSubmittedProposal}

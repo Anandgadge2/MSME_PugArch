@@ -51,13 +51,23 @@ const createVersionedRouter = () => {
     await prisma.$queryRaw`SELECT 1`;
     checks.database = 'ok';
 
-    const coreModels = ['User', 'Tender', 'PaymentTransaction', 'EscrowAccount'];
-    for (const model of coreModels) {
+    const coreModels: Record<string, string> = {
+      User: 'user',
+      Tender: 'tender',
+      PaymentTransaction: 'paymentTransaction',
+      EscrowAccount: 'escrowAccount'
+    };
+    for (const [name, modelKey] of Object.entries(coreModels)) {
       try {
-        await (prisma as any)[model.toLowerCase()].count({ take: 1 });
-        checks.coreTables[model] = true;
+        const delegate = (prisma as any)[modelKey];
+        if (delegate && typeof delegate.count === 'function') {
+          await delegate.count({ take: 1 });
+          checks.coreTables[name] = true;
+        } else {
+          checks.coreTables[name] = false;
+        }
       } catch {
-        checks.coreTables[model] = false;
+        checks.coreTables[name] = false;
       }
     }
 

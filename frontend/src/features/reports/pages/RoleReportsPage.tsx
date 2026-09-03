@@ -17,7 +17,7 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
-import { BarChart3, Download, FileSpreadsheet, FileText, RefreshCw, Search, ShoppingCart, Truck, IndianRupee, Receipt } from 'lucide-react';
+import { BarChart3, FileSpreadsheet, FileText, RefreshCw, Search, ShoppingCart, Truck, IndianRupee, Receipt } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useAuth } from '../../../hooks/useAuth';
 import { getApi } from '../../shared/apiClient';
@@ -29,7 +29,7 @@ import { usePagination } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { formatDateTime } from '../../shared/format';
-import { downloadCsv, downloadJson } from '../../shared/exportUtils';
+import { downloadCsv } from '../../shared/exportUtils';
 import { ExcelEngine, type ExcelDocumentConfig } from '../../../lib/excelEngine';
 
 const COLORS = ['#12335f', '#0f766e', '#c86413', '#6366f1', '#dc2626', '#64748b'];
@@ -117,7 +117,7 @@ export default function RoleReportsPage() {
         createdAt: order.createdAt || '',
     }));
 
-    const handleExport = async (type: 'csv' | 'json' | 'print' | 'excel') => {
+    const handleExport = async (type: 'csv' | 'print' | 'excel') => {
         if (type === 'print') {
             const tableData = exportRows.map((row, index) => [
               String(index + 1),
@@ -238,12 +238,7 @@ export default function RoleReportsPage() {
                         <Button type="button" variant="outline" onClick={() => handleExport('excel')} className="h-10 gap-2 text-xs font-black uppercase bg-[#12335f] text-white hover:bg-[#0b2447] hover:text-white border-transparent">
                             <FileSpreadsheet className="h-4 w-4" /> Excel Report
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => handleExport('csv')} className="h-10 gap-2 text-xs font-black uppercase">
-                            <FileSpreadsheet className="h-4 w-4" /> CSV
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => handleExport('json')} className="h-10 gap-2 text-xs font-black uppercase">
-                            <Download className="h-4 w-4" /> JSON
-                        </Button>
+
                         <Button type="button" variant="outline" onClick={() => handleExport('print')} className="h-10 gap-2 text-xs font-black uppercase">
                             <FileText className="h-4 w-4" /> Print / PDF
                         </Button>

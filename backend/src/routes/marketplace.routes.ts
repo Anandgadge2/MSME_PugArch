@@ -10,6 +10,7 @@ import { verifyAccessToken } from '../services/token.service.js';
 import { longCache, shortCache } from '../middleware/httpCache.js';
 import { sha256 } from '../utils/crypto.js';
 import { formatRequirementNumber } from '../utils/refIdUtils.js';
+import { notifyPurchaseOrderCreated } from '../services/invoice-pdf.service.js';
 
 const db = prisma as any;
 const router = Router();
@@ -3150,11 +3151,16 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
         }
 
         const allTargetReqIds = Array.from(new Set([
-            ...candidateIds,
             linkedBuyerReq?.id,
             linkedLegacyReq?.id,
+            (linkedBid?.sourceModel === 'REQUIREMENT' || linkedBid?.sourceModel === 'BUYER_REQUIREMENT') && linkedBid?.sourceId ? Number(linkedBid.sourceId) : null,
+            Number((linkedBid?.technicalPacket as any)?.sourceRequirementId || (linkedBid?.technicalPacket as any)?.requirementId || 0) || null,
+            (!linkedBid && candidateIds.length) ? candidateIds[0] : null
+        ].filter(Boolean) as number[]));
+
+        const allTargetBidIds = Array.from(new Set([
             linkedBid?.id,
-            linkedBid?.sourceId ? Number(linkedBid.sourceId) : null
+            (candidateIds.length && linkedBid) ? candidateIds[0] : null
         ].filter(Boolean) as number[]));
 
         const allTargetReqNumbers = Array.from(new Set([
@@ -3194,10 +3200,11 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
         ]);
 
         // Fallback: If no responses in requirementResponse, check procurementBidParticipation table
-        if (responses.length === 0 && allTargetReqIds.length > 0) {
+        const candidateBidIds = allTargetBidIds.length > 0 ? allTargetBidIds : allTargetReqIds;
+        if (responses.length === 0 && candidateBidIds.length > 0) {
             const participations = await db.procurementBidParticipation.findMany({
                 where: {
-                    bidId: { in: allTargetReqIds },
+                    bidId: { in: candidateBidIds },
                     submissionStatus: { not: 'DRAFT' },
                     isWithdrawn: false
                 },
@@ -3290,6 +3297,7 @@ router.post('/buyer/requirements/:id/responses/:responseId/accept', authenticate
             return apiResponse.error(res, 404, 'Response not found', 'RESPONSE_NOT_FOUND');
         }
 
+        let createdPoId: number | undefined;
         await db.$transaction(async (tx: any) => {
             // Update the accepted response
             await tx.requirementResponse.update({
@@ -3390,7 +3398,15 @@ router.post('/buyer/requirements/:id/responses/:responseId/accept', authenticate
                     redirectUrl: `/buyer/orders`
                 }
             });
+
+            createdPoId = purchaseOrder.id;
         }, { timeout: 30000, maxWait: 10000 });
+
+        if (createdPoId) {
+            notifyPurchaseOrderCreated(createdPoId).catch(err => {
+                console.warn('[Marketplace] Failed to dispatch purchase order notification with PDF:', err);
+            });
+        }
 
         return ok(res, { success: true, message: 'Response accepted and PO generated successfully.' });
     } catch (error: any) {

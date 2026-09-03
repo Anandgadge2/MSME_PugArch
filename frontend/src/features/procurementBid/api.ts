@@ -421,7 +421,35 @@ export const normalizeBid = (raw: any): ProcurementBid => {
       fileAssetId: doc.fileAssetId,
       url: doc.fileUrl || doc.url,
     })),
-    technicalPacket: pkt ? { ...pkt, items } : { items },
+    invitations: raw.invitations || [],
+    invitedCount: Number(
+      raw.invitedCount ??
+      raw.invitationsCount ??
+      (Array.isArray(raw.invitations) && raw.invitations.length ? raw.invitations.length : undefined) ??
+      (Array.isArray(raw.invitedSellers) && raw.invitedSellers.length ? raw.invitedSellers.length : undefined) ??
+      (Array.isArray(pkt?.vendors?.invitedSellers) && pkt?.vendors?.invitedSellers?.length ? pkt.vendors.invitedSellers.length : undefined) ??
+      pkt?.vendors?.inviteCount ??
+      0
+    ) || 0,
+    invitationsCount: Number(raw.invitationsCount ?? raw.invitedCount ?? (Array.isArray(raw.invitations) ? raw.invitations.length : 0)),
+    invitedSellers: raw.invitedSellers || pkt?.vendors?.invitedSellers || (Array.isArray(raw.invitations) ? raw.invitations.map((i: any) => i.sellerOrgId || i.sellerUserId).filter(Boolean) : []),
+    technicalPacket: pkt
+      ? {
+          ...pkt,
+          items,
+          vendors: {
+            ...(pkt.vendors || {}),
+            invitedSellers: pkt.vendors?.invitedSellers || raw.invitedSellers || (Array.isArray(raw.invitations) ? raw.invitations.map((i: any) => i.sellerOrgId || i.sellerUserId).filter(Boolean) : []),
+            inviteCount: Math.max(
+              Number(pkt.vendors?.inviteCount) || 0,
+              Number(raw.invitedCount) || 0,
+              Array.isArray(pkt.vendors?.invitedSellers) ? pkt.vendors.invitedSellers.length : 0,
+              Array.isArray(raw.invitations) ? raw.invitations.length : 0,
+              Array.isArray(raw.invitedSellers) ? raw.invitedSellers.length : 0
+            ),
+          }
+        }
+      : { items },
     buyer: raw.buyer || null,
     buyerOrganization: raw.buyerOrganization || raw.organization || null,
   };

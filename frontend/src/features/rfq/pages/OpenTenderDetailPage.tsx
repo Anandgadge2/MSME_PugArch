@@ -172,7 +172,20 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
       payload={payload}
       documents={bid.documents || bid.bidDocuments || reqObj.documents || payload.documents || []}
       items={bid.items || payload.items || reqObj.items || payload.boqTable || []}
-      evaluationMethod={bid.evaluationMethod || payload.evaluationMethod || 'L1 Evaluation'}
+      evaluationMethod={
+        [
+          payload.evaluation?.method,
+          payload.evaluation?.evaluationMethod,
+          payload.evaluationMethod,
+          payload.rules?.evaluationMethod,
+          reqObj?.payload?.evaluation?.method,
+          bid.technicalPacket?.evaluation?.method,
+          bid.evaluationMethod,
+        ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
+        bid.evaluationMethod ||
+        payload.evaluationMethod ||
+        'L1 Evaluation'
+      }
       participations={participationsList}
       participantsCount={bid.participantsCount ?? participationsList.length}
       emdAmount={bid.emdAmount || reqObj.emdAmount || basics.emdAmount}
