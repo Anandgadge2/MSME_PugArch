@@ -578,6 +578,10 @@ function PropertyItem({
         lower === 'warrantyperiod' ||
         lower.includes('warranty')
       )) ||
+      lower === 'contractsubcategory' ||
+      lower === 'subcategory' ||
+      lower.includes('contractsub') ||
+      lower.includes('subcategory') ||
       lower === 'retentionamount' ||
       lower === 'securitydeposit' ||
       lower === 'retention' ||

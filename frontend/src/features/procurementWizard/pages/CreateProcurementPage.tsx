@@ -5649,9 +5649,10 @@ function ScheduleStepForm({
             <Field label="Contract Category">
               <input value={draft.rateContractConfig.contractCategory} onChange={e => updateRateContract('contractCategory', e.target.value)} className={inputClass} />
             </Field>
-            <Field label="Contract Subcategory">
+            {/* Contract Subcategory - commented out on buyer side */}
+            {/* <Field label="Contract Subcategory">
               <input value={draft.rateContractConfig.contractSubCategory} onChange={e => updateRateContract('contractSubCategory', e.target.value)} className={inputClass} />
-            </Field>
+            </Field> */}
             <Field label="Contract Start Date" required>
               <input type="date" value={draft.rateContractConfig.periodStartDate} onChange={e => updateRateContract('periodStartDate', e.target.value)} className={inputClass} />
             </Field>
