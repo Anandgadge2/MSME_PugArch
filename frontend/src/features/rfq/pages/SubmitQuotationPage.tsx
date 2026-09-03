@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
 import { formatRefId } from '../../../utils/refIdUtils';
 import {
@@ -318,9 +318,16 @@ export default function SubmitQuotationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const pathname = usePathname() || '';
+  
+  const pathTokens = pathname.split('/').filter(Boolean);
+  const pathId = (pathTokens.length >= 2 && pathTokens[pathTokens.length - 1] === 'respond')
+    ? decodeURIComponent(pathTokens[pathTokens.length - 2])
+    : '';
+
   const conversationIdParam = searchParams?.get('conversationId');
   const quoteRequestIdParam = searchParams?.get('quoteRequestId');
-  const requirementIdParam = searchParams?.get('requirementId') || searchParams?.get('id') || searchParams?.get('requestId');
+  const requirementIdParam = searchParams?.get('requirementId') || searchParams?.get('id') || searchParams?.get('requestId') || pathId;
   const isMarketplaceQuoteFlow = Boolean(conversationIdParam);
   const requirementId = isMarketplaceQuoteFlow
     ? 0
