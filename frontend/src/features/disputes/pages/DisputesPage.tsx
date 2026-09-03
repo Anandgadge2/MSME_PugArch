@@ -7,7 +7,7 @@
  *   - List: scrollable list of disputes for the role
  *   - Detail: thread + evidence + status updater (admin)
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, FileCheck, FileText, Paperclip, Plus, RefreshCw, Send, Shield, Trash2, X, XCircle, Search } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { useAuth } from '../../../hooks/useAuth';
@@ -31,6 +31,7 @@ import { usePurchaseOrders } from '../../purchaseOrders/hooks';
 import { uploadDeliveryFile, type UploadedFileAsset } from '../../delivery/upload';
 import { openFileAsset } from '../../../lib/files';
 import type { PurchaseOrderDto } from '../../shared/types';
+import { GrievancesSection } from '../components/GrievancesSection';
 
 const STATUS_TONE: Record<DisputeStatus, string> = {
     open: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -44,24 +45,100 @@ const STATUS_TONE: Record<DisputeStatus, string> = {
     closed: 'border-slate-200 bg-slate-100 text-slate-700'
 };
 
-export default function DisputesPage() {
+export default function DisputesPage({ defaultTab }: { defaultTab?: 'disputes' | 'grievances' } = {}) {
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
+    const [activeSection, setActiveSection] = useState<'disputes' | 'grievances'>(() => {
+        if (defaultTab) return defaultTab;
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('tab') === 'grievances') return 'grievances';
+        }
+        return 'disputes';
+    });
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [showCreate, setShowCreate] = useState(false);
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const tab = params.get('tab');
+            if (tab === 'grievances') {
+                setActiveSection('grievances');
+            } else if (tab === 'disputes') {
+                setActiveSection('disputes');
+            }
+        }
+    }, []);
+
+    const handleSectionChange = (section: 'disputes' | 'grievances') => {
+        setActiveSection(section);
+        setSelectedId(null);
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', section);
+            window.history.replaceState({}, '', url.toString());
+        }
+    };
 
     if (selectedId !== null) {
         return <DisputeDetail id={selectedId} onBack={() => setSelectedId(null)} isAdmin={isAdmin} />;
     }
 
     return (
-        <DisputeList
-            isAdmin={isAdmin}
-            onSelect={setSelectedId}
-            onCreate={() => setShowCreate(true)}
-            showCreate={showCreate}
-            onCloseCreate={() => setShowCreate(false)}
-        />
+        <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
+            {/* Top Navigation Tabs */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-3">
+                <div>
+                    <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">
+                        Dispute Resolution & Grievances
+                    </h1>
+                    <p className="mt-0.5 text-xs font-semibold text-slate-500">
+                        Arbitrate formal purchase order disputes, investigate stakeholder grievances, and manage resolutions.
+                    </p>
+                </div>
+                <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 p-1">
+                    <button
+                        role="tab"
+                        aria-selected={activeSection === 'disputes'}
+                        onClick={() => handleSectionChange('disputes')}
+                        className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
+                            activeSection === 'disputes'
+                                ? 'bg-white text-[#12335f] shadow-sm font-black'
+                                : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                    >
+                        <Shield className="h-3.5 w-3.5" />
+                        Contract Disputes
+                    </button>
+                    <button
+                        role="tab"
+                        aria-selected={activeSection === 'grievances'}
+                        onClick={() => handleSectionChange('grievances')}
+                        className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
+                            activeSection === 'grievances'
+                                ? 'bg-white text-[#12335f] shadow-sm font-black'
+                                : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                    >
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Stakeholder Grievances
+                    </button>
+                </div>
+            </div>
+
+            {activeSection === 'disputes' ? (
+                <DisputeList
+                    isAdmin={isAdmin}
+                    onSelect={setSelectedId}
+                    onCreate={() => setShowCreate(true)}
+                    showCreate={showCreate}
+                    onCloseCreate={() => setShowCreate(false)}
+                />
+            ) : (
+                <GrievancesSection isAdmin={isAdmin} />
+            )}
+        </div>
     );
 }
 
@@ -115,14 +192,13 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
     const { page, pageSize, pageItems: pagedItems, total, setPage, setPageSize } = usePagination(filteredItems, 10);
 
     return (
-        <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
+        <div className="space-y-5">
             {/* Header */}
             <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#12335f]">RESOLUTION CENTER</p>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div>
-                        <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">Disputes & Resolution</h1>
-                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                        <h2 className="text-lg font-black tracking-tight text-slate-900">Purchase Order Disputes</h2>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-500">
                             Raise, track, and resolve disputes for purchase orders, payments, escrow, and milestone delivery.
                         </p>
                     </div>

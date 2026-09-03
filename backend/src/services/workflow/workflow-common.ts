@@ -52,7 +52,11 @@ export const notifyWorkflow = async (
     content?: Buffer | string;
     path?: string;
     contentType?: string;
-  }>
+  }>,
+  extra?: {
+    emailSubject?: string;
+    emailHtml?: string;
+  }
 ) => {
   await notificationService.notifyWithEmail(userId, {
     title,
@@ -60,7 +64,9 @@ export const notifyWorkflow = async (
     type,
     priority: 'medium',
     redirectUrl,
-    attachments
+    attachments,
+    emailSubject: extra?.emailSubject,
+    emailHtml: extra?.emailHtml
   });
 };
 
@@ -75,9 +81,13 @@ export const notifyWorkflowSoon = (
     content?: Buffer | string;
     path?: string;
     contentType?: string;
-  }>
+  }>,
+  extra?: {
+    emailSubject?: string;
+    emailHtml?: string;
+  }
 ) => {
-  void notifyWorkflow(userId, title, message, type, redirectUrl, attachments).catch(error => {
+  void notifyWorkflow(userId, title, message, type, redirectUrl, attachments, extra).catch(error => {
     console.warn('[WorkflowNotify] Background notification failed', error instanceof Error ? error.message : error);
   });
 };

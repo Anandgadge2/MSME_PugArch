@@ -18,64 +18,58 @@ const sellerBusinessTypes = [
 
 const shgTypes = [
   { value: 'Women SHG (Mahila Bachat Gat)', label: 'Women SHG (Mahila Bachat Gat)' },
-  { value: 'Farmer SHG', label: 'Farmer SHG' },
+  { value: 'Farmer SHG', label: 'Farmer SHG (Agriculture & Allied)' },
   { value: 'Artisan / Handicraft SHG', label: 'Artisan / Handicraft SHG' },
-  { value: 'Dairy SHG', label: 'Dairy SHG' },
-  { value: 'Livelihood SHG', label: 'Livelihood SHG' },
-  { value: 'Tribal SHG', label: 'Tribal SHG' },
-  { value: 'Youth SHG', label: 'Youth SHG' },
-  { value: 'Other SHG', label: 'Other SHG' }
+  { value: 'Dairy SHG', label: 'Dairy / Livestock SHG' },
+  { value: 'Livelihood SHG', label: 'Livelihood & Processing SHG' },
+  { value: 'Tribal SHG', label: 'Tribal Community SHG' },
+  { value: 'Youth SHG', label: 'Youth Enterprise SHG' },
+  { value: 'Other SHG', label: 'Other Enterprise SHG' }
 ];
 
-const shgCommonMandatoryDocs = [
-  'SHG Registration Certificate',
+const shgPersonalDocs = [
   'Aadhaar of Group Leader',
+  'Member List'
+];
+
+const shgBusinessDocs = [
+  'Udyam Registration Certificate',
   'Bank Passbook / Cancelled Cheque',
-  'Member List',
-  'Address Proof'
+  'SHG Registration Certificate / Formation Resolution'
 ];
 
 const shgCommonOptionalDocs = [
-  'PAN Card',
-  'Udyam Registration Certificate',
-  'GST Certificate',
-  'Product Images',
+  'PAN Card of SHG or Representative',
+  'Address Proof',
+  'GST Certificate (if applicable)',
+  'Product Images / Catalogue',
   'Training / Skill Certificates'
 ];
 
 const shgAdditionalOptionalDocs: Record<string, string[]> = {
   'Women SHG (Mahila Bachat Gat)': [
-    'NRLM Mission Certificate',
-    'Women Empowerment Training Certificate'
+    'NRLM / SRLM Mission Letter (Optional)'
   ],
   'Farmer SHG': [
-    'Farmer ID Card',
-    'Land Record (7/12)',
-    'FPO/FPC Certificate'
+    'Produce / Crop Photos (Optional)'
   ],
   'Artisan / Handicraft SHG': [
-    'Artisan Card',
-    'Handicraft Certification',
-    'Product Catalogue'
+    'Product Catalogue / Samples (Optional)'
   ],
   'Dairy SHG': [
-    'Dairy Cooperative Membership Certificate',
-    'Livestock Ownership Proof'
+    'Dairy Society Linkage Proof (Optional)'
   ],
   'Livelihood SHG': [
-    'Skill Development Certificates',
-    'Business Activity Proof'
+    'Enterprise Activity Details (Optional)'
   ],
   'Tribal SHG': [
-    'Tribal Community Certificate',
-    'Tribal Development Scheme Registration'
+    'Activity Details (Optional)'
   ],
   'Youth SHG': [
-    'Skill Training Certificate',
-    'Startup/Entrepreneurship Training Certificate'
+    'Skill Certificate (Optional)'
   ],
   'Other SHG': [
-    'Activity-specific Supporting Documents'
+    'Activity-specific Supporting Documents (Optional)'
   ]
 };
 
@@ -128,43 +122,10 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
     ]
   },
   'herSHG': {
-    personal: [
-      'Authorized representative Aadhaar/Virtual ID with Aadhaar linked mobile number OR Personal PAN details with mobile number',
-      'Active Email ID for OTP verification of the herSHG representative'
-    ],
-    business: [
-      'Self-Help Group resolution or authorization letter naming the representative',
-      'SHG registration certificate / NRLM, mission, federation, cooperative, or local authority proof',
-      'List of members and office bearers with contact details',
-      'SHG bank account number and IFSC',
-      'PAN card of SHG or Form 60 declaration where PAN is not available',
-      'Registered address or meeting-place address proof'
-    ],
-    optional: [
-      'Udyam / MSME registration number where available',
-      'GST number for taxable or interstate supplies',
-      'Product catalogue, photos, FSSAI/handloom/handicraft certification where applicable',
-      'Recent bank statement or passbook copy'
-    ]
+    personal: shgPersonalDocs,
+    business: shgBusinessDocs,
+    optional: shgCommonOptionalDocs
   },
-  // 'Startup': {
-  //   personal: [
-  //     'Aadhaar/Virtual ID and Aadhaar linked mobile number OR Personal PAN details with mobile number',
-  //     'Active Email ID - Personal E-mail Id or Offical Email-Id (to verify OTP)'
-  //   ],
-  //   business: [
-  //     'Business PAN details',
-  //     'Bank account number and IFSC',
-  //     'Company Registered Address',
-  //     'Udyam number',
-  //     'DIPP number'
-  //   ],
-  //   optional: [
-  //     'GST number',
-  //     'NSIC Registered',
-  //  'Income tax returns of last 3 years'
-  //   ]
-  // },
   'Partnership': {
     personal: [
       'Aadhaar/Virtual ID and Aadhaar linked mobile number OR Personal PAN details with mobile number',
@@ -203,9 +164,12 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
 };
 
 const getShgPrerequisiteDocs = (selectedShgType: string) => ({
-  personal: shgCommonMandatoryDocs,
-  business: shgCommonOptionalDocs,
-  optional: shgAdditionalOptionalDocs[selectedShgType] || []
+  personal: shgPersonalDocs,
+  business: shgBusinessDocs,
+  optional: [
+    ...shgCommonOptionalDocs,
+    ...(shgAdditionalOptionalDocs[selectedShgType] || [])
+  ]
 });
 
 interface PrerequisitesProps {
@@ -360,11 +324,9 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
                 </>
               ) : (
                 <>
-                  {/* <div className="mb-2 flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-slate-800">
-                      {isHerShg ? 'Documents and readiness checklist *' : 'Required *'}
-                    </h3>
-                  </div> */}
+                  <div className="mb-2 flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-800">Required *</h3>
+                  </div>
                   {isHerShg && !selectedShgType ? (
                     <p className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50 px-4 py-3 text-xs font-semibold text-indigo-700">
                       Please select an SHG Type to view the matching document checklist.
@@ -372,22 +334,21 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
                   ) : (
                     <>
                       <Section
-                        title={isHerShg ? 'Common Mandatory Documents (All SHGs)' : 'Personal Details'}
+                        title="Personal Details"
                         items={docs.personal}
                         onCheck={handleCheck}
                         checkedItems={checkedItems} 
-                         required={!isHerShg}
+                        required
                       />
                       <Section
-                        title={isHerShg ? 'Common Optional Documents (All SHGs)' : 'Business Details'}
+                        title="Business Details"
                         items={docs.business}
                         onCheck={handleCheck}
                         checkedItems={checkedItems}
-                        isOptional={isHerShg}
-                        required={!isHerShg}
+                        required
                       />
                       <Section
-                        title={isHerShg ? `${selectedShgType} Additional Optional Documents` : 'Optional'}
+                        title="Optional"
                         items={docs.optional}
                         onCheck={handleCheck}
                         checkedItems={checkedItems}
@@ -513,14 +474,10 @@ function Section({
   return (
     <div className="space-y-3">
       <h4 className="text-[11px] font-black uppercase tracking-[0.1em] text-indigo-400/90 flex items-center gap-2 px-1">
-  <span>{title}</span>
-
-  {required && (
-    <span className="ml-auto text-red-500 font-black">*</span>
-  )}
-
-  <span className="h-px flex-1 bg-indigo-100/50"></span>
-</h4>
+        <span>{title}</span>
+        {required && <span className="text-red-500 font-black">*</span>}
+        <span className="h-px flex-1 bg-indigo-100/50"></span>
+      </h4>
       <div className="space-y-2 bg-slate-50/50 p-3 rounded-2xl border border-slate-100">
         {items.map((item, idx) => {
           const checked = checkedItems[item];

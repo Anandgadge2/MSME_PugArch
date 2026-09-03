@@ -721,11 +721,15 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
     }
   };
 
-  // const title = mode === 'seller' ? 'Seller Marketplace' : mode === 'admin' ? 'Marketplace Review' : 'Buyer Marketplace';
+  const title = mode === 'seller'
+    ? 'Seller Marketplace'
+    : mode === 'admin'
+      ? 'Catalogue Moderation & Product Review'
+      : 'Marketplace Catalogue';
   const subtitle = mode === 'seller'
     ? 'Create and manage products and services after seller approval.'
     : mode === 'admin'
-      ? 'Review every product and service listed by sellers.'
+      ? 'Audit, review, and moderate products and services published by registered sellers.'
       : 'Search approved products and services from active sellers.';
 
   const isInitialLoading = loading && data.length === 0;
@@ -737,7 +741,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
         <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-emerald-300/20 blur-3xl" />
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between relative z-10">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">Marketplace Catalogue</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">{title}</h1>
             <p className="mt-0.5 max-w-3xl text-xs font-semibold leading-relaxed text-blue-100/90">{subtitle}</p>
           </div>
           

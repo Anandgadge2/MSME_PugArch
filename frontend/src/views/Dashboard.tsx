@@ -560,15 +560,15 @@ export default function Dashboard() {
       icon: Trophy
     },
     {
-      title: 'Banner Management',
-      detail: 'Create, approve, hide, and review homepage banners submitted by eligible organizations.',
-      path: '/admin/banners',
+      title: 'CMS & Banners',
+      detail: 'Create, approve, hide, and review homepage banners and public announcements.',
+      path: '/admin/cms?tab=banners',
       icon: Images
     },
     {
-      title: 'Marketplace Sections',
+      title: 'Discovery Sections',
       detail: 'Control homepage discovery order, section visibility, and section item limits.',
-      path: '/admin/marketplace/home-sections',
+      path: '/admin/cms?tab=sections',
       icon: ShoppingBag
     },
     {
@@ -620,7 +620,7 @@ export default function Dashboard() {
             title="Operations Monitoring"
             description="Track marketplace, orders, delivery, payments, and compliance signals from one row."
             actions={[
-              ['Catalogue review', '/admin/marketplace', Store],
+              ['Catalogue moderation', '/admin/catalogue-moderation', Store],
               ['Orders & delivery', '/admin/delivery', Truck],
               ['Payments & escrow', '/payments/transactions', CreditCard],
             ]}

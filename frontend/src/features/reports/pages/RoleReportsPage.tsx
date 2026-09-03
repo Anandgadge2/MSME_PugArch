@@ -17,7 +17,7 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
-import { BarChart3, Download, FileSpreadsheet, FileText, RefreshCw, Search, ShoppingCart, Truck, IndianRupee, Receipt } from 'lucide-react';
+import { BarChart3, FileSpreadsheet, FileText, RefreshCw, Search, ShoppingCart, Truck, IndianRupee, Receipt } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useAuth } from '../../../hooks/useAuth';
 import { getApi } from '../../shared/apiClient';
@@ -29,7 +29,7 @@ import { usePagination } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { formatDateTime } from '../../shared/format';
-import { downloadCsv, downloadJson } from '../../shared/exportUtils';
+import { downloadCsv } from '../../shared/exportUtils';
 import { ExcelEngine, type ExcelDocumentConfig } from '../../../lib/excelEngine';
 
 const COLORS = ['#12335f', '#0f766e', '#c86413', '#6366f1', '#dc2626', '#64748b'];
@@ -117,7 +117,7 @@ export default function RoleReportsPage() {
         createdAt: order.createdAt || '',
     }));
 
-    const handleExport = async (type: 'csv' | 'json' | 'print' | 'excel') => {
+    const handleExport = async (type: 'csv' | 'print' | 'excel') => {
         if (type === 'print') {
             const tableData = exportRows.map((row, index) => [
               String(index + 1),

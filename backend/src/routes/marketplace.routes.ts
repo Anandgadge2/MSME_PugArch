@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/prisma.js';
-import { deleteCache, getOrSetCache } from '../services/cache.service.js';
+import { deleteCache, getOrSetCache, invalidateByPattern } from '../services/cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { authenticate, type AuthRequest } from '../middleware/authenticate.js';
@@ -10,6 +10,7 @@ import { verifyAccessToken } from '../services/token.service.js';
 import { longCache, shortCache } from '../middleware/httpCache.js';
 import { sha256 } from '../utils/crypto.js';
 import { formatRequirementNumber } from '../utils/refIdUtils.js';
+import { notifyPurchaseOrderCreated } from '../services/invoice-pdf.service.js';
 
 const db = prisma as any;
 const router = Router();
@@ -1415,13 +1416,26 @@ const buildHomeLayout = async (params: z.infer<typeof marketplaceHomeLayoutQuery
         }
     };
 
+    const ruleTypeToSectionKey: Record<string, string> = {
+        AUTO_POPULAR: 'popular_picks',
+        AUTO_MOST_PURCHASED: 'most_purchased',
+        AUTO_DISCOUNTED: 'discounted_products',
+        LOCAL_MSME: 'local_msme',
+        HERSHG: 'hershg_products',
+        SERVICES: 'services',
+        BUYER_REQUIREMENTS: 'buyer_requirements',
+        MANUAL_FEATURED: 'popular_picks'
+    };
+
     const sections = (sectionConfigs || [])
         .filter((section: any) => section.enabled)
         .sort((a: any, b: any) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0))
         .map((section: any) => {
-            const data = sectionData[section.key] || sectionData.popular_picks;
+            const dataKey = (section.ruleType && ruleTypeToSectionKey[section.ruleType]) || section.key;
+            const data = sectionData[dataKey] || sectionData[section.key] || sectionData.popular_picks;
             return {
                 ...data,
+                key: section.key,
                 title: section.title || data.title,
                 items: Array.isArray(data.items) ? data.items.slice(0, Number(section.itemLimit || limit)) : []
             };
@@ -1590,12 +1604,49 @@ router.get('/marketplace/recommendations', authenticate, authorize('buyer', 'adm
     }
 });
 
+const purgeMarketplaceHomeCache = async () => {
+    try {
+        await Promise.allSettled([
+            deleteCache(redisKeys.cacheMarketplaceHome()),
+            deleteCache('marketplace:home:v2'),
+            invalidateByPattern('cache:marketplace:home-layout:*'),
+            invalidateByPattern('cache:marketplace:*')
+        ]);
+    } catch (err) {
+        console.warn('[Marketplace Cache Purge Warning]', err);
+    }
+};
+
 router.get('/admin/marketplace/home-sections', authenticate, authorize('admin', 'master_admin'), async (_req: AuthRequest, res: Response) => {
     try {
         return ok(res, { sections: await ensureMarketplaceHomeSections() });
     } catch (error) {
         console.error('[Admin Marketplace Sections]', error);
         return apiResponse.error(res, 500, 'Failed to load marketplace home sections', 'ADMIN_MARKETPLACE_SECTIONS_ERROR');
+    }
+});
+
+router.post('/admin/marketplace/home-sections/reset-defaults', authenticate, authorize('admin', 'master_admin'), async (_req: AuthRequest, res: Response) => {
+    try {
+        await Promise.all(defaultHomeSections.map(section =>
+            db.marketplaceHomeSection.upsert({
+                where: { key: section.key },
+                update: {
+                    title: section.title,
+                    enabled: section.enabled,
+                    displayOrder: section.displayOrder,
+                    itemLimit: section.itemLimit,
+                    ruleType: section.ruleType
+                },
+                create: { ...section }
+            })
+        ));
+        await purgeMarketplaceHomeCache();
+        const sections = await db.marketplaceHomeSection.findMany({ orderBy: [{ displayOrder: 'asc' }, { key: 'asc' }] });
+        return ok(res, { sections });
+    } catch (error) {
+        console.error('[Admin Marketplace Sections Reset]', error);
+        return apiResponse.error(res, 500, 'Failed to reset marketplace home sections', 'ADMIN_MARKETPLACE_SECTIONS_RESET_ERROR');
     }
 });
 
@@ -1610,6 +1661,7 @@ router.patch('/admin/marketplace/home-sections/:key', authenticate, authorize('a
             update: body,
             create: { ...existingDefault, ...body }
         });
+        await purgeMarketplaceHomeCache();
         return ok(res, section);
     } catch (error) {
         console.error('[Admin Marketplace Section Update]', error);
@@ -3099,11 +3151,16 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
         }
 
         const allTargetReqIds = Array.from(new Set([
-            ...candidateIds,
             linkedBuyerReq?.id,
             linkedLegacyReq?.id,
+            (linkedBid?.sourceModel === 'REQUIREMENT' || linkedBid?.sourceModel === 'BUYER_REQUIREMENT') && linkedBid?.sourceId ? Number(linkedBid.sourceId) : null,
+            Number((linkedBid?.technicalPacket as any)?.sourceRequirementId || (linkedBid?.technicalPacket as any)?.requirementId || 0) || null,
+            (!linkedBid && candidateIds.length) ? candidateIds[0] : null
+        ].filter(Boolean) as number[]));
+
+        const allTargetBidIds = Array.from(new Set([
             linkedBid?.id,
-            linkedBid?.sourceId ? Number(linkedBid.sourceId) : null
+            (candidateIds.length && linkedBid) ? candidateIds[0] : null
         ].filter(Boolean) as number[]));
 
         const allTargetReqNumbers = Array.from(new Set([
@@ -3143,10 +3200,11 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
         ]);
 
         // Fallback: If no responses in requirementResponse, check procurementBidParticipation table
-        if (responses.length === 0 && allTargetReqIds.length > 0) {
+        const candidateBidIds = allTargetBidIds.length > 0 ? allTargetBidIds : allTargetReqIds;
+        if (responses.length === 0 && candidateBidIds.length > 0) {
             const participations = await db.procurementBidParticipation.findMany({
                 where: {
-                    bidId: { in: allTargetReqIds },
+                    bidId: { in: candidateBidIds },
                     submissionStatus: { not: 'DRAFT' },
                     isWithdrawn: false
                 },
@@ -3239,6 +3297,7 @@ router.post('/buyer/requirements/:id/responses/:responseId/accept', authenticate
             return apiResponse.error(res, 404, 'Response not found', 'RESPONSE_NOT_FOUND');
         }
 
+        let createdPoId: number | undefined;
         await db.$transaction(async (tx: any) => {
             // Update the accepted response
             await tx.requirementResponse.update({
@@ -3339,7 +3398,15 @@ router.post('/buyer/requirements/:id/responses/:responseId/accept', authenticate
                     redirectUrl: `/buyer/orders`
                 }
             });
+
+            createdPoId = purchaseOrder.id;
         }, { timeout: 30000, maxWait: 10000 });
+
+        if (createdPoId) {
+            notifyPurchaseOrderCreated(createdPoId).catch(err => {
+                console.warn('[Marketplace] Failed to dispatch purchase order notification with PDF:', err);
+            });
+        }
 
         return ok(res, { success: true, message: 'Response accepted and PO generated successfully.' });
     } catch (error: any) {

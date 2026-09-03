@@ -1512,6 +1512,15 @@ const categoryCache = new Map<string, number>();
 const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procurementDraftBody>) => {
   const methodSlug = methodSlugForDraft(body);
   const methodCode = procurementMethodCodeFor(methodSlug);
+  if (body.payload && typeof body.payload === 'object') {
+    const payloadObj = body.payload as any;
+    if (payloadObj.vendors) {
+      const inv = Array.isArray(payloadObj.vendors.invitedSellers) ? payloadObj.vendors.invitedSellers : [];
+      if (inv.length > 0) {
+        payloadObj.vendors.inviteCount = Math.max(inv.length, Number(payloadObj.vendors.inviteCount) || 0);
+      }
+    }
+  }
   const draftMeta = {
     methodSlug,
     draftStep: body.draftStep ?? null,
@@ -1750,7 +1759,15 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   const schedule = payload.schedule || {};
   const terms = payload.terms || {};
   const internal = payload.internal || {};
-  const vendors = payload.vendors || {};
+  const rawVendors = payload.vendors || {};
+  const rawInvitedSellers = Array.isArray(rawVendors.invitedSellers)
+    ? rawVendors.invitedSellers
+    : (Array.isArray(payload.qualifiedVendors) ? payload.qualifiedVendors : []);
+  const vendors = {
+    ...rawVendors,
+    invitedSellers: rawInvitedSellers,
+    inviteCount: Math.max(rawInvitedSellers.length, Number(rawVendors.inviteCount) || 0)
+  };
   const rateContractConfig = payload.rateContractConfig || payload.rateContract || {};
   const canonicalMethod = String(draftBody.canonicalMethod || requirement.canonicalMethod || methodSlug.toUpperCase()).toUpperCase();
   const isLimitedRfq = methodSlug === 'rfq' && String(payload.rfqType || '').toUpperCase() === 'LIMITED';
@@ -1800,7 +1817,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     status: 'OPEN',
     approvalStatus: 'APPROVED',
     lifecycleStage: 'SELLER_PARTICIPATION',
-    evaluationMethod: payload.evaluation?.evaluationMethod || payload.evaluation?.quotationFormat || 'L1',
+    evaluationMethod: payload.evaluation?.evaluationMethod || payload.evaluation?.method || payload.evaluationMethod || payload.rules?.evaluationMethod || payload.evaluation?.quotationFormat || 'L1',
     isEmdRequired: Boolean(terms.emdRequired || tender.emdRequired),
     emdAmount: terms.emdAmount || tender.emdAmount || null,
     documentFee: tender.documentFee || null,
@@ -2365,14 +2382,14 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     ].includes(String(regDetails.businessType || regDetails.shgType || '').trim().toLowerCase());
 
     const requiredDocs: string[] = isShg
-      ? ['bank_passbook', 'address_proof', 'leader_aadhaar', 'member_list']
+      ? ['bank_passbook', 'leader_aadhaar', 'member_list', 'shg_registration_certificate', 'udyam_certificate']
       : ['pan_copy', 'bank_passbook', 'address_proof'];
 
     const addRequiredDoc = (docType: string) => {
       if (!requiredDocs.includes(docType)) requiredDocs.push(docType);
     };
 
-    if (Array.isArray(regDetails.selectedDocuments)) {
+    if (!isShg && Array.isArray(regDetails.selectedDocuments)) {
       for (const docType of regDetails.selectedDocuments) {
         if (typeof docType === 'string' && docType.trim()) addRequiredDoc(docType.trim());
       }
@@ -2382,22 +2399,22 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
       addRequiredDoc('udyam_certificate');
     }
 
-    if (profile.isStartup || String(profile.organizationType || regDetails.businessType).toLowerCase() === 'startup') {
+    if (!isShg && (profile.isStartup || String(profile.organizationType || regDetails.businessType).toLowerCase() === 'startup')) {
       addRequiredDoc('dipp_certificate');
     }
 
     const hasGstin = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('GST_REGISTERED');
-    if (hasGstin) {
+    if (!isShg && hasGstin) {
       addRequiredDoc('gst_certificate');
     }
 
-    if (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber) {
+    if (!isShg && (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber)) {
       addRequiredDoc('aadhaar_card');
     }
 
     const corporateTypes = ['Company', 'LLP', 'Partnership', 'Cooperative', 'Society', 'Trust'];
     const isCorporate = corporateTypes.some(t => String(profile.organizationType || regDetails.businessType).toLowerCase().includes(t.toLowerCase()));
-    if (isCorporate && (regDetails.cinNumber || regDetails.registrationNumber || regDetails.cin)) {
+    if (!isShg && isCorporate && (regDetails.cinNumber || regDetails.registrationNumber || regDetails.cin)) {
       addRequiredDoc('business_registration_proof');
     }
 
@@ -2409,12 +2426,32 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
         if (normU === normR) return true;
         const aliases: Record<string, string[]> = {
           bankpassbook: ['bankpassbook', 'bankpassbookcancelledcheque'],
-          leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard'],
-          registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate']
+          leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard', 'aadhaarcard'],
+          registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate'],
+          udyamcertificate: ['udyamcertificate', 'udyamregistrationcertificate']
         };
         return (aliases[normR] || []).includes(normU) || (aliases[normU] || []).includes(normR);
       });
-    const missingDocs = requiredDocs.filter(d => !matchesDocType(d, uploadedDocs));
+
+    const shgOptionalDocPatterns = [
+      'pancard', 'pancopy', 'pan',
+      'addressproof',
+      'gstcertificate', 'gst',
+      'productimages',
+      'trainingskill', 'trainingcertificate', 'skilltraining', 'skilldevelopment',
+      'womenempowerment', 'startupentrepreneurship', 'nrlm', 'produce',
+      'farmerid', 'landrecord', 'fpo', 'fpc', 'artisan', 'handicraft',
+      'catalogue', 'dairycooperative', 'dairylinkage', 'livestock',
+      'businessactivity', 'activitydetails', 'tribal', 'activityspecific'
+    ];
+    const isShgOptionalDoc = (docType: string) => {
+      const norm = String(docType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return shgOptionalDocPatterns.some(pat => norm.includes(pat) || pat.includes(norm));
+    };
+
+    const missingDocs = requiredDocs
+      .filter(d => !(isShg && isShgOptionalDoc(d)))
+      .filter(d => !matchesDocType(d, uploadedDocs));
 
     if (missingDocs.length > 0) {
       const labels: Record<string, string> = {
@@ -2430,6 +2467,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
         nsic_certificate: 'NSIC Registration Certificate',
         leader_aadhaar: 'Group Leader Aadhaar Card',
         registration_certificate: 'SHG Registration Certificate',
+        shg_registration_certificate: 'SHG Registration Certificate',
         member_list: 'Member List'
       };
       const missingLabels = missingDocs.map(d => labels[d] || d).join(', ');
@@ -3802,7 +3840,7 @@ router.post('/profile/verify-gst-dashboard', authenticate, asyncRoute(async (req
   await db.apiVerificationLog.create({
     data: {
       userId: user.id,
-      provider: gstResult.source === 'live_apisetu' ? 'apisetu' : 'mocked',
+      provider: gstResult.source === 'live_apisetu' ? 'apisetu' : 'cache',
       verificationType: 'GST',
       requestReference: normalizedGstin,
       status: 'VERIFIED'
@@ -7716,7 +7754,7 @@ router.get('/admin/users', authenticate, authorizeAdmin, asyncRoute(async (req, 
     if (r === 'master_admin' || r === 'master admin') {
       return ok(res, { records: [], total: 0, filters: query });
     }
-    where.role = query.role;
+    where.role = r;
   } else {
     where.role = { not: 'master_admin' };
   }
@@ -7785,6 +7823,35 @@ router.get('/admin/users', authenticate, authorizeAdmin, asyncRoute(async (req, 
         productCategories: true
       }
     },
+    shgProfile: {
+      select: {
+        id: true,
+        shgName: true,
+        shgType: true,
+        state: true,
+        district: true,
+        block: true,
+        gramPanchayat: true,
+        village: true,
+        pincode: true,
+        formationYear: true,
+        formationDate: true,
+        memberCount: true,
+        registrationStatus: true,
+        registrationNumber: true,
+        nrlmId: true,
+        promotedBy: true,
+        mainActivity: true,
+        gstin: true,
+        udyamNumber: true,
+        representativeMobile: true,
+        representativeEmail: true,
+        representativeRole: true,
+        applicationStatus: true,
+        submittedAt: true,
+        approvedAt: true
+      }
+    },
     kycVerifications: {
       where: { provider: 'MERIPEHCHAAN' as const, verificationType: 'AADHAAR' as const },
       take: 1,
@@ -7830,23 +7897,24 @@ router.get('/admin/users', authenticate, authorizeAdmin, asyncRoute(async (req, 
   ]);
 
   const mappedRecords = records.map((user: any) => {
-    const rawProfile = user.buyerProfile || user.sellerProfile || {};
+    const rawProfile = user.buyerProfile || user.sellerProfile || user.shgProfile || {};
     const profile = {
       ...rawProfile,
-      businessName: rawProfile.businessName || rawProfile.organizationName || user.organization?.organizationName || null,
-      organizationName: rawProfile.organizationName || rawProfile.businessName || user.organization?.organizationName || null,
-      gst: rawProfile.gst || user.organization?.gstin || null,
+      businessName: rawProfile.businessName || rawProfile.shgName || rawProfile.organizationName || user.organization?.organizationName || null,
+      organizationName: rawProfile.organizationName || rawProfile.shgName || rawProfile.businessName || user.organization?.organizationName || null,
+      gst: rawProfile.gst || rawProfile.gstin || user.organization?.gstin || null,
       pan: rawProfile.pan || user.organization?.panNumber || null,
-      city: rawProfile.city || user.organization?.city || null,
+      city: rawProfile.city || rawProfile.district || rawProfile.village || user.organization?.city || null,
       state: rawProfile.state || user.organization?.state || null,
-      udyamNumber: user.organization?.udyamNumber || null,
+      udyamNumber: rawProfile.udyamNumber || user.organization?.udyamNumber || null,
       annualTurnover: user.organization?.annualTurnover || null
     };
     return {
       ...user,
       aadhaarKyc: user.kycVerifications?.[0] || null,
       kycVerifications: undefined,
-      profile
+      profile,
+      shgProfile: user.shgProfile || null
     };
   });
 
@@ -7897,11 +7965,16 @@ router.put('/admin/users/:id', authenticate, authorizeAdmin, asyncRoute(async (r
     accountStatus: z.enum(['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']).optional()
   }), req.body);
 
+  const allowedAssignableRoles = ['admin', 'buyer', 'seller', 'shg'];
   if (body.role) {
     const requestedRole = body.role.trim().toLowerCase();
     if (requestedRole === 'master_admin' || requestedRole === 'master admin') {
       throw new ApiError(403, 'Cannot assign Master Admin role.', 'MASTER_ADMIN_ASSIGNMENT_BLOCKED');
     }
+    if (!allowedAssignableRoles.includes(requestedRole)) {
+      throw new ApiError(400, `Cannot assign role '${requestedRole}'. Allowed roles: ${allowedAssignableRoles.join(', ')}`, 'INVALID_ROLE');
+    }
+    body.role = requestedRole;
   }
 
   if (id === userId(req) && body.accountStatus && body.accountStatus !== 'ACTIVE') {
@@ -8150,166 +8223,7 @@ router.get('/admin/compliance-rules/:id/violations', authenticate, authorizeAdmi
     db.complianceViolation.count({ where: whereFilter })
   ]);
 
-  if (total === 0) {
-    const existingUsers = await db.user.findMany({ take: 3, select: { id: true } });
-    const userIds = existingUsers.map((u: any) => u.id);
-    const u1 = userIds[0] || null;
-    const u2 = userIds[1] || u1;
-    const u3 = userIds[2] || u1;
 
-    let mocks: Array<{
-      type: string;
-      severity: string;
-      description: string;
-      metadata: any;
-      userId: number | null;
-    }> = [];
-
-    if (rule.code === 'SUSPICIOUS_REGISTRATION') {
-      mocks = [
-        {
-          type: 'ip_proxy_detection',
-          severity: 'high',
-          description: 'Registration IP matches a known public proxy/VPN network often associated with fraudulent registrations.',
-          metadata: { ipAddress: '194.26.29.8', proxyType: 'VPN', provider: 'NordVPN', flagCountry: 'NL' },
-          userId: u1
-        },
-        {
-          type: 'device_hash_conflict',
-          severity: 'critical',
-          description: 'Device fingerprint matches that of a previously blacklisted seller account.',
-          metadata: { deviceHash: 'dev_84f9b2a1c0d3e4f5', matchedBlacklistedUserId: 104, confidence: 'high' },
-          userId: u2
-        },
-        {
-          type: 'multiple_pan_attempts',
-          severity: 'medium',
-          description: 'Multiple verification attempts made with different PAN numbers within a short timespan during registration.',
-          metadata: { panAttempts: ['ABCDE1234F', 'EDCBA4321G'], timespanSeconds: 45 },
-          userId: u3
-        }
-      ];
-    } else if (rule.code === 'DUPLICATE_IDENTIFIER' || rule.code === 'BANK_ACCOUNT_DUPLICATE') {
-      mocks = [
-        {
-          type: 'duplicate_bank_account',
-          severity: 'high',
-          description: 'This bank account is already linked to another active vendor account in the system.',
-          metadata: { accountNumber: '******5432', ifsc: 'SBIN0001234', conflictingUserId: 8 },
-          userId: u1
-        },
-        {
-          type: 'duplicate_pan',
-          severity: 'critical',
-          description: 'The provided PAN is already associated with another seller account.',
-          metadata: { panHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', originalUserId: 5 },
-          userId: u2
-        }
-      ];
-    } else if (rule.code === 'KYC_PAN_REQUIRED' || rule.code === 'MISSING_REQUIRED_DOCUMENT') {
-      mocks = [
-        {
-          type: 'missing_udyam_certificate',
-          severity: 'high',
-          description: 'The mandatory Udyam MSME registration certificate was omitted or failed to upload during onboarding.',
-          metadata: { documentType: 'Udyam Certificate', reason: 'User cancelled upload' },
-          userId: u1
-        },
-        {
-          type: 'missing_gst_declaration',
-          severity: 'medium',
-          description: 'GST-exempt declaration is required but has not been uploaded.',
-          metadata: { documentType: 'GST Declaration' },
-          userId: u2
-        }
-      ];
-    } else if (rule.code === 'INVALID_GST' || rule.code === 'GSTIN_FORMAT_CHECK') {
-      mocks = [
-        {
-          type: 'gst_status_inactive',
-          severity: 'high',
-          description: 'GSTIN validation via API Setu returned an Inactive status.',
-          metadata: { gstin: '24AAAAP1234A1Z5', status: 'INACTIVE', responseCode: '200' },
-          userId: u1
-        },
-        {
-          type: 'gst_legal_name_mismatch',
-          severity: 'high',
-          description: 'Business name provided during onboarding does not match the legal name on record in GSTIN.',
-          metadata: { inputName: 'Rohan Retailers Ltd', gstLegalName: 'Rohan Trading Private Limited' },
-          userId: u2
-        }
-      ];
-    } else if (rule.code === 'INVALID_PAN') {
-      mocks = [
-        {
-          type: 'pan_name_mismatch',
-          severity: 'high',
-          description: 'Name on the PAN card does not match the organization representative name.',
-          metadata: { representativeName: 'Anil Kumar', panName: 'ANIL KUMAR MEHTA' },
-          userId: u1
-        }
-      ];
-    } else if (rule.code === 'INVALID_BANK') {
-      mocks = [
-        {
-          type: 'bank_verification_failed',
-          severity: 'high',
-          description: 'Penny drop verification returned an account name mismatch error.',
-          metadata: { accountHolderProvided: 'Neha Gupta', nameReturned: 'NEHA GUPTA AND SONS' },
-          userId: u1
-        }
-      ];
-    } else if (rule.code === 'BID_DEADLINE_ENFORCEMENT' || rule.code === 'POLICY_VIOLATION') {
-      mocks = [
-        {
-          type: 'late_bid_submission_attempt',
-          severity: 'critical',
-          description: 'System blocked and logged an attempt to submit/modify a bid after the official closesAt deadline.',
-          metadata: { tenderId: 12, closesAt: '2026-05-27T10:00:00Z', attemptAt: '2026-05-27T10:02:14Z' },
-          userId: u1
-        }
-      ];
-    } else {
-      mocks = [
-        {
-          type: 'general_policy_warning',
-          severity: 'medium',
-          description: `Compliance warning triggered under general policy rules for ${rule.code}.`,
-          metadata: { triggeredAt: new Date().toISOString() },
-          userId: u1
-        }
-      ];
-    }
-
-    if (mocks.length > 0) {
-      await Promise.all(mocks.map(violation =>
-        db.complianceViolation.create({
-          data: {
-            ruleId: id,
-            userId: violation.userId,
-            type: violation.type,
-            severity: violation.severity,
-            status: 'open',
-            description: violation.description,
-            metadata: violation.metadata as any
-          }
-        })
-      ));
-
-      // Re-fetch now that they are seeded
-      [records, total] = await Promise.all([
-        db.complianceViolation.findMany({
-          where: { ruleId: id },
-          include: { user: { select: { id: true, name: true, email: true, role: true } } },
-          orderBy: { createdAt: 'desc' },
-          skip: window.skip,
-          take: window.take
-        }),
-        db.complianceViolation.count({ where: { ruleId: id } })
-      ]);
-    }
-  }
 
   ok(res, { records, total, ...window });
 }));
@@ -8489,7 +8403,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
               args.push(role);
               filterSql += ` AND "role" = $${args.length}`;
             }
-            const rawResult = await db.$queryRawUnsafe<any[]>(`
+            const rawResult: any[] = await (db as any).$queryRawUnsafe(`
               SELECT AVG(EXTRACT(EPOCH FROM ("updatedAt" - "createdAt")) / 86400) as "avgDays"
               FROM "User"
               ${filterSql}
@@ -8589,66 +8503,494 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
   // 2. Heavy details calculation (only if not kpiOnly)
   let userGrowth: any[] = [];
   let transactions: any[] = [];
+  let clusterBreakdown: any[] = [];
+  let procurementMethods: any = {};
+  let settlementCompliance: any = {};
+  let geographicLinkage: any = {};
+  let entityClassification: any = {};
+  let recentActivities: any[] = [];
+  let shgStats: any = null;
 
   if (!kpiOnly) {
+    const timeframe = String(req.query.timeframe || '30d').toLowerCase();
+    const roleFilter = String(req.query.role || 'all').toLowerCase();
+
+    // Determine timeframe start date
+    const now = new Date();
+    let startDate = new Date();
+    let intervalCount = 6;
+    let intervalType: 'day' | 'week' | 'month' = 'month';
+
+    if (timeframe === '7d') {
+      startDate.setDate(now.getDate() - 7);
+      intervalCount = 7;
+      intervalType = 'day';
+    } else if (timeframe === '30d') {
+      startDate.setDate(now.getDate() - 30);
+      intervalCount = 5;
+      intervalType = 'week';
+    } else if (timeframe === '90d') {
+      startDate.setDate(now.getDate() - 90);
+      intervalCount = 3;
+      intervalType = 'month';
+    } else if (timeframe === '1y') {
+      startDate.setFullYear(now.getFullYear() - 1);
+      intervalCount = 12;
+      intervalType = 'month';
+    } else { // 'all'
+      startDate.setFullYear(now.getFullYear() - 2);
+      intervalCount = 8;
+      intervalType = 'month';
+    }
+
+    // A. User Growth calculation with role & timeframe awareness
     const userGrowthPromise = (async () => {
-      const sixMonthsAgo = new Date();
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      const recentUsers = await db.user.findMany({
-        where: { createdAt: { gte: sixMonthsAgo }, ...globalWhere, ...userRoleWhere },
-        select: { createdAt: true, role: true }
-      });
-
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const growthMap = new Map();
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date();
-        d.setMonth(d.getMonth() - i);
-        growthMap.set(monthNames[d.getMonth()], { name: monthNames[d.getMonth()], buyers: 0, sellers: 0 });
-      }
-
-      recentUsers.forEach((u: any) => {
-        const d = new Date(u.createdAt);
-        const m = monthNames[d.getMonth()];
-        if (growthMap.has(m)) {
-          const entry = growthMap.get(m);
-          if (u.role === 'buyer') entry.buyers++;
-          if (u.role === 'seller') entry.sellers++;
+      try {
+        const userWhere: any = { createdAt: { gte: startDate } };
+        if (roleFilter !== 'all') {
+          userWhere.role = roleFilter;
         }
-      });
-      return Array.from(growthMap.values());
+
+        const recentUsers = await db.user.findMany({
+          where: userWhere,
+          select: { createdAt: true, role: true },
+          orderBy: { createdAt: 'asc' }
+        });
+
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const buckets: Array<{ name: string; buyers: number; sellers: number; shgs: number; total: number; start: Date; end: Date }> = [];
+
+        if (intervalType === 'day') {
+          for (let i = intervalCount - 1; i >= 0; i--) {
+            const d = new Date(now);
+            d.setDate(now.getDate() - i);
+            d.setHours(0, 0, 0, 0);
+            const endD = new Date(d);
+            endD.setHours(23, 59, 59, 999);
+            buckets.push({
+              name: `${dayNames[d.getDay()]} ${d.getDate()}`,
+              buyers: 0,
+              sellers: 0,
+              shgs: 0,
+              total: 0,
+              start: d,
+              end: endD
+            });
+          }
+        } else if (intervalType === 'week') {
+          for (let i = intervalCount - 1; i >= 0; i--) {
+            const startD = new Date(now);
+            startD.setDate(now.getDate() - (i + 1) * 6);
+            startD.setHours(0, 0, 0, 0);
+            const endD = new Date(startD);
+            endD.setDate(startD.getDate() + 6);
+            endD.setHours(23, 59, 59, 999);
+            buckets.push({
+              name: `Wk ${intervalCount - i}`,
+              buyers: 0,
+              sellers: 0,
+              shgs: 0,
+              total: 0,
+              start: startD,
+              end: endD
+            });
+          }
+        } else {
+          for (let i = intervalCount - 1; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const endD = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+            buckets.push({
+              name: monthNames[d.getMonth()],
+              buyers: 0,
+              sellers: 0,
+              shgs: 0,
+              total: 0,
+              start: d,
+              end: endD
+            });
+          }
+        }
+
+        recentUsers.forEach((u: any) => {
+          const uDate = new Date(u.createdAt);
+          for (const b of buckets) {
+            if (uDate >= b.start && uDate <= b.end) {
+              if (u.role === 'buyer') b.buyers++;
+              else if (u.role === 'seller') b.sellers++;
+              else if (u.role === 'shg') b.shgs++;
+              b.total++;
+              break;
+            }
+          }
+        });
+
+        return buckets.map(b => ({
+          name: b.name,
+          buyers: b.buyers,
+          sellers: b.sellers,
+          shgs: b.shgs,
+          total: b.total
+        }));
+      } catch {
+        return [];
+      }
     })();
 
+    // B. Transaction Volume calculation
     const transactionsPromise = (async () => {
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const recentPayments = await db.paymentTransaction.findMany({
-        where: { createdAt: { gte: sevenDaysAgo }, ...globalWhere },
-        select: { createdAt: true, amount: true }
-      });
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const txnMap = new Map();
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        txnMap.set(dayNames[d.getDay()], { name: dayNames[d.getDay()], value: 0 });
-      }
-      recentPayments.forEach((p: any) => {
-        const d = new Date(p.createdAt);
-        const day = dayNames[d.getDay()];
-        if (txnMap.has(day)) {
-          txnMap.get(day).value += Number(p.amount);
+      try {
+        const recentPayments = await db.paymentTransaction.findMany({
+          where: { createdAt: { gte: startDate } },
+          select: { createdAt: true, amount: true, status: true },
+          orderBy: { createdAt: 'asc' }
+        });
+
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const buckets: Array<{ name: string; value: number; count: number; start: Date; end: Date }> = [];
+
+        if (intervalType === 'day') {
+          for (let i = intervalCount - 1; i >= 0; i--) {
+            const d = new Date(now);
+            d.setDate(now.getDate() - i);
+            d.setHours(0, 0, 0, 0);
+            const endD = new Date(d);
+            endD.setHours(23, 59, 59, 999);
+            buckets.push({
+              name: `${dayNames[d.getDay()]} ${d.getDate()}`,
+              value: 0,
+              count: 0,
+              start: d,
+              end: endD
+            });
+          }
+        } else if (intervalType === 'week') {
+          for (let i = intervalCount - 1; i >= 0; i--) {
+            const startD = new Date(now);
+            startD.setDate(now.getDate() - (i + 1) * 6);
+            startD.setHours(0, 0, 0, 0);
+            const endD = new Date(startD);
+            endD.setDate(startD.getDate() + 6);
+            endD.setHours(23, 59, 59, 999);
+            buckets.push({
+              name: `Wk ${intervalCount - i}`,
+              value: 0,
+              count: 0,
+              start: startD,
+              end: endD
+            });
+          }
+        } else {
+          for (let i = intervalCount - 1; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const endD = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+            buckets.push({
+              name: monthNames[d.getMonth()],
+              value: 0,
+              count: 0,
+              start: d,
+              end: endD
+            });
+          }
         }
-      });
-      return Array.from(txnMap.values());
+
+        recentPayments.forEach((p: any) => {
+          const pDate = new Date(p.createdAt);
+          for (const b of buckets) {
+            if (pDate >= b.start && pDate <= b.end) {
+              b.value += Number(p.amount || 0);
+              b.count++;
+              break;
+            }
+          }
+        });
+
+        return buckets.map(b => ({
+          name: b.name,
+          value: Math.round(b.value),
+          count: b.count
+        }));
+      } catch {
+        return [];
+      }
     })();
 
-    [userGrowth, transactions] = await Promise.all([userGrowthPromise, transactionsPromise]);
+    // C. Jharsuguda Industrial Cluster Breakdown (Pure DB Sourcing)
+    const clusterBreakdownPromise = (async () => {
+      try {
+        const items = await db.purchaseOrderItem.findMany({
+          select: {
+            totalAmount: true,
+            itemName: true,
+            purchaseOrderId: true,
+            product: { select: { category: { select: { name: true } } } }
+          }
+        });
+
+        const categorySpend: Record<string, { spend: number; orderIds: Set<number> }> = {};
+        for (const it of items) {
+          const catName = it.product?.category?.name || it.itemName || 'General Procurement';
+          if (!categorySpend[catName]) {
+            categorySpend[catName] = { spend: 0, orderIds: new Set() };
+          }
+          categorySpend[catName].spend += Number(it.totalAmount || 0);
+          categorySpend[catName].orderIds.add(it.purchaseOrderId);
+        }
+
+        const clusterBreakdown = Object.entries(categorySpend).map(([name, data]) => ({
+          name,
+          spend: Math.round(data.spend),
+          orders: data.orderIds.size
+        })).sort((a, b) => b.spend - a.spend);
+
+        const totalSpend = clusterBreakdown.reduce((s, c) => s + c.spend, 0) || 1;
+        return clusterBreakdown.map(c => ({
+          ...c,
+          percentage: Math.round((c.spend / totalSpend) * 100)
+        }));
+      } catch {
+        return [];
+      }
+    })();
+
+    // D. Procurement Methods Breakdown (Pure DB Sourcing)
+    const procurementMethodsPromise = (async () => {
+      try {
+        const [tendersCount, directCount, quoteCount, rateContractCount] = await Promise.all([
+          db.tender.count().catch(() => 0),
+          db.directPurchase.count().catch(() => 0),
+          db.quoteRequest.count().catch(() => 0),
+          db.contract.count({ where: { contractType: 'RATE_CONTRACT' } }).catch(() => 0)
+        ]);
+
+        const totalMethods = tendersCount + directCount + quoteCount + rateContractCount || 1;
+        return [
+          { name: 'E-Tendering', count: tendersCount, share: Math.round((tendersCount / totalMethods) * 100) },
+          { name: 'Direct Purchase', count: directCount, share: Math.round((directCount / totalMethods) * 100) },
+          { name: 'L1 Quotations', count: quoteCount, share: Math.round((quoteCount / totalMethods) * 100) },
+          { name: 'Rate Contracts', count: rateContractCount, share: Math.round((rateContractCount / totalMethods) * 100) }
+        ];
+      } catch {
+        return [];
+      }
+    })();
+
+    // E. MSMED Act 45-Day Statutory Payment Adherence (Pure DB Sourcing)
+    const settlementCompliancePromise = (async () => {
+      try {
+        const [invoices, escrowAgg] = await Promise.all([
+          db.invoice.findMany({
+            select: {
+              id: true,
+              createdAt: true,
+              payments: { select: { createdAt: true, status: true } }
+            }
+          }).catch(() => []),
+          db.escrowAccount.aggregate({
+            _sum: { amount: true },
+            where: { status: { in: ['held', 'funded'] } }
+          }).catch(() => ({ _sum: { amount: 0 } }))
+        ]);
+
+        const escrowHeld = Number(escrowAgg._sum?.amount || 0);
+        let onTime = 0;
+        let delayed = 0;
+        let totalDays = 0;
+        let settledCount = 0;
+
+        for (const inv of invoices) {
+          const paidPayment = inv.payments?.find((p: any) => 
+            ['completed', 'settled', 'success'].includes(p.status?.toLowerCase())
+          );
+          if (paidPayment) {
+            const days = Math.max(0, (paidPayment.createdAt.getTime() - inv.createdAt.getTime()) / (1000 * 3600 * 24));
+            totalDays += days;
+            settledCount++;
+            if (days <= 45) onTime++;
+            else delayed++;
+          } else {
+            const ageDays = (Date.now() - inv.createdAt.getTime()) / (1000 * 3600 * 24);
+            if (ageDays > 45) delayed++;
+          }
+        }
+
+        const avgSettlementDays = settledCount > 0 ? Number((totalDays / settledCount).toFixed(1)) : 0;
+        const complianceRate = invoices.length > 0 ? `${Math.round((onTime / invoices.length) * 100)}%` : '0%';
+
+        return {
+          complianceRate,
+          onTimePaymentsCount: onTime,
+          delayedCount: delayed,
+          avgSettlementDays,
+          escrowHeldValue: `₹${(escrowHeld / 10000000).toFixed(2)}Cr`,
+          targetSlaDays: 45,
+          statutoryAct: 'MSMED Act 2006, Section 15'
+        };
+      } catch {
+        return {
+          complianceRate: '0%',
+          onTimePaymentsCount: 0,
+          delayedCount: 0,
+          avgSettlementDays: 0,
+          escrowHeldValue: '₹0.00Cr',
+          targetSlaDays: 45,
+          statutoryAct: 'MSMED Act 2006, Section 15'
+        };
+      }
+    })();
+
+    // F. Geographic Linkage (Pure DB Sourcing)
+    const geographicLinkagePromise = (async () => {
+      try {
+        const orgs = await db.organization.findMany({
+          select: { district: true, city: true, state: true }
+        });
+
+        let jsgCount = 0;
+        let odishaCount = 0;
+        let outsideCount = 0;
+
+        for (const o of orgs) {
+          const isJsg = (o.district && /jharsuguda/i.test(o.district)) || (o.city && /jharsuguda/i.test(o.city));
+          const isOdisha = o.state && /odisha|orissa/i.test(o.state);
+          if (isJsg) jsgCount++;
+          else if (isOdisha) odishaCount++;
+          else outsideCount++;
+        }
+
+        return {
+          jharsugudaDistrict: jsgCount,
+          restOfOdisha: odishaCount,
+          restOfIndia: outsideCount,
+          localLinkagePercent: orgs.length > 0 ? Math.round((jsgCount / orgs.length) * 100) : 0
+        };
+      } catch {
+        return {
+          jharsugudaDistrict: 0,
+          restOfOdisha: 0,
+          restOfIndia: 0,
+          localLinkagePercent: 0
+        };
+      }
+    })();
+
+    // G. Entity Classification (Pure DB Sourcing)
+    const entityClassificationPromise = (async () => {
+      try {
+        const [localMsmeCount, msmeCount, allSellersCount, shgCount, buyerCount] = await Promise.all([
+          db.sellerProfile.count({ where: { msmeType: 'LOCAL_MSME' } }).catch(() => 0),
+          db.sellerProfile.count({ where: { msmeType: 'MSME' } }).catch(() => 0),
+          db.user.count({ where: { role: 'seller' } }).catch(() => 0),
+          db.user.count({ where: { role: 'shg' } }).catch(() => 0),
+          db.user.count({ where: { role: 'buyer' } }).catch(() => 0)
+        ]);
+
+        const otherSuppliers = Math.max(0, allSellersCount - (localMsmeCount + msmeCount));
+        const total = (localMsmeCount + msmeCount + otherSuppliers + shgCount + buyerCount) || 1;
+
+        const list = [
+          { name: 'Local MSMEs (District)', count: localMsmeCount, value: Math.round((localMsmeCount / total) * 100), fill: '#12335f' },
+          { name: 'MSME Enterprises', count: msmeCount, value: Math.round((msmeCount / total) * 100), fill: '#0284c7' },
+          { name: 'General Suppliers', count: otherSuppliers, value: Math.round((otherSuppliers / total) * 100), fill: '#10b981' },
+          { name: 'Women SHGs', count: shgCount, value: Math.round((shgCount / total) * 100), fill: '#8b5cf6' },
+          { name: 'Anchor Buyers & PSUs', count: buyerCount, value: Math.round((buyerCount / total) * 100), fill: '#f59e0b' }
+        ];
+
+        return list.filter(item => item.count > 0);
+      } catch {
+        return [];
+      }
+    })();
+
+    // H. Recent Activities Log (Pure DB Sourcing)
+    const recentActivitiesPromise = (async () => {
+      try {
+        const recentOrders = await db.purchaseOrder.findMany({
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            buyer: { select: { name: true } },
+            seller: { select: { name: true } }
+          }
+        });
+
+        return recentOrders.map((po: any) => ({
+          id: po.id,
+          type: 'PURCHASE_ORDER',
+          title: po.title || `Purchase Order PO-${po.id}`,
+          partyA: po.buyer?.name || 'Anchor Buyer',
+          partyB: po.seller?.name || 'MSME Vendor',
+          amount: Number(po.amount || 0),
+          status: po.status,
+          date: po.createdAt
+        }));
+      } catch {
+        return [];
+      }
+    })();
+
+    // I. Women SHG Linkage (Pure DB Sourcing)
+    const shgStatsPromise = (async () => {
+      try {
+        const [shgUsersCount, shgPos] = await Promise.all([
+          db.user.count({ where: { role: 'shg' } }).catch(() => 0),
+          db.purchaseOrder.findMany({
+            where: { seller: { role: 'shg' } },
+            select: { id: true, amount: true, title: true }
+          }).catch(() => [])
+        ]);
+
+        const shgSpend = shgPos.reduce((sum: number, po: any) => sum + Number(po.amount || 0), 0);
+        return {
+          collectivesCount: shgUsersCount,
+          ordersCount: shgPos.length,
+          totalSpend: shgSpend,
+          spendFormatted: `₹${Number(shgSpend).toLocaleString('en-IN')}`
+        };
+      } catch {
+        return {
+          collectivesCount: 0,
+          ordersCount: 0,
+          totalSpend: 0,
+          spendFormatted: '₹0'
+        };
+      }
+    })();
+
+    [
+      userGrowth,
+      transactions,
+      clusterBreakdown,
+      procurementMethods,
+      settlementCompliance,
+      geographicLinkage,
+      entityClassification,
+      recentActivities,
+      shgStats
+    ] = await Promise.all([
+      userGrowthPromise,
+      transactionsPromise,
+      clusterBreakdownPromise,
+      procurementMethodsPromise,
+      settlementCompliancePromise,
+      geographicLinkagePromise,
+      entityClassificationPromise,
+      recentActivitiesPromise,
+      shgStatsPromise
+    ]);
 
     if (detailsOnly) {
       return ok(res, {
         userGrowth,
-        transactions
+        transactions,
+        clusterBreakdown,
+        procurementMethods,
+        settlementCompliance,
+        geographicLinkage,
+        entityClassification,
+        recentActivities,
+        shgStats
       });
     }
   }
@@ -8665,6 +9007,13 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
     disputes,
     userGrowth,
     transactions,
+    clusterBreakdown,
+    procurementMethods,
+    settlementCompliance,
+    geographicLinkage,
+    entityClassification,
+    recentActivities,
+    shgStats,
     avgOnboardingTime,
     approvalRate,
     activeProcurementValue,
@@ -10006,6 +10355,7 @@ export type NormalizedProcurement = {
   documents?: any[];
   items?: any[];
   paymentTerms?: string;
+  evaluationMethod?: string;
   eligibilityCriteria?: string[];
   termsAndConditions?: string[];
   budgetDetails?: any;
@@ -10321,10 +10671,14 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       quantity: String(b.quantity || ''),
       unit: b.unit || '',
       organizationName: b.buyerOrganizationName || '',
-      participantsCount: (b.participations || []).filter((p: any) => p.submissionStatus === 'SUBMITTED' || !p.isWithdrawn).length,
+      participantsCount: (b.participations || []).filter((p: any) => {
+        const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
+        return subStatus !== 'DRAFT' && !p.isWithdrawn;
+      }).length,
       createdAt: b.createdAt?.toISOString?.() || '',
       updatedAt: b.updatedAt?.toISOString?.() || '',
       actionUrl: `/bids/${b.id}`,
+      evaluationMethod: b.evaluationMethod || (b.technicalPacket as any)?.evaluation?.method || (b.technicalPacket as any)?.evaluationMethod || (b.technicalPacket as any)?.rules?.evaluationMethod || 'L1 Basis',
       documents,
       items,
       paymentTerms: '',
@@ -10711,6 +11065,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       organizationName: (r as any).organization?.organizationName || payload.basics?.buyerOrganizationName || loggedInOrgName || '',
       createdAt: r.createdAt?.toISOString?.() || '',
       updatedAt: r.updatedAt?.toISOString?.() || '',
+      evaluationMethod: payload.evaluation?.method || payload.evaluation?.evaluationMethod || payload.evaluationMethod || payload.rules?.evaluationMethod || 'L1 Basis',
       actionUrl: (() => {
         const linkedAuction = auctionsByRequirementId[r.id];
         if (linkedAuction) {
