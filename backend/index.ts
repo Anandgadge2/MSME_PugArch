@@ -3720,15 +3720,11 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
         'group_leader_aadhaar',
         'bank_passbook_cancelled_cheque',
         'member_list',
-        'address_proof'
+        'udyam_certificate'
       ]
       : ['pan_copy', 'bank_passbook', 'address_proof'];
 
-    if (isHerShg) {
-      if (regDetails.gstin || profile.offices?.some((o: any) => o.gst)) {
-        requiredDocs.push('gst_certificate');
-      }
-    } else {
+    if (!isHerShg) {
       requiredDocs.push('udyam_certificate');
     }
 
@@ -3772,7 +3768,25 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
         return (aliases[normR] || []).includes(normU) || (aliases[normU] || []).includes(normR);
       });
 
-    const missingDocs = requiredDocs.filter(d => !matchesDocType(d, uploadedDocs));
+    const shgOptionalDocPatterns = [
+      'pancard', 'pancopy', 'pan',
+      'addressproof',
+      'gstcertificate', 'gst',
+      'productimages',
+      'trainingskill', 'trainingcertificate', 'skilltraining', 'skilldevelopment',
+      'womenempowerment', 'startupentrepreneurship', 'nrlm', 'produce',
+      'farmerid', 'landrecord', 'fpo', 'fpc', 'artisan', 'handicraft',
+      'catalogue', 'dairycooperative', 'dairylinkage', 'livestock',
+      'businessactivity', 'activitydetails', 'tribal', 'activityspecific'
+    ];
+    const isShgOptionalDoc = (docType: string) => {
+      const norm = String(docType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return shgOptionalDocPatterns.some(pat => norm.includes(pat) || pat.includes(norm));
+    };
+
+    const missingDocs = requiredDocs
+      .filter(d => !(isHerShg && isShgOptionalDoc(d)))
+      .filter(d => !matchesDocType(d, uploadedDocs));
 
     if (missingDocs.length > 0) {
       const labels: Record<string, string> = {

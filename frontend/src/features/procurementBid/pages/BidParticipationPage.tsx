@@ -1831,8 +1831,8 @@ function SubmitStep({
         <p className="mt-1 text-sm text-slate-600">Review your checklist before final submission.</p>
       </div>
 
-      {/* EMD Section */}
-      {isEmdActive && (
+      {/* EMD Section commented out as per client request */}
+      {/* {isEmdActive && (
         <div className="text-left max-w-xl mx-auto">
           <EmdCard
             emdInfo={emdInfo || null}
@@ -1841,7 +1841,7 @@ function SubmitStep({
             procurementType={procurementType}
           />
         </div>
-      )}
+      )} */}
       
       <div className="flex flex-col gap-2.5 sm:gap-3 max-w-sm mx-auto text-left">
         {requirements.map((req, i) => (

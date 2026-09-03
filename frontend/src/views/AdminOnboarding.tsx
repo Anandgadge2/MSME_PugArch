@@ -253,7 +253,6 @@ export default function AdminOnboarding() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [progressFilter, setProgressFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
-  const [adminView, setAdminView] = useState("applications");
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showcaseItems, setShowcaseItems] = useState<any[]>([]);
   const [showcaseItemsLoading, setShowcaseItemsLoading] = useState(false);
@@ -1092,8 +1091,17 @@ export default function AdminOnboarding() {
     [sellers],
   );
 
+  const sellerApplications = useMemo(
+    () => sellers.filter((item) => !isShgUser({ ...item, sellerProfile: item.profile })),
+    [sellers],
+  );
+
   const currentData =
-    activeTab === "sellers" ? filterData(sellers) : activeTab === "buyers" ? filterData(buyers) : filterData(shgApplications);
+    activeTab === "sellers"
+      ? filterData(sellerApplications)
+      : activeTab === "buyers"
+        ? filterData(buyers)
+        : filterData(shgApplications);
   const currentPage = Math.min(
     page,
     Math.max(1, Math.ceil(currentData.length / pageSize)),
@@ -1136,19 +1144,13 @@ export default function AdminOnboarding() {
         b.onboardingStatus,
       ),
     ).length;
-  const activeSellers = sellers.filter(
+  const activeSellers = sellerApplications.filter(
     (s) => s.onboardingStatus === "approved_for_procurement",
   ).length;
   const activeBuyers = buyers.filter(
     (b) => b.onboardingStatus === "approved_for_procurement",
   ).length;
   const totalNetwork = sellers.length + buyers.length;
-  const rejectedTotal = [...sellers, ...buyers].filter(
-    (item) => item.onboardingStatus === "rejected",
-  ).length;
-  const correctionTotal = [...sellers, ...buyers].filter(
-    (item) => item.onboardingStatus === "resubmission_required",
-  ).length;
   const averageProgress = totalNetwork
     ? Math.round(
       [...sellers, ...buyers].reduce(
@@ -1224,20 +1226,25 @@ export default function AdminOnboarding() {
 
   const handleKpiClick = (target: string) => {
     if (target === "pending") {
-      setStatusFilter("pending");
-      setAdminView("scrutiny");
+      setStatusFilter((prev) => (prev === "pending" ? "all" : "pending"));
     } else if (target === "sellers") {
-      setActiveTab("sellers");
-      setStatusFilter("approved");
-      setAdminView("applications");
+      if (activeTab === "sellers" && statusFilter === "approved") {
+        setStatusFilter("all");
+      } else {
+        setActiveTab("sellers");
+        setStatusFilter("approved");
+      }
     } else if (target === "buyers") {
-      setActiveTab("buyers");
-      setStatusFilter("approved");
-      setAdminView("applications");
+      if (activeTab === "buyers" && statusFilter === "approved") {
+        setStatusFilter("all");
+      } else {
+        setActiveTab("buyers");
+        setStatusFilter("approved");
+      }
     } else {
       setStatusFilter("all");
       setProgressFilter("all");
-      setAdminView("reports");
+      setSearchTerm("");
     }
   };
 
@@ -1298,7 +1305,7 @@ export default function AdminOnboarding() {
         <div className="grid grid-cols-1 gap-4">
           <div className="min-w-0 space-y-4">
             {/* Stats Section */}
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-4 lg:grid-cols-4">
               {[
                 {
                   label: "Pending Approval",
@@ -1342,46 +1349,14 @@ export default function AdminOnboarding() {
                   tone={stat.tone}
                   onClick={() => handleKpiClick(stat.target)}
                   active={
-                    (stat.target === "pending" && statusFilter === "pending" && adminView === "scrutiny") ||
+                    (stat.target === "pending" && statusFilter === "pending") ||
                     (stat.target === "sellers" && activeTab === "sellers" && statusFilter === "approved") ||
                     (stat.target === "buyers" && activeTab === "buyers" && statusFilter === "approved") ||
-                    (stat.target === "network" && adminView === "reports")
+                    (stat.target === "network" && statusFilter === "all" && progressFilter === "all" && !searchTerm)
                   }
                 />
               ))}
             </div>
-
-            {adminView !== "applications" && (
-              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm md:grid-cols-3">
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
-                    Current Desk
-                  </p>
-                  <p className="mt-2 text-sm font-black text-[#12335f]">
-                    {adminView === "scrutiny"
-                      ? "Pending Scrutiny Queue"
-                      : adminView === "reports"
-                        ? "MIS Compliance Snapshot"
-                        : "Correction & Rejection Flags"}
-                  </p>
-                  <p className="mt-1 text-xs font-medium text-slate-600">
-                    {adminView === "scrutiny"
-                      ? "Prioritise applications waiting for section-wise verification."
-                      : adminView === "reports"
-                        ? "Review the overall health of seller and buyer onboarding."
-                        : "Track applications that need correction, resubmission, or closure."}
-                  </p>
-                </div>
-                <MetricTile
-                  label="Correction Required"
-                  value={correctionTotal}
-                />
-                <MetricTile
-                  label="Rejected Applications"
-                  value={rejectedTotal}
-                />
-              </div>
-            )}
 
             <Card className="border-none shadow-sm border border-slate-200/80 rounded-2xl overflow-hidden">
               <CardHeader className="bg-white p-0 border-b border-slate-100">
@@ -1496,14 +1471,6 @@ export default function AdminOnboarding() {
                       }
                     />
                   </div>
-
-                  {adminView !== "applications" && (
-                    <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#12335f]">
-                        View: {adminView.replace("_", " ")}
-                      </span>
-                    </div>
-                  )}
                 </div>
 
                 {isLoading ? (
@@ -3616,19 +3583,6 @@ export default function AdminOnboarding() {
         <DocumentPreviewModal previewDocument={previewDocument} onClose={handleClosePreview} />
       )}
     </div>
-  );
-}
-
-
-function MetricTile({ label, value, subtext }: { label: string; value: number; subtext?: string }) {
-  return (
-    <KpiCard
-      label={label}
-      value={value}
-      subtext={subtext || (label.toLowerCase().includes('reject') ? 'Denied submissions' : 'Requires stakeholder action')}
-      tone={label.toLowerCase().includes('reject') ? 'red' : 'amber'}
-      icon={label.toLowerCase().includes('reject') ? XCircle : AlertTriangle}
-    />
   );
 }
 

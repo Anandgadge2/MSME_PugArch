@@ -393,11 +393,20 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     };
   });
 
+  const shgType = String(regDetails.shgType || formData.shgType || cachedRegDetails.shgType || cachedProfile.shgType || '').trim();
   const isHerShg = isShgUser(user)
+    || isShgUser(cachedMe?.user)
+    || user?.role === 'shg'
+    || Boolean(user?.shgProfile)
     || isShgBusinessType(regDetails.businessType)
     || isShgBusinessType(regDetails.stakeholderCategory)
-    || isShgBusinessType(formData.organizationType);
-  const shgType = String(regDetails.shgType || formData.shgType || cachedRegDetails.shgType || cachedProfile.shgType || '').trim();
+    || isShgBusinessType(regDetails.shgType)
+    || isShgBusinessType(formData.organizationType)
+    || isShgBusinessType(formData.businessType)
+    || isShgBusinessType(formData.shgType)
+    || isShgBusinessType(cachedRegDetails.businessType)
+    || isShgBusinessType(cachedRegDetails.stakeholderCategory)
+    || isShgBusinessType(shgType);
 
   const getRequiredDocuments = useCallback(() => {
     if (isHerShg) {
@@ -503,13 +512,19 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   const areAllDocumentsUploaded = useCallback(() => {
     const required = getRequiredDocuments();
     const uploadedTypes = (Array.isArray(sellerDocuments) ? sellerDocuments : []).map((d: any) => d.documentType);
-    return required.filter(doc => doc.required).every(reqDoc => {
-      if (orgVerified && ['pan_copy', 'gst_certificate', 'address_proof', 'business_registration_proof'].includes(reqDoc.id)) {
+    return required
+      .filter(doc => {
+        if (!doc.required) return false;
+        if (isHerShg && doc.category === 'optional') return false;
         return true;
-      }
-      return uploadedTypes.some(uploadedType => matchesDocumentType(uploadedType, reqDoc.id));
-    });
-  }, [getRequiredDocuments, sellerDocuments, orgVerified]);
+      })
+      .every(reqDoc => {
+        if (orgVerified && ['pan_copy', 'gst_certificate', 'address_proof', 'business_registration_proof'].includes(reqDoc.id)) {
+          return true;
+        }
+        return uploadedTypes.some(uploadedType => matchesDocumentType(uploadedType, reqDoc.id));
+      });
+  }, [getRequiredDocuments, sellerDocuments, orgVerified, isHerShg]);
 
   const submittedOnboardingDocuments = useMemo(() => {
     const allDocs = getRequiredDocuments();

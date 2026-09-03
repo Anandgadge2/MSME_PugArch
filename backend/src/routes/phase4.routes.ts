@@ -2382,14 +2382,14 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     ].includes(String(regDetails.businessType || regDetails.shgType || '').trim().toLowerCase());
 
     const requiredDocs: string[] = isShg
-      ? ['bank_passbook', 'address_proof', 'leader_aadhaar', 'member_list']
+      ? ['bank_passbook', 'leader_aadhaar', 'member_list', 'shg_registration_certificate', 'udyam_certificate']
       : ['pan_copy', 'bank_passbook', 'address_proof'];
 
     const addRequiredDoc = (docType: string) => {
       if (!requiredDocs.includes(docType)) requiredDocs.push(docType);
     };
 
-    if (Array.isArray(regDetails.selectedDocuments)) {
+    if (!isShg && Array.isArray(regDetails.selectedDocuments)) {
       for (const docType of regDetails.selectedDocuments) {
         if (typeof docType === 'string' && docType.trim()) addRequiredDoc(docType.trim());
       }
@@ -2399,22 +2399,22 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
       addRequiredDoc('udyam_certificate');
     }
 
-    if (profile.isStartup || String(profile.organizationType || regDetails.businessType).toLowerCase() === 'startup') {
+    if (!isShg && (profile.isStartup || String(profile.organizationType || regDetails.businessType).toLowerCase() === 'startup')) {
       addRequiredDoc('dipp_certificate');
     }
 
     const hasGstin = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('GST_REGISTERED');
-    if (hasGstin) {
+    if (!isShg && hasGstin) {
       addRequiredDoc('gst_certificate');
     }
 
-    if (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber) {
+    if (!isShg && (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber)) {
       addRequiredDoc('aadhaar_card');
     }
 
     const corporateTypes = ['Company', 'LLP', 'Partnership', 'Cooperative', 'Society', 'Trust'];
     const isCorporate = corporateTypes.some(t => String(profile.organizationType || regDetails.businessType).toLowerCase().includes(t.toLowerCase()));
-    if (isCorporate && (regDetails.cinNumber || regDetails.registrationNumber || regDetails.cin)) {
+    if (!isShg && isCorporate && (regDetails.cinNumber || regDetails.registrationNumber || regDetails.cin)) {
       addRequiredDoc('business_registration_proof');
     }
 
@@ -2426,12 +2426,32 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
         if (normU === normR) return true;
         const aliases: Record<string, string[]> = {
           bankpassbook: ['bankpassbook', 'bankpassbookcancelledcheque'],
-          leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard'],
-          registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate']
+          leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard', 'aadhaarcard'],
+          registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate'],
+          udyamcertificate: ['udyamcertificate', 'udyamregistrationcertificate']
         };
         return (aliases[normR] || []).includes(normU) || (aliases[normU] || []).includes(normR);
       });
-    const missingDocs = requiredDocs.filter(d => !matchesDocType(d, uploadedDocs));
+
+    const shgOptionalDocPatterns = [
+      'pancard', 'pancopy', 'pan',
+      'addressproof',
+      'gstcertificate', 'gst',
+      'productimages',
+      'trainingskill', 'trainingcertificate', 'skilltraining', 'skilldevelopment',
+      'womenempowerment', 'startupentrepreneurship', 'nrlm', 'produce',
+      'farmerid', 'landrecord', 'fpo', 'fpc', 'artisan', 'handicraft',
+      'catalogue', 'dairycooperative', 'dairylinkage', 'livestock',
+      'businessactivity', 'activitydetails', 'tribal', 'activityspecific'
+    ];
+    const isShgOptionalDoc = (docType: string) => {
+      const norm = String(docType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return shgOptionalDocPatterns.some(pat => norm.includes(pat) || pat.includes(norm));
+    };
+
+    const missingDocs = requiredDocs
+      .filter(d => !(isShg && isShgOptionalDoc(d)))
+      .filter(d => !matchesDocType(d, uploadedDocs));
 
     if (missingDocs.length > 0) {
       const labels: Record<string, string> = {
@@ -2447,6 +2467,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
         nsic_certificate: 'NSIC Registration Certificate',
         leader_aadhaar: 'Group Leader Aadhaar Card',
         registration_certificate: 'SHG Registration Certificate',
+        shg_registration_certificate: 'SHG Registration Certificate',
         member_list: 'Member List'
       };
       const missingLabels = missingDocs.map(d => labels[d] || d).join(', ');
@@ -8306,8 +8327,22 @@ router.put('/admin/fraud-alerts/:id', authenticate, authorizeAdmin, asyncRoute(a
 router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const kpiOnly = req.query.kpiOnly === 'true';
   const detailsOnly = req.query.detailsOnly === 'true';
+  const timeframe = (req.query.timeframe as string) || 'all';
+  const role = (req.query.role as string) || 'all';
 
-  const pendingOnboardingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review'];
+  let startDate: Date | undefined;
+  if (timeframe === '7d') startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  else if (timeframe === '30d') startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  else if (timeframe === '90d') startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  else if (timeframe === '1y') startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+
+  const globalWhere: any = {};
+  if (startDate) globalWhere.createdAt = { gte: startDate };
+
+  const userRoleWhere: any = {};
+  if (role !== 'all') userRoleWhere.role = role;
+
+  const pendingOnboardingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review', 'resubmission_required'];
 
   // 1. If detailsOnly is not true, we fetch the counts and KPIs (wrapped in cache)
   let totalNetwork = 0;
@@ -8326,49 +8361,59 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
 
   if (!detailsOnly) {
     const cachedKpis = await getOrSetCache(
-      redisKeys.cacheAdminKpiSummary(),
+      redisKeys.cacheAdminKpiSummary(timeframe, role),
       async () => {
         const countsPromise = Promise.all([
-          db.user.count(),
-          db.organization.count({ where: { verificationStatus: 'VERIFIED', organizationType: 'SELLER' } }).catch(() => db.user.count({ where: { role: 'seller', onboardingStatus: 'approved_for_procurement' } })),
-          db.organization.count({ where: { verificationStatus: 'VERIFIED', organizationType: { in: ['BUYER', 'GOVERNMENT', 'PSU', 'PUBLIC_LIMITED', 'PRIVATE_LIMITED'] } } }).catch(() => db.user.count({ where: { role: 'buyer', onboardingStatus: 'approved_for_procurement' } })),
-          db.user.count({ where: { role: { in: ['seller', 'buyer'] }, onboardingStatus: { in: pendingOnboardingStatuses } } }),
-          db.tender.count(),
-          db.bid.count(),
-          db.purchaseOrder.count(),
-          db.paymentTransaction.count(),
-          db.dispute.count()
+          db.user.count({ where: { ...globalWhere, ...userRoleWhere } }),
+          db.user.count({ where: { role: 'seller', onboardingStatus: 'approved_for_procurement', ...globalWhere, ...userRoleWhere } }),
+          db.user.count({ where: { role: 'buyer', onboardingStatus: 'approved_for_procurement', ...globalWhere, ...userRoleWhere } }),
+          db.user.count({ where: { role: { in: ['seller', 'buyer'] }, onboardingStatus: { in: pendingOnboardingStatuses }, ...globalWhere, ...userRoleWhere } }),
+          db.tender.count({ where: globalWhere }),
+          db.bid.count({ where: globalWhere }),
+          db.purchaseOrder.count({ where: globalWhere }),
+          db.paymentTransaction.count({ where: globalWhere }),
+          db.dispute.count({ where: globalWhere })
         ]);
 
         const aggregatesPromise = (async () => {
           // Active PO Sum
           const activePOs = await db.purchaseOrder.aggregate({
-            where: { status: { in: ['accepted', 'in_progress', 'delivered'] } },
+            where: { status: { in: ['accepted', 'in_progress', 'delivered'] }, ...globalWhere },
             _sum: { amount: true }
           });
           const activeVal = '₹' + (Number(activePOs._sum.amount || 0) / 10000000).toFixed(2) + 'Cr';
 
           // Tender metrics
           const [closedTenders, awardedTenders] = await Promise.all([
-            db.tender.count({ where: { status: 'closed' } }),
-            db.tender.count({ where: { status: 'closed', awardedBidId: { not: null } } })
+            db.tender.count({ where: { status: 'closed', ...globalWhere } }),
+            db.tender.count({ where: { status: 'closed', awardedBidId: { not: null }, ...globalWhere } })
           ]);
           const successRate = closedTenders > 0 ? ((awardedTenders / closedTenders) * 100).toFixed(1) + '%' : '0%';
 
           // Optimized Avg Onboarding Time using queryRaw with a fallback
           let onboardingTime = '0 Days';
           try {
-            const rawResult = await db.$queryRaw<any[]>`
+            let filterSql = `WHERE "onboardingStatus" = 'approved_for_procurement'`;
+            const args: any[] = [];
+            if (startDate) {
+              args.push(startDate);
+              filterSql += ` AND "createdAt" >= $${args.length}`;
+            }
+            if (role !== 'all') {
+              args.push(role);
+              filterSql += ` AND "role" = $${args.length}`;
+            }
+            const rawResult: any[] = await (db as any).$queryRawUnsafe(`
               SELECT AVG(EXTRACT(EPOCH FROM ("updatedAt" - "createdAt")) / 86400) as "avgDays"
               FROM "User"
-              WHERE "onboardingStatus" = 'approved_for_procurement'
-            `;
+              ${filterSql}
+            `, ...args);
             const avgDays = rawResult?.[0]?.avgDays ?? rawResult?.[0]?.avgdays;
             onboardingTime = avgDays ? Number(avgDays).toFixed(1) + ' Days' : '0 Days';
           } catch (e) {
             // Fallback to sample logic
             const approvedUsers = await db.user.findMany({
-              where: { onboardingStatus: 'approved_for_procurement' },
+              where: { onboardingStatus: 'approved_for_procurement', ...globalWhere, ...userRoleWhere },
               select: { createdAt: true, updatedAt: true },
               take: 1000,
               orderBy: { updatedAt: 'desc' }
@@ -8398,7 +8443,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
         const tenderSuccessRate_val = aggregates.successRate;
         const avgOnboardingTime_val = aggregates.onboardingTime;
 
-        const totalOnboarded = await db.user.count({ where: { onboardingStatus: { not: 'pending' } } });
+        const totalOnboarded = await db.user.count({ where: { onboardingStatus: { not: 'pending' }, ...globalWhere, ...userRoleWhere } });
         const approvalRate_val = totalOnboarded > 0 ? ((activeSellers_val + activeBuyers_val) / totalOnboarded * 100).toFixed(1) + '%' : '0%';
 
         return {

@@ -35,36 +35,83 @@ export default function ProcurementOrdersPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [remarks, setRemarks] = useState('');
-  const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  
+  const [filters, setFilters] = useState({ search: '', status: '', buyerId: '', sellerId: '', minAmount: '', maxAmount: '', dateFrom: '', dateTo: '' });
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  
   const [sortKey, setSortKey] = useState<OrderSortKey>('createdAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [viewMode, setViewMode] = useResponsiveViewMode(`phase7:procurement-orders:${user?.role || 'all'}:view-mode`);
+  
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [metadata, setMetadata] = useState<{ buyers: any[], sellers: any[], statuses: string[] }>({ buyers: [], sellers: [], statuses: [] });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (debouncedSearch !== filters.search) {
+        setFilters(prev => ({ ...prev, search: debouncedSearch }));
+        setPage(1);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [debouncedSearch, filters.search]);
 
   const load = useCallback(() => {
     let alive = true;
     setLoading(true);
     setError('');
-    const request = orderId
-      ? procurementOrderApi.getOrder(orderId).then(data => {
-        if (alive) setOrder(data);
-      })
-      : Promise.all([
-        procurementOrderApi.listOrders(),
-        user?.role === 'seller' ? procurementOrderApi.sellerAwards() : Promise.resolve([])
-      ]).then(([orderData, awardData]) => {
-        if (!alive) return;
-        setOrders(orderData.items || orderData.purchaseOrders || []);
-        setAwards(awardData || []);
+    
+    if (orderId) {
+      procurementOrderApi.getOrder(orderId).then(data => {
+        if (alive) {
+          setOrder(data);
+          setLoading(false);
+        }
+      }).catch(err => {
+        if (alive) {
+          setError(err?.message || 'Unable to load procurement orders.');
+          setLoading(false);
+        }
       });
-    request.catch((err: any) => {
+      return () => { alive = false; };
+    }
+
+    const params: any = { page, pageSize, sort: `${sortKey}_${sortDirection}` };
+    if (metadata.statuses.length === 0) {
+      params.withMetadata = 'true';
+    }
+    
+    if (filters.search) params.search = filters.search;
+    if (filters.status) params.status = filters.status;
+    if (filters.buyerId) params.buyerId = filters.buyerId;
+    if (filters.sellerId) params.sellerId = filters.sellerId;
+    if (filters.minAmount) params.minAmount = filters.minAmount;
+    if (filters.maxAmount) params.maxAmount = filters.maxAmount;
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+
+    Promise.all([
+      procurementOrderApi.listOrders(params),
+      user?.role === 'seller' ? procurementOrderApi.sellerAwards() : Promise.resolve([])
+    ]).then(([orderData, awardData]) => {
+      if (!alive) return;
+      setOrders(orderData.items || orderData.purchaseOrders || []);
+      setTotal(orderData.total || 0);
+      if (orderData.metadata) {
+        setMetadata(orderData.metadata);
+      }
+      setAwards(awardData || []);
+    }).catch((err: any) => {
       if (!alive) return;
       setError(err?.message || 'Unable to load procurement orders.');
     }).finally(() => {
       if (alive) setLoading(false);
     });
+
     return () => { alive = false; };
-  }, [orderId, user?.role]);
+  }, [orderId, user?.role, page, pageSize, sortKey, sortDirection, filters, metadata.statuses.length]);
 
   useEffect(() => load(), [load]);
 
@@ -82,51 +129,19 @@ export default function ProcurementOrdersPage() {
   };
 
   const visibleAwards = useMemo(() => awards.filter(award => award.purchaseOrder), [awards]);
-  const filteredOrders = useMemo(() => {
-    const text = query.trim().toLowerCase();
-    return [...orders].filter(item => {
-      const haystack = [
-        item.poNumber,
-        item.title,
-        item.status,
-        item.buyer?.name,
-        item.seller?.name,
-        item.deliveryTrackings?.[0]?.status,
-        item.invoices?.[0]?.status,
-      ].join(' ').toLowerCase();
-      if (text && !haystack.includes(text)) return false;
-      if (statusFilter && String(item.status || '').toLowerCase() !== statusFilter.toLowerCase()) return false;
-      return true;
-    }).sort((a, b) => {
-      const valueFor = (item: any) => {
-        if (sortKey === 'poNumber') return item.poNumber || '';
-        if (sortKey === 'title') return item.title || '';
-        if (sortKey === 'buyer') return item.buyer?.name || '';
-        if (sortKey === 'seller') return item.seller?.name || '';
-        if (sortKey === 'status') return item.status || '';
-        if (sortKey === 'amount') return Number(item.amount || 0);
-        return new Date(item.createdAt || 0).getTime();
-      };
-      const av = valueFor(a);
-      const bv = valueFor(b);
-      const result = typeof av === 'number' && typeof bv === 'number'
-        ? av - bv
-        : String(av).localeCompare(String(bv));
-      return sortDirection === 'asc' ? result : -result;
-    });
-  }, [orders, query, sortDirection, sortKey, statusFilter]);
-  const { page, pageSize, pageItems, total, setPage, setPageSize } = usePagination(filteredOrders, 10);
-
+  
   const toggleSort = (field: OrderSortKey) => {
     setSortDirection(prev => sortKey === field && prev === 'asc' ? 'desc' : 'asc');
     setSortKey(field);
     setPage(1);
   };
 
-  const statusOptions = useMemo(
-    () => Array.from(new Set(orders.map(item => String(item.status || '')).filter(Boolean))).sort(),
-    [orders]
-  );
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setPage(1);
+  };
+
+  const activeFilterCount = Object.values(filters).filter(v => v !== '').length;
 
   return (
     <PageShell>
@@ -137,7 +152,7 @@ export default function ProcurementOrdersPage() {
           action={<button onClick={load} className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-700"><RefreshCcw className="h-4 w-4" /> Refresh</button>}
         />
 
-        {loading ? <div className="mt-5"><PageTableSkeleton kpiCount={0} /></div> : error ? <div className="mt-5"><ProcurementErrorState message={error} onRetry={load} /></div> : order ? (
+        {loading && !orders.length ? <div className="mt-5"><PageTableSkeleton kpiCount={0} /></div> : error ? <div className="mt-5"><ProcurementErrorState message={error} onRetry={load} /></div> : order ? (
           <OrderDetail order={order} role={user?.role} busy={busy} remarks={remarks} setRemarks={setRemarks} run={run} />
         ) : (
           <section className="mt-5 space-y-5">
@@ -149,60 +164,130 @@ export default function ProcurementOrdersPage() {
                 </div>
               </div>
             )}
-            {orders.length > 0 && (
-              <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
-                <ResponsiveFilterBar
-                  activeFilterCount={(statusFilter ? 1 : 0) + (query ? 1 : 0)}
-                  searchInput={
-                    <div className="relative w-full">
-                      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <input
-                        value={query}
-                        onChange={event => { setQuery(event.target.value); setPage(1); }}
-                        placeholder="Search PO, buyer, seller, delivery, invoice..."
-                        className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-                      />
+            
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+              <ResponsiveFilterBar
+                activeFilterCount={activeFilterCount}
+                searchInput={
+                  <div className="relative w-full">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      value={debouncedSearch}
+                      onChange={event => setDebouncedSearch(event.target.value)}
+                      placeholder="Search PO, buyer, seller..."
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                    />
+                  </div>
+                }
+                filters={
+                  <>
+                    <div className="w-full sm:w-auto sm:min-w-[140px]">
+                      <select
+                        value={filters.status}
+                        onChange={event => { setFilters(prev => ({ ...prev, status: event.target.value })); setPage(1); }}
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                      >
+                        <option value="">All statuses</option>
+                        {metadata.statuses.map(status => <option key={status} value={status}>{status}</option>)}
+                      </select>
                     </div>
-                  }
-                  filters={
-                    <>
-                      <div className="w-full sm:w-auto sm:min-w-[150px]">
+                    {user?.role !== 'buyer' && (
+                      <div className="w-full sm:w-auto sm:min-w-[140px]">
                         <select
-                          value={statusFilter}
-                          onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
+                          value={filters.buyerId}
+                          onChange={event => { setFilters(prev => ({ ...prev, buyerId: event.target.value })); setPage(1); }}
                           className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                         >
-                          <option value="">All statuses</option>
-                          {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
+                          <option value="">All buyers</option>
+                          {metadata.buyers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                         </select>
                       </div>
-                      {(query || statusFilter) && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => { setQuery(''); setStatusFilter(''); setPage(1); }}
-                          className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                    )}
+                    {user?.role !== 'seller' && (
+                      <div className="w-full sm:w-auto sm:min-w-[140px]">
+                        <select
+                          value={filters.sellerId}
+                          onChange={event => { setFilters(prev => ({ ...prev, sellerId: event.target.value })); setPage(1); }}
+                          className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                         >
-                          Reset
-                        </Button>
-                      )}
-                    </>
-                  }
-                  endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
-                />
-              </div>
-            )}
-            {!orders.length ? <ProcurementEmptyState title="No awarded procurement orders yet." message="Final award approved bids will appear here once PO/work order generation is complete." /> : !pageItems.length ? (
-              <ProcurementEmptyState title="No procurement orders match these filters." message="Clear the search or status filter to see the full lifecycle list." />
-            ) : viewMode === 'grid' ? (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {pageItems.map(item => <OrderCard key={item.id} order={item} />)}
-              </div>
+                          <option value="">All sellers</option>
+                          {metadata.sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto">
+                      <input
+                        type="number"
+                        placeholder="Min ₹"
+                        value={filters.minAmount}
+                        onChange={e => { setFilters(prev => ({ ...prev, minAmount: e.target.value })); setPage(1); }}
+                        className="h-10 w-full sm:w-24 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Max ₹"
+                        value={filters.maxAmount}
+                        onChange={e => { setFilters(prev => ({ ...prev, maxAmount: e.target.value })); setPage(1); }}
+                        className="h-10 w-full sm:w-24 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto">
+                      <input
+                        type="date"
+                        value={filters.dateFrom}
+                        onChange={e => { setFilters(prev => ({ ...prev, dateFrom: e.target.value })); setPage(1); }}
+                        className="h-10 w-full sm:w-32 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
+                        title="Date From"
+                      />
+                      <input
+                        type="date"
+                        value={filters.dateTo}
+                        onChange={e => { setFilters(prev => ({ ...prev, dateTo: e.target.value })); setPage(1); }}
+                        className="h-10 w-full sm:w-32 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
+                        title="Date To"
+                      />
+                    </div>
+                    {activeFilterCount > 0 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => { 
+                          setDebouncedSearch('');
+                          setFilters({ search: '', status: '', buyerId: '', sellerId: '', minAmount: '', maxAmount: '', dateFrom: '', dateTo: '' }); 
+                          setPage(1); 
+                        }}
+                        className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 w-full sm:w-auto sm:min-w-[80px]"
+                      >
+                        Reset Filters
+                      </Button>
+                    )}
+                  </>
+                }
+                endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+              />
+            </div>
+
+            {!orders.length && !activeFilterCount && !loading && !debouncedSearch ? <ProcurementEmptyState title="No awarded procurement orders yet." message="Final award approved bids will appear here once PO/work order generation is complete." /> : !orders.length && !loading ? (
+              <ProcurementEmptyState title="No procurement orders found." message="Try changing or clearing your filters." />
             ) : (
-              <OrderTable orders={pageItems} sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+              <div className={`relative transition-opacity duration-200 ${loading ? 'opacity-50 pointer-events-none min-h-[200px]' : ''}`}>
+                {loading && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center">
+                    <RefreshCcw className="h-8 w-8 animate-spin text-[#0b2447]" />
+                  </div>
+                )}
+                {viewMode === 'grid' ? (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {orders.map(item => <OrderCard key={item.id} order={item} />)}
+                  </div>
+                ) : (
+                  <OrderTable orders={orders} sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+                )}
+              </div>
             )}
+            
             {orders.length > 0 && (
-              <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
+              <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={handlePageSizeChange} label="orders" />
             )}
           </section>
         )}

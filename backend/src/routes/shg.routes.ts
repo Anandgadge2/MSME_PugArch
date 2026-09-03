@@ -720,9 +720,16 @@ router.post('/shg/submit', authenticate, authorize('shg'), async (req: AuthReque
 
   const otpRecord = await assertOtpVerified('ownership_submission', identity);
   if (!otpRecord.ok) return apiResponse.error(res, 400, 'Final submission OTP must be verified', 'FINAL_OTP_REQUIRED');
-  const missingDocuments = requiredDocumentTypes(profile.registrationStatus).filter(type =>
-    !(profile.documents || []).some((doc: any) => doc.documentType === type && ['UPLOADED', 'UNDER_REVIEW', 'VERIFIED'].includes(doc.status))
-  );
+  const optionalDocTypes = new Set([
+    'PAN_CARD', 'ADDRESS_PROOF', 'GST_CERTIFICATE', 'PRODUCT_CATALOGUE',
+    'TRAINING_CERTIFICATE', 'ACTIVITY_CERTIFICATE', 'MEETING_REGISTER',
+    'BANK_STATEMENT', 'OTHER', 'NRLM_SRLM_CERTIFICATE'
+  ]);
+  const missingDocuments = requiredDocumentTypes(profile.registrationStatus)
+    .filter(type => !optionalDocTypes.has(type))
+    .filter(type =>
+      !(profile.documents || []).some((doc: any) => doc.documentType === type && ['UPLOADED', 'UNDER_REVIEW', 'VERIFIED'].includes(doc.status))
+    );
   const hasPrimaryBank = (profile.bankAccounts || []).some((bank: any) => bank.isPrimary);
   if (!hasPrimaryBank || missingDocuments.length) {
     return apiResponse.error(res, 400, 'Mandatory SHG onboarding data is incomplete', 'ONBOARDING_INCOMPLETE', { hasPrimaryBank, missingDocuments });

@@ -828,7 +828,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         status,
         parties: [
           { title: 'BUYER', name: buyerOrg, address: location, email: email || undefined, phone: mobile || undefined, details: [`Contact: ${contact}`, `Category: ${category}`] },
-          { title: 'RFQ',   name: title,    details: [`Method: ${method}`, `Deadline: ${fmtDate(deadline, true)}`, `EMD: ${emdInfo?.isEmdRequired ? fmt(emdInfo.emdAmount) : 'Nil'}`] },
+          { title: 'RFQ',   name: title,    details: [`Method: ${method}`, `Deadline: ${fmtDate(deadline, true)}`] },
         ],
         infoGrid: { Delivery: location, 'Payment Terms': payTerms, 'Delivery SLA': delTerms, 'Evaluation': evalMethod },
         tableHeaders: ['#', 'Item', 'Qty', 'Unit', 'Est. Price', 'GST'],

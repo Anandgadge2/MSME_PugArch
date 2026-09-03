@@ -154,7 +154,7 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
     if (user.role === 'master_admin') {
       defaults.push('*');
     } else if (user.role === 'admin') {
-      defaults.push('dashboard.view', 'report.view', 'audit.view');
+      defaults.push('dashboard.view', 'report.view', 'audit.view', 'payment.view', 'payment.verify');
     } else if (!user.organizationId && !isOrgSubUser) {
       // Standalone single-user buyers/sellers (without organization) receive baseline default permissions
       if (user.role === 'seller' || user.role === 'shg') {

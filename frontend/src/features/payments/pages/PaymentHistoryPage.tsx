@@ -43,6 +43,7 @@ import { useResponsiveViewMode, usePaginatedFeatureQuery } from '../../shared/ho
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { PaymentReceiptUploadModal } from '../components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../components/PaymentReceiptViewModal';
+import { useOrgRole } from '../../../hooks/useOrgRole';
 
 type PaymentRow = {
   id: number;
@@ -80,6 +81,7 @@ type PaymentRow = {
 type PaymentSortKey = 'reference' | 'parties' | 'gateway' | 'amount' | 'tax' | 'escrow' | 'ledger' | 'status' | 'date';
 
 export default function PaymentHistoryPage({ admin = false }: { admin?: boolean }) {
+  const { hasPermission } = useOrgRole();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [gatewayFilter, setGatewayFilter] = useState('');
@@ -106,7 +108,8 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
   const { records: payments, warning, loading, refreshing, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<PaymentRow>('/api/payments', {
     ...(searchTerm.trim() ? { q: searchTerm.trim() } : {}),
     ...(statusFilter ? { status: statusFilter } : {}),
-    ...(gatewayFilter ? { gateway: gatewayFilter } : {})
+    ...(gatewayFilter ? { gateway: gatewayFilter } : {}),
+    ...(escrowFilter ? { escrow: escrowFilter } : {})
   }, 20);
 
   const paymentSummary = useMemo(() => {
@@ -212,12 +215,14 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            onClick={() => { setSelectedProofPayment(null); setUploadProofModalOpen(true); }}
-            className="h-10 rounded-lg text-xs font-black uppercase bg-[#12335f] hover:bg-[#0b2445] text-white shadow-sm"
-          >
-            <Upload className="mr-2 h-4 w-4" /> Upload Payment Proof
-          </Button>
+          {hasPermission('payment.initiate') && (
+            <Button
+              onClick={() => { setSelectedProofPayment(null); setUploadProofModalOpen(true); }}
+              className="h-10 rounded-lg text-xs font-black uppercase bg-[#12335f] hover:bg-[#0b2445] text-white shadow-sm"
+            >
+              <Upload className="mr-2 h-4 w-4" /> Upload Payment Proof
+            </Button>
+          )}
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
             <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} /> Refresh
           </Button>

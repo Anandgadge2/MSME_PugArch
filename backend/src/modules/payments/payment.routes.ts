@@ -26,7 +26,12 @@ const orgScope = {
 };
 
 const isPlatformFinanceUser = (req: AuthRequest) =>
-  req.user?.accountTypeId === 0 || req.user?.accountTypeId === 1 || req.user?.accountType === 'MASTER_ADMIN' || req.user?.accountType === 'SUPERADMIN';
+  req.user?.role === 'admin' ||
+  req.user?.role === 'master_admin' ||
+  req.user?.accountTypeId === 0 ||
+  req.user?.accountTypeId === 1 ||
+  req.user?.accountType === 'MASTER_ADMIN' ||
+  req.user?.accountType === 'SUPERADMIN';
 
 const getListWindow = (query: Record<string, unknown>) => {
   const take = Math.min(100, Math.max(1, Number(query.take ?? query.pageSize ?? 50)));
@@ -185,15 +190,45 @@ router.get('/', requirePermission('payment.view'), async (req: AuthRequest, res)
         ? { payerId: userId }
         : { payeeId: userId };
     const query = req.query as Record<string, unknown>;
-    if (query.status) (where as any).status = String(query.status);
-    if (query.gateway) (where as any).gateway = String(query.gateway);
+    if (query.status) {
+      const statuses = String(query.status).toLowerCase().split(',');
+      const expandedStatuses = [...statuses, ...statuses.map(s => s.toUpperCase())];
+      if (statuses.includes('success')) {
+        expandedStatuses.push(
+          'completed', 'COMPLETED', 
+          'escrow_released', 'ESCROW_RELEASED', 
+          'offline_proof_verified', 'OFFLINE_PROOF_VERIFIED'
+        );
+      }
+      (where as any).status = { in: expandedStatuses };
+    }
+    if (query.gateway) {
+      const g = String(query.gateway);
+      (where as any).AND = [
+        ...((where as any).AND || []),
+        { OR: [
+          { gateway: { equals: g, mode: 'insensitive' } },
+          { method: { equals: g, mode: 'insensitive' } }
+        ]}
+      ];
+    }
+    if (query.escrow) {
+      if (query.escrow === 'funded') {
+        (where as any).escrowAccount = { isNot: null };
+      } else if (query.escrow === 'not_funded') {
+        (where as any).escrowAccount = { is: null };
+      }
+    }
     if (query.q) {
-      (where as any).OR = [
-        { referenceId: { contains: String(query.q), mode: 'insensitive' } },
-        { invoice: { invoiceNumber: { contains: String(query.q), mode: 'insensitive' } } },
-        { purchaseOrder: { poNumber: { contains: String(query.q), mode: 'insensitive' } } },
-        { payer: { email: { contains: String(query.q), mode: 'insensitive' } } },
-        { payee: { email: { contains: String(query.q), mode: 'insensitive' } } }
+      (where as any).AND = [
+        ...((where as any).AND || []),
+        { OR: [
+          { referenceId: { contains: String(query.q), mode: 'insensitive' } },
+          { invoice: { invoiceNumber: { contains: String(query.q), mode: 'insensitive' } } },
+          { purchaseOrder: { poNumber: { contains: String(query.q), mode: 'insensitive' } } },
+          { payer: { email: { contains: String(query.q), mode: 'insensitive' } } },
+          { payee: { email: { contains: String(query.q), mode: 'insensitive' } } }
+        ]}
       ];
     }
 

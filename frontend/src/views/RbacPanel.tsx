@@ -461,11 +461,11 @@ export default function RbacPanel() {
             <div className="max-h-[640px] overflow-y-auto p-4">
               {Object.entries(groupedPermissions).map(([module, items]) => (
                 <section key={module} className="mb-5">
-                  <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">{module}</h3>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 truncate">{module}</h3>
                     <button
                       onClick={() => setDraft(prev => ({ ...prev, permissionCodes: Array.from(new Set([...prev.permissionCodes, ...items.map(item => item.code)])) }))}
-                      className="text-xs font-bold text-slate-700 underline"
+                      className="text-xs font-bold text-slate-700 underline whitespace-nowrap shrink-0"
                     >
                       Select all for new role
                     </button>
