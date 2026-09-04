@@ -2349,47 +2349,47 @@ model PurchaseOrderItem {
 }
 
 model DeliveryTracking {
-  id                   Int                     @id @default(autoincrement())
-  purchaseOrderId      Int
-  trackingNumber       String?                 @unique
-  carrierName          String?
-  status               DeliveryStatus          @default(CREATED)
-  expectedDelivery     DateTime?
-  actualDelivery       DateTime?
-  currentLocation      String?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  sellerAcceptedAt     DateTime?
-  sellerRejectedAt     DateTime?
-  sellerRejectReason   String?
-  packedAt             DateTime?
-  pickupScheduledAt    DateTime?
-  pickedUpAt           DateTime?
-  packageWeightKg      Decimal?                @db.Decimal(10, 3)
-  packageDimensions    String?
-  packageCount         Int?
-  logisticsPartnerId   Int?
-  logisticsPartnerName String?
-  logisticsContact     String?
-  ewayBillNumber       String?
-  courierReceiptNumber String?
-  remarks              String?
-  metadata             Json?
-  closedAt             DateTime?
-  slaStatus            String?                 @default("ON_TIME")
+  id                      Int                     @id @default(autoincrement())
+  purchaseOrderId         Int
+  trackingNumber          String?                 @unique
+  carrierName             String?
+  status                  DeliveryStatus          @default(CREATED)
+  expectedDelivery        DateTime?
+  actualDelivery          DateTime?
+  currentLocation         String?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  sellerAcceptedAt        DateTime?
+  sellerRejectedAt        DateTime?
+  sellerRejectReason      String?
+  packedAt                DateTime?
+  pickupScheduledAt       DateTime?
+  pickedUpAt              DateTime?
+  packageWeightKg         Decimal?                @db.Decimal(10, 3)
+  packageDimensions       String?
+  packageCount            Int?
+  logisticsPartnerId      Int?
+  logisticsPartnerName    String?
+  logisticsContact        String?
+  ewayBillNumber          String?
+  courierReceiptNumber    String?
+  remarks                 String?
+  metadata                Json?
+  closedAt                DateTime?
+  slaStatus               String?                 @default("ON_TIME")
   lastBuyerReminderSentAt DateTime?
-  deliveryOtpHash      String?
-  deliveryOtpExpiresAt DateTime?
-  deliveryOtpVerifiedAt DateTime?
-  acceptance           BuyerAcceptance?
-  documents            DeliveryDocument[]
-  dpExtensions         DeliveryDpExtension[]
-  participants         DeliveryParticipant[]
-  statusLogs           DeliveryStatusLog[]
-  logisticsPartner     LogisticsPartner?       @relation(fields: [logisticsPartnerId], references: [id])
-  purchaseOrder        PurchaseOrder           @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  events               DeliveryTrackingEvent[]
-  settlement           PaymentSettlement?
+  deliveryOtpHash         String?
+  deliveryOtpExpiresAt    DateTime?
+  deliveryOtpVerifiedAt   DateTime?
+  acceptance              BuyerAcceptance?
+  documents               DeliveryDocument[]
+  dpExtensions            DeliveryDpExtension[]
+  participants            DeliveryParticipant[]
+  statusLogs              DeliveryStatusLog[]
+  logisticsPartner        LogisticsPartner?       @relation(fields: [logisticsPartnerId], references: [id])
+  purchaseOrder           PurchaseOrder           @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  events                  DeliveryTrackingEvent[]
+  settlement              PaymentSettlement?
 
   @@index([purchaseOrderId])
   @@index([status])
@@ -2415,7 +2415,7 @@ model DeliveryDpExtension {
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
   deliveryTracking      DeliveryTracking @relation(fields: [deliveryTrackingId], references: [id], onDelete: Cascade)
-  requestedBy            User             @relation("DpExtensionRequester", fields: [requestedById], references: [id])
+  requestedBy           User             @relation("DpExtensionRequester", fields: [requestedById], references: [id])
   respondedBy           User?            @relation("DpExtensionResponder", fields: [respondedById], references: [id])
 
   @@index([deliveryTrackingId])
@@ -5369,22 +5369,22 @@ enum CatalogueImportStatus {
 }
 
 model EmdPayment {
-  id               Int      @id @default(autoincrement())
-  requirementId    Int?
-  bidId            Int?
-  sellerId         Int
-  sellerOrgId      Int?
-  amount           Decimal  @db.Decimal(18, 2)
-  paymentMethod    String   @default("ONLINE")
-  transactionId    String   @unique
-  status           String   @default("PAID")
-  refundPolicy     String?
-  instructions     String?
-  paidAt           DateTime @default(now())
-  verifiedAt       DateTime?
-  refundedAt       DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id            Int       @id @default(autoincrement())
+  requirementId Int?
+  bidId         Int?
+  sellerId      Int
+  sellerOrgId   Int?
+  amount        Decimal   @db.Decimal(18, 2)
+  paymentMethod String    @default("ONLINE")
+  transactionId String    @unique
+  status        String    @default("PAID")
+  refundPolicy  String?
+  instructions  String?
+  paidAt        DateTime  @default(now())
+  verifiedAt    DateTime?
+  refundedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@unique([sellerId, requirementId])
   @@unique([sellerId, bidId])
@@ -5393,4 +5393,3 @@ model EmdPayment {
   @@index([bidId])
   @@index([status])
 }
-

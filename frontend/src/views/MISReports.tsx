@@ -321,9 +321,9 @@ export default function MISReports() {
             <h1 className="flex items-center gap-2.5 text-2xl font-black tracking-tight text-slate-950">
               <FileBarChart className="h-7 w-7 text-[#12335f]" /> Executive MIS & Linkage Analytics
             </h1>
-            <p className="mt-1 max-w-3xl text-xs sm:text-sm font-semibold text-slate-500">
+            {/* <p className="mt-1 max-w-3xl text-xs sm:text-sm font-semibold text-slate-500">
               Executive dashboard for network health, onboarding metrics, and transaction analytics across the Jharsuguda industrial ecosystem.
-            </p>
+            </p> */}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -435,19 +435,10 @@ export default function MISReports() {
         </div>
       </div>
 
-      {/* ── Hero KPI Scorecard (8 Calibrated Enterprise Metrics) ── */}
+      {/* ── Hero KPI Scorecard (4 Calibrated Enterprise Metrics) ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          label="Total Network"
-          value={stats?.totalNetwork || 0}
-          icon={Users}
-          subtext="+14% network expansion"
-          hint="Verified buyers, MSMEs & SHGs"
-          tone="blue"
-          loading={isKpiLoading}
-        />
-        <KpiCard
-          label="Verified MSMEs"
+          label="Verified Sellers"
           value={stats?.activeSellers || 0}
           icon={ClipboardCheck}
           subtext="Suppliers & Fabricators"
@@ -456,21 +447,21 @@ export default function MISReports() {
           loading={isKpiLoading}
         />
         <KpiCard
-          label="Anchor Buyers & PSUs"
+          label="Verified Buyers"
           value={stats?.activeBuyers || 0}
           icon={Building2}
           subtext="Major Industrial Procurement"
           hint="Vedanta, MCL, OPGC, NTPC"
-          tone="indigo"
+          tone="blue"
           loading={isKpiLoading}
         />
         <KpiCard
-          label="Pending Verifications"
-          value={stats?.pendingApproval || 0}
-          icon={Activity}
-          subtext="Under compliance review"
-          hint="Action required by admin"
-          tone="amber"
+          label="Verified SHG"
+          value={stats?.activeShg || 0}
+          icon={Users}
+          subtext="Approved SHG groups"
+          hint="Women SHGs verified"
+          tone="indigo"
           loading={isKpiLoading}
         />
         <KpiCard
@@ -480,33 +471,6 @@ export default function MISReports() {
           subtext="Live POs in progress"
           hint="Total pipeline valuation"
           tone="emerald"
-          loading={isKpiLoading}
-        />
-        <KpiCard
-          label="MSMED 45-Day Adherence"
-          value={settlementHealth.complianceRate}
-          icon={Scale}
-          subtext="Statutory Payment Rule"
-          hint="Avg settlement: 18.2 days"
-          tone="teal"
-          loading={isKpiLoading}
-        />
-        <KpiCard
-          label="Onboarding Velocity"
-          value={stats?.avgOnboardingTime || '0 Days'}
-          icon={Clock}
-          subtext="Application to approval"
-          hint="Target SLA: <= 3.0 Days"
-          tone="purple"
-          loading={isKpiLoading}
-        />
-        <KpiCard
-          label="Tender Success Rate"
-          value={stats?.tenderSuccessRate || '0%'}
-          icon={Award}
-          subtext="Awarded vs Closed"
-          hint="Procurement fulfillment index"
-          tone="sky"
           loading={isKpiLoading}
         />
       </div>
@@ -852,7 +816,7 @@ export default function MISReports() {
             </Card>
 
             {/* MSMED 45-Day Statutory Compliance Monitor */}
-            <Card className="shadow-sm border-slate-200 lg:col-span-1">
+            {/* <Card className="shadow-sm border-slate-200 lg:col-span-1">
               <CardHeader className="pb-2 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <Scale className="h-4 w-4 text-emerald-600" />
@@ -897,7 +861,7 @@ export default function MISReports() {
                   </div>
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
           </div>
         </div>
       )}
