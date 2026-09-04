@@ -2517,8 +2517,9 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         let id = Number(idToken);
         let hasNumericId = idToken !== '' && Number.isFinite(id) && id !== 0;
         
-        if (!hasNumericId && idToken.startsWith('REQ-')) {
-            const parsed = Number(idToken.replace('REQ-', ''));
+        if (!hasNumericId) {
+            const cleanToken = idToken.replace(/^(?:REQ|RFQ|BID|TND|LT|RC|RA)[-_]/i, '').replace(/^0+/, '');
+            const parsed = Number(cleanToken);
             if (Number.isFinite(parsed) && parsed !== 0) {
                 id = parsed;
                 hasNumericId = true;
@@ -2560,6 +2561,41 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                 if (legacyReq) {
                     requirement = mapLegacyRequirementToPublic(legacyReq);
                     isLegacy = true;
+                }
+            }
+
+            if (!requirement) {
+                const bid = await db.procurementBid.findFirst({
+                    where: {
+                        OR: [
+                            ...(hasNumericId ? [{ id }] : []),
+                            { bidNumber: idToken },
+                            { bidNumber: idToken.startsWith('REQ-') ? idToken : `REQ-${idToken}` },
+                            { bidNumber: idToken.startsWith('RFQ-') ? idToken : `RFQ-${idToken}` }
+                        ]
+                    },
+                    include: { documents: true, participations: true }
+                }).catch(() => null);
+                if (bid) {
+                    requirement = {
+                        id: bid.bidNumber || `BID-${bid.id}`,
+                        requirementNumber: bid.bidNumber || `BID-${bid.id}`,
+                        title: bid.title,
+                        description: bid.description || bid.title,
+                        requirementType: bid.bidType || bid.procurementType || 'PRODUCT',
+                        procurementMethod: bid.procurementMethod || bid.procurementType || 'RFQ',
+                        status: bid.status || 'OPEN',
+                        statusLabel: bid.status || 'Open',
+                        budgetMin: Number(bid.estimatedValue || 0),
+                        budgetMax: Number(bid.estimatedValue || 0),
+                        lastDate: bid.endDate,
+                        createdAt: bid.createdAt,
+                        updatedAt: bid.updatedAt,
+                        buyerId: bid.buyerId,
+                        buyerOrganizationId: bid.buyerOrganizationId,
+                        payload: bid.technicalPacket || bid.payload || {},
+                        documents: bid.documents || []
+                    };
                 }
             }
 
@@ -2613,7 +2649,7 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         }
 
         if (requirement.visibility === 'VERIFIED_SELLERS_ONLY') {
-            const isVerifiedSeller = req.user?.role === 'seller';
+            const isVerifiedSeller = req.user?.role === 'seller' || req.user?.role === 'shg';
             const isAdmin = ['admin', 'master_admin'].includes(req.user?.role || '');
             const isOwner = Boolean(req.user?.id && (requirement.buyerId === req.user.id || requirement.createdById === req.user.id || (req.user.organizationId && requirement.buyerOrganizationId === req.user.organizationId)));
             if (!isVerifiedSeller && !isAdmin && !isOwner) {
@@ -2640,10 +2676,11 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         let ownResponse: any = null;
         const responseRequirementIds = new Set<number>([
             Number(requirement.id),
-            Math.abs(Number(requirement.id))
+            Math.abs(Number(requirement.id)),
+            ...(hasNumericId && id > 0 ? [id] : [])
         ].filter((value) => Number.isFinite(value) && value > 0));
 
-        if (isLegacy && req.user?.role === 'seller') {
+        if (isLegacy && (req.user?.role === 'seller' || req.user?.role === 'shg')) {
             const mirroredRequirement = await db.buyerRequirement.findFirst({
                 where: {
                     title: requirement.title,
@@ -2655,6 +2692,8 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
             }).catch(() => null);
             if (mirroredRequirement?.id) responseRequirementIds.add(mirroredRequirement.id);
         }
+
+        const isSupplierOrAdmin = req.user && ['seller', 'shg', 'admin', 'master_admin'].includes(req.user.role);
 
         const [similarList, response] = await Promise.all([
             db.buyerRequirement.findMany({
@@ -2670,15 +2709,15 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                 orderBy: { lastDate: 'asc' },
                 select: publicRequirementListSelect
             }),
-            req.user?.role === 'seller'
+            isSupplierOrAdmin
                 ? db.requirementResponse.findFirst({
                     where: {
                         AND: [
                             { requirementId: { in: Array.from(responseRequirementIds) } },
                             {
                                 OR: [
-                                    { sellerUserId: Number(req.user.id) },
-                                    ...(req.user.organizationId ? [{ sellerOrganizationId: req.user.organizationId }] : [])
+                                    { sellerUserId: Number(req.user!.id) },
+                                    ...(req.user!.organizationId ? [{ sellerOrganizationId: req.user!.organizationId }] : [])
                                 ]
                             }
                         ]
@@ -2702,6 +2741,49 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         ]);
         similar = similarList.map(decorateRequirement);
         ownResponse = response;
+
+        // Fallback: Check procurementBidParticipation if ownResponse is not yet found
+        if (!ownResponse && isSupplierOrAdmin) {
+            const userId = Number(req.user!.id);
+            const orgId = req.user!.organizationId;
+            const participation = await (prisma as any).procurementBidParticipation.findFirst({
+                where: {
+                    OR: [
+                        { sellerId: userId },
+                        ...(orgId ? [{ organizationId: orgId }] : [])
+                    ],
+                    bid: {
+                        OR: [
+                            ...(hasNumericId ? [{ id }] : []),
+                            { bidNumber: idToken },
+                            { bidNumber: idToken.startsWith('REQ-') ? idToken : `REQ-${idToken}` },
+                            { bidNumber: idToken.startsWith('RFQ-') ? idToken : `RFQ-${idToken}` }
+                        ]
+                    }
+                },
+                include: { documents: true, bid: true },
+                orderBy: { createdAt: 'desc' }
+            }).catch(() => null);
+
+            if (participation) {
+                ownResponse = {
+                    id: participation.id,
+                    status: participation.status || participation.submissionStatus || 'SUBMITTED',
+                    createdAt: participation.createdAt,
+                    updatedAt: participation.updatedAt,
+                    offeredPrice: participation.quotedAmount || participation.offeredPrice || participation.totalAmount,
+                    offeredQuantity: participation.offeredQuantity,
+                    deliveryTimeline: participation.deliveryTimeline,
+                    message: participation.message || participation.offeredItemDescription || participation.coverNote,
+                    attachmentUrl: participation.attachmentUrl,
+                    terms: participation.terms,
+                    responseData: participation.responseData || {
+                        documents: participation.documents,
+                        lineItems: participation.lineItems
+                    }
+                };
+            }
+        }
 
         return ok(res, { requirement, similarRequirements: similar, ownResponse });
     } catch (error) {
@@ -2744,7 +2826,7 @@ router.post('/buyer/requirements', authenticate, authorize('buyer', 'admin', 'ma
     }
 });
 
-router.post('/marketplace/requirements/:id/responses', authenticate, authorize('seller'), async (req: AuthRequest, res: Response) => {
+router.post('/marketplace/requirements/:id/responses', authenticate, authorize('seller', 'shg'), async (req: AuthRequest, res: Response) => {
     try {
         const idToken = String(req.params.id || '').trim();
         const tokenVariants = [
@@ -2853,8 +2935,9 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
         }
 
         const body = responseSchema.parse(req.body);
-        if (req.user?.role !== 'seller') {
-            return apiResponse.error(res, 403, 'Only seller accounts can respond to buyer requirements.', 'SELLER_ROLE_REQUIRED');
+        const isSupplierRole = req.user?.role === 'seller' || req.user?.role === 'shg';
+        if (!isSupplierRole) {
+            return apiResponse.error(res, 403, 'Only seller or SHG accounts can respond to buyer requirements.', 'SELLER_ROLE_REQUIRED');
         }
         const seller = await prisma.user.findUnique({
             where: { id: Number(req.user?.id) },
@@ -3706,7 +3789,7 @@ router.get('/marketplace/requirements/:id/clarifications', authenticate, async (
     }
 });
 
-router.get('/seller/requirement-responses', authenticate, authorize('seller', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.get('/seller/requirement-responses', authenticate, authorize('seller', 'shg', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
     try {
         const query = responseListQuery.parse(req.query);
         const page = query.page || 1;

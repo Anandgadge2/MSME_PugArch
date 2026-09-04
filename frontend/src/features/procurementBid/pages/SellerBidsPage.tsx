@@ -659,31 +659,33 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     return 'bg-slate-100 text-slate-700';
   };
 
-  const handleAction = (item: any) => {
-    if (item.isMarketplaceResponse) {
-      const isRfp = item.bid?.category?.toLowerCase().includes('proposal') || item.bid?.category?.toLowerCase().includes('rfp');
-      router.push(sellerRoutes.detail(isRfp ? 'RFP' : 'RFQ', item.requirementId));
-      return;
+  const getActualRfqId = (item: any): string => {
+    const candidate = item.bid?.requirementNumber || item.bid?.refId || item.bid?.bidNumber || item.bid?.bidNo || item.requirementNumber || item.refId;
+    if (candidate && String(candidate).trim()) {
+      return String(candidate).trim();
     }
-    const bidId = item.bid?.id || item.bidId;
-    
-    const typeStr = String(item.bid?.procurementType || item.bid?.bidType || item.bid?.category || '').toLowerCase();
-    const isRfp = typeStr.includes('rfp') || typeStr.includes('proposal');
-    const isRfq = typeStr.includes('rfq');
+    if (item.requirementId != null && item.requirementId !== '') {
+      const rawReq = String(item.requirementId).trim();
+      if (/^(REQ|RFQ|RFP|BID|LT|RA|RC)-/i.test(rawReq)) return rawReq.toUpperCase();
+      if (/^req[-_]?(\d+)$/i.test(rawReq)) return `REQ-${rawReq.replace(/^req[-_]?/i, '')}`;
+      return `REQ-${rawReq}`;
+    }
+    const raw = String(item?.bid?.id || item?.bidId || item?.id || '').trim();
+    if (/^(REQ|RFQ|RFP|BID|LT|RA|RC)-/i.test(raw)) {
+      return raw.toUpperCase();
+    }
+    if (/^req[-_]?(\d+)$/i.test(raw)) {
+      return `REQ-${raw.replace(/^req[-_]?/i, '')}`;
+    }
+    if (/^\d+$/.test(raw)) {
+      return `REQ-${raw}`;
+    }
+    return formatBidDisplayId(item);
+  };
 
-    // Any not-yet-submitted participation (draft or partially uploaded) resumes the
-    // participate flow; finalised/awarded ones open the read-only details view.
-    if (isDraft(item)) {
-      router.push(`/bids/${bidId}/participate`);
-    } else {
-      if (isRfp) {
-        router.push(sellerRoutes.detail('RFP', bidId));
-      } else if (isRfq) {
-        router.push(sellerRoutes.detail('RFQ', bidId));
-      } else {
-        router.push(`/bids/${bidId}`);
-      }
-    }
+  const handleAction = (item: any) => {
+    const rfqId = getActualRfqId(item);
+    router.push(`/seller/procurement/rfq/${encodeURIComponent(rfqId)}/respond`);
   };
 
   const handleConvertToInvoice = async (e: React.MouseEvent, item: any) => {

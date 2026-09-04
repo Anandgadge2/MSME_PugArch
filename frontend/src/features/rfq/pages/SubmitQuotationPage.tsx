@@ -427,10 +427,15 @@ export default function SubmitQuotationPage() {
         }
       }
 
+      const rawIdStr = String(requirementId || '').trim();
+      const cleanNumToken = rawIdStr.replace(/^(?:REQ|RFQ|BID|TND|LT|RC|RA)[-_]0*/i, '');
+      const parsedNum = Number(cleanNumToken);
+      const hasNumeric = Number.isFinite(parsedNum) && parsedNum > 0;
+
       // 2. Standard RFQ Marketplace Requirements Flow
       let marketplaceResult: { requirement: any; ownResponse: any } | null = null;
       try {
-        const data = await getApi<any>(`/api/marketplace/requirements/${requirementId}`);
+        const data = await getApi<any>(`/api/marketplace/requirements/${encodeURIComponent(rawIdStr)}`);
         if (data && (data.requirement || data.id)) {
           marketplaceResult = {
             requirement: data.requirement || data,
@@ -438,13 +443,52 @@ export default function SubmitQuotationPage() {
           };
         }
       } catch (err) {
-        // Fallback to procurement bid endpoint if marketplace requirement route fails
+        // Try with numeric ID if string failed
+        if (hasNumeric && cleanNumToken !== rawIdStr) {
+          try {
+            const data = await getApi<any>(`/api/marketplace/requirements/${parsedNum}`);
+            if (data && (data.requirement || data.id)) {
+              marketplaceResult = {
+                requirement: data.requirement || data,
+                ownResponse: normalizeOwnResponse(data.ownResponse || data.myResponse || data.response || null),
+              };
+            }
+          } catch {
+            // Ignore fallback error
+          }
+        }
+      }
+
+      // Check seller requirement responses if marketplace response wasn't attached directly
+      if (marketplaceResult && !marketplaceResult.ownResponse) {
+        try {
+          const sellerResponsesRes = await getApi<any>('/api/seller/requirement-responses');
+          const sellerResponses = Array.isArray(sellerResponsesRes)
+            ? sellerResponsesRes
+            : (sellerResponsesRes && Array.isArray(sellerResponsesRes.responses))
+            ? sellerResponsesRes.responses
+            : (sellerResponsesRes && Array.isArray(sellerResponsesRes.data))
+            ? sellerResponsesRes.data
+            : [];
+          const matched = sellerResponses.find((r: any) =>
+            (hasNumeric && Number(r.requirementId) === parsedNum) ||
+            String(r.requirementId) === rawIdStr ||
+            (hasNumeric && r.requirement?.id === parsedNum) ||
+            r.requirement?.requirementNumber === rawIdStr ||
+            r.requirement?.refId === rawIdStr
+          );
+          if (matched) {
+            marketplaceResult.ownResponse = normalizeOwnResponse(matched);
+          }
+        } catch {
+          // Ignore
+        }
       }
 
       // 3. Procurement Bid Flow
       let bidResult: { requirement: any; ownResponse: any } | null = null;
       try {
-        const bidData = await getApi<any>(`/api/procurement-bids/${encodeURIComponent(String(requirementId))}`);
+        const bidData = await getApi<any>(`/api/procurement-bids/${encodeURIComponent(rawIdStr)}`);
         if (bidData) {
           const userParticipation = findSellerParticipation(bidData, user);
           const ownResponseData = participationToOwnResponse(userParticipation);
@@ -495,10 +539,29 @@ export default function SubmitQuotationPage() {
         // Ignore fallback error
       }
 
+      // Check seller procurement bids if ownResponse still missing
+      if (bidResult && !bidResult.ownResponse) {
+        try {
+          const sellerBids = await getApi<any>('/api/seller/procurement-bids');
+          const bidsList = Array.isArray(sellerBids) ? sellerBids : (sellerBids && Array.isArray(sellerBids.data)) ? sellerBids.data : [];
+          const matched = bidsList.find((b: any) =>
+            (hasNumeric && Number(b.bidId) === parsedNum) ||
+            String(b.bidId) === rawIdStr ||
+            (hasNumeric && Number(b.bid?.id) === parsedNum) ||
+            b.bid?.bidNumber === rawIdStr
+          );
+          if (matched) {
+            bidResult.ownResponse = participationToOwnResponse(matched);
+          }
+        } catch {
+          // Ignore
+        }
+      }
+
       // 4. Quote Request Flow
       let quoteRequestResult: { requirement: any; ownResponse: any } | null = null;
       try {
-        const quoteData = await getApi<any>(`/api/quote-requests/${requirementId}`);
+        const quoteData = await getApi<any>(`/api/quote-requests/${encodeURIComponent(rawIdStr)}`);
         if (quoteData && (quoteData.id || quoteData.subject)) {
           const myResponse = Array.isArray(quoteData.quoteResponses)
             ? (quoteData.quoteResponses.find((r: any) => r.sellerId === Number(user?.id)) || quoteData.quoteResponses[0])
@@ -1113,11 +1176,16 @@ export default function SubmitQuotationPage() {
       const match = restoreSaved
         ? (savedLines.find(l => String(l?.itemName || l?.name || '').toLowerCase().trim() === String(item.itemName).toLowerCase().trim()) || savedLines[idx])
         : null;
+      const targetPrice = ownResponse?.offeredPrice ?? ownResponse?.responseData?.offeredPrice;
+      const targetQty = Number(item.quantity) || 1;
+      const fallbackUnitPrice = (!match?.unitPrice && itemsList.length === 1 && targetPrice != null)
+        ? String(Math.round((Number(targetPrice) / targetQty) * 100) / 100)
+        : '';
       return {
         itemName: item.itemName,
-        quantity: Number(item.quantity) || 0,
+        quantity: targetQty,
         unitOfMeasure: item.unitOfMeasure || 'Nos',
-        unitPrice: match?.unitPrice != null ? String(match.unitPrice) : '',
+        unitPrice: match?.unitPrice != null && match.unitPrice !== '' ? String(match.unitPrice) : fallbackUnitPrice,
         gstPercent: match?.gstPercent != null ? String(match.gstPercent) : '18',
         makeBrand: match?.makeBrand || match?.brand || '',
         remarks: match?.remarks || ''
@@ -1498,37 +1566,6 @@ export default function SubmitQuotationPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 px-4 py-6 md:px-8 pb-12">
-      {isSubmittedQuote && (
-        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-            <div>
-              <h3 className="text-sm font-black text-emerald-800">You have already submitted your quotation for this procurement.</h3>
-              <p className="text-xs font-semibold text-emerald-700 mt-0.5">
-                Your submitted quotation details are displayed below in read-only mode.
-              </p>
-            </div>
-          </div>
-          <Button onClick={handleBackToRfq} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-9 text-xs font-black uppercase shadow-sm shrink-0">
-            Back to Requirement
-          </Button>
-        </div>
-      )}
-      {!isSubmittedQuote && isClosed && (
-        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-slate-500" />
-            <div>
-              <h3 className="text-sm font-black text-slate-800">Requirement {rfqData?.status}</h3>
-              <p className="text-xs font-semibold text-slate-500">This requirement is no longer accepting new quotations.</p>
-            </div>
-          </div>
-          <Button onClick={handleBackToRfq} className="bg-slate-600 hover:bg-slate-700 text-white rounded-xl h-9 text-xs font-black uppercase shadow-sm">
-            Back to Requirement
-          </Button>
-        </div>
-      )}
-
       {/* Navigation & Breadcrumb */}
       <div className="flex flex-wrap items-center gap-3">
         <Button
