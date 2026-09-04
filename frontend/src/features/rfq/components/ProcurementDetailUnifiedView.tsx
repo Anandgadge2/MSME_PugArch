@@ -3089,7 +3089,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             details: [
               `Method: ${procurementMethod}`,
               `Deadline: ${closingDateFormatted}`,
-              `EMD Required: ${props.isEmdRequired ? formatCurrency(props.emdAmount || 0) : 'Nil'}`,
+              // `EMD Required: ${props.isEmdRequired ? formatCurrency(props.emdAmount || 0) : 'Nil'}`, // Commented out as requested
               `Estimated Value: ${formatCurrency(props.estimatedValue)}`,
             ],
           },
