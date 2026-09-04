@@ -1133,22 +1133,20 @@ export default function AdminOnboarding() {
     });
   }, [activeTab, searchTerm, statusFilter, progressFilter, sortBy]);
 
-  const pendingTotal =
-    sellers.filter((s) =>
-      ["pending", "pending_validation", "manual_review_required", "under_compliance_review"].includes(
-        s.onboardingStatus,
-      ),
-    ).length +
-    buyers.filter((b) =>
-      ["pending", "pending_validation", "manual_review_required", "under_compliance_review"].includes(
-        b.onboardingStatus,
-      ),
-    ).length;
-  const activeSellers = sellerApplications.filter(
+  const pendingSellersCount = sellerApplications.filter((s) => isPendingStatus(s.onboardingStatus)).length;
+  const pendingBuyersCount = buyers.filter((b) => isPendingStatus(b.onboardingStatus)).length;
+  const pendingShgCount = shgApplications.filter((s) => isPendingStatus(s.onboardingStatus)).length;
+
+  const pendingTotal = adminStats?.pendingApproval ?? (pendingSellersCount + pendingBuyersCount + pendingShgCount);
+
+  const activeSellers = adminStats?.activeSellers ?? sellerApplications.filter(
     (s) => s.onboardingStatus === "approved_for_procurement",
   ).length;
-  const activeBuyers = buyers.filter(
+  const activeBuyers = adminStats?.activeBuyers ?? buyers.filter(
     (b) => b.onboardingStatus === "approved_for_procurement",
+  ).length;
+  const activeShg = adminStats?.activeShg ?? shgApplications.filter(
+    (s) => s.onboardingStatus === "approved_for_procurement",
   ).length;
   const totalNetwork = sellers.length + buyers.length;
   const averageProgress = totalNetwork
@@ -1226,7 +1224,23 @@ export default function AdminOnboarding() {
 
   const handleKpiClick = (target: string) => {
     if (target === "pending") {
-      setStatusFilter((prev) => (prev === "pending" ? "all" : "pending"));
+      setStatusFilter((prev) => {
+        if (prev === "pending") return "all";
+        
+        // Intelligently switch to a tab that has pending items if the current tab is empty
+        if (activeTab === "shg" && pendingShgCount === 0) {
+          if (pendingSellersCount > 0) setActiveTab("sellers");
+          else if (pendingBuyersCount > 0) setActiveTab("buyers");
+        } else if (activeTab === "sellers" && pendingSellersCount === 0) {
+          if (pendingBuyersCount > 0) setActiveTab("buyers");
+          else if (pendingShgCount > 0) setActiveTab("shg");
+        } else if (activeTab === "buyers" && pendingBuyersCount === 0) {
+          if (pendingSellersCount > 0) setActiveTab("sellers");
+          else if (pendingShgCount > 0) setActiveTab("shg");
+        }
+        
+        return "pending";
+      });
     } else if (target === "sellers") {
       if (activeTab === "sellers" && statusFilter === "approved") {
         setStatusFilter("all");
@@ -1239,6 +1253,13 @@ export default function AdminOnboarding() {
         setStatusFilter("all");
       } else {
         setActiveTab("buyers");
+        setStatusFilter("approved");
+      }
+    } else if (target === "shg") {
+      if (activeTab === "shg" && statusFilter === "approved") {
+        setStatusFilter("all");
+      } else {
+        setActiveTab("shg");
         setStatusFilter("approved");
       }
     } else {
@@ -1321,7 +1342,7 @@ export default function AdminOnboarding() {
                   sub: "Approved supplier base",
                   icon: ShoppingBag,
                   target: "sellers",
-                  tone: "indigo" as const,
+                  tone: "emerald" as const,
                 },
                 {
                   label: "Active Buyers",
@@ -1332,12 +1353,12 @@ export default function AdminOnboarding() {
                   tone: "blue" as const,
                 },
                 {
-                  label: "Total Network",
-                  value: totalNetwork,
-                  sub: `${averageProgress}% average verification`,
-                  icon: Users,
-                  target: "network",
-                  tone: "slate" as const,
+                  label: "Active SHG",
+                  value: activeShg,
+                  sub: "Approved SHG groups",
+                  icon: BarChart3,
+                  target: "shg",
+                  tone: "indigo" as const,
                 },
               ].map((stat) => (
                 <KpiCard
@@ -1352,6 +1373,7 @@ export default function AdminOnboarding() {
                     (stat.target === "pending" && statusFilter === "pending") ||
                     (stat.target === "sellers" && activeTab === "sellers" && statusFilter === "approved") ||
                     (stat.target === "buyers" && activeTab === "buyers" && statusFilter === "approved") ||
+                    (stat.target === "shg" && activeTab === "shg" && statusFilter === "approved") ||
                     (stat.target === "network" && statusFilter === "all" && progressFilter === "all" && !searchTerm)
                   }
                 />
@@ -1362,9 +1384,9 @@ export default function AdminOnboarding() {
               <CardHeader className="bg-white p-0 border-b border-slate-100">
                 <Tabs
                   tabs={[
-                    { id: "sellers", label: "Seller Onboarding" },
-                    { id: "buyers", label: "Buyer Onboarding" },
-                    { id: "shg", label: "SHG Onboarding" },
+                    { id: "sellers", label: `Seller Onboarding${statusFilter === 'pending' && pendingSellersCount > 0 ? ` (${pendingSellersCount})` : ''}` },
+                    { id: "buyers", label: `Buyer Onboarding${statusFilter === 'pending' && pendingBuyersCount > 0 ? ` (${pendingBuyersCount})` : ''}` },
+                    { id: "shg", label: `SHG Onboarding${statusFilter === 'pending' && pendingShgCount > 0 ? ` (${pendingShgCount})` : ''}` },
                   ]}
                   activeTab={activeTab}
                   onChange={setActiveTab}
