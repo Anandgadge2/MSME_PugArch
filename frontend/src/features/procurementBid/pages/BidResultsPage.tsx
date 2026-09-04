@@ -18,6 +18,7 @@ import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { toast } from 'sonner';
 import { ComparisonMatrixSkeleton } from '../../../components/ui/skeleton';
+import { SupplierQuotationDetailModal, SupplierQuotationDetailView, normalizeQuotationDocuments } from '../components/SupplierQuotationDetailModal';
 
 export default function BidResultsPage() {
   const { user } = useAuth();
@@ -196,7 +197,7 @@ export default function BidResultsPage() {
       if (data && Array.isArray(data.participations) && data.participations.length > 0 && (!Array.isArray(data.results) || data.results.length === 0)) {
         data.results = data.participations.map((r: any, idx: number) => {
           const respData = typeof r.responseData === 'string' ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })() : (r.responseData || {});
-          const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || 0);
+          const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || respData.offeredPrice || respData.quotedAmount || respData.totalAmount || 0);
           const sellerOrg = r.sellerOrgName
             || r.sellerOrganization?.organizationName
             || r.seller?.organization?.organizationName
@@ -209,6 +210,17 @@ export default function BidResultsPage() {
             || (r.sellerUserId || r.sellerId ? `Supplier #${r.sellerUserId || r.sellerId}` : `Supplier ${idx + 1}`);
           const contactPerson = r.contactPerson || r.sellerName || r.sellerUser?.name || r.seller?.name || 'Representative';
 
+          const lineItems = (Array.isArray(respData.lineItems) && respData.lineItems.length > 0)
+            ? respData.lineItems
+            : (Array.isArray(respData.lineQuotes) && respData.lineQuotes.length > 0)
+            ? respData.lineQuotes
+            : (Array.isArray(r.lineItems) ? r.lineItems : []);
+
+          const docs = normalizeQuotationDocuments({
+            ...r,
+            responseData: respData,
+          });
+
           return {
             id: r.id || `res-${idx}`,
             participationId: r.id || idx + 1,
@@ -218,7 +230,7 @@ export default function BidResultsPage() {
             sellerMobile: r.sellerMobile || r.sellerUser?.mobile || r.seller?.mobile || 'Not listed',
             submittedAt: r.createdAt || r.submittedAt,
             sellerType: 'Verified Seller',
-            offeredItem: r.offeredItemDescription || r.message || r.itemName || 'Procurement requirement',
+            offeredItem: r.offeredItemDescription || r.message || respData.message || respData.coverNote || r.itemName || 'Procurement requirement',
             makeBrand: r.makeBrand || respData.makeBrand || 'Standard',
             model: r.model || respData.model || 'Standard',
             technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' || r.technicalStatus === 'QUALIFIED' ? 'Qualified' : (r.status === 'REJECTED' || r.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : 'Pending'),
@@ -226,9 +238,14 @@ export default function BidResultsPage() {
             quotedAmount: quotedAmt,
             gstPercentage: Number(r.gstPercentage || respData.gstPercentage || 0),
             totalAmount: quotedAmt,
-            offeredQuantity: r.offeredQuantity || r.quantity || 1,
+            offeredQuantity: r.offeredQuantity || respData.offeredQuantity || r.quantity || 1,
             deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
-            documents: r.documents || [],
+            documents: docs,
+            lineItems: lineItems,
+            message: r.message || respData.message || respData.coverNote || r.offeredItemDescription || '',
+            terms: r.terms || respData.terms || '',
+            responseData: respData,
+            rawParticipation: r,
             finalRank: `L${idx + 1}`,
             resultStatus: 'Responsive',
             details: {
@@ -239,9 +256,11 @@ export default function BidResultsPage() {
               submittedAt: r.createdAt || r.submittedAt,
               deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
               complianceRemarks: r.complianceRemarks || 'Compliant',
-              rfqNotes: r.message || r.offeredItemDescription || '',
+              rfqNotes: r.message || respData.message || r.offeredItemDescription || '',
               quotedAmount: quotedAmt,
               totalAmount: quotedAmt,
+              lineItems: lineItems,
+              documents: docs,
             }
           };
         });
@@ -256,18 +275,13 @@ export default function BidResultsPage() {
             const reqItems = reqRes?.responses || reqRes?.participants || reqRes?.participations || reqRes?.items || reqRes?.data || (Array.isArray(reqRes) ? reqRes : []);
             if (Array.isArray(reqItems) && reqItems.length > 0) {
               const mappedResults = reqItems.map((r: any, idx: number) => {
-                const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
-                const rawDocs: any[] = Array.isArray(respData.documents) ? respData.documents : (Array.isArray(r.documents) ? r.documents : []);
-                const docs = rawDocs.map((d: any, dIdx: number) => ({
-                  id: d.id || `rdoc-${r.id}-${dIdx}`,
-                  documentName: d.documentName || d.name || d.fileName || 'Document',
-                  fileName: d.fileName || d.name || 'file.pdf',
-                  fileUrl: d.fileUrl || d.url || null,
-                  fileAssetId: d.fileAssetId || null,
-                  documentCategory: d.documentCategory || d.category || 'TECHNICAL_PROPOSAL',
-                }));
+                const respData = typeof r.responseData === 'string' ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })() : (r.responseData || {});
+                const docs = normalizeQuotationDocuments({
+                  ...r,
+                  responseData: respData,
+                });
 
-                const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || 0);
+                const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || respData.offeredPrice || respData.quotedAmount || respData.totalAmount || 0);
                 const sellerOrg = r.sellerOrgName
                   || r.sellerOrganization?.organizationName
                   || r.seller?.organization?.organizationName
@@ -280,6 +294,12 @@ export default function BidResultsPage() {
                   || (r.sellerUserId || r.sellerId ? `Supplier #${r.sellerUserId || r.sellerId}` : `Supplier ${idx + 1}`);
                 const contactPerson = r.contactPerson || r.sellerName || r.sellerUser?.name || r.seller?.name || 'Representative';
 
+                const lineItems = (Array.isArray(respData.lineItems) && respData.lineItems.length > 0)
+                  ? respData.lineItems
+                  : (Array.isArray(respData.lineQuotes) && respData.lineQuotes.length > 0)
+                  ? respData.lineQuotes
+                  : (Array.isArray(r.lineItems) ? r.lineItems : []);
+
                 return {
                   id: r.id || `res-${idx}`,
                   participationId: r.id || idx + 1,
@@ -289,7 +309,7 @@ export default function BidResultsPage() {
                   sellerMobile: r.sellerMobile || r.sellerUser?.mobile || r.seller?.mobile || 'Not listed',
                   submittedAt: r.createdAt || r.submittedAt,
                   sellerType: 'Verified Seller',
-                  offeredItem: r.message || r.itemName || 'Procurement requirement',
+                  offeredItem: r.message || respData.message || respData.coverNote || r.itemName || 'Procurement requirement',
                   makeBrand: r.makeBrand || respData.makeBrand || 'Standard',
                   model: r.model || respData.model || 'Standard',
                   technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' || r.technicalStatus === 'QUALIFIED' ? 'Qualified' : (r.status === 'REJECTED' || r.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : 'Pending'),
@@ -297,9 +317,14 @@ export default function BidResultsPage() {
                   quotedAmount: quotedAmt,
                   gstPercentage: Number(r.gstPercentage || respData.gstPercentage || 0),
                   totalAmount: quotedAmt,
-                  offeredQuantity: r.offeredQuantity || r.quantity || 1,
+                  offeredQuantity: r.offeredQuantity || respData.offeredQuantity || r.quantity || 1,
                   deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
                   documents: docs,
+                  lineItems: lineItems,
+                  message: r.message || respData.message || respData.coverNote || r.offeredItemDescription || '',
+                  terms: r.terms || respData.terms || '',
+                  responseData: respData,
+                  rawParticipation: r,
                   finalRank: `L${idx + 1}`,
                   resultStatus: 'Responsive',
                   details: {
@@ -310,9 +335,11 @@ export default function BidResultsPage() {
                     submittedAt: r.createdAt || r.submittedAt,
                     deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
                     complianceRemarks: r.complianceRemarks || 'Compliant',
-                    rfqNotes: r.message || '',
+                    rfqNotes: r.message || respData.message || '',
                     quotedAmount: quotedAmt,
                     totalAmount: quotedAmt,
+                    lineItems: lineItems,
+                    documents: docs,
                   }
                 };
               });
@@ -392,6 +419,61 @@ export default function BidResultsPage() {
     }
   };
 
+  const handleSelectResult = (row: any) => {
+    setSelectedResult(row);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      const qId = String(row.id || row.participationId || '');
+      if (qId) {
+        url.searchParams.set('quoteId', qId);
+        window.history.pushState({}, '', url.toString());
+      }
+    }
+  };
+
+  const handleBackFromQuotationDetail = () => {
+    setSelectedResult(null);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('quoteId');
+      window.history.pushState({}, '', url.toString());
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && ranking.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const quoteId = params.get('quoteId');
+      if (quoteId) {
+        const match = ranking.find(
+          r => String((r as any).id) === quoteId || String(r.participationId) === quoteId
+        );
+        if (match) {
+          setSelectedResult(match);
+        }
+      }
+    }
+  }, [ranking]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const quoteId = params.get('quoteId');
+        if (!quoteId) {
+          setSelectedResult(null);
+        } else if (ranking.length > 0) {
+          const match = ranking.find(
+            r => String((r as any).id) === quoteId || String(r.participationId) === quoteId
+          );
+          if (match) setSelectedResult(match);
+        }
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [ranking]);
+
   if (loading) {
     return (
       <PageShell>
@@ -420,6 +502,98 @@ export default function BidResultsPage() {
           <ProcurementHero title="Bid Result and Financial Ranking" subtitle={bidId || 'Requested bid'} action={<Link href="/bids" className="inline-flex h-10 items-center rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-700">Back to bids</Link>} />
           <div className="mt-5"><ProcurementEmptyState title="No bid results available currently." message="This bid was not returned by the live backend." /></div>
         </main>
+      </PageShell>
+    );
+  }
+
+  // Render dedicated Full View Page when a quotation is selected
+  if (selectedResult) {
+    return (
+      <PageShell>
+        <SupplierQuotationDetailView
+          result={selectedResult}
+          bid={bid}
+          bidId={bidId}
+          onBack={handleBackFromQuotationDetail}
+          onAcceptAndGeneratePo={(res) => setAwardModal({ show: true, row: res, remarks: '', submitting: false })}
+          onDownloadPdf={(res) => handleDownloadQuotationPdf(res)}
+        />
+
+        {/* Award & PO Generation Confirmation Modal */}
+        {awardModal.show && awardModal.row && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
+            <div className="relative w-full max-w-lg rounded-3xl border border-slate-150 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-sm">Generate Purchase Order</span>
+                  <h3 className="text-base font-black text-slate-900 mt-1">Accept Quotation & Award Bid</h3>
+                </div>
+                <button
+                  onClick={() => setAwardModal({ show: false, row: null, remarks: '', submitting: false })}
+                  className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              <div className="py-4 space-y-4 text-xs">
+                <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-semibold">Selected Supplier:</span>
+                    <span className="font-black text-slate-900">{awardModal.row.sellerName}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-semibold">Evaluated Price:</span>
+                    <span className="font-black text-emerald-700 text-sm">{money(awardModal.row.totalPrice)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-semibold">Rank:</span>
+                    <span className="font-black text-slate-800">{awardModal.row.finalRank}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-slate-700">Award Remarks / PO Reference</label>
+                  <textarea
+                    rows={3}
+                    value={awardModal.remarks}
+                    onChange={(e) => setAwardModal(prev => ({ ...prev, remarks: e.target.value }))}
+                    placeholder="Enter award justification or procurement notes (e.g., L1 verified and compliant)..."
+                    className="w-full rounded-xl border border-slate-200 p-3 text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Accepting this quotation will officially award the procurement to <strong className="text-slate-700">{awardModal.row.sellerName}</strong>, mark the bid as awarded, and trigger automatic purchase order generation.
+                </p>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAwardModal({ show: false, row: null, remarks: '', submitting: false })}
+                  className="h-9 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={awardModal.submitting}
+                  onClick={handleConfirmAward}
+                  className="h-9 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs font-black text-white flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                >
+                  {awardModal.submitting ? (
+                    'Generating PO...'
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" /> Confirm & Generate PO
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </PageShell>
     );
   }
@@ -599,7 +773,7 @@ export default function BidResultsPage() {
                       {/* Card Footer Actions */}
                       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
                         <button
-                          onClick={() => setSelectedResult(row)}
+                          onClick={() => handleSelectResult(row)}
                           className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-250 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-2xs"
                         >
                           <Eye className="h-3.5 w-3.5 text-slate-500" /> View Quotation Details
@@ -744,7 +918,7 @@ export default function BidResultsPage() {
                           <td className="px-4 py-3.5 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <button
-                                onClick={() => setSelectedResult(row)}
+                                onClick={() => handleSelectResult(row)}
                                 className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-250 bg-white hover:bg-slate-50 text-slate-700 px-3 text-[10px] font-bold transition shadow-2xs"
                               >
                                 <Eye className="h-3.5 w-3.5 text-slate-500" /> View Quotation Details
@@ -904,310 +1078,7 @@ export default function BidResultsPage() {
         </div>
       )}
 
-      {/* Selected Result Details Modal */}
-      {selectedResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-2xl rounded-3xl border border-slate-150 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-            
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div>
-                <span className="text-[9px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-xs">Supplier Response details</span>
-                <h3 className="text-base font-black text-slate-900 mt-1">{selectedResult.sellerName}</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleDownloadQuotationPdf(selectedResult)}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer"
-                  title="Download Quotation PDF"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>Download PDF</span>
-                </button>
-                <button 
-                  onClick={() => setSelectedResult(null)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
 
-            {/* Content Scroll Shell */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-5 pr-1 text-xs">
-              {/* Section 1: Technical Offer Details */}
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 border-l-2 border-blue-600 pl-2 mb-3">Technical Specification</h4>
-                {(() => {
-                  const hasValue = (v: any) => Boolean(v && String(v).trim() !== '' && String(v).trim() !== '—' && String(v).trim() !== 'N/A');
-
-                  const make = selectedResult.makeBrand && hasValue(selectedResult.makeBrand) ? String(selectedResult.makeBrand) : null;
-                  const model = selectedResult.model && hasValue(selectedResult.model) ? String(selectedResult.model) : null;
-                  const desc = selectedResult.offeredItem || selectedResult.details?.offeredItemDescription;
-                  const offeredDesc = hasValue(desc) ? String(desc) : null;
-                  const compliance = selectedResult.details?.complianceRemarks || selectedResult.complianceRemarks;
-                  const compRemarks = hasValue(compliance) ? String(compliance) : null;
-                  const delivery = selectedResult.deliveryTimeline || selectedResult.details?.deliveryTimeline;
-                  const delTimeline = hasValue(delivery) ? String(delivery) : null;
-                  const warranty = selectedResult.details?.warrantyDetails || selectedResult.warrantyDetails;
-                  const warrantyVal = hasValue(warranty) ? String(warranty) : null;
-                  const support = selectedResult.details?.serviceSupport || selectedResult.serviceSupport;
-                  const supportVal = hasValue(support) ? String(support) : null;
-                  const deviation = selectedResult.details?.deviation || selectedResult.deviation;
-                  const devVal = hasValue(deviation) ? String(deviation) : null;
-                  const notes = selectedResult.details?.rfqNotes || selectedResult.rfqNotes || selectedResult.terms || selectedResult.details?.terms;
-                  const notesVal = hasValue(notes) ? String(notes) : null;
-
-                  const hasAnyTechField = make || model || offeredDesc || compRemarks || delTimeline || warrantyVal || supportVal || devVal || notesVal;
-
-                  if (!hasAnyTechField) {
-                    return <p className="text-xs font-semibold text-slate-400 py-2 border border-dashed border-slate-200 rounded-xl text-center">No technical specifications specified.</p>;
-                  }
-
-                  return (
-                    <div className="grid grid-cols-2 gap-4 bg-slate-50/50 rounded-2xl p-4 border border-slate-100/50">
-                      {make && (
-                        <div>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Make / Brand</span>
-                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{make}</span>
-                        </div>
-                      )}
-                      {model && (
-                        <div>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Model</span>
-                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{model}</span>
-                        </div>
-                      )}
-                      {offeredDesc && (
-                        <div className="col-span-2">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Offered Item/Service Description</span>
-                          <span className="text-xs font-bold text-slate-800 block mt-0.5 leading-relaxed">{offeredDesc}</span>
-                        </div>
-                      )}
-                      {compRemarks && (
-                        <div className="col-span-2">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Technical Compliance Remarks</span>
-                          <span className="text-xs font-semibold text-slate-700 block mt-0.5 leading-relaxed">{compRemarks}</span>
-                        </div>
-                      )}
-                      {delTimeline && (
-                        <div>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Delivery Timeline</span>
-                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{delTimeline}</span>
-                        </div>
-                      )}
-                      {warrantyVal && (
-                        <div>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Warranty Details</span>
-                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{warrantyVal}</span>
-                        </div>
-                      )}
-                      {supportVal && (
-                        <div>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Service Support</span>
-                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{supportVal}</span>
-                        </div>
-                      )}
-                      {devVal && (
-                        <div>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Deviation (if any)</span>
-                          <span className="text-xs font-bold text-slate-800 block mt-0.5">{devVal}</span>
-                        </div>
-                      )}
-                      {notesVal && (
-                        <div className="col-span-2">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Additional Notes / Terms</span>
-                          <span className="text-xs font-semibold text-slate-700 block mt-0.5 leading-relaxed">{notesVal}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Section 2: Financial Offer Details */}
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 border-l-2 border-emerald-600 pl-2 mb-3">Financial Quote Details</h4>
-                <div className="grid grid-cols-3 gap-4 bg-emerald-50/10 rounded-2xl p-4 border border-emerald-100/30">
-                  {Boolean(selectedResult.quotedAmount || selectedResult.details?.quotedAmount) && (
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Quoted Base Amount</span>
-                      <span className="text-xs font-black text-slate-800 block mt-0.5">{money(selectedResult.quotedAmount || selectedResult.details?.quotedAmount)}</span>
-                    </div>
-                  )}
-                  {Boolean(selectedResult.gstPercentage || selectedResult.details?.gstPercentage) && (
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">GST Percentage</span>
-                      <span className="text-xs font-bold text-slate-800 block mt-0.5">{`${selectedResult.gstPercentage || selectedResult.details?.gstPercentage}%`}</span>
-                    </div>
-                  )}
-                  <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Total Evaluated Price</span>
-                    <span className="text-xs font-black text-emerald-700 block mt-0.5">{money(selectedResult.totalAmount || selectedResult.totalPrice || selectedResult.details?.totalAmount || 0)}</span>
-                  </div>
-                  {Boolean(selectedResult.offeredQuantity || selectedResult.details?.offeredQuantity) && (
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Offered Quantity</span>
-                      <span className="text-xs font-bold text-slate-800 block mt-0.5">{selectedResult.offeredQuantity || selectedResult.details?.offeredQuantity}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Section 3: Uploaded Supplier Documents (Separated by Type) */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 border-l-2 border-orange-600 pl-2">Uploaded Supplier Documents & Attachments</h4>
-                {selectedResult.documents && selectedResult.documents.length > 0 ? (
-                  (() => {
-                    const allDocs = selectedResult.documents || [];
-                    const techDocs = allDocs.filter((d: any) => {
-                      const c = String(d.documentCategory || d.documentType || '').toLowerCase();
-                      const n = String(d.documentName || d.fileName || d.name || '').toLowerCase();
-                      return c.includes('tech') || c.includes('spec') || c.includes('compliance') || n.includes('tech') || n.includes('spec');
-                    });
-                    const finDocs = allDocs.filter((d: any) => {
-                      const c = String(d.documentCategory || d.documentType || '').toLowerCase();
-                      const n = String(d.documentName || d.fileName || d.name || '').toLowerCase();
-                      return c.includes('finan') || c.includes('quote') || c.includes('price') || n.includes('price') || n.includes('quote') || n.includes('cost');
-                    });
-                    const boqDocs = allDocs.filter((d: any) => {
-                      const c = String(d.documentCategory || d.documentType || '').toLowerCase();
-                      const n = String(d.documentName || d.fileName || d.name || '').toLowerCase();
-                      return c.includes('boq') || c.includes('schedule') || n.includes('boq') || n.includes('sheet') || n.includes('excel');
-                    });
-                    const otherDocs = allDocs.filter((d: any) => !techDocs.includes(d) && !finDocs.includes(d) && !boqDocs.includes(d));
-
-                    const renderDocCard = (doc: any, idx: number, theme: string) => {
-                      const docTitle = doc.documentName || doc.name || doc.title || 'Uploaded Document';
-                      const fileName = doc.fileName || doc.originalName || '';
-                      const category = doc.documentCategory || doc.documentType || 'Attachment';
-
-                      return (
-                        <div 
-                          key={idx} 
-                          title={fileName ? `${docTitle} (${fileName})` : docTitle}
-                          onClick={() => {
-                            if (doc.fileAssetId || doc.fileUrl || doc.url) {
-                              openFileAsset({
-                                id: doc.fileAssetId || doc.id,
-                                fileAssetId: doc.fileAssetId,
-                                originalName: fileName || docTitle,
-                                url: doc.fileUrl || doc.url,
-                              }, fileName || docTitle).catch(err => {
-                                toast.error(err instanceof Error ? err.message : 'Unable to open file');
-                              });
-                            }
-                          }}
-                          className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 flex items-start gap-2.5 hover:shadow-md transition-all duration-200 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 group"
-                        >
-                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${theme} transition-colors mt-0.5`}>
-                            <FileText className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[11px] font-black text-slate-800 block leading-tight break-words">{docTitle}</span>
-                            {fileName && fileName !== docTitle && (
-                              <span className="text-[10px] font-semibold text-slate-500 block mt-0.5 break-all leading-tight">{fileName}</span>
-                            )}
-                            <span className="inline-block text-[8px] font-black text-blue-700 bg-blue-50 border border-blue-150 px-1.5 py-0.5 rounded-xs mt-1 uppercase tracking-wider">{category}</span>
-                          </div>
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-400 group-hover:text-blue-600 group-hover:border-blue-300 transition-colors">
-                            <Download className="h-3.5 w-3.5" />
-                          </div>
-                        </div>
-                      );
-                    };
-
-                    return (
-                      <div className="space-y-3">
-                        {techDocs.length > 0 && (
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-black uppercase text-blue-700 tracking-wider flex items-center gap-1">
-                              <FileText className="h-3 w-3 text-blue-600" /> Technical Proposals & Specifications ({techDocs.length})
-                            </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {techDocs.map((doc: any, idx: number) => renderDocCard(doc, idx, 'bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white'))}
-                            </div>
-                          </div>
-                        )}
-
-                        {finDocs.length > 0 && (
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider flex items-center gap-1">
-                              <FileText className="h-3 w-3 text-emerald-600" /> Financial Quotes & Price Bids ({finDocs.length})
-                            </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {finDocs.map((doc: any, idx: number) => renderDocCard(doc, idx, 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white'))}
-                            </div>
-                          </div>
-                        )}
-
-                        {boqDocs.length > 0 && (
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-black uppercase text-purple-700 tracking-wider flex items-center gap-1">
-                              <FileText className="h-3 w-3 text-purple-600" /> BOQ & Rate Schedules ({boqDocs.length})
-                            </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {boqDocs.map((doc: any, idx: number) => renderDocCard(doc, idx, 'bg-purple-100 text-purple-700 group-hover:bg-purple-600 group-hover:text-white'))}
-                            </div>
-                          </div>
-                        )}
-
-                        {otherDocs.length > 0 && (
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider flex items-center gap-1">
-                              <FileText className="h-3 w-3 text-slate-600" /> Statutory & Compliance Attachments ({otherDocs.length})
-                            </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {otherDocs.map((doc: any, idx: number) => renderDocCard(doc, idx, 'bg-slate-200 text-slate-700 group-hover:bg-slate-700 group-hover:text-white'))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()
-                ) : (
-                  <p className="text-xs font-bold text-slate-400 py-3 text-center border border-dashed border-slate-100 rounded-xl">No documents uploaded.</p>
-                )}
-              </div>
-            </div>
-
-            {/* Footer Actions */}
-            <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-2.5 sm:gap-3">
-              <div className="flex items-center gap-2">
-                {selectedResult.resultStatus === 'Awarded' || bid?.status === 'Awarded' ? (
-                  <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-100 px-4 text-xs font-black text-emerald-800 uppercase tracking-wide">
-                    <CheckCircle2 className="h-4 w-4" /> PO Generated (Awarded)
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setAwardModal({ show: true, row: selectedResult, remarks: '', submitting: false });
-                    }}
-                    className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 text-xs font-black text-white transition-colors inline-flex items-center gap-2 shadow-xs"
-                  >
-                    <CheckCircle2 className="h-4 w-4" /> Accept Quotation & Generate PO
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => handleDownloadQuotationPdf(selectedResult)}
-                  className="h-10 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 text-xs font-black text-white transition-colors inline-flex items-center gap-2 shadow-xs cursor-pointer"
-                >
-                  <Download className="h-4 w-4" /> Download PDF
-                </button>
-              </div>
-              <button
-                onClick={() => setSelectedResult(null)}
-                className="h-10 rounded-xl bg-slate-100 hover:bg-slate-200 px-5 text-xs font-black text-slate-700 transition-colors"
-              >
-                Close Details
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
 
       {/* Award & PO Generation Confirmation Modal */}
       {awardModal.show && awardModal.row && (

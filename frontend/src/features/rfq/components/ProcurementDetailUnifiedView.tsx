@@ -3565,40 +3565,40 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         )}
 
         {/* Header */}
-        <header className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
+        <header className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 sm:px-5 sm:py-3 shadow-2xs">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <StatusBadge status={statusLabel} />
                 {!isBuyerSide && buyerOrgName !== 'N/A' && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-indigo-700">
-                    <Building2 className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.2 text-[10px] font-black uppercase tracking-wider text-indigo-700">
+                    <Building2 className="h-3 w-3" />
                     {formatPrimitiveValue(buyerOrgName, 'organization')}
                   </span>
                 )}
                 {props.deadlineDate && <DeadlineCountdown targetDate={props.deadlineDate} />}
                 {props.hasSubmittedProposal && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-700">
-                    <ShieldCheck className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.2 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                    <ShieldCheck className="h-3 w-3" />
                     {props.procurementType === 'RFQ' ? 'Quotation Submitted' : 'Proposal Submitted'}
                   </span>
                 )}
               </div>
               <h1
                 className={cn(
-                  'leading-tight tracking-tight text-slate-900 font-black break-words',
+                  'leading-snug tracking-tight text-slate-900 font-black break-words',
                   isBuyerSide
-                    ? 'text-lg sm:text-xl md:text-2xl'
-                    : 'text-xl sm:text-2xl lg:text-3xl'
+                    ? 'text-base sm:text-lg'
+                    : 'text-lg sm:text-xl'
                 )}
               >
                 {resolvedSubject}
               </h1>
-              <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 {/* Requisition ID badge - hidden on buyer side */}
                 {!isBuyerSide && (
                   <>
-                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-700 text-[11px] font-bold">{displayIdStr}</span>
+                    <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-slate-700 text-[10px] font-bold">{displayIdStr}</span>
                     <span>•</span>
                   </>
                 )}
@@ -3612,7 +3612,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2.5 lg:self-center">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 lg:self-center">
               <Button
                 type="button"
                 variant="outline"
@@ -3624,9 +3624,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     handleDefaultPdfDownload();
                   }
                 }}
-                className="h-9 px-3.5 text-xs font-bold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
+                className="h-8 px-3 text-xs font-bold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
               >
-                <Download className="h-4 w-4 text-slate-600" />
+                <Download className="h-3.5 w-3.5 text-slate-600" />
                 Download
               </Button>
               {props.invoiceStatus && props.onConvertToInvoiceClick && (
@@ -3634,9 +3634,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   <Button
                     type="button"
                     onClick={() => router.push(`/seller/invoices/${props.invoiceStatus!.invoiceId}`)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 h-9 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-3.5 h-8 rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                   >
-                    <Eye className="h-4 w-4 mr-0.5" />
+                    <Eye className="h-3.5 w-3.5 mr-0.5" />
                     View Invoice
                   </Button>
                 ) : (
@@ -3644,9 +3644,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     type="button"
                     disabled={props.isConvertingInvoice || props.invoiceStatus.loading}
                     onClick={props.onConvertToInvoiceClick}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 h-9 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-3.5 h-8 rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                   >
-                    {props.isConvertingInvoice ? <Loader2 className="h-4 w-4 mr-0.5 animate-spin" /> : <FileText className="h-4 w-4 mr-0.5" />}
+                    {props.isConvertingInvoice ? <Loader2 className="h-3.5 w-3.5 mr-0.5 animate-spin" /> : <FileText className="h-3.5 w-3.5 mr-0.5" />}
                     {props.isConvertingInvoice ? 'Converting...' : 'Convert to Invoice'}
                   </Button>
                 )
@@ -3657,9 +3657,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   variant="outline"
                   size="sm"
                   onClick={props.onDiscardClick}
-                  className="h-9 px-3.5 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
+                  className="h-8 px-3 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1 flex items-center"
                 >
-                  <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                  <Trash2 className="h-3 w-3 text-rose-600" />
                   Discard Draft
                 </Button>
               )}
@@ -3669,7 +3669,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   size="sm"
                   onClick={handleActionSubmit}
                   className={cn(
-                    'h-9 px-4 text-white text-xs font-extrabold rounded-lg bg-[#0b2447] hover:bg-[#12335f] cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5',
+                    'h-8 px-3.5 text-white text-xs font-black rounded-lg bg-[#0b2447] hover:bg-[#12335f] cursor-pointer shadow-2xs active:scale-95 transition-all flex items-center gap-1.5',
                     isEmdGated ? 'bg-amber-600 hover:bg-amber-700' : ''
                   )}
                 >
