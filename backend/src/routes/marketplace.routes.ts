@@ -10,6 +10,7 @@ import { verifyAccessToken } from '../services/token.service.js';
 import { longCache, shortCache } from '../middleware/httpCache.js';
 import { sha256 } from '../utils/crypto.js';
 import { formatRequirementNumber } from '../utils/refIdUtils.js';
+import { canonicalMethodFromRecord, normalizeCanonicalMethod } from '../utils/procurement-methods.js';
 import { notifyPurchaseOrderCreated } from '../services/invoice-pdf.service.js';
 
 const db = prisma as any;
@@ -356,7 +357,12 @@ const mapLegacyRequirementToPublic = (requirement: any) => {
     const totalQty = items.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
     const primaryUnit = items[0]?.unitOfMeasure || null;
     const directPurchase = Array.isArray(requirement.directPurchases) ? requirement.directPurchases[0] : null;
-    const procurementMethod = String(requirement.procurementMethod || '').replace(/_/g, ' ');
+    const canonical = canonicalMethodFromRecord(requirement);
+    const rawMethodUpper = String(requirement.procurementMethod || canonical || '').toUpperCase();
+    const isTender = canonical === 'OPEN_TENDER' || rawMethodUpper.includes('TENDER');
+    const finalCanonical = isTender ? 'OPEN_TENDER' : canonical;
+    const finalMethod = isTender ? 'OPEN_TENDER' : (requirement.procurementMethod || canonical);
+    const procurementMethod = isTender ? 'Open Tender' : String(requirement.procurementMethod || canonical).replace(/_/g, ' ');
     const itemSummary = items.length
         ? items.map((item: any) => item.itemName).filter(Boolean).join(', ')
         : null;
@@ -388,9 +394,9 @@ const mapLegacyRequirementToPublic = (requirement: any) => {
         buyerOrganization: organization,
         _count: { responses: (requirement._count?.tenders || 0) },
         requirementNumber: requirement.requirementNumber,
-        procurementMethod: requirement.procurementMethod,
-        canonicalMethod: requirement.canonicalMethod || requirement.procurementMethod,
-        procurementMethodLabel: procurementMethod || null,
+        procurementMethod: finalMethod,
+        canonicalMethod: finalCanonical,
+        procurementMethodLabel: isTender ? 'Open Tender' : (procurementMethod || 'RFQ'),
         payload: requirement.payload,
         estimatedValue: requirement.estimatedValue || directPurchase?.totalAmount || null,
         currency: requirement.currency || 'INR',
@@ -2459,18 +2465,74 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
             buyerOrderBy = [{ lastDate: 'asc' }];
         }
 
-        const [buyerRequirements, buyerTotal, legacyRequirements, legacyTotal] = await Promise.all([
+        const [buyerRequirements, buyerTotal, legacyRequirements, legacyTotal, activeBids] = await Promise.all([
             db.buyerRequirement.findMany({ where, orderBy: buyerOrderBy, take: pageSize * page, select: publicRequirementListSelect }),
             db.buyerRequirement.count({ where }),
             db.requirement.findMany({ where: legacyWhere, orderBy: [{ requiredBy: 'asc' }, { updatedAt: 'desc' }], take: pageSize * page, select: publicLegacyRequirementSelect }).catch(() => []),
-            db.requirement.count({ where: legacyWhere }).catch(() => 0)
+            db.requirement.count({ where: legacyWhere }).catch(() => 0),
+            db.procurementBid.findMany({
+                where: {
+                    approvalStatus: { in: ['APPROVED', 'PENDING'] },
+                    status: { in: ['PUBLISHED', 'OPEN', 'ACTIVE', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'SELLER_PARTICIPATION', 'BID_SUBMISSION'] }
+                },
+                select: {
+                    id: true,
+                    bidNumber: true,
+                    title: true,
+                    buyerId: true,
+                    buyerOrganizationId: true,
+                    technicalPacket: true
+                }
+            }).catch(() => [])
         ]);
+
+        const cleanCoreTitle = (str: string) => {
+            return String(str || '')
+                .toLowerCase()
+                .replace(/^procurement of\s+/, '')
+                .replace(/\b(annual|rate|contract|contracts|for|service|services|1|year|years|supply|supplies|procurement|of)\b/gi, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        };
+
+        const linkedReqIds = new Set<number>();
+        const linkedReqNumbers = new Set<string>();
+        const activeBidTitleKeys = new Set<string>();
+
+        for (const bid of (activeBids || [])) {
+            const tp: any = bid.technicalPacket || {};
+            const sourceReqId = Number(tp.sourceRequirementId || tp.requirementId || tp.linkedRequirementId || 0);
+            if (sourceReqId > 0) linkedReqIds.add(sourceReqId);
+            if (bid.bidNumber) linkedReqNumbers.add(String(bid.bidNumber).toUpperCase().trim());
+            const reqNum = String(tp.requirementNumber || '').toUpperCase().trim();
+            if (reqNum) linkedReqNumbers.add(reqNum);
+            
+            const core = cleanCoreTitle(bid.title);
+            if (core) {
+                const orgKey = String(bid.buyerOrganizationId || bid.buyerId || '');
+                if (orgKey) activeBidTitleKeys.add(`${orgKey}_${core}`);
+                activeBidTitleKeys.add(`all_${core}`);
+            }
+        }
 
         const currentUserId = req.user?.id ? Number(req.user.id) : null;
         const filteredLegacy = (legacyRequirements || []).filter((reqItem: any) => {
-            const method = reqItem.canonicalMethod || reqItem.procurementMethod || '';
-            const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
-            const isLimitedRfq = method.toUpperCase() === 'RFQ' && reqItem.payload && typeof reqItem.payload === 'object' && (reqItem.payload as any).rfqType === 'LIMITED';
+            const payload: any = reqItem.payload || {};
+            const linkedBidId = Number(payload.linkedProcurementBidId || payload.procurementBidId || 0);
+            if (linkedBidId > 0 || linkedReqIds.has(reqItem.id)) return false;
+
+            const reqNum = String(reqItem.requirementNumber || '').toUpperCase().trim();
+            if (reqNum && linkedReqNumbers.has(reqNum)) return false;
+
+            const orgKey = String(reqItem.organizationId || reqItem.buyerId || '');
+            const core = cleanCoreTitle(reqItem.title);
+            if (core && (activeBidTitleKeys.has(`${orgKey}_${core}`) || activeBidTitleKeys.has(`all_${core}`))) {
+                return false;
+            }
+
+            const method = String(reqItem.canonicalMethod || reqItem.procurementMethod || '').toUpperCase();
+            const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method);
+            const isLimitedRfq = method === 'RFQ' && reqItem.payload && typeof reqItem.payload === 'object' && (reqItem.payload as any).rfqType === 'LIMITED';
             
             if (isRestricted || isLimitedRfq) {
                 if (!currentUserId) return false;
@@ -2480,11 +2542,20 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
             return true;
         });
 
-        const decoratedBuyer = buyerRequirements.map(decorateRequirement);
-        const buyerTitles = new Set(decoratedBuyer.map((b: any) => (b.title || '').trim().toLowerCase()));
+        const filteredBuyer = buyerRequirements.filter((b: any) => {
+            const orgKey = String(b.buyerOrganizationId || b.createdById || '');
+            const core = cleanCoreTitle(b.title);
+            if (core && (activeBidTitleKeys.has(`${orgKey}_${core}`) || activeBidTitleKeys.has(`all_${core}`))) {
+                return false;
+            }
+            return true;
+        });
+
+        const decoratedBuyer = filteredBuyer.map(decorateRequirement);
+        const buyerTitles = new Set(decoratedBuyer.map((b: any) => cleanCoreTitle(b.title)));
         const decoratedLegacy = filteredLegacy
             .map(mapLegacyRequirementToPublic)
-            .filter((l: any) => !buyerTitles.has((l.title || '').trim().toLowerCase()));
+            .filter((l: any) => !buyerTitles.has(cleanCoreTitle(l.title)));
 
         const combined = [
             ...decoratedBuyer,
@@ -2583,7 +2654,8 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                         title: bid.title,
                         description: bid.description || bid.title,
                         requirementType: bid.bidType || bid.procurementType || 'PRODUCT',
-                        procurementMethod: bid.procurementMethod || bid.procurementType || 'RFQ',
+                        procurementMethod: bid.procurementType || bid.bidType || 'OPEN_TENDER',
+                        canonicalMethod: bid.procurementType || bid.bidType || 'OPEN_TENDER',
                         status: bid.status || 'OPEN',
                         statusLabel: bid.status || 'Open',
                         budgetMin: Number(bid.estimatedValue || 0),

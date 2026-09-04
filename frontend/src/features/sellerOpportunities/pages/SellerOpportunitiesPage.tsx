@@ -419,14 +419,22 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const exactKey = `${opportunity.type}_${opportunity.sourceRef}_${(opportunity.title || '').trim().toLowerCase()}`;
         const coreTitle = cleanCoreTitle(opportunity.title);
         const titleKey = `${opportunity.type}_${coreTitle}`;
+        const universalTitleKey = `${(opportunity.buyer || '').trim().toLowerCase()}_${coreTitle}`;
 
         const refKeys = extractRefKeys(opportunity);
         const existingIndex = deduped.findIndex(item => {
           const itemExact = `${item.type}_${item.sourceRef}_${(item.title || '').trim().toLowerCase()}`;
           const itemTitleKey = `${item.type}_${cleanCoreTitle(item.title)}`;
+          const itemUniversalKey = `${(item.buyer || '').trim().toLowerCase()}_${cleanCoreTitle(item.title)}`;
           const itemRefKeys = extractRefKeys(item);
 
           if (itemExact === exactKey || itemTitleKey === titleKey) return true;
+          if (coreTitle && cleanCoreTitle(item.title) === coreTitle) {
+            const isOneTender = item.type === 'Open Tender' || opportunity.type === 'Open Tender';
+            const isOneRfq = item.type === 'RFQ' || opportunity.type === 'RFQ';
+            if (isOneTender && isOneRfq) return true;
+            if (itemUniversalKey === universalTitleKey) return true;
+          }
           return refKeys.length > 0 && refKeys.some(r => itemRefKeys.includes(r));
         });
 
@@ -440,6 +448,22 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           const titleA = existing.title || '';
           const titleB = opportunity.title || '';
           const bestTitle = titleB.length > titleA.length ? titleB : titleA;
+
+          const typePriority: Record<string, number> = {
+            'Open Tender': 6,
+            'Limited Tender': 5,
+            'RFP': 4,
+            'Rate Contract': 3,
+            'Reverse Auction': 2,
+            'Repeat Order': 2,
+            'RFQ': 1
+          };
+          const isOppHigherPriority = (typePriority[opportunity.type] || 0) > (typePriority[existing.type] || 0);
+          const bestType = isOppHigherPriority ? opportunity.type : existing.type;
+          const bestHref = isOppHigherPriority ? opportunity.href : (existing.href || opportunity.href);
+          const bestDetailsHref = isOppHigherPriority ? opportunity.detailsHref : (existing.detailsHref || opportunity.detailsHref);
+          const bestActionLabel = isOppHigherPriority ? opportunity.actionLabel : (existing.actionLabel || opportunity.actionLabel);
+          const bestSourceRef = isOppHigherPriority ? opportunity.sourceRef : (existing.sourceRef || opportunity.sourceRef);
 
           const buyerA = existing.buyer || '';
           const buyerB = opportunity.buyer || '';
@@ -467,13 +491,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
           deduped[existingIndex] = {
             ...existing,
+            type: bestType,
             title: bestTitle,
             buyer: bestBuyer,
             category: bestCategory,
             location: bestLoc,
             estimatedValue: bestVal,
-            href: existing.href || opportunity.href,
-            detailsHref: existing.detailsHref || opportunity.detailsHref,
+            href: bestHref,
+            detailsHref: bestDetailsHref,
+            actionLabel: bestActionLabel,
+            sourceRef: bestSourceRef,
           };
         }
       });
@@ -510,7 +537,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const isExplicitBidRfq = method === 'RFQ' || bid.procurementType === 'RFQ' || bid.bidType === 'RFQ';
         const isExplicitBidRfp = method === 'RFP' || bid.procurementType === 'RFP' || bid.bidType === 'RFP';
-        const isExplicitBidTender = method.includes('TENDER') || String(bid.procurementType || '').includes('TENDER');
+        const isExplicitBidTender = method.includes('TENDER') || String(bid.procurementType || '').includes('TENDER') || upperTitle.includes('OPEN TENDER');
 
         const isBidRateContract = !isExplicitBidRfq && !isExplicitBidRfp && !isExplicitBidTender && (
           upperMethod.includes('RATE') ||
@@ -525,7 +552,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         if (isBidRateContract) opportunityType = 'Rate Contract';
         else if (method === 'RFP' || upperMethod.includes('RFP')) opportunityType = 'RFP';
         else if (method === 'LIMITED_TENDER' || method === 'LIMITED' || method.includes('LIMITED')) opportunityType = 'Limited Tender';
-        else if (method === 'OPEN_TENDER' || method === 'TENDER') opportunityType = 'Open Tender';
+        else if (method === 'OPEN_TENDER' || method === 'TENDER' || isExplicitBidTender) opportunityType = 'Open Tender';
         else if (method === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
         else if (method === 'REPEAT_ORDER') opportunityType = 'Repeat Order';
 
@@ -537,6 +564,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           href = sellerRoutes.respond('RATE_CONTRACT', bid.id);
           detailsHref = sellerRoutes.detail('RATE_CONTRACT', bid.id);
           actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
+        } else if (opportunityType === 'Open Tender') {
+          href = sellerRoutes.detail('OPEN_TENDER', bid.id);
+          detailsHref = sellerRoutes.detail('OPEN_TENDER', bid.id);
+          actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
         } else if (bid.sourceModel === 'TENDER' && bid.sourceId) {
           href = `/seller/tenders/${bid.sourceId}/bid`;
           detailsHref = `/tenders?tender=${bid.sourceId}`;
@@ -600,31 +631,15 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       const next: SellerOpportunity[] = [];
       const requirements = (res as any)?.requirements || (res as any)?.items || res || [];
       (Array.isArray(requirements) ? requirements : []).forEach((req: any) => {
-        const reqMethod = String(req.canonicalMethod || req.procurementMethod || 'RFQ').toUpperCase();
-        const allowedMethods = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT'];
-        if (reqMethod && !allowedMethods.includes(reqMethod)) return;
-
-        const reqInvites = Array.isArray(req.payload?.vendors?.invitedSellers) 
-          ? req.payload.vendors.invitedSellers 
-          : (Array.isArray(req.invitedSellers) ? req.invitedSellers : []);
-        
-        const isReqPrivate = req.visibility === 'VERIFIED_SELLERS_ONLY' || req.visibility === 'INVITED_SUPPLIERS' || ['LIMITED_TENDER', 'REPEAT_ORDER'].includes(reqMethod);
-        
-        if (isReqPrivate) {
-          const isInvited = reqInvites.includes(user?.id) || reqInvites.includes(user?.organizationId) || req.responsesCount > 0;
-          if (!isInvited) return;
-        }
-
+        const rawMethod = String(req.canonicalMethod || req.procurementMethod || req.payload?.fullProcurementMethod || req.payload?.type || req.payload?.basics?.procurementMethod || 'RFQ').toUpperCase();
         const upperReqTitle = String(req.title || '').toUpperCase();
-        const upperReqMethod = String(req.canonicalMethod || req.procurementMethod || req.payload?.fullProcurementMethod || req.payload?.type || req.payload?.basics?.procurementMethod || '').toUpperCase();
         const upperReqNumber = String(req.requirementNumber || req.id || '').toUpperCase();
 
-        const isExplicitReqRfq = reqMethod === 'RFQ' || req.procurementMethod === 'RFQ' || req.canonicalMethod === 'RFQ' || req.payload?.fullProcurementMethod === 'RFQ' || req.payload?.type === 'RFQ' || upperReqMethod === 'RFQ';
-        const isExplicitReqRfp = reqMethod === 'RFP' || req.procurementMethod === 'RFP' || req.canonicalMethod === 'RFP' || req.payload?.fullProcurementMethod === 'RFP' || req.payload?.type === 'RFP' || upperReqMethod === 'RFP';
-        const isExplicitReqTender = reqMethod.includes('TENDER') || String(req.procurementMethod || '').includes('TENDER') || String(req.canonicalMethod || '').includes('TENDER') || upperReqMethod.includes('TENDER');
-
-        const isReqRateContract = !isExplicitReqRfq && !isExplicitReqRfp && !isExplicitReqTender && (
-          upperReqMethod.includes('RATE') ||
+        const isOpenTender = rawMethod === 'OPEN_TENDER' || rawMethod === 'TENDER' || rawMethod.includes('TENDER') || upperReqTitle.includes('OPEN TENDER');
+        const isLimitedTender = rawMethod === 'LIMITED_TENDER' || rawMethod === 'LIMITED' || rawMethod.includes('LIMITED');
+        const isRfp = rawMethod === 'RFP' || rawMethod.includes('RFP') || upperReqTitle.includes('RFP') || upperReqTitle.includes('PROPOSAL');
+        const isRateContract = !isOpenTender && !isLimitedTender && !isRfp && (
+          rawMethod.includes('RATE') ||
           upperReqTitle.includes('RATE CONTRACT') ||
           upperReqNumber.startsWith('RC-') ||
           req.procurementMethod === 'RATE_CONTRACT' ||
@@ -632,14 +647,30 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           req.payload?.type === 'RATE_CONTRACT' ||
           req.payload?.fullProcurementMethod === 'RATE_CONTRACT'
         );
+        const isReverseAuction = rawMethod === 'REVERSE_AUCTION' || rawMethod.includes('AUCTION');
+        const isRepeatOrder = rawMethod === 'REPEAT_ORDER';
 
         let opportunityType: OpportunityType = 'RFQ';
-        if (isReqRateContract) opportunityType = 'Rate Contract';
-        else if (reqMethod === 'RFP' || upperReqMethod.includes('RFP')) opportunityType = 'RFP';
-        else if (reqMethod === 'LIMITED_TENDER' || reqMethod === 'LIMITED' || reqMethod.includes('LIMITED')) opportunityType = 'Limited Tender';
-        else if (reqMethod === 'OPEN_TENDER' || reqMethod === 'TENDER') opportunityType = 'Open Tender';
-        else if (reqMethod === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
-        else if (reqMethod === 'REPEAT_ORDER') opportunityType = 'Repeat Order';
+        if (isOpenTender) opportunityType = 'Open Tender';
+        else if (isLimitedTender) opportunityType = 'Limited Tender';
+        else if (isRfp) opportunityType = 'RFP';
+        else if (isRateContract) opportunityType = 'Rate Contract';
+        else if (isReverseAuction) opportunityType = 'Reverse Auction';
+        else if (isRepeatOrder) opportunityType = 'Repeat Order';
+
+        const allowedMethods = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT'];
+        if (rawMethod && !allowedMethods.includes(rawMethod) && !isOpenTender) return;
+
+        const reqInvites = Array.isArray(req.payload?.vendors?.invitedSellers) 
+          ? req.payload.vendors.invitedSellers 
+          : (Array.isArray(req.invitedSellers) ? req.invitedSellers : []);
+        
+        const isReqPrivate = req.visibility === 'VERIFIED_SELLERS_ONLY' || req.visibility === 'INVITED_SUPPLIERS' || ['LIMITED_TENDER', 'REPEAT_ORDER'].includes(rawMethod);
+        
+        if (isReqPrivate) {
+          const isInvited = reqInvites.includes(user?.id) || reqInvites.includes(user?.organizationId) || req.responsesCount > 0;
+          if (!isInvited) return;
+        }
 
         const documents = asTextList(req.requiredDocuments);
         const linkedBidId = req.payload?.linkedProcurementBidId;
