@@ -62,6 +62,8 @@ export interface ProcurementBid {
   departmentName: string;
   bidType: BidType;
   procurementType?: string;
+  canonicalMethod?: string;
+  method?: string;
   category: string;
   location: string;
   deliveryLocation: string;

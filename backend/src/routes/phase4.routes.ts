@@ -10339,6 +10339,8 @@ export type NormalizedProcurement = {
   statusGroup: string;
   method: string;
   methodLabel: string;
+  canonicalMethod?: string;
+  bidType?: string;
   estimatedValue: number;
   category: string;
   description: string;
@@ -10661,6 +10663,8 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       statusGroup: statusGroupFor(String(b.status || 'DRAFT')),
       method: methodSlug,
       methodLabel: METHOD_LABEL_MAP[methodSlug] || methodCanonical.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      canonicalMethod: methodCanonical,
+      bidType: b.bidType || methodCanonical,
 
       estimatedValue: Number(b.estimatedValue || 0),
       category: b.category || '',

@@ -612,13 +612,16 @@ export default function SubmitQuotationPage() {
     ''
   ).toUpperCase();
 
-  const isLimitedTender = rawMethodStr.includes('LIMITED') || rawMethodStr === 'LIMITED_TENDER';
-  const isRateContract = !isLimitedTender && (
+  const isRateContract =
     rawMethodStr.includes('RATE_CONTRACT') ||
+    rawMethodStr.includes('RATE-CONTRACT') ||
     rawMethodStr === 'RATE CONTRACT' ||
+    rawMethodStr.includes('RATE') ||
     rfqData?.title?.toLowerCase().includes('rate contract') ||
-    (typeof window !== 'undefined' && window.location.pathname.includes('rate-contract') && !rawMethodStr)
-  );
+    rfqData?.title?.toLowerCase().includes('rate') ||
+    (typeof window !== 'undefined' && window.location.pathname.includes('rate-contract'));
+
+  const isLimitedTender = !isRateContract && (rawMethodStr.includes('LIMITED') || rawMethodStr === 'LIMITED_TENDER');
 
   const isRfp = !isLimitedTender && !isRateContract && (
     rawMethodStr.includes('RFP') ||
@@ -633,9 +636,9 @@ export default function SubmitQuotationPage() {
     rawMethodStr.includes('BID')
   );
 
-  const procurementType = isLimitedTender ? 'LIMITED_TENDER'
+  const procurementType = isRateContract ? 'RATE_CONTRACT'
+    : isLimitedTender ? 'LIMITED_TENDER'
     : isOpenTender ? 'OPEN_TENDER'
-    : isRateContract ? 'RATE_CONTRACT'
     : isRfp ? 'RFP'
     : 'RFQ';
 

@@ -655,6 +655,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       deliveryTerms={rcData.deliveryTerms || deliverySla}
       description={rcData.description}
       payload={payload}
+      rateContractConfig={rateContractConfig}
       documents={uploadedDocuments.map((d, index) => ({
         id: d.fileAssetId ? String(d.fileAssetId) : `rc-doc-${index}`,
         name: d.fileName,

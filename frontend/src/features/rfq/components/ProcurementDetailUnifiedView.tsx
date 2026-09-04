@@ -32,6 +32,7 @@ import {
   Mail,
   CheckCircle2,
   CheckCircle,
+  Check,
   Scale,
   Sparkles,
   X,
@@ -42,6 +43,8 @@ import {
   AlertCircle,
   HelpCircle,
   Paperclip,
+  XCircle,
+  Truck,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -537,12 +540,14 @@ interface BuyerSideContextValue {
   isBuyer: boolean;
   isOpenTender: boolean;
   isLimitedTender: boolean;
+  isRateContract?: boolean;
 }
 
 const BuyerSideContext = React.createContext<BuyerSideContextValue>({
   isBuyer: false,
   isOpenTender: false,
   isLimitedTender: false,
+  isRateContract: false,
 });
 
 function PropertyItem({
@@ -1230,9 +1235,10 @@ function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
   const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
   const isOpenTender = typeof ctx === 'boolean' ? false : ctx.isOpenTender;
   const isLimitedTender = typeof ctx === 'boolean' ? false : (ctx.isLimitedTender || false);
+  const isRateContract = typeof ctx === 'boolean' ? false : (ctx.isRateContract || false);
 
-  // Strictly hide Service Details & Parameters on buyer side for limited tender, open tender, etc.
-  if ((isBuyer && (isLimitedTender || isOpenTender)) || !serviceDetails || !isPlainObject(serviceDetails)) return null;
+  // Strictly hide Service Details & Parameters on buyer side for limited tender, open tender, rate contract, etc.
+  if ((isBuyer && (isLimitedTender || isOpenTender || isRateContract)) || !serviceDetails || !isPlainObject(serviceDetails)) return null;
 
   const { duration, penaltyClause, slaResponseTime, manpowerRequired, experienceRequired, milestones, ...rest } = serviceDetails;
 
@@ -1262,6 +1268,368 @@ function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
             <PropertyItem key={key} label={humanizeKey(key)} value={val} />
           ))}
         </PropertyGrid>
+      </div>
+    </div>
+  );
+}
+
+function formatRcDate(dateVal?: string | Date | null): string {
+  if (!dateVal) return '—';
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return '—';
+    return dateVal.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+  const str = String(dateVal).trim();
+  if (!str) return '—';
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return str;
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function calculateValidityDays(start?: string | Date | null, end?: string | Date | null): string | null {
+  if (!start || !end) return null;
+  try {
+    const s = new Date(start);
+    const e = new Date(end);
+    if (isNaN(s.getTime()) || isNaN(e.getTime())) return null;
+    const diffTime = e.getTime() - s.getTime();
+    if (diffTime <= 0) return null;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    return `${diffDays} Day${diffDays === 1 ? '' : 's'} Duration`;
+  } catch {
+    return null;
+  }
+}
+
+function formatRcStrategy(strat?: string | null): string {
+  if (!strat) return '—';
+  switch (strat) {
+    case 'ITEM_WISE_L1':
+      return 'Item-wise L1';
+    case 'SINGLE_SUPPLIER':
+      return 'Single Supplier';
+    case 'MULTI_SUPPLIER':
+      return 'Multiple Suppliers';
+    case 'PANEL_RATE_CONTRACT':
+      return 'Panel Rate Contract';
+    default:
+      return String(strat).replace(/_/g, ' ');
+  }
+}
+
+function formatRcPriceVariation(clause?: string | null): string {
+  if (!clause) return '—';
+  switch (clause) {
+    case 'FIXED_PRICE':
+      return 'Fixed Price';
+    case 'INDEX_BASED_VARIATION':
+      return 'Index-based Variation';
+    case 'MUTUALLY_AGREED_REVISION':
+      return 'Mutually Agreed Revision';
+    default:
+      return String(clause).replace(/_/g, ' ');
+  }
+}
+
+function getRcSuppliersCountText(rateContractConfig: any, payload: any): string {
+  const selected = rateContractConfig?.selectedSuppliers || payload?.rateContractConfig?.selectedSuppliers;
+  if (Array.isArray(selected) && selected.length > 0) {
+    return `${selected.length} Selected Supplier${selected.length === 1 ? '' : 's'}`;
+  }
+  const invited = payload?.vendors?.invitedSellers;
+  if (Array.isArray(invited) && invited.length > 0) {
+    return `${invited.length} Invited Supplier${invited.length === 1 ? '' : 's'}`;
+  }
+  return 'Open to Qualified Suppliers';
+}
+
+function RateContractConfigSection({
+  rateContractConfig,
+  displayId,
+  documents,
+  payload,
+  deliveryTerms,
+  createdAt,
+  publishedDate,
+  deadlineDate,
+  closingDate,
+}: {
+  rateContractConfig: any;
+  displayId?: string;
+  documents?: any[];
+  payload?: any;
+  deliveryTerms?: string;
+  createdAt?: string | Date | null;
+  publishedDate?: string | Date | null;
+  deadlineDate?: string | Date | null;
+  closingDate?: string | Date | null;
+}) {
+  const rcNumber =
+    rateContractConfig?.rateContractNumber ||
+    payload?.rateContractConfig?.rateContractNumber ||
+    payload?.rateContract?.rateContractNumber ||
+    displayId ||
+    '—';
+
+  const rawStart =
+    rateContractConfig?.periodStartDate ||
+    payload?.rateContractConfig?.periodStartDate ||
+    payload?.schedule?.submissionStartDate ||
+    createdAt ||
+    publishedDate;
+
+  const rawEnd =
+    rateContractConfig?.periodEndDate ||
+    payload?.rateContractConfig?.periodEndDate ||
+    payload?.schedule?.submissionDate ||
+    deadlineDate ||
+    closingDate;
+
+  const startDate = formatRcDate(rawStart);
+  const endDate = formatRcDate(rawEnd);
+  const validityDays = calculateValidityDays(rawStart, rawEnd);
+
+  const supplierStrategy = formatRcStrategy(
+    rateContractConfig?.supplierSelectionStrategy ||
+    payload?.rateContractConfig?.supplierSelectionStrategy
+  );
+
+  const selectedSuppliersText = getRcSuppliersCountText(rateContractConfig, payload);
+
+  const priceVariationClause = formatRcPriceVariation(
+    rateContractConfig?.priceVariationClause ||
+    payload?.rateContractConfig?.priceVariationClause
+  );
+
+  const callOffOrderAllowed =
+    rateContractConfig?.callOffOrderAllowed === true ||
+    rateContractConfig?.callOffOrderAllowed === 'true' ||
+    (rateContractConfig?.callOffOrderAllowed !== false && rateContractConfig?.callOffOrderAllowed !== 'false' && (rateContractConfig?.callOffOrderAllowed != null || payload?.rateContractConfig?.callOffOrderAllowed != null));
+
+  const rawMaxQty = rateContractConfig?.maximumOrderQuantityPerCallOff ?? payload?.rateContractConfig?.maximumOrderQuantityPerCallOff;
+  const maxOrderQtyDisplay = rawMaxQty !== undefined && rawMaxQty !== null && rawMaxQty !== '' && Number(rawMaxQty) > 0
+    ? `${Number(rawMaxQty).toLocaleString('en-IN')} Units`
+    : 'No Upper Limit';
+
+  const rawMinQty = rateContractConfig?.minimumOrderQuantity ?? payload?.rateContractConfig?.minimumOrderQuantity;
+  const minOrderQtyDisplay = rawMinQty !== undefined && rawMinQty !== null && rawMinQty !== '' && Number(rawMinQty) > 0
+    ? `${Number(rawMinQty).toLocaleString('en-IN')} Units`
+    : 'No Minimum';
+
+  const deliverySla =
+    rateContractConfig?.deliverySla ||
+    payload?.rateContractConfig?.deliverySla ||
+    payload?.terms?.deliveryTerms ||
+    deliveryTerms ||
+    '—';
+
+  const penaltyClause =
+    rateContractConfig?.penaltyClause ||
+    payload?.rateContractConfig?.penaltyClause ||
+    payload?.terms?.penaltyClause ||
+    '—';
+
+  const contractDoc =
+    rateContractConfig?.contractDocument ||
+    payload?.rateContractConfig?.contractDocument ||
+    payload?.rateContract?.contractDocument ||
+    null;
+
+  const attachedDoc = documents?.find((d: any) =>
+    d.meta === 'RATE_CONTRACT_DOCUMENT' ||
+    d.type === 'RATE_CONTRACT_DOCUMENT' ||
+    (typeof d.name === 'string' && (d.name.toLowerCase().includes('contract') || d.name.toLowerCase().includes('.png') || d.name.toLowerCase().includes('.pdf')))
+  );
+
+  const fileName = contractDoc?.fileName || attachedDoc?.name || (documents && documents.length > 0 ? documents[0].name : null);
+  const fileAssetId = contractDoc?.fileAssetId || attachedDoc?.fileAssetId || (documents && documents.length > 0 ? documents[0].fileAssetId : null);
+  const fileUrl = contractDoc?.fileUrl || attachedDoc?.url || (fileAssetId ? `/api/files/${fileAssetId}/view` : null);
+
+  return (
+    <div className="space-y-4 pt-2">
+      {/* Section Header */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-200/60">
+            <Layers className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+              Rate Contract Configuration
+            </h3>
+            <p className="text-[11px] font-medium text-slate-500">
+              Recurring purchase rates, validity schedule &amp; call-off controls
+            </p>
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-50 px-3 py-1 text-[11px] font-bold text-teal-800 border border-teal-200">
+          <Tag className="h-3 w-3" />
+          Rate Contract Sourcing
+        </span>
+      </div>
+
+      {/* Top Summary Cards (4 key highlights - completely read-only) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* 1. Contract Reference */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
+          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Rate Contract Number</p>
+          <p className="mt-1 font-mono text-sm font-bold text-slate-900 truncate">
+            {rcNumber}
+          </p>
+          <p className="mt-1 text-[10px] font-medium text-slate-400">Fixed Rate Reference</p>
+        </div>
+
+        {/* 2. Validity Timeline */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
+          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Contract Validity</p>
+          <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-slate-900">
+            <Calendar className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+            <span className="truncate">
+              {startDate !== '—' || endDate !== '—' ? `${startDate} to ${endDate}` : '—'}
+            </span>
+          </div>
+          {validityDays ? (
+            <p className="mt-1 text-[10px] font-bold text-teal-700">{validityDays}</p>
+          ) : (
+            <p className="mt-1 text-[10px] font-medium text-slate-400">Effective Validity Window</p>
+          )}
+        </div>
+
+        {/* 3. Selection Strategy */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
+          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Supplier Strategy</p>
+          <p className="mt-1 text-xs font-bold text-slate-900 truncate">
+            {supplierStrategy}
+          </p>
+          <p className="mt-1 text-[10px] font-medium text-slate-500">{selectedSuppliersText}</p>
+        </div>
+
+        {/* 4. Call-off Orders Facility */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
+          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Call-off Orders</p>
+          <div className="mt-1">
+            {callOffOrderAllowed ? (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                Allowed
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                <XCircle className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                Not Allowed
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-[10px] font-medium text-slate-400">
+            {callOffOrderAllowed ? 'Periodic Indents Enabled' : 'Single Delivery Only'}
+          </p>
+        </div>
+      </div>
+
+      {/* Commercial & Order Execution Parameters */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3.5">
+        <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
+          <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
+          Order Execution &amp; Pricing Controls
+        </h4>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-lg bg-white p-3 border border-slate-200/80">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Price Variation Clause</span>
+            <p className="mt-1 text-xs font-bold text-slate-900">{priceVariationClause}</p>
+            <p className="mt-0.5 text-[10px] text-slate-400">
+              {priceVariationClause === 'Fixed Price' ? 'Firm rates throughout tenure' : 'Subject to contractual variation'}
+            </p>
+          </div>
+          <div className="rounded-lg bg-white p-3 border border-slate-200/80">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Min Order Quantity (MOQ)</span>
+            <p className="mt-1 text-xs font-bold text-slate-900">{minOrderQtyDisplay}</p>
+            <p className="mt-0.5 text-[10px] text-slate-400">Per individual call-off order</p>
+          </div>
+          <div className="rounded-lg bg-white p-3 border border-slate-200/80">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Max Order Qty (per Call-off)</span>
+            <p className="mt-1 text-xs font-bold text-slate-900">{maxOrderQtyDisplay}</p>
+            <p className="mt-0.5 text-[10px] text-slate-400">Single call-off cap</p>
+          </div>
+        </div>
+
+        {/* Delivery SLA & Penalty Terms */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          <div className="rounded-lg bg-white p-3 border border-slate-200/80 space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Truck className="h-3 w-3 text-slate-400" />
+              Delivery SLA
+            </span>
+            <p className="text-xs font-semibold text-slate-800 leading-relaxed break-words">
+              {deliverySla}
+            </p>
+          </div>
+          <div className="rounded-lg bg-white p-3 border border-slate-200/80 space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <AlertCircle className="h-3 w-3 text-slate-400" />
+              Penalty / Liquidated Damages Clause
+            </span>
+            <p className="text-xs font-semibold text-slate-800 leading-relaxed break-words">
+              {penaltyClause}
+            </p>
+          </div>
+        </div>
+
+        {/* Attached Contract Document */}
+        {fileName && (
+          <div className="pt-2 border-t border-slate-200">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
+              Uploaded Contract Document
+            </span>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 ring-1 ring-teal-100">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900 truncate" title={fileName}>
+                    {fileName}
+                  </p>
+                  <p className="text-[11px] font-medium text-emerald-600 flex items-center gap-1.5 mt-0.5" role="status">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    Attached Contract Specification
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {(fileAssetId || fileUrl) && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(fileUrl || `/api/files/${fileAssetId}/view`, '_blank')}
+                      className="h-8 px-3 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-1.5" />
+                      View
+                    </Button>
+                    <a
+                      href={fileUrl || `/api/files/${fileAssetId}/view`}
+                      download={fileName}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-3 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                      >
+                        <Download className="h-3.5 w-3.5 mr-1.5" />
+                        Download
+                      </Button>
+                    </a>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2033,6 +2401,7 @@ export interface ProcurementDetailUnifiedViewProps {
   requiredDocuments?: any;
   boqTable?: any;
   serviceDetails?: any;
+  rateContractConfig?: any;
   consigneeDetails?: any;
   evaluationMethod?: string;
   timeSlot?: string;
@@ -2399,6 +2768,16 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     pathname.includes('/limited-tender') ||
     pathname.includes('/limited');
   const isBuyerLimitedTender = isBuyerSide && isLimitedTenderType;
+
+  const isRateContractType =
+    props.procurementType === 'RATE_CONTRACT' ||
+    String(props.procurementType || '').toUpperCase().includes('RATE_CONTRACT') ||
+    String(props.procurementType || '').toUpperCase().includes('RATE CONTRACT') ||
+    String(props.procurementLabel || '').toUpperCase().includes('RATE CONTRACT') ||
+    String(props.procurementMethod || '').toUpperCase().includes('RATE CONTRACT') ||
+    pathname.includes('/rate-contract');
+  const isBuyerRateContract = isBuyerSide && isRateContractType;
+  const resolvedRateContractConfig = props.rateContractConfig || payload.rateContractConfig || payload.rateContract || {};
 
   const cleanBuyerTerms = (val: any): any => {
     if (!isBuyerSide || !val) return val;
@@ -3130,7 +3509,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   };
 
   return (
-    <BuyerSideContext.Provider value={{ isBuyer: isBuyerSide, isOpenTender: isBuyerOpenTender, isLimitedTender: isBuyerLimitedTender }}>
+    <BuyerSideContext.Provider value={{ isBuyer: isBuyerSide, isOpenTender: isBuyerOpenTender, isLimitedTender: isBuyerLimitedTender, isRateContract: isBuyerRateContract }}>
       <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6 lg:px-8">
         {/* Navigation Breadcrumb & Back Button */}
@@ -3399,8 +3778,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               ]}
             />
 
-            {/* Clarification Threads & Status grid - commented out strictly in RFQ, Open Tender, and Limited Tender on buyer side */}
-            {!isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
+            {/* Clarification Threads & Status grid - commented out strictly in RFQ, Open Tender, Limited Tender, and Rate Contract on buyer side */}
+            {!isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && !isBuyerRateContract && (
               <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
                 <PropertyGrid columns={4}>
                   <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
@@ -3425,9 +3804,24 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 procurementMethod={procurementMethod}
               />
 
-              {/* Service Details & Parameters - commented out strictly in Open Tender, Limited Tender, and RFQ on buyer side */}
-              {hasDetailData(serviceDetails) && !isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
+              {/* Service Details & Parameters - strictly hidden on buyer side for Open Tender, Limited Tender, RFQ, and Rate Contract */}
+              {hasDetailData(serviceDetails) && !isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && !isBuyerRateContract && (
                 <ServiceDetailsSection serviceDetails={serviceDetails} />
+              )}
+
+              {/* Rate Contract Configuration - strictly on buyer side for Rate Contract */}
+              {isBuyerRateContract && (
+                <RateContractConfigSection
+                  rateContractConfig={resolvedRateContractConfig}
+                  displayId={props.displayId}
+                  documents={documents}
+                  payload={payload}
+                  deliveryTerms={props.deliveryTerms}
+                  createdAt={props.createdAt}
+                  publishedDate={props.publishedDate}
+                  deadlineDate={props.deadlineDate}
+                  closingDate={props.closingDate}
+                />
               )}
 
               {hasDetailData(lineItems) && (

@@ -43,7 +43,7 @@ export type RateContractMetadata = {
   pbgRequired: boolean;
   pbgAmount: number;
   approvalWorkflow: string;
-  contractDocument: { fileName: string };
+  contractDocument?: { fileName?: string; fileAssetId?: number | null; fileUrl?: string };
   activeState: string;
 };
 

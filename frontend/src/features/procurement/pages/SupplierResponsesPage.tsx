@@ -47,6 +47,7 @@ import { EmptyState } from '../../shared/FeatureStates';
 
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { getApi } from '../../shared/apiClient';
+import { ProcurementDetailView, isCartCheckoutProcurement } from '../components/ProcurementDetailView';
 
 const formatCurrency = (value: number | string | null | undefined) => {
   const num = Number(value || 0);
@@ -72,47 +73,155 @@ const getConsolidatedType = (b: any): string => {
   const approvalStatus = String(b.approvalStatus || '').toLowerCase();
   const title = String(b.title || '').toLowerCase();
   
-  // Try checking bidType, procurementType, method, type
+  // Try checking bidType, procurementType, method, type, canonicalMethod, methodLabel
   const pt = String(b.procurementType || '').toLowerCase();
   const bt = String(b.bidType || '').toLowerCase();
   const rawType = String(b.type || '').toLowerCase();
   const rawMethod = String(b.method || '').toLowerCase();
+  const cm = String(b.canonicalMethod || '').toLowerCase();
+  const ml = String(b.methodLabel || '').toLowerCase();
+  const tl = String(b.typeLabel || '').toLowerCase();
+  const reqNum = String(b.bidNumber || b.referenceNumber || b.id || '').toLowerCase();
 
   // 1. Draft
   if (status === 'draft' || approvalStatus === 'draft' || title.includes('draft')) {
     return 'Draft';
   }
-  // 2. RFQ
-  if (pt.includes('rfq') || pt.includes('efq') || bt.includes('rfq') || bt.includes('efq') || rawType.includes('rfq') || rawType.includes('efq') || rawMethod.includes('rfq') || rawMethod.includes('efq')) {
-    return 'RFQ';
-  }
-  // 3. RFP
-  if (pt.includes('rfp') || pt.includes('rfi') || bt.includes('rfp') || bt.includes('rfi') || rawType.includes('rfp') || rawType.includes('rfi') || rawMethod.includes('rfp') || rawMethod.includes('rfi')) {
-    return 'RFP';
-  }
-  // 4. Reverse Auction
-  if (pt.includes('auction') || bt.includes('auction') || rawType.includes('auction') || rawMethod.includes('auction')) {
-    return 'Reverse Auction';
-  }
-  // 5. Cart Checkout
-  if (pt.includes('cart') || pt.includes('checkout') || bt.includes('cart') || bt.includes('checkout') || rawType.includes('cart') || rawType.includes('checkout')) {
-    return 'Cart Checkout';
-  }
-  // 6. Limited Tender (Checked BEFORE OpenTender)
-  if (pt.includes('limited') || bt.includes('limited') || rawType.includes('limited') || rawMethod.includes('limited')) {
-    return 'Limited Tender';
-  }
-  // 7. OpenTender
-  if (pt.includes('open') || pt.includes('tender') || bt.includes('open') || bt.includes('tender') || rawType.includes('open') || rawType.includes('tender')) {
-    return 'OpenTender';
-  }
-  // 8. Rate Contract
-  if (pt.includes('rate') || bt.includes('rate') || rawType.includes('rate') || rawMethod.includes('rate')) {
+
+  // 2. Rate Contract (Checked FIRST before generic tenders)
+  if (
+    cm.includes('rate') ||
+    rawMethod.includes('rate') ||
+    ml.includes('rate') ||
+    pt.includes('rate') ||
+    bt.includes('rate') ||
+    rawType.includes('rate') ||
+    title.includes('rate contract') ||
+    title.includes('rate_contract') ||
+    title.includes('rate') ||
+    reqNum.startsWith('rc-') ||
+    String(b.contractType || '').toLowerCase().includes('rate')
+  ) {
     return 'Rate Contract';
   }
-  // 9. Repeat order
-  if (pt.includes('repeat') || bt.includes('repeat') || rawType.includes('repeat') || rawMethod.includes('repeat')) {
+
+  // 3. RFQ
+  if (
+    cm.includes('rfq') ||
+    cm.includes('efq') ||
+    rawMethod.includes('rfq') ||
+    rawMethod.includes('efq') ||
+    ml.includes('rfq') ||
+    pt.includes('rfq') ||
+    pt.includes('efq') ||
+    bt.includes('rfq') ||
+    bt.includes('efq') ||
+    title.includes('rfq') ||
+    title.includes('request for quotation') ||
+    reqNum.startsWith('rfq-')
+  ) {
+    return 'RFQ';
+  }
+
+  // 4. RFP
+  if (
+    cm.includes('rfp') ||
+    cm.includes('rfi') ||
+    rawMethod.includes('rfp') ||
+    rawMethod.includes('rfi') ||
+    ml.includes('rfp') ||
+    pt.includes('rfp') ||
+    pt.includes('rfi') ||
+    bt.includes('rfp') ||
+    bt.includes('rfi') ||
+    title.includes('rfp') ||
+    title.includes('request for proposal') ||
+    reqNum.startsWith('rfp-')
+  ) {
+    return 'RFP';
+  }
+
+  // 5. Reverse Auction
+  if (
+    cm.includes('auction') ||
+    rawMethod.includes('auction') ||
+    ml.includes('auction') ||
+    pt.includes('auction') ||
+    bt.includes('auction') ||
+    rawType.includes('auction') ||
+    title.includes('auction')
+  ) {
+    return 'Reverse Auction';
+  }
+
+  // 6. Cart Checkout
+  if (
+    cm.includes('direct') ||
+    cm.includes('cart') ||
+    rawMethod.includes('cart') ||
+    rawMethod.includes('checkout') ||
+    rawMethod.includes('direct') ||
+    pt.includes('cart') ||
+    pt.includes('checkout') ||
+    bt.includes('cart') ||
+    bt.includes('checkout') ||
+    rawType.includes('cart') ||
+    rawType.includes('checkout') ||
+    rawType.includes('direct') ||
+    rawType === 'procurement_request' ||
+    rawType === 'direct_purchase'
+  ) {
+    return 'Cart Checkout';
+  }
+
+  // 7. Limited Tender (Checked BEFORE OpenTender)
+  if (
+    cm.includes('limited') ||
+    rawMethod.includes('limited') ||
+    ml.includes('limited') ||
+    tl.includes('limited') ||
+    pt.includes('limited') ||
+    bt.includes('limited') ||
+    rawType.includes('limited') ||
+    title.includes('limited tender') ||
+    title.includes('limited')
+  ) {
+    return 'Limited Tender';
+  }
+
+  // 8. Repeat order
+  if (
+    cm.includes('repeat') ||
+    rawMethod.includes('repeat') ||
+    ml.includes('repeat') ||
+    pt.includes('repeat') ||
+    bt.includes('repeat') ||
+    rawType.includes('repeat') ||
+    title.includes('repeat')
+  ) {
     return 'Repeat order';
+  }
+
+  // 9. OpenTender (Fallback for generic tender records after specific methods are checked)
+  if (
+    cm.includes('open') ||
+    rawMethod === 'open-tender' ||
+    rawMethod === 'open_tender' ||
+    rawMethod === 'tender' ||
+    rawMethod.includes('open') ||
+    rawMethod === 'boq' ||
+    ml.includes('open') ||
+    pt.includes('open') ||
+    bt.includes('open') ||
+    rawType.includes('open') ||
+    title.includes('open tender') ||
+    title.includes('opentender') ||
+    rawType === 'bid_tender' ||
+    rawMethod.includes('tender') ||
+    pt.includes('tender') ||
+    bt.includes('tender')
+  ) {
+    return 'OpenTender';
   }
 
   return 'RFQ';
@@ -230,6 +339,7 @@ export default function SupplierResponsesPage() {
   const [sortKey, setSortKey] = useState<SortKey>('startDate');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [viewMode, setViewMode] = useResponsiveViewMode('supplier-responses:view-mode');
+  const [selectedCartProcurement, setSelectedCartProcurement] = useState<any | null>(null);
 
   // Debounce search
   React.useEffect(() => {
@@ -287,6 +397,9 @@ export default function SupplierResponsesPage() {
         legacySubmittedCount
       );
 
+      const rawCanonical = p.canonicalMethod || legacy?.canonicalMethod || (String(p.method || '').includes('rate') ? 'RATE_CONTRACT' : undefined);
+      const effectiveMethodLabel = p.methodLabel || legacy?.methodLabel || (String(p.method || '').includes('rate') ? 'Rate Contract' : undefined);
+
       return {
         id: p.referenceNumber || String(p.id),
         bidNumber: p.referenceNumber || `PB-${p.id}`,
@@ -299,8 +412,11 @@ export default function SupplierResponsesPage() {
         buyerName: p.organizationName || 'Buyer Organization',
         buyerType: 'Private Enterprise',
         departmentName: 'Procurement',
-        bidType: p.typeLabel || p.methodLabel || 'RFQ',
-        procurementType: p.methodLabel || p.typeLabel || 'RFQ',
+        bidType: effectiveMethodLabel || p.typeLabel || legacy?.bidType || 'RFQ',
+        procurementType: effectiveMethodLabel || p.typeLabel || legacy?.procurementType || 'RFQ',
+        canonicalMethod: rawCanonical,
+        methodLabel: effectiveMethodLabel,
+        typeLabel: p.typeLabel || legacy?.typeLabel,
         category: p.category || 'General',
         location: p.deliveryLocation || 'Location not specified',
         deliveryLocation: p.deliveryLocation || 'Delivery location not specified',
@@ -314,7 +430,8 @@ export default function SupplierResponsesPage() {
         type: p.type,
         method: p.method,
         detailSections: p.detailSections,
-        actionUrl: p.actionUrl
+        actionUrl: p.actionUrl,
+        rawProcurement: p,
       };
     });
 
@@ -331,7 +448,40 @@ export default function SupplierResponsesPage() {
   const error = isError ? (queryError as any)?.message || 'Unable to load supplier responses.' : '';
   const refreshing = isFetching && !loading;
 
-  const handleViewResponses = (bid: any) => {
+  const handleViewResponses = async (bid: any) => {
+    // STRICT SCOPE: Cart/Checkout Procurements ONLY
+    const isCart = isCartCheckoutProcurement(bid) || isCartCheckoutProcurement(bid.rawProcurement) || getConsolidatedType(bid) === 'Cart Checkout';
+    if (isCart) {
+      if (bid.rawProcurement && (bid.rawProcurement.items?.length || bid.rawProcurement.detailSections?.length)) {
+        setSelectedCartProcurement(bid.rawProcurement);
+        return;
+      }
+
+      // Fetch authentic record using actual procurement ID / reference number if not already present
+      try {
+        const res = await getApi<any>('/api/buyer/my-procurements');
+        const procurements: any[] = res?.procurements || [];
+        const found = procurements.find((p: any) =>
+          String(p.id) === String(bid.requirementId || bid.id || bid.sourceId) ||
+          String(p.referenceNumber || '').trim().toUpperCase() === String(bid.referenceNumber || bid.bidNumber || bid.id || '').trim().toUpperCase()
+        );
+        if (found) {
+          setSelectedCartProcurement(found);
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to load cart procurement details:', err);
+      }
+
+      setSelectedCartProcurement(bid.rawProcurement || bid);
+      return;
+    }
+
+    const typeStr = getConsolidatedType(bid);
+    if (typeStr === 'Rate Contract') {
+      router.push(`/bids/${bid.id}?method=RATE_CONTRACT`);
+      return;
+    }
     if (bid.isMarketplaceRequirement) {
       const method = String(bid.procurementType || '').toUpperCase();
       if (method === 'REVERSE_AUCTION' || method.includes('AUCTION')) {
@@ -600,6 +750,18 @@ export default function SupplierResponsesPage() {
       </th>
     );
   };
+
+  if (selectedCartProcurement) {
+    return (
+      <div className="mx-auto max-w-[1600px] px-2.5 sm:px-4 pt-2">
+        <ProcurementDetailView
+          procurement={selectedCartProcurement}
+          onBack={() => setSelectedCartProcurement(null)}
+          breadcrumbParent="Supplier Responses"
+        />
+      </div>
+    );
+  }
 
   const isKpisLoading = loading && bids.length === 0;
 

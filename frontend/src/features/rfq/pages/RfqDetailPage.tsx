@@ -23,6 +23,7 @@ import { PdfEngine } from '../../../lib/pdfEngine';
 import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import RateContractDetailPage from './RateContractDetailPage';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    UTILITY HELPERS
@@ -500,8 +501,28 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     rawDescUpper.includes('METHOD: RFQ') ||
     String(ref).toUpperCase().startsWith('RFQ-');
 
-  const isLimited = !isRfqExplicit && (methodUpper.includes('LIMITED') || reqTypeUpper.includes('LIMITED'));
-  const isRateContract = !isRfqExplicit && !isLimited && (methodUpper.includes('RATE_CONTRACT') || methodUpper === 'RATE CONTRACT' || reqTypeUpper.includes('RATE_CONTRACT') || reqTypeUpper === 'RATE CONTRACT' || methodUpper.startsWith('RC-') || reqTypeUpper.startsWith('RC-'));
+  const isRateContract = !isRfqExplicit && (
+    methodUpper.includes('RATE_CONTRACT') ||
+    methodUpper.includes('RATE-CONTRACT') ||
+    methodUpper === 'RATE CONTRACT' ||
+    methodUpper.includes('RATE') ||
+    reqTypeUpper.includes('RATE_CONTRACT') ||
+    reqTypeUpper.includes('RATE-CONTRACT') ||
+    reqTypeUpper === 'RATE CONTRACT' ||
+    reqTypeUpper.includes('RATE') ||
+    methodUpper.startsWith('RC-') ||
+    reqTypeUpper.startsWith('RC-') ||
+    rawDescUpper.includes('RATE_CONTRACT') ||
+    rawDescUpper.includes('RATE CONTRACT') ||
+    String(title).toUpperCase().includes('RATE CONTRACT') ||
+    String(title).toUpperCase().includes('RATE_CONTRACT')
+  );
+
+  if (isRateContract) {
+    return <RateContractDetailPage initialData={rawBid || reqObj || initialData} />;
+  }
+
+  const isLimited = !isRfqExplicit && !isRateContract && (methodUpper.includes('LIMITED') || reqTypeUpper.includes('LIMITED'));
   const isRfp = !isRfqExplicit && !isRateContract && !isLimited && (methodUpper.includes('RFP') || methodUpper.includes('REQUEST FOR PROPOSAL') || reqTypeUpper.includes('RFP') || reqTypeUpper.includes('REQUEST FOR PROPOSAL'));
   const isOpenTender = !isRfqExplicit && !isLimited && !isRateContract && !isRfp && (
     methodUpper.includes('TENDER') ||
@@ -510,9 +531,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     reqTypeUpper.includes('OPEN')
   );
 
-  const derivedProcurementType = isLimited ? 'LIMITED_TENDER'
+  const derivedProcurementType = isRateContract ? 'RATE_CONTRACT'
+    : isLimited ? 'LIMITED_TENDER'
     : isOpenTender ? 'OPEN_TENDER'
-    : isRateContract ? 'RATE_CONTRACT'
     : isRfp ? 'RFP'
     : 'RFQ';
 

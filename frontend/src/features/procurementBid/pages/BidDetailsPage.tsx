@@ -205,13 +205,13 @@ export default function BidDetailsPage() {
   const bidObj: any = bidData || {};
   const queryType = String(searchParams?.get('type') || searchParams?.get('method') || '').toUpperCase();
   const rawMethod = String(
+    bidObj.canonicalMethod ||
+    bidObj.method ||
     bidObj.procurementMethod ||
     bidObj.sourcingMethod ||
-    bidObj.procurementType ||
     bidObj.bidType ||
+    bidObj.procurementType ||
     bidObj.type ||
-    bidObj.method ||
-    bidObj.canonicalMethod ||
     bidObj.methodSlug ||
     bidObj.payload?.basics?.procurementMethod ||
     bidObj.payload?.basics?.procurementType ||
@@ -225,16 +225,32 @@ export default function BidDetailsPage() {
   const title = String(bidObj.title || bidObj.subject || '').toUpperCase();
   const reqNum = String(bidObj.requirementNumber || bidObj.referenceNumber || bidObj.bidNumber || requestId || '').toUpperCase();
 
+  // 1. Rate Contract (Check FIRST before generic Open Tender)
+  if (
+    rawMethod.includes('RATE') ||
+    title.includes('RATE CONTRACT') ||
+    title.includes('RATE_CONTRACT') ||
+    title.includes('RATE') ||
+    desc.includes('RATE_CONTRACT') ||
+    desc.includes('RATE CONTRACT') ||
+    reqNum.startsWith('RC-') ||
+    String(bidObj.canonicalMethod || '').toUpperCase() === 'RATE_CONTRACT' ||
+    String(bidObj.bidType || '').toUpperCase() === 'RATE_CONTRACT' ||
+    String(bidObj.contractType || '').toUpperCase() === 'RATE_CONTRACT' ||
+    String(bidObj.method || '').toUpperCase().includes('RATE') ||
+    queryType.includes('RATE')
+  ) {
+    return <RateContractDetailPage initialData={bidObj} />;
+  }
+
+  // 2. Open Tender
   if (rawMethod.includes('OPEN') || title.includes('OPENTENDER') || title.includes('OPEN TENDER')) {
     return <OpenTenderDetailPage initialData={bidObj} />;
   }
 
+  // 3. Limited Tender
   if (rawMethod.includes('LIMITED') || title.includes('LIMITEDTENDER') || title.includes('LIMITED TENDER')) {
     return <LimitedTenderDetailPage initialData={bidObj} />;
-  }
-
-  if (rawMethod.includes('RATE') || title.includes('RATE CONTRACT') || reqNum.startsWith('RC-')) {
-    return <RateContractDetailPage initialData={bidObj} />;
   }
 
   const isRfq =

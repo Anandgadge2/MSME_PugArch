@@ -9,6 +9,7 @@ import { Button } from '../../../components/ui/button';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import RateContractDetailPage from './RateContractDetailPage';
 import { toast } from 'sonner';
 
 function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
@@ -126,6 +127,18 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
 
   const title = bid.title || bid.subject || reqObj.title || basics.title || 'Open Tender Procurement';
   const openTenderNumber = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber || bid.id || `TND-${requestId}`;
+
+  const isRc =
+    bid.canonicalMethod === 'RATE_CONTRACT' ||
+    bid.bidType === 'RATE_CONTRACT' ||
+    reqObj.canonicalMethod === 'RATE_CONTRACT' ||
+    reqObj.procurementMethod === 'RATE_CONTRACT' ||
+    String(title).toUpperCase().includes('RATE CONTRACT') ||
+    String(title).toUpperCase().includes('RATE_CONTRACT');
+
+  if (isRc) {
+    return <RateContractDetailPage initialData={bidData || reqData || initialData} />;
+  }
 
   const handleSubmitProposal = () => {
     if (!currentUser) {

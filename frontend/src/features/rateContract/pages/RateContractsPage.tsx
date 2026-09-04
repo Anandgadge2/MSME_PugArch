@@ -422,6 +422,45 @@ export default function RateContractsPage() {
                         </div>
                       )}
 
+                      {/* Contract Document */}
+                      {meta.contractDocument?.fileName && (
+                        <div>
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Contract Document</h4>
+                          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-[#12335f]">
+                                <FileText className="h-4 w-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800 truncate">{meta.contractDocument.fileName}</p>
+                                <span className="text-[10px] text-emerald-600 font-medium">Uploaded &amp; Attached Document</span>
+                              </div>
+                            </div>
+                            {meta.contractDocument.fileAssetId && (
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <a
+                                  href={`/api/files/${meta.contractDocument.fileAssetId}/view`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
+                                >
+                                  View
+                                </a>
+                                <a
+                                  href={`/api/files/${meta.contractDocument.fileAssetId}/view`}
+                                  download={meta.contractDocument.fileName}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex h-7 items-center rounded-lg bg-[#12335f] px-2.5 text-[11px] font-bold text-white hover:bg-[#1a4a7a]"
+                                >
+                                  Download
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Purchase Orders */}
                       {detailContract.purchaseOrders && detailContract.purchaseOrders.length > 0 && (
                         <div>

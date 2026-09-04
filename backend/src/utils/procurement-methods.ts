@@ -33,7 +33,11 @@ const legacyAliases: Record<string, CanonicalProcurementMethod> = {
   INVITATION: 'LIMITED_TENDER',
   LIMITED_TENDER: 'LIMITED_TENDER',
   CUSTOM_SERVICE_BID: 'RFP',
-  SERVICE_BID: 'RFP'
+  SERVICE_BID: 'RFP',
+  RATE_CONTRACT_TENDER: 'RATE_CONTRACT',
+  RATE_CONTRACTS: 'RATE_CONTRACT',
+  RATE: 'RATE_CONTRACT',
+  RC: 'RATE_CONTRACT'
 };
 
 const normalizeToken = (value: unknown) =>
@@ -46,7 +50,13 @@ const normalizeToken = (value: unknown) =>
 export const normalizeCanonicalMethod = (rawMethod: unknown, fallback: CanonicalProcurementMethod = 'OPEN_TENDER'): CanonicalProcurementMethod => {
   const token = normalizeToken(rawMethod);
   if (canonicalSet.has(token)) return token as CanonicalProcurementMethod;
-  return legacyAliases[token] || fallback;
+  if (legacyAliases[token]) return legacyAliases[token];
+  if (token.includes('RATE')) return 'RATE_CONTRACT';
+  if (token.includes('AUCTION')) return 'REVERSE_AUCTION';
+  if (token.includes('LIMITED')) return 'LIMITED_TENDER';
+  if (token.includes('PROPOSAL') || token.includes('RFP')) return 'RFP';
+  if (token.includes('QUOTE') || token.includes('QUOTATION') || token.includes('RFQ')) return 'RFQ';
+  return fallback;
 };
 
 export const broadMethodForCanonical = (value: unknown): BroadProcurementMethod => {
@@ -77,6 +87,10 @@ export const getIsolatedProcurementType = (value: unknown): IsolatedProcurementT
       return 'RFP';
     case 'LIMITED_TENDER':
       return 'LIMITED_TENDER';
+    case 'RATE_CONTRACT':
+      return 'RATE_CONTRACT';
+    case 'REVERSE_AUCTION':
+      return 'REVERSE_AUCTION';
     case 'OPEN_TENDER':
     default:
       return 'OPEN_TENDER';
@@ -90,6 +104,7 @@ export const canonicalMethodFromRecord = (record: {
   canonicalMethod?: unknown;
   methodSlug?: unknown;
   procurementMethod?: unknown;
+  bidType?: unknown;
   payload?: unknown;
   items?: Array<{ specifications?: unknown }>;
 }) => {
@@ -111,6 +126,7 @@ export const canonicalMethodFromRecord = (record: {
 
   return normalizeCanonicalMethod(
     record.canonicalMethod ||
+      (record as any).bidType ||
       payload?.fullProcurementMethod ||
       payload?.type ||
       draftPayload?.fullProcurementMethod ||
