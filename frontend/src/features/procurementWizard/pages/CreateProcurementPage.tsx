@@ -1450,15 +1450,18 @@ export default function CreateProcurementPage() {
         const end = new Date(contract.periodEndDate).getTime();
         if (!contract.contractTitle.trim()) return false;
         if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
-        if (!contract.rateValidityPeriod.trim()) return false;
-        if (contract.itemRateSchedule.length === 0) return false;
-        if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) return false;
-        if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) return false;
+        // Rate validity period commented out on buyer side
+        if (contract.rateValidityPeriod && !contract.rateValidityPeriod.trim()) contract.rateValidityPeriod = 'Contract period';
+        // Item / Rate Schedule validation commented out as requested
+        // if (contract.itemRateSchedule.length === 0) return false;
+        // if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) return false;
+        // if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) return false;
         if (contract.callOffOrderAllowed && contract.maximumOrderQuantityPerCallOff > 0 && contract.maximumOrderQuantityPerCallOff < contract.minimumOrderQuantity) return false;
         if (!contract.deliverySla.trim()) return false;
         if (!contract.penaltyClause.trim()) return false;
-        if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) return false;
-        if (contract.pbgRequired && contract.pbgAmount <= 0) return false;
+        // Security Deposit & PBG checks commented out as requested
+        // if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) return false;
+        // if (contract.pbgRequired && contract.pbgAmount <= 0) return false;
       }
     } else if (stepIdx === 6) {
       if (!d.terms.paymentTerms) return false;
@@ -1740,22 +1743,23 @@ export default function CreateProcurementPage() {
           toast.error('Rate Contract start date must be before end date.');
           return false;
         }
-        if (!contract.rateValidityPeriod.trim()) {
-          toast.error('Rate validity period is required.');
-          return false;
+        // Rate validity period commented out on buyer side, auto-fill default if blank
+        if (!contract.rateValidityPeriod || !contract.rateValidityPeriod.trim()) {
+          contract.rateValidityPeriod = 'Contract period';
         }
-        if (contract.itemRateSchedule.length === 0) {
-          toast.error('Rate Contract requires at least one item in the rate schedule.');
-          return false;
-        }
-        if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) {
-          toast.error('Every rate schedule item must have item name, UOM, annual quantity, and base rate.');
-          return false;
-        }
-        if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) {
-          toast.error('Slab pricing rows must have valid quantity ranges and positive rates.');
-          return false;
-        }
+        // Item / Rate Schedule validation commented out as requested
+        // if (contract.itemRateSchedule.length === 0) {
+        //   toast.error('Rate Contract requires at least one item in the rate schedule.');
+        //   return false;
+        // }
+        // if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) {
+        //   toast.error('Every rate schedule item must have item name, UOM, annual quantity, and base rate.');
+        //   return false;
+        // }
+        // if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) {
+        //   toast.error('Slab pricing rows must have valid quantity ranges and positive rates.');
+        //   return false;
+        // }
         if (contract.callOffOrderAllowed && contract.maximumOrderQuantityPerCallOff > 0 && contract.maximumOrderQuantityPerCallOff < contract.minimumOrderQuantity) {
           toast.error('Maximum call-off quantity cannot be lower than minimum order quantity.');
           return false;
@@ -1768,14 +1772,15 @@ export default function CreateProcurementPage() {
           toast.error('Penalty clause is required.');
           return false;
         }
-        if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) {
-          toast.error('Security deposit amount is required.');
-          return false;
-        }
-        if (contract.pbgRequired && contract.pbgAmount <= 0) {
-          toast.error('PBG amount is required.');
-          return false;
-        }
+        // Security Deposit & PBG checks commented out as requested
+        // if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) {
+        //   toast.error('Security deposit amount is required.');
+        //   return false;
+        // }
+        // if (contract.pbgRequired && contract.pbgAmount <= 0) {
+        //   toast.error('PBG amount is required.');
+        //   return false;
+        // }
       }
     } else if (stepIdx === 6) {
       // Step 6 Terms
@@ -5643,12 +5648,13 @@ function ScheduleStepForm({
             <Field label="Contract Title" required>
               <input value={draft.rateContractConfig.contractTitle} onChange={e => updateRateContract('contractTitle', e.target.value)} className={inputClass} />
             </Field>
-            <Field label="Contract Description">
+            {/* Contract Description and Contract Category - commented out on buyer side */}
+            {/* <Field label="Contract Description">
               <textarea value={draft.rateContractConfig.contractDescription} onChange={e => updateRateContract('contractDescription', e.target.value)} className={cn(inputClass, 'min-h-[76px]')} />
             </Field>
             <Field label="Contract Category">
               <input value={draft.rateContractConfig.contractCategory} onChange={e => updateRateContract('contractCategory', e.target.value)} className={inputClass} />
-            </Field>
+            </Field> */}
             {/* Contract Subcategory - commented out on buyer side */}
             {/* <Field label="Contract Subcategory">
               <input value={draft.rateContractConfig.contractSubCategory} onChange={e => updateRateContract('contractSubCategory', e.target.value)} className={inputClass} />
@@ -5659,9 +5665,10 @@ function ScheduleStepForm({
             <Field label="Contract End Date" required>
               <input type="date" value={draft.rateContractConfig.periodEndDate} onChange={e => updateRateContract('periodEndDate', e.target.value)} className={inputClass} />
             </Field>
-            <Field label="Rate Validity Period" required>
+            {/* Rate Validity Period - commented out on buyer side */}
+            {/* <Field label="Rate Validity Period" required>
               <input value={draft.rateContractConfig.rateValidityPeriod} onChange={e => updateRateContract('rateValidityPeriod', e.target.value)} className={inputClass} />
-            </Field>
+            </Field> */}
             <Field label="Supplier Selection Strategy" required>
               <select value={draft.rateContractConfig.supplierSelectionStrategy} onChange={e => updateRateContract('supplierSelectionStrategy', e.target.value as RateContractConfig['supplierSelectionStrategy'])} className={inputClass}>
                 <option value="SINGLE_SUPPLIER">Single Supplier</option>
@@ -5679,7 +5686,8 @@ function ScheduleStepForm({
             </Field>
           </div>
 
-          <div className="rounded-lg border border-teal-100 bg-white p-3 space-y-3">
+          {/* Item / Rate Schedule commented out as requested */}
+          {/* <div className="rounded-lg border border-teal-100 bg-white p-3 space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-[11px] font-black uppercase tracking-wide text-slate-800">Item / Rate Schedule</h4>
               <Button type="button" variant="outline" size="sm" onClick={addRateItem} className="h-8 text-[10px] font-black">
@@ -5729,7 +5737,7 @@ function ScheduleStepForm({
                 </p>
               )}
             </div>
-          </div>
+          </div> */}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Price Variation Clause" required>
@@ -5759,7 +5767,8 @@ function ScheduleStepForm({
             <Field label="Penalty Clause" required>
               <input value={draft.rateContractConfig.penaltyClause} onChange={e => updateRateContract('penaltyClause', e.target.value)} className={inputClass} />
             </Field>
-            <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
+            {/* Security Deposit & Performance Bank Guarantee commented out as requested */}
+            {/* <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
               <input type="checkbox" checked={draft.rateContractConfig.securityDepositRequired} onChange={e => updateRateContract('securityDepositRequired', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
               <span>Security Deposit Required?</span>
             </label>
@@ -5776,10 +5785,11 @@ function ScheduleStepForm({
               <Field label="PBG Amount" required>
                 <input type="number" min={0} value={draft.rateContractConfig.pbgAmount || ''} onChange={e => updateRateContract('pbgAmount', Number(e.target.value || 0))} className={inputClass} />
               </Field>
-            )}
-            <Field label="Approval Workflow" required>
+            )} */}
+            {/* Approval Workflow commented out as requested */}
+            {/* <Field label="Approval Workflow" required>
               <input value={draft.rateContractConfig.approvalWorkflow} onChange={e => updateRateContract('approvalWorkflow', e.target.value)} className={inputClass} />
-            </Field>
+            </Field> */}
             <Field label="Contract Document Upload">
               <input value={draft.rateContractConfig.contractDocument.fileName} onChange={e => updateRateContract('contractDocument', { ...draft.rateContractConfig.contractDocument, fileName: e.target.value })} className={inputClass} placeholder="Document name or uploaded file reference" />
             </Field>
@@ -6508,6 +6518,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     contractDescription: draft.rateContractConfig.contractDescription || draft.basics.justification || basics.description,
     contractCategory: draft.rateContractConfig.contractCategory || draft.basics.category,
     contractSubCategory: draft.rateContractConfig.contractSubCategory || draft.basics.subCategory,
+    rateValidityPeriod: draft.rateContractConfig.rateValidityPeriod || 'Contract period',
     contractDocument: draft.rateContractConfig.contractDocument?.fileName ? {
       fileAssetId: draft.rateContractConfig.contractDocument.fileAssetId || null,
       fileName: cleanDocName(draft.rateContractConfig.contractDocument.fileName, '')
