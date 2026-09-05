@@ -86,7 +86,7 @@ export default function GrnDetailPage({ id }: Props) {
                             Submit for Approval
                         </Button>
                     )}
-                    {canApprove && (
+                    {/* {canApprove && (
                         <>
                             <Button
                                 variant="outline"
@@ -108,7 +108,7 @@ export default function GrnDetailPage({ id }: Props) {
                                 Approve
                             </Button>
                         </>
-                    )}
+                    )} */}
                 </div>
             </div>
 

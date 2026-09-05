@@ -1087,7 +1087,14 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           sourceModel: isRateContract ? 'RATE_CONTRACT' : 'REQUIREMENT',
           sourceId: requirement.id,
           consigneeDetails: payload.consigneeDetails || null,
-          items: requirement.items || [],
+          items: (() => {
+            const cands = [requirement.items, payload.items, payload.basics?.items, payload.technicalPacket?.items];
+            let best: any[] = [];
+            for (const c of cands) {
+              if (Array.isArray(c) && c.length > best.length) best = c;
+            }
+            return best;
+          })(),
         };
         return apiResponse.success(res, synthesized, 200, 'Requirement-based bid details fetched successfully');
       }

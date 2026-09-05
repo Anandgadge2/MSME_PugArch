@@ -59,15 +59,42 @@ import { KpiCard } from '../../shared/KpiCard';
 function formatEnumLabel(val?: string | null): string {
   if (!val) return 'N/A';
   const str = String(val).trim();
+  // Auction type mappings
   if (str === 'ENGLISH_REVERSE') return 'English Reverse Auction';
+  if (str === 'RANK_BASED_REVERSE') return 'Rank Based Reverse Auction';
+  // Auction mode
   if (str === 'ONLINE') return 'Online E-Auction';
+  // Rank visibility
   if (str === 'SHOW_RANK_ONLY') return 'Show Rank Only';
   if (str === 'SHOW_LOWEST_PRICE') return 'Show Lowest Price';
   if (str === 'SHOW_PRICE_AND_RANK') return 'Show Price & Rank';
+  if (str === 'HIDDEN') return 'Hidden';
+  // Procurement method
+  if (str === 'REVERSE_AUCTION') return 'Reverse Auction';
+  if (str === 'BID_WITH_REVERSE_AUCTION') return 'Bid with Reverse Auction';
+  // Auction trigger
   if (str === 'TECHNICAL_QUALIFICATION') return 'Technical Qualification';
   if (str === 'DIRECT_AUCTION') return 'Direct Auction';
-  if (str === 'BID_WITH_REVERSE_AUCTION') return 'Bid with Reverse Auction';
+  if (str === 'AFTER_TECHNICAL_QUALIFICATION') return 'After Technical Qualification';
+  if (str === 'TOP_N_BIDDERS') return 'Top N Bidders';
+  if (str === 'ALL_TECHNICALLY_QUALIFIED') return 'All Technically Qualified';
+  // Visibility mode
+  if (str === 'INVITED_SELLERS_ONLY') return 'Invited Sellers Only';
+  if (str === 'TECHNICALLY_QUALIFIED_ONLY') return 'Technically Qualified Only';
+  // Participant / auction status
+  if (str === 'INVITED') return 'Invited';
+  if (str === 'ACCEPTED') return 'Accepted';
+  if (str === 'QUALIFIED') return 'Qualified';
+  if (str === 'DISQUALIFIED') return 'Disqualified';
+  if (str === 'LIVE') return 'Live';
+  if (str === 'DRAFT') return 'Draft';
+  if (str === 'SCHEDULED') return 'Scheduled';
+  if (str === 'PAUSED') return 'Paused';
+  if (str === 'CLOSED') return 'Closed';
+  if (str === 'COMPLETED') return 'Completed';
+  // Fallback: lowercase then title-case so raw SNAKE_CASE never shows as ALL CAPS
   return str
+    .toLowerCase()
     .replace(/_/g, ' ')
     .replace(/\b\w/g, l => l.toUpperCase());
 }

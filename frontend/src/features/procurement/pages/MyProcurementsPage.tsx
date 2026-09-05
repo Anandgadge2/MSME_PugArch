@@ -761,7 +761,7 @@ export default function MyProcurementsPage() {
       </div>
 
       {/* ── KPI Cards Grid ── */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 px-4 sm:px-0">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 px-4 sm:px-0">
         <KpiCard
           icon={BarChart3}
           label="Total"
@@ -772,7 +772,7 @@ export default function MyProcurementsPage() {
           tone="blue"
           subtext="All procurement files"
         />
-        <KpiCard
+        {/* <KpiCard
           icon={Clock}
           label="Pending"
           value={kpis.pendingApproval}
@@ -781,7 +781,7 @@ export default function MyProcurementsPage() {
           onClick={() => handleKpiClick('pending_approval')}
           tone="amber"
           subtext="Awaiting review"
-        />
+        /> */}
         <KpiCard
           icon={TrendingUp}
           label="Active"
@@ -812,14 +812,14 @@ export default function MyProcurementsPage() {
           tone="red"
           subtext="Voided or abandoned"
         />
-        <KpiCard
+        {/* <KpiCard
           icon={Package}
           label="Est. Value"
           value={formatCurrency(kpis.totalValue)}
           loading={isKpisLoading}
           tone="purple"
           subtext="Aggregate budget"
-        />
+        /> */}
       </div>
 
       {/* ── Floating Filters Bar ── */}

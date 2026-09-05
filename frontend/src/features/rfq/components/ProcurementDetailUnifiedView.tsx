@@ -595,7 +595,9 @@ function PropertyItem({
       lower === 'securitydepositpercentage' ||
       lower === 'securitydepositrequired' ||
       lower.includes('retention') ||
-      lower.includes('securitydeposit')
+      lower.includes('securitydeposit') ||
+      lower === 'partial' ||
+      lower.includes('partial')
     ) {
       return null;
     }
@@ -4363,7 +4365,11 @@ export function SellerQuotationReviewModal({
         : (Array.isArray(participation.acknowledgement?.lineItems)
           ? participation.acknowledgement.lineItems
           : [])));
-  const docs: any[] = Array.isArray(participation.documents) ? participation.documents : (Array.isArray(participation.responseData?.documents) ? participation.responseData.documents : []);
+  const candidateAttach = participation.attachmentUrl || participation.responseData?.attachmentUrl;
+  const docs: any[] = [
+    ...(Array.isArray(participation.documents) ? participation.documents : (Array.isArray(participation.responseData?.documents) ? participation.responseData.documents : [])),
+    ...(candidateAttach ? [{ name: 'Supporting Document', fileName: candidateAttach.split('/').pop() || 'Supporting Document', fileUrl: candidateAttach }] : [])
+  ];
   const message = participation.offeredItemDescription || participation.message || participation.responseData?.message || '';
 
   const handleDownloadQuotationPdf = () => {
@@ -4531,6 +4537,7 @@ export function SellerQuotationReviewModal({
                 <IndianRupee className="h-4 w-4 text-slate-500" /> Commercial Terms
               </h4>
               <div className="text-xs space-y-1 text-slate-700 font-medium">
+                <p><span className="text-slate-400 font-bold">Terms & Conditions:</span> {participation.terms || participation.responseData?.terms || paymentTerms || 'Standard terms apply'}</p>
                 <p><span className="text-slate-400 font-bold">Payment Terms:</span> {paymentTerms}</p>
                 <p><span className="text-slate-400 font-bold">Submitted At:</span> {submittedAt ? new Date(submittedAt).toLocaleString() : 'N/A'}</p>
                 {message && <p className="pt-1"><span className="text-slate-400 font-bold block">Supplier Remarks:</span> "{message}"</p>}

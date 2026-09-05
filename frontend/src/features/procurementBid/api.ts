@@ -142,8 +142,26 @@ const normalizeTenderItem = (item: any, index: number) => {
 };
 
 const normalizeTenderItems = (raw: any, pkt: any, wizardData: any) => {
-  const sourceItems = asArray(raw?.items, pkt?.items, pkt?.boq, pkt?.boqItems, pkt?.lineItems, pkt?.itemRateSchedule, wizardData?.items, wizardData?.boq, wizardData?.lineItems);
-  return sourceItems.map(normalizeTenderItem);
+  const candidates = [
+    raw?.items,
+    raw?.payload?.items,
+    raw?.payload?.basics?.items,
+    pkt?.items,
+    pkt?.boq,
+    pkt?.boqItems,
+    pkt?.lineItems,
+    pkt?.itemRateSchedule,
+    wizardData?.items,
+    wizardData?.boq,
+    wizardData?.lineItems
+  ];
+  let best: any[] = [];
+  for (const cand of candidates) {
+    if (Array.isArray(cand) && cand.length > best.length) {
+      best = cand;
+    }
+  }
+  return best.map(normalizeTenderItem);
 };
 
 export const normalizeBid = (raw: any): ProcurementBid => {
@@ -172,12 +190,28 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     }
 
     // Merge responseData and acknowledgement as fallback sources for technical fields
-    const responseData = (typeof p.responseData === 'object' && p.responseData) ? p.responseData : {};
-    const ackData = (typeof p.acknowledgement === 'object' && p.acknowledgement &&
-      // Only use acknowledgement if it looks like technical data (not just an ACK receipt)
-      !p.acknowledgement.acknowledgementId) ? p.acknowledgement : {};
+    const responseData = (typeof p.responseData === 'object' && p.responseData)
+      ? p.responseData
+      : (typeof p.responseData === 'string' ? (() => { try { return JSON.parse(p.responseData); } catch { return {}; } })() : {});
+    const ackData = (typeof p.acknowledgement === 'object' && p.acknowledgement)
+      ? p.acknowledgement
+      : (typeof p.acknowledgement === 'string' ? (() => { try { return JSON.parse(p.acknowledgement); } catch { return {}; } })() : {});
 
-    const lineItemsArr = asArray(p.lineItems, detailsFromDesc.lineItems, responseData.lineItems, ackData.lineItems);
+    const lineItemsArr = (Array.isArray(p.lineItems) && p.lineItems.length > 0)
+      ? p.lineItems
+      : (Array.isArray(ackData.lineItems) && ackData.lineItems.length > 0)
+      ? ackData.lineItems
+      : (Array.isArray(ackData.lineQuotes) && ackData.lineQuotes.length > 0)
+      ? ackData.lineQuotes
+      : (Array.isArray(ackData.items) && ackData.items.length > 0)
+      ? ackData.items
+      : (Array.isArray(responseData.lineItems) && responseData.lineItems.length > 0)
+      ? responseData.lineItems
+      : (Array.isArray(responseData.lineQuotes) && responseData.lineQuotes.length > 0)
+      ? responseData.lineQuotes
+      : (Array.isArray(detailsFromDesc.lineItems) && detailsFromDesc.lineItems.length > 0)
+      ? detailsFromDesc.lineItems
+      : [];
     const firstLineItem = lineItemsArr.length ? lineItemsArr[0] : {};
     const techOffer = detailsFromDesc.technicalOffer || responseData.technicalOffer || ackData.technicalOffer || {};
 
@@ -198,12 +232,16 @@ export const normalizeBid = (raw: any): ProcurementBid => {
       mobile: sellerMobile,
       sellerMobile,
       submittedAt,
+      lineItems: lineItemsArr,
       complianceRemarks: firstValue(p.complianceRemarks, detailsFromDesc.complianceRemarks, responseData.complianceRemarks, ackData.complianceRemarks, techOffer.complianceRemarks, firstLineItem.complianceRemarks, firstLineItem.remarks),
       deliveryTimeline: firstValue(p.deliveryTimeline, detailsFromDesc.deliveryTimeline, responseData.deliveryTimeline, ackData.deliveryTimeline, techOffer.deliveryTimeline, firstLineItem.deliveryTimeline, firstLineItem.deliveryRequirement, firstLineItem.deliverySchedule),
       warrantyDetails: firstValue(p.warrantyDetails, detailsFromDesc.warrantyDetails, responseData.warrantyDetails, ackData.warrantyDetails, techOffer.warrantyDetails, firstLineItem.warrantyDetails),
       serviceSupport: firstValue(p.serviceSupport, detailsFromDesc.serviceSupport, responseData.serviceSupport, ackData.serviceSupport, techOffer.serviceSupport),
       deviation: firstValue(p.deviation, detailsFromDesc.deviation, responseData.deviation, ackData.deviation, techOffer.deviation, firstLineItem.deviation),
       rfqNotes: firstValue(p.rfqNotes, detailsFromDesc.rfqNotes, responseData.rfqNotes, ackData.rfqNotes, detailsFromDesc.notes, responseData.notes, ackData.notes),
+      terms: firstValue(p.terms, detailsFromDesc.terms, responseData.terms, ackData.terms, ''),
+      message: firstValue(p.message, detailsFromDesc.message, responseData.message, ackData.message, p.offeredItemDescription, ''),
+      attachmentUrl: firstValue(p.attachmentUrl, detailsFromDesc.attachmentUrl, responseData.attachmentUrl, ackData.attachmentUrl, ''),
     };
 
     // If responseData/ack had a better offeredItemDescription, use it
@@ -211,6 +249,9 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     if (betterOfferedItem && offeredItem === (raw.title || 'Procurement requirement')) {
       offeredItem = betterOfferedItem;
     }
+
+    const totalQtyFromItems = lineItemsArr.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 0), 0);
+    const offeredQuantity = p.offeredQuantity || ackData.offeredQuantity || responseData.offeredQuantity || detailsFromDesc.offeredQuantity || (totalQtyFromItems > 0 ? totalQtyFromItems : undefined);
 
     return {
       ...p,
@@ -222,8 +263,8 @@ export const normalizeBid = (raw: any): ProcurementBid => {
       submittedAt: submittedAt || p.createdAt,
       sellerType: p.seller?.role === 'seller' ? 'Verified Seller' : p.seller?.role || 'Verified Seller',
       offeredItem,
-      makeBrand: firstValue(p.makeBrand, details.makeBrand, responseData.makeBrand, techOffer.makeBrand, firstLineItem.makeBrand, 'As quoted'),
-      model: firstValue(p.model, details.model, responseData.model, techOffer.model, firstLineItem.model, 'Standard'),
+      makeBrand: firstValue(p.makeBrand, details.makeBrand, responseData.makeBrand, ackData.makeBrand, techOffer.makeBrand, firstLineItem.makeBrand, 'As quoted'),
+      model: firstValue(p.model, details.model, responseData.model, ackData.model, techOffer.model, firstLineItem.model, 'Standard'),
       technicalStatus: p.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' 
         : p.technicalStatus === 'QUALIFIED' ? 'Qualified' 
         : p.technicalStatus === 'UNDER_REVIEW' ? 'Under Review' 
@@ -231,12 +272,23 @@ export const normalizeBid = (raw: any): ProcurementBid => {
         : (p.technicalStatus ? String(p.technicalStatus).replace(/_/g, ' ') : 'Pending'),
       totalPrice: Number(p.totalAmount || p.quotedAmount || 0),
       quotedAmount: Number(p.quotedAmount || 0),
-      gstPercentage: Number(p.gstPercentage || details.gstPercentage || responseData.gstPercentage || firstLineItem.gstPercent || firstLineItem.gstPercentage || 0),
+      gstPercentage: Number(p.gstPercentage || details.gstPercentage || responseData.gstPercentage || ackData.gstPercentage || firstLineItem.gstPercent || firstLineItem.gstPercentage || 0),
       totalAmount: Number(p.totalAmount || 0),
+      offeredQuantity,
+      lineItems: lineItemsArr,
+      acknowledgement: ackData,
+      responseData,
+      rawParticipation: p,
       deliveryTimeline: firstValue(p.deliveryTimeline, details.deliveryTimeline, responseData.deliveryTimeline, ackData.deliveryTimeline, techOffer.deliveryTimeline, firstLineItem.deliveryTimeline, firstLineItem.deliveryRequirement, ''),
       terms: firstValue(p.terms, details.terms, responseData.terms, ackData.terms, ''),
+      message: firstValue(p.message, details.message, responseData.message, ackData.message, p.offeredItemDescription, ''),
+      attachmentUrl: firstValue(p.attachmentUrl, details.attachmentUrl, responseData.attachmentUrl, ackData.attachmentUrl, ''),
       documents: (() => {
-        const rawDocs = asArray(p.documents, details.documents, responseData.documents, ackData.documents);
+        const attach = firstValue(p.attachmentUrl, details.attachmentUrl, responseData.attachmentUrl, ackData.attachmentUrl);
+        const rawDocs = [
+          ...asArray(p.documents, details.documents, responseData.documents, ackData.documents),
+          ...(attach ? [{ documentName: 'Supporting Document', fileName: 'Supporting Document', fileUrl: attach, category: 'Supporting Document' }] : [])
+        ];
         return rawDocs.map((doc: any, idx: number) => {
           const docName = firstValue(doc.documentName, doc.name, doc.title, doc.label);
           const fName = firstValue(doc.fileName, doc.originalName, doc.name, 'Document');

@@ -53,7 +53,7 @@ export interface CartDto {
     rejectedBy?: { id: number; name: string; email: string };
 }
 
-export const fetchActiveCart = () => getApi<CartDto>('/api/cart');
+export const fetchActiveCart = () => getApi<CartDto>('/api/cart', true);
 export const fetchCartHistory = () => getApi<CartDto[]>('/api/cart/history');
 export const fetchCartById = (id: number) => getApi<CartDto>(`/api/cart/${id}`);
 export const fetchPendingApprovals = () => getApi<CartDto[]>('/api/cart/pending-approval');
@@ -63,10 +63,10 @@ export const addItemToCart = (data: { productId?: number; serviceId?: number; qu
     postApi<CartDto>('/api/cart/items', data);
 
 export const updateCartItem = (id: number, quantity: number) =>
-    putApi<CartItemDto>(`/api/cart/items/${id}`, { quantity });
+    putApi<CartDto>(`/api/cart/items/${id}`, { quantity });
 
 export const removeCartItem = (id: number) =>
-    deleteApi<{ success: boolean }>(`/api/cart/items/${id}`);
+    deleteApi<CartDto>(`/api/cart/items/${id}`);
 
 export const submitCart = (notes?: string) =>
     postApi<CartDto>('/api/cart/submit', { notes });

@@ -3430,7 +3430,9 @@ function EnterpriseDocumentDropzone({
           <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
             {attachments.map(att => {
               const fileType = getFileTypeDetails(att.fileName);
-              const viewUrl = `${BASE_URL}/api/files/${att.fileAssetId}/view?token=${encodeURIComponent(token || (typeof window !== 'undefined' ? localStorage.getItem('token') || '' : ''))}`;
+              const viewUrl = att.url || (att.fileAssetId
+                ? `${BASE_URL}/api/files/${att.fileAssetId}/view?token=${encodeURIComponent(token || (typeof window !== 'undefined' ? localStorage.getItem('token') || '' : ''))}`
+                : '#');
 
               return (
                 <div
@@ -3441,6 +3443,8 @@ function EnterpriseDocumentDropzone({
                     onClick={() => {
                       if (onPreviewAttachment) {
                         onPreviewAttachment(att);
+                      } else if (att.url && !att.fileAssetId) {
+                        window.open(att.url, '_blank');
                       } else {
                         openFileAsset(att, att.fileName);
                       }
@@ -3470,6 +3474,8 @@ function EnterpriseDocumentDropzone({
                       onClick={() => {
                         if (onPreviewAttachment) {
                           onPreviewAttachment(att);
+                        } else if (att.url && !att.fileAssetId) {
+                          window.open(att.url, '_blank');
                         } else {
                           openFileAsset(att, att.fileName);
                         }
@@ -3511,6 +3517,29 @@ function EnterpriseDocumentDropzone({
   );
 }
 
+function getItemAllDocs(it: ItemRow): ItemAttachment[] {
+  const list: ItemAttachment[] = [...(it.attachments || [])];
+  if (it.documentUrl && !list.some(a => a.url === it.documentUrl || a.signedUrl === it.documentUrl)) {
+    list.push({
+      id: `doc:url:${it.id || 'primary'}`,
+      name: 'Specification Document URL',
+      fileName: it.specificationFileName || it.documentUrl.split('/').pop()?.split('?')[0] || 'Specification_Document.pdf',
+      url: it.documentUrl,
+      signedUrl: it.documentUrl,
+      uploadedAt: new Date().toISOString(),
+    });
+  } else if (list.length === 0 && (it.fileAssetId || it.specificationFileName)) {
+    list.push({
+      id: `doc:asset:${it.id || 'primary'}`,
+      name: 'Technical Specification',
+      fileAssetId: Number(it.fileAssetId || 0),
+      fileName: it.specificationFileName || 'Technical Specification.pdf',
+      uploadedAt: new Date().toISOString(),
+    });
+  }
+  return list;
+}
+
 /** Quick Document Manager Modal for In-Table Trigger */
 function QuickDocumentModal({
   item,
@@ -3526,17 +3555,7 @@ function QuickDocumentModal({
   token: string | null;
 }) {
   const initialAttachments = useMemo(() => {
-    if (item.attachments && item.attachments.length > 0) return item.attachments;
-    if (item.fileAssetId || item.specificationFileName) {
-      return [{
-        id: makeId(),
-        name: 'Technical Specification',
-        fileAssetId: Number(item.fileAssetId || 0),
-        fileName: item.specificationFileName || 'Technical Specification.pdf',
-        uploadedAt: new Date().toISOString(),
-      }];
-    }
-    return [];
+    return getItemAllDocs(item);
   }, [item]);
 
   const [attachments, setAttachments] = useState<ItemAttachment[]>(initialAttachments);
@@ -5227,10 +5246,10 @@ function ItemsDetailsForm({
                 </tr>
               ) : (
                 draft.items.map((item, index) => {
-                  const attachmentsList = item.attachments || [];
-                  const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
-                  const firstDoc = attachmentsList[0];
-                  const docCount = attachmentsList.length || (item.specificationFileName ? 1 : 0);
+                  const allDocs = getItemAllDocs(item);
+                  const hasDocs = allDocs.length > 0;
+                  const firstDoc = allDocs[0];
+                  const docCount = allDocs.length;
 
                   return (
                     <tr key={item.id || index} className="align-middle hover:bg-slate-50/70 transition-colors group">
@@ -5332,18 +5351,6 @@ function ItemsDetailsForm({
                             <button
                               type="button"
                               onClick={() => {
-                                const allDocs = (item.attachments && item.attachments.length > 0)
-                                  ? item.attachments
-                                  : (item.fileAssetId || item.specificationFileName || item.documentUrl)
-                                    ? [{
-                                        id: 'primary-doc',
-                                        name: item.specificationFileName || 'Technical Specification',
-                                        fileAssetId: Number(item.fileAssetId || 0),
-                                        fileName: item.specificationFileName || 'Technical Specification.pdf',
-                                        url: item.documentUrl,
-                                        signedUrl: item.documentUrl,
-                                      }]
-                                    : [];
                                 if (allDocs.length === 1 && allDocs[0]) {
                                   if (allDocs[0].url && !allDocs[0].fileAssetId) {
                                     window.open(allDocs[0].url, '_blank');
@@ -5363,17 +5370,27 @@ function ItemsDetailsForm({
                                 {docCount} file{docCount === 1 ? '' : 's'}
                               </span>
                             </button>
-                            {item.documentUrl && (
-                              <a
-                                href={item.documentUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex h-6 w-6 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer"
-                                title="Open specification document URL in new tab"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (allDocs.length > 1) {
+                                  setQuickDocItem(item);
+                                } else if (allDocs.length === 1 && allDocs[0]) {
+                                  if (allDocs[0].url && !allDocs[0].fileAssetId) {
+                                    window.open(allDocs[0].url, '_blank');
+                                  } else {
+                                    onPreviewDocument(allDocs[0], allDocs[0].fileName || item.name);
+                                  }
+                                } else if (item.documentUrl) {
+                                  window.open(item.documentUrl, '_blank');
+                                }
+                              }}
+                              className="flex h-6 w-6 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer"
+                              title={docCount > 1 ? `View all ${docCount} documents` : "Open specification document in new tab"}
+                              aria-label={docCount > 1 ? `View all ${docCount} documents for ${item.name || 'item'}` : "Open specification document in new tab"}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => setQuickDocItem(item)}
@@ -6200,6 +6217,8 @@ function ScheduleStepForm({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
+            {/* Currency selection commented out as requested */}
+            {/*
             <div className="sm:col-span-2 sm:max-w-xs">
               <Field label="Currency" required error={fieldError(showErrors && currencyMissing, 'Currency is required.')}>
                 <select
@@ -6220,6 +6239,7 @@ function ScheduleStepForm({
                 )}
               </Field>
             </div>
+            */}
             <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
               <input type="datetime-local" value={draft.auctionConfig.startDateTime} onChange={e => updateAuction('startDateTime', e.target.value)} className={controlClass(fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.'))} />
             </Field>

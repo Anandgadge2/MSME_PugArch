@@ -805,7 +805,7 @@ export default function SupplierResponsesPage() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Total Procurements"
           value={kpis.total}
@@ -859,14 +859,14 @@ export default function SupplierResponsesPage() {
             setResponseFilter(prev => prev === 'has_responses' ? '' : 'has_responses');
           }}
         />
-        <KpiCard
+        {/* <KpiCard
           label="Total Value"
           value={formatCurrency(kpis.totalValue)}
           loading={isKpisLoading}
           subtext="Combined estimate"
           icon={IndianRupee}
           tone="indigo"
-        />
+        /> */}
       </div>
 
       {error && (

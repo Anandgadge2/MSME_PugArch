@@ -4505,15 +4505,62 @@ app.get('/api/invoices/summary', authenticate, authorize('buyer', 'seller', 'adm
 
     const invoices = await prisma.invoice.findMany({
       where,
-      select: { amount: true, status: true, invoiceStatus: true }
+      select: {
+        id: true,
+        amount: true,
+        status: true,
+        invoiceStatus: true,
+        taxableAmount: true,
+        totalTaxAmount: true,
+        tdsAmount: true,
+        createdAt: true
+      }
     });
 
+    const now = new Date();
+    const overdueThreshold = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
     const statusOf = (inv: any) => String(inv.invoiceStatus || inv.status || 'draft').toLowerCase();
-    const totalValue = invoices.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
-    const pendingCount = invoices.filter(inv => ['draft', 'submitted', 'pending'].includes(statusOf(inv))).length;
-    const approvedCount = invoices.filter(inv => ['approved', 'paid'].includes(statusOf(inv))).length;
 
-    res.json({ success: true, totalValue, pendingCount, approvedCount });
+    let totalValue = 0;
+    let pendingCount = 0;
+    let approvedCount = 0;
+    let overdueCount = 0;
+    let totalTax = 0;
+    let totalTds = 0;
+
+    for (const inv of invoices) {
+      const st = statusOf(inv);
+      totalValue += Number(inv.amount || 0);
+      totalTax += Number(inv.totalTaxAmount || 0);
+      totalTds += Number(inv.tdsAmount || 0);
+
+      if (['draft', 'submitted', 'pending'].includes(st)) {
+        pendingCount += 1;
+      }
+      if (['approved', 'paid', 'payment_initiated'].includes(st)) {
+        approvedCount += 1;
+      }
+      const isClosed = ['paid', 'cancelled', 'rejected'].includes(st);
+      if (!isClosed && inv.createdAt && new Date(inv.createdAt) < overdueThreshold) {
+        overdueCount += 1;
+      }
+    }
+
+    const summary = {
+      totalValue: Math.round(totalValue * 100) / 100,
+      pendingCount,
+      approvedCount,
+      overdueCount,
+      totalTax: Math.round(totalTax * 100) / 100,
+      totalTds: Math.round(totalTds * 100) / 100,
+      totalCount: invoices.length
+    };
+
+    res.json(maskSensitive({
+      success: true,
+      data: summary,
+      ...summary
+    }));
   } catch (err: any) {
     return handleFinancialRouteError(res, err);
   }
@@ -4663,27 +4710,29 @@ app.get('/api/invoices', authenticate, authorize('buyer', 'seller', 'admin'), as
       where.AND = andConditions;
     }
 
-    let orderBy: any = {};
+    let orderBy: any = [];
     if (sortBy === 'invoiceNumber') {
-      orderBy = { invoiceNumber: sortOrder };
+      orderBy = [{ invoiceNumber: sortOrder }, { id: 'desc' }];
     } else if (sortBy === 'poNumber') {
-      orderBy = { purchaseOrder: { poNumber: sortOrder } };
+      orderBy = [{ purchaseOrder: { poNumber: sortOrder } }, { id: 'desc' }];
     } else if (sortBy === 'party') {
-      orderBy = role === 'seller' ? { buyer: { name: sortOrder } } : { seller: { name: sortOrder } };
+      orderBy = role === 'seller'
+        ? [{ buyer: { name: sortOrder } }, { id: 'desc' }]
+        : [{ seller: { name: sortOrder } }, { id: 'desc' }];
     } else if (sortBy === 'taxableAmount') {
-      orderBy = { taxableAmount: sortOrder };
+      orderBy = [{ taxableAmount: sortOrder }, { id: 'desc' }];
     } else if (sortBy === 'totalTaxAmount') {
-      orderBy = { totalTaxAmount: sortOrder };
+      orderBy = [{ totalTaxAmount: sortOrder }, { id: 'desc' }];
     } else if (sortBy === 'tdsAmount') {
-      orderBy = { tdsAmount: sortOrder };
+      orderBy = [{ tdsAmount: sortOrder }, { id: 'desc' }];
     } else if (sortBy === 'totalAmount') {
-      orderBy = { amount: sortOrder };
+      orderBy = [{ amount: sortOrder }, { id: 'desc' }];
     } else if (sortBy === 'dueDate') {
-      orderBy = { createdAt: sortOrder };
+      orderBy = [{ createdAt: sortOrder }, { id: 'desc' }];
     } else if (sortBy === 'status') {
-      orderBy = { status: sortOrder };
+      orderBy = [{ status: sortOrder }, { id: 'desc' }];
     } else {
-      orderBy = { createdAt: sortOrder };
+      orderBy = [{ createdAt: sortOrder }, { id: 'desc' }];
     }
 
     const total = await prisma.invoice.count({ where });

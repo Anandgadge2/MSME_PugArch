@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock } from 'lucide-react';
+import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical, Building2, Calendar, ChevronDown, MapPin, User, Copy, Package, CreditCard, Clock } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
 
 const moneyPdf = (val: any, currency = 'INR') => {
@@ -265,6 +265,109 @@ const OrderActionsMenu = ({
     document.body
   );
 };
+
+function UpdatedDateFilterPopover({
+  value,
+  onChange,
+  onClear,
+}: {
+  value: { start: string; end: string };
+  onChange: (val: { start: string; end: string }) => void;
+  onClear: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const hasValue = Boolean(value.start || value.end);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const label = useMemo(() => {
+    if (value.start && value.end) {
+      return `${value.start.slice(5)} – ${value.end.slice(5)}`;
+    }
+    if (value.start) return `From ${value.start.slice(5)}`;
+    if (value.end) return `Until ${value.end.slice(5)}`;
+    return 'Updated: All';
+  }, [value]);
+
+  return (
+    <div className="relative w-full sm:w-auto" ref={popoverRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(prev => !prev)}
+        className={cn(
+          "h-10 w-full sm:w-[130px] flex items-center justify-between gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors shadow-xs cursor-pointer whitespace-nowrap outline-none",
+          hasValue
+            ? "border-[#12335f] bg-[#12335f]/5 text-[#12335f]"
+            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
+        )}
+      >
+        <span className="truncate">{hasValue ? `Upd: ${label}` : 'Updated: All'}</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform duration-200 shrink-0", isOpen && "rotate-180")} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 z-50 w-72 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-100">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-600">Updated Date</span>
+            {hasValue && (
+              <button
+                type="button"
+                onClick={() => { onClear(); setIsOpen(false); }}
+                className="text-[10px] font-bold text-red-600 hover:text-red-700 cursor-pointer"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-2.5">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">From Date</label>
+              <input
+                type="date"
+                value={value.start}
+                onChange={e => onChange({ ...value, start: e.target.value })}
+                className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">To Date</label>
+              <input
+                type="date"
+                value={value.end}
+                onChange={e => onChange({ ...value, end: e.target.value })}
+                className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:bg-white"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="h-8 rounded-lg bg-[#12335f] px-3 text-xs font-bold text-white hover:bg-[#0e2a4f] cursor-pointer"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function PurchaseOrders() {
   const { user } = useAuth();
@@ -829,11 +932,11 @@ export default function PurchaseOrders() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-2">
         <KpiCard label="Open POs" value={openCount} subtext="Active purchase orders" icon={FileText} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} tone="blue" />
         <KpiCard label="Delivered" value={deliveredCount} subtext="Completed deliveries" icon={CheckCircle2} onClick={() => setActiveTab('Delivered')} active={activeTab === 'Delivered'} tone="green" />
-        <KpiCard label="Total Value" value={formatCurrency(totalSpend)} subtext="Cumulative purchase spend" icon={ShieldCheck} onClick={() => setActiveTab('All')} active={activeTab === 'All'} tone="indigo" />
-        <KpiCard label="Open Value" value={formatCurrency(poHealth.openValue)} subtext="Pending fulfillment value" icon={ShieldCheck} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} tone="amber" />
+        {/* <KpiCard label="Total Value" value={formatCurrency(totalSpend)} subtext="Cumulative purchase spend" icon={ShieldCheck} onClick={() => setActiveTab('All')} active={activeTab === 'All'} tone="indigo" />
+        <KpiCard label="Open Value" value={formatCurrency(poHealth.openValue)} subtext="Pending fulfillment value" icon={ShieldCheck} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} tone="amber" /> */}
       </div>
 
       {error && <InlineError message={error} onRetry={reload} />}
@@ -920,13 +1023,12 @@ export default function PurchaseOrders() {
                 </div>
               )}
 
-              {/* Updated Date */}
-              <div className="flex items-center flex-nowrap whitespace-nowrap gap-1 bg-slate-50/50 border border-slate-200 rounded-xl px-2 h-10 w-full sm:w-auto">
-                <span className="text-[10px] font-black uppercase text-slate-400 px-1 shrink-0 hidden lg:inline-block">Updated</span>
-                <input type="date" value={updatedDateFilter.start} onChange={e => setUpdatedDateFilter({ ...updatedDateFilter, start: e.target.value })} className="h-8 w-full sm:w-[105px] shrink-0 rounded-lg border-none bg-transparent px-1 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-slate-300" title="Updated Start" />
-                <span className="text-slate-300 font-black shrink-0">-</span>
-                <input type="date" value={updatedDateFilter.end} onChange={e => setUpdatedDateFilter({ ...updatedDateFilter, end: e.target.value })} className="h-8 w-full sm:w-[105px] shrink-0 rounded-lg border-none bg-transparent px-1 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-slate-300" title="Updated End" />
-              </div>
+              {/* Updated Date Popover */}
+              <UpdatedDateFilterPopover
+                value={updatedDateFilter}
+                onChange={setUpdatedDateFilter}
+                onClear={() => setUpdatedDateFilter({ start: '', end: '' })}
+              />
               {activeFiltersCount > 0 && (
                 <Button variant="ghost" onClick={handleClearFilters} className="h-10 px-3 text-xs font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl shrink-0">
                   Clear Filters
@@ -969,7 +1071,13 @@ export default function PurchaseOrders() {
                           </span>
                           <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
                         </div>
-                        <h3 title={order.title} className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{order.title}</h3>
+                        <h3
+                          title={order.title}
+                          onClick={() => setViewingOrder(order)}
+                          className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors cursor-pointer"
+                        >
+                          {order.title}
+                        </h3>
                       </div>
                       <StatusPill status={order.status} />
                     </div>
@@ -1038,7 +1146,13 @@ export default function PurchaseOrders() {
                         <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
                       </td>
                       <td className="p-3">
-                        <p className="font-bold text-slate-900">{order.title}</p>
+                        <button
+                          type="button"
+                          onClick={() => setViewingOrder(order)}
+                          className="font-bold text-slate-900 text-left hover:text-[#12335f] transition-colors cursor-pointer block"
+                        >
+                          {order.title}
+                        </button>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1">
                           <span className="text-[9px] font-bold text-slate-500">{formatDate(order.createdAt)}</span>
                           {order.paymentTerms && (

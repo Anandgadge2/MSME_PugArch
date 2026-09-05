@@ -107,7 +107,14 @@ export const normalizePaginated = <T>(value: unknown): PaginatedResult<T> => {
 };
 
 export const getApi = async <T>(endpoint: string, skipCache = false) =>
-  unwrap<T>(await api.get(endpoint, { headers: authHeaders(), skipCache } as RequestInit & { skipCache?: boolean }));
+  unwrap<T>(await api.get(endpoint, {
+    headers: {
+      ...authHeaders(),
+      ...(skipCache ? { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' } : {})
+    },
+    cache: skipCache ? 'no-store' : 'default',
+    skipCache
+  } as RequestInit & { skipCache?: boolean }));
 
 export const peekApi = <T>(endpoint: string): T | null => {
   if (typeof window === 'undefined') return null;

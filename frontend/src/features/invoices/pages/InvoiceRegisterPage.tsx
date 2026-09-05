@@ -145,13 +145,18 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     10
   );
 
-  const { data: summaryData } = useFeatureQuery<{ totalValue: number; pendingCount: number; approvedCount: number } | null>(
+  const { data: summaryData, reload: reloadSummary } = useFeatureQuery<{
+    totalValue: number;
+    pendingCount: number;
+    approvedCount: number;
+    overdueCount?: number;
+    totalTax?: number;
+    totalTds?: number;
+    totalCount?: number;
+  } | null>(
     '/api/invoices/summary',
     null
   );
-  const totalValue = summaryData?.totalValue ?? 0;
-  const pendingCount = summaryData?.pendingCount ?? 0;
-  const approvedCount = summaryData?.approvedCount ?? 0;
   const invoiceHealth = useMemo(() => {
     const now = new Date();
     const nextWeek = new Date(now);
@@ -173,6 +178,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       { overdue: 0, dueSoon: 0, tax: 0, tds: 0, submitted: 0 }
     );
   }, [pagedInvoices]);
+
+  const totalValue = summaryData?.totalValue ?? 0;
+  const pendingCount = summaryData?.pendingCount ?? 0;
+  const approvedCount = summaryData?.approvedCount ?? 0;
+  const overdueCount = summaryData?.overdueCount !== undefined ? summaryData.overdueCount : invoiceHealth.overdue;
+  const totalTax = summaryData?.totalTax !== undefined ? summaryData.totalTax : invoiceHealth.tax;
+  const totalTds = summaryData?.totalTds !== undefined ? summaryData.totalTds : invoiceHealth.tds;
 
   const handleResetFilters = () => {
     setSearchTerm('');
@@ -259,31 +271,112 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
   const toggleSort = (field: 'invoiceNumber' | 'poNumber' | 'party' | 'taxableAmount' | 'totalTaxAmount' | 'tdsAmount' | 'totalAmount' | 'dueDate' | 'status') => {
     if (sortField === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortField(field);
-      setSortOrder('asc');
+      const isAmountField = field === 'taxableAmount' || field === 'totalTaxAmount' || field === 'tdsAmount' || field === 'totalAmount';
+      setSortOrder(isAmountField ? 'desc' : 'asc');
     }
+    setPage(1);
   };
+
+  const sortedInvoices = useMemo(() => {
+    if (!pagedInvoices || !pagedInvoices.length) return [];
+    const items = [...pagedInvoices];
+    items.sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'invoiceNumber': {
+          const invA = String(a.invoiceNumber || `INV-${a.id}`).toLowerCase();
+          const invB = String(b.invoiceNumber || `INV-${b.id}`).toLowerCase();
+          comparison = invA.localeCompare(invB, undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        }
+        case 'poNumber': {
+          const poA = String(a.purchaseOrder?.poNumber || '').toLowerCase();
+          const poB = String(b.purchaseOrder?.poNumber || '').toLowerCase();
+          comparison = poA.localeCompare(poB, undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        }
+        case 'party': {
+          const partyA = String(role === 'seller' ? a.buyer?.name : a.seller?.name || '').toLowerCase();
+          const partyB = String(role === 'seller' ? b.buyer?.name : b.seller?.name || '').toLowerCase();
+          comparison = partyA.localeCompare(partyB, undefined, { sensitivity: 'base' });
+          break;
+        }
+        case 'taxableAmount': {
+          const taxA = Number(a.taxableAmount ?? 0);
+          const taxB = Number(b.taxableAmount ?? 0);
+          comparison = taxA - taxB;
+          break;
+        }
+        case 'totalTaxAmount': {
+          const taxA = Number(a.totalTaxAmount ?? 0);
+          const taxB = Number(b.totalTaxAmount ?? 0);
+          comparison = taxA - taxB;
+          break;
+        }
+        case 'tdsAmount': {
+          const tdsA = Number(a.tdsAmount ?? 0);
+          const tdsB = Number(b.tdsAmount ?? 0);
+          comparison = tdsA - tdsB;
+          break;
+        }
+        case 'totalAmount': {
+          const totA = Number(a.amount ?? a.totalAmount ?? 0);
+          const totB = Number(b.amount ?? b.totalAmount ?? 0);
+          comparison = totA - totB;
+          break;
+        }
+        case 'status': {
+          const stA = statusOf(a);
+          const stB = statusOf(b);
+          comparison = stA.localeCompare(stB);
+          break;
+        }
+        case 'dueDate': {
+          const dateA = new Date(a.dueDate || a.createdAt || 0).getTime();
+          const dateB = new Date(b.dueDate || b.createdAt || 0).getTime();
+          comparison = dateA - dateB;
+          break;
+        }
+        default:
+          comparison = 0;
+      }
+      if (comparison !== 0) {
+        return sortOrder === 'asc' ? comparison : -comparison;
+      }
+      return (Number(b.id) || 0) - (Number(a.id) || 0);
+    });
+    return items;
+  }, [pagedInvoices, sortField, sortOrder, role]);
 
   const SortHeader = ({ label, field, className = '' }: { label: string; field: 'invoiceNumber' | 'poNumber' | 'party' | 'taxableAmount' | 'totalTaxAmount' | 'tdsAmount' | 'totalAmount' | 'dueDate' | 'status'; className?: string }) => {
     const isActive = sortField === field;
+    const nextOrder = isActive ? (sortOrder === 'asc' ? 'descending' : 'ascending') : (field === 'taxableAmount' || field === 'totalTaxAmount' || field === 'tdsAmount' || field === 'totalAmount' ? 'descending' : 'ascending');
     return (
       <button
         type="button"
-        onClick={() => toggleSort(field)}
-        className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider transition-colors hover:text-[#12335f] ${isActive ? "text-[#12335f]" : "text-slate-500"
-          } ${className}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleSort(field);
+        }}
+        aria-label={`Sort by ${label}, currently ${isActive ? (sortOrder === 'asc' ? 'sorted ascending' : 'sorted descending') : 'not sorted'}. Click to sort ${nextOrder}.`}
+        className={cn(
+          "inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-colors hover:text-[#12335f] focus:outline-none rounded py-0.5",
+          isActive ? "text-[#12335f]" : "text-slate-500",
+          className
+        )}
       >
-        {label}
+        <span>{label}</span>
         {isActive ? (
           sortOrder === 'asc' ? (
-            <ArrowUp className="h-3 w-3 text-[#12335f]" />
+            <ArrowUp className="h-3 w-3 text-[#12335f] stroke-[2.5]" aria-hidden="true" />
           ) : (
-            <ArrowDown className="h-3 w-3 text-[#12335f]" />
+            <ArrowDown className="h-3 w-3 text-[#12335f] stroke-[2.5]" aria-hidden="true" />
           )
         ) : (
-          <ArrowUpDown className="h-3 w-3 opacity-45" />
+          <ArrowUpDown className="h-3 w-3 opacity-45 group-hover:opacity-80 transition-opacity" aria-hidden="true" />
         )}
       </button>
     );
@@ -387,6 +480,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     try {
       await postApi(`/api/invoices/${invoiceId}/approve`, {});
       await reload();
+      await reloadSummary();
       toast.success('Invoice approved successfully.');
     } catch (err: any) {
       toast.error(err.message || 'Invoice approval failed');
@@ -757,6 +851,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       // Optimistically update invoice list status to 'paid' so "PAY NOW" disappears immediately
       setPagedInvoices(prev => prev.map(inv => inv.id === checkoutInvoice.id ? { ...inv, status: 'paid', invoiceStatus: 'PAID' } : inv));
       void reload();
+      void reloadSummary();
     } catch (err: any) {
       setCheckoutStep('tabs');
       setErrorMsg(err.message || 'Payment simulation failed. Please try again.');
@@ -801,17 +896,17 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               Create Invoice
             </Button>
           )}
-          <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
+          <Button variant="outline" onClick={() => { reload(); reloadSummary(); }} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
             <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} /> Refresh
           </Button>
         </div>
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-4">
         <KpiCard
           label="Invoices"
-          value={total}
+          value={summaryData?.totalCount !== undefined && summaryData.totalCount > 0 ? summaryData.totalCount : total}
           subtext="All invoices"
           icon={FileText}
           active={!statusFilter && dateRangeFilter === 'all' && paymentStatusFilter === 'all' && amountRangeFilter === 'all' && invoiceScope === 'all'}
@@ -839,16 +934,16 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           ariaLabel="Filter paid invoices"
           color="green"
         />
-        <KpiCard
+        {/* <KpiCard
           label="Invoice Value"
           value={formatCurrency(totalValue)}
           subtext="Total invoice value"
           icon={IndianRupee}
           color="indigo"
-        />
+        /> */}
         <KpiCard
           label="Overdue"
-          value={invoiceHealth.overdue}
+          value={overdueCount}
           subtext="Overdue invoices"
           icon={AlertCircle}
           active={paymentStatusFilter === 'overdue'}
@@ -856,13 +951,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           ariaLabel="Filter overdue invoices"
           color="red"
         />
-        <KpiCard
+        {/* <KpiCard
           label="GST/TDS"
-          value={`${formatCurrency(invoiceHealth.tax)} / ${formatCurrency(invoiceHealth.tds)}`}
+          value={`${formatCurrency(totalTax)} / ${formatCurrency(totalTds)}`}
           subtext="Total GST/TDS"
           icon={ShieldCheck}
           color="purple"
-        />
+        /> */}
       </div>
 
       {error && <InlineError message={error} onRetry={reload} />}
@@ -1017,19 +1112,19 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
                   <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-12">Sr. No</th>
-                  <th className="p-3 w-40"><SortHeader label="Invoice" field="invoiceNumber" /></th>
-                  <th className="p-3 w-40"><SortHeader label="PO" field="poNumber" /></th>
-                  <th className="p-3 w-40"><SortHeader label="Party" field="party" /></th>
-                  <th className="p-3 w-32 whitespace-nowrap"><SortHeader label="Taxable" field="taxableAmount" /></th>
-                  <th className="p-3 w-32 whitespace-nowrap"><SortHeader label="GST" field="totalTaxAmount" /></th>
-                  <th className="p-3 w-32 whitespace-nowrap"><SortHeader label="TDS" field="tdsAmount" /></th>
-                  <th className="p-3 w-36 whitespace-nowrap"><SortHeader label="Total" field="totalAmount" /></th>
-                  <th className="p-3 w-32 whitespace-nowrap"><SortHeader label="Status" field="status" /></th>
+                  <th scope="col" aria-sort={sortField === 'invoiceNumber' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('invoiceNumber')} className="p-3 w-40 cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="Invoice" field="invoiceNumber" /></th>
+                  <th scope="col" aria-sort={sortField === 'poNumber' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('poNumber')} className="p-3 w-40 cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="PO" field="poNumber" /></th>
+                  <th scope="col" aria-sort={sortField === 'party' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('party')} className="p-3 w-40 cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="Party" field="party" /></th>
+                  <th scope="col" aria-sort={sortField === 'taxableAmount' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('taxableAmount')} className="p-3 w-32 whitespace-nowrap cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="Taxable" field="taxableAmount" /></th>
+                  <th scope="col" aria-sort={sortField === 'totalTaxAmount' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('totalTaxAmount')} className="p-3 w-32 whitespace-nowrap cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="GST" field="totalTaxAmount" /></th>
+                  <th scope="col" aria-sort={sortField === 'tdsAmount' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('tdsAmount')} className="p-3 w-32 whitespace-nowrap cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="TDS" field="tdsAmount" /></th>
+                  <th scope="col" aria-sort={sortField === 'totalAmount' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('totalAmount')} className="p-3 w-36 whitespace-nowrap cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="Total" field="totalAmount" /></th>
+                  <th scope="col" aria-sort={sortField === 'status' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('status')} className="p-3 w-32 whitespace-nowrap cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="Status" field="status" /></th>
                   <th className="p-3 text-right w-16 whitespace-nowrap text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                {pagedInvoices.map((invoice, index) => {
+                {sortedInvoices.map((invoice, index) => {
                   const state = statusOf(invoice);
                   const isSubmitted = state === 'submitted';
                   const isPayable = state === 'approved' || state === 'payment_initiated';
@@ -1181,7 +1276,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {pagedInvoices.map((invoice, index) => {
+            {sortedInvoices.map((invoice, index) => {
               const state = statusOf(invoice);
               const isSubmitted = state === 'submitted';
               const isPayable = state === 'approved' || state === 'payment_initiated';

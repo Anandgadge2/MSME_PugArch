@@ -265,57 +265,93 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
     }
   }
 
+  // Check if file asset is linked via ProcurementBidParticipationDocument
+  const participationDoc = await prisma.procurementBidParticipationDocument.findFirst({
+    where: {
+      OR: [
+        { fileAssetId: asset.id },
+        ...(asset.url ? [{ fileUrl: asset.url }] : []),
+        ...(asset.key ? [{ fileKey: asset.key }] : []),
+      ]
+    },
+    include: {
+      participation: {
+        include: { bid: true }
+      }
+    }
+  });
+
+  if (participationDoc) {
+    const bid = participationDoc.participation?.bid;
+    if (user.role === 'seller' && (participationDoc.sellerId === user.id || asset.ownerId === user.id)) return true;
+    if (user.role === 'buyer' && bid && bid.buyerId === user.id) {
+      if (participationDoc.documentCategory !== 'FINANCIAL_QUOTE') return true;
+      return participationDoc.participation.technicalStatus === 'QUALIFIED' &&
+        ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(bid.status);
+    }
+  }
+
+  // Check if file asset is referenced in ProcurementBidParticipation (e.g. in acknowledgement JSON documents)
+  if (user.role === 'buyer' || user.role === 'seller') {
+    const relatedParticipations = await prisma.procurementBidParticipation.findMany({
+      where: {
+        OR: [
+          ...(user.role === 'buyer' ? [{ bid: { buyerId: user.id } }] : []),
+          ...(user.role === 'seller' ? [{ sellerId: user.id }] : []),
+        ],
+        ...(asset.ownerId ? { sellerId: asset.ownerId } : {})
+      },
+      include: { bid: true }
+    });
+
+    const assetSearchPattern = `/api/files/${asset.id}`;
+    for (const part of relatedParticipations) {
+      const ackStr = JSON.stringify(part.acknowledgement || '');
+      if (
+        ackStr.includes(assetSearchPattern) ||
+        (asset.key && ackStr.includes(asset.key)) ||
+        (asset.url && ackStr.includes(asset.url))
+      ) {
+        if (user.role === 'seller') return part.sellerId === user.id || asset.ownerId === user.id;
+        if (user.role === 'buyer') return part.bid?.buyerId === user.id;
+      }
+    }
+  }
+
+  // Check if file asset is linked via ProcurementBidClarificationFile
+  const clarificationFile = await prisma.procurementBidClarificationFile.findFirst({
+    where: { fileAssetId: asset.id },
+    include: { clarification: { include: { bid: true } } }
+  });
+  if (clarificationFile) {
+    if (user.role === 'seller') return clarificationFile.clarification.sellerId === user.id || asset.ownerId === user.id;
+    if (user.role === 'buyer') return clarificationFile.clarification.bid.buyerId === user.id;
+    return false;
+  }
+
+  // Check if file asset is linked via DeliveryDocument or Invoice
+  const deliveryDoc = await prisma.deliveryDocument.findFirst({
+    where: { fileAssetId: asset.id },
+    include: { deliveryTracking: { include: { purchaseOrder: true } } }
+  }).catch(() => null);
+  const invoice = deliveryDoc ? null : await prisma.invoice.findFirst({
+    where: { OR: [{ invoiceFileId: asset.id }, { fileAssetId: asset.id }] },
+    include: { purchaseOrder: true }
+  }).catch(() => null);
+  if (deliveryDoc || invoice) {
+    const po = deliveryDoc?.deliveryTracking?.purchaseOrder || invoice?.purchaseOrder;
+    if (!po) return asset.ownerId === user.id;
+    if (user.role === 'seller') return po.sellerId === user.id || asset.ownerId === user.id;
+    if (user.role === 'buyer') return po.buyerId === user.id;
+    return false;
+  }
+
   if (!asset.entityId) return false;
 
   if (asset.entityType === 'tender') return checkOwnership('tender', asset.entityId, user);
   if (asset.entityType === 'bid') return checkOwnership('bid', asset.entityId, user);
   if (asset.entityType === 'quote') return checkOwnership('quote', asset.entityId, user);
   if (asset.entityType === 'procurement_checkout') return asset.ownerId === user.id;
-  if (['procurement_bid_participation', 'procurement_participation_document', 'procurement_financial_quote'].includes(asset.entityType)) {
-    const doc = await prisma.procurementBidParticipationDocument.findFirst({
-      where: { fileAssetId: asset.id },
-      include: { participation: { include: { bid: true } } }
-    });
-    if (!doc) return false;
-    const bid = doc.participation.bid;
-    if (user.role === 'seller') return doc.sellerId === user.id;
-    if (user.role === 'buyer') {
-      if (bid.buyerId !== user.id) return false;
-      if (doc.documentCategory !== 'FINANCIAL_QUOTE') {
-        return true;
-      }
-      return doc.participation.technicalStatus === 'QUALIFIED' && ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(bid.status);
-    }
-    return false;
-  }
-  if (['procurement_bid_clarification', 'procurement_clarification_file'].includes(asset.entityType)) {
-    const file = await prisma.procurementBidClarificationFile.findFirst({
-      where: { fileAssetId: asset.id },
-      include: { clarification: { include: { bid: true } } }
-    });
-    if (!file) return false;
-    if (user.role === 'seller') return file.clarification.sellerId === user.id;
-    if (user.role === 'buyer') return file.clarification.bid.buyerId === user.id;
-    return false;
-  }
-  if (['procurement_award_document', 'procurement_evaluation_report'].includes(asset.entityType)) {
-    return false;
-  }
-  if (['procurement_delivery_document', 'procurement_invoice'].includes(asset.entityType)) {
-    const deliveryDoc = await prisma.deliveryDocument.findFirst({
-      where: { fileAssetId: asset.id },
-      include: { deliveryTracking: { include: { purchaseOrder: true } } }
-    }).catch(() => null);
-    const invoice = deliveryDoc ? null : await prisma.invoice.findFirst({
-      where: { OR: [{ invoiceFileId: asset.id }, { fileAssetId: asset.id }] },
-      include: { purchaseOrder: true }
-    }).catch(() => null);
-    const po = deliveryDoc?.deliveryTracking?.purchaseOrder || invoice?.purchaseOrder;
-    if (!po) return asset.ownerId === user.id;
-    if (user.role === 'seller') return po.sellerId === user.id;
-    if (user.role === 'buyer') return po.buyerId === user.id;
-    return false;
-  }
 
   const messageAttachment = await prisma.messageAttachment.findFirst({
     where: { fileAssetId: asset.id },

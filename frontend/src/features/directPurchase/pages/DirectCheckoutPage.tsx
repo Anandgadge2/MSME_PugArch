@@ -460,7 +460,8 @@ export default function DirectCheckoutPage() {
             </CardContent>
           </Card>
 
-          {/* Section 3: Order Instructions & Expected Date */}
+          {/* Section 3: Order Instructions & Expected Date - Commented out */}
+          {/*
           <Card className="border-slate-200 shadow-sm">
             <CardHeader className="border-b border-slate-100 bg-slate-50/60 pb-3 pt-4">
               <CardTitle className="text-sm font-black uppercase tracking-wider text-[#12335f] flex items-center gap-2">
@@ -497,12 +498,13 @@ export default function DirectCheckoutPage() {
               </div>
             </CardContent>
           </Card>
+          */}
 
-          {/* Section 4: Payment Terms */}
+          {/* Section 3 (formerly 4): Payment Terms */}
           <Card className="border-slate-200 shadow-sm">
             <CardHeader className="border-b border-slate-100 bg-slate-50/60 pb-3 pt-4">
               <CardTitle className="text-sm font-black uppercase tracking-wider text-[#12335f] flex items-center gap-2">
-                <CreditCard className="h-4 w-4 text-[#12335f]" /> 4. Payment Terms
+                <CreditCard className="h-4 w-4 text-[#12335f]" /> 3. Payment Terms
               </CardTitle>
             </CardHeader>
             <CardContent className="p-5 space-y-3">

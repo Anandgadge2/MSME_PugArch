@@ -29,11 +29,15 @@ interface BaseProps {
 
 interface NavProps extends BaseProps {
     to: string;
+    target?: string;
+    rel?: string;
     onClick?: never;
 }
 
 interface ClickProps extends BaseProps {
     to?: never;
+    target?: never;
+    rel?: never;
     onClick: () => void;
 }
 
@@ -44,7 +48,7 @@ const sizeClass = {
     md: 'h-7 px-2.5 text-[11px]'
 } as const;
 
-export function EntityIdLink({ label, id, size = 'md', className, showIcon = true, to, onClick }: EntityIdLinkProps) {
+export function EntityIdLink({ label, id, size = 'md', className, showIcon = true, to, target, rel, onClick }: EntityIdLinkProps) {
     const display = label || (id !== undefined ? `#${id}` : '—');
 
     const inner = (
@@ -62,7 +66,13 @@ export function EntityIdLink({ label, id, size = 'md', className, showIcon = tru
 
     if (to) {
         return (
-            <Link href={to} className={styles} onClick={e => e.stopPropagation()}>
+            <Link
+                href={to}
+                target={target}
+                rel={target === '_blank' ? (rel || 'noopener noreferrer') : rel}
+                className={styles}
+                onClick={e => e.stopPropagation()}
+            >
                 {inner}
             </Link>
         );

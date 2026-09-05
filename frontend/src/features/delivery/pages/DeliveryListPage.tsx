@@ -354,7 +354,7 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
         <>
           {/* KPI Cards Grid */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <KpiCard
+            {/* <KpiCard
               label="In Movement"
               value={counters.inMovement}
               subtext="Active consignments"
@@ -363,7 +363,7 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
               color="blue"
               active={['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'AT_HUB', 'PICKED_UP'].includes(statusFilter)}
               onClick={() => setStatusFilter(prev => prev === 'DISPATCHED' ? '' : 'DISPATCHED')}
-            />
+            /> */}
             <KpiCard
               label="Completed"
               value={counters.completed}

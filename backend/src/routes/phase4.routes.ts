@@ -7569,17 +7569,142 @@ router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(
 
 router.get('/invoices', authenticate, asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
+  const searchTerm = String(req.query.search || query.q || '').trim();
+  const statusParam = String(req.query.status || query.status || '').trim();
+  const paymentStatus = String(req.query.paymentStatus || '').trim();
+  const dateRange = String(req.query.dateRange || 'all').trim();
+  const amountRange = String(req.query.amountRange || 'all').trim();
+  const scope = String(req.query.scope || 'all').trim();
+  const sortBy = String(req.query.sortBy || 'createdAt').trim();
+  const sortOrder = String(req.query.sortOrder || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+
   const where: any = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
-  if (query.status) where.OR = [{ status: query.status }, { invoiceStatus: String(query.status).toUpperCase() }];
-  if (query.q) {
-    where.OR = [
-      ...(where.OR || []),
-      { invoiceNumber: { contains: query.q, mode: 'insensitive' } },
-      { purchaseOrder: { poNumber: { contains: query.q, mode: 'insensitive' } } },
-      { seller: { name: { contains: query.q, mode: 'insensitive' } } },
-      { buyer: { name: { contains: query.q, mode: 'insensitive' } } }
-    ];
+  const andConditions: any[] = [];
+
+  if (searchTerm) {
+    andConditions.push({
+      OR: [
+        { invoiceNumber: { contains: searchTerm, mode: 'insensitive' } },
+        { purchaseOrder: { poNumber: { contains: searchTerm, mode: 'insensitive' } } },
+        { purchaseOrder: { title: { contains: searchTerm, mode: 'insensitive' } } },
+        { seller: { name: { contains: searchTerm, mode: 'insensitive' } } },
+        { buyer: { name: { contains: searchTerm, mode: 'insensitive' } } }
+      ]
+    });
   }
+
+  if (statusParam) {
+    andConditions.push({
+      OR: [
+        { status: { equals: statusParam, mode: 'insensitive' } },
+        { invoiceStatus: { equals: statusParam.toUpperCase() as any } }
+      ]
+    });
+  }
+
+  const now = new Date();
+  if (paymentStatus === 'paid') {
+    andConditions.push({
+      OR: [
+        { status: { in: ['paid', 'PAID'], mode: 'insensitive' } },
+        { invoiceStatus: { equals: 'PAID' as any } }
+      ]
+    });
+  } else if (paymentStatus === 'pending') {
+    andConditions.push({
+      AND: [
+        { status: { in: ['draft', 'submitted', 'under_review', 'approved', 'payment_initiated'], mode: 'insensitive' } },
+        { invoiceStatus: { not: 'PAID' as any } }
+      ]
+    });
+  } else if (paymentStatus === 'overdue') {
+    const overdueThreshold = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
+    andConditions.push({
+      AND: [
+        { status: { notIn: ['paid', 'PAID', 'cancelled', 'rejected'], mode: 'insensitive' } },
+        { createdAt: { lt: overdueThreshold } }
+      ]
+    });
+  } else if (paymentStatus === 'due_soon') {
+    const dueSoonStart = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
+    const dueSoonEnd = new Date(now.getTime() - 38 * 24 * 60 * 60 * 1000);
+    andConditions.push({
+      AND: [
+        { status: { notIn: ['paid', 'PAID', 'cancelled', 'rejected'], mode: 'insensitive' } },
+        { createdAt: { gte: dueSoonStart, lte: dueSoonEnd } }
+      ]
+    });
+  }
+
+  if (scope === 'interstate') {
+    andConditions.push({ metadata: { path: ['interstate'], equals: true } });
+  } else if (scope === 'domestic') {
+    andConditions.push({ NOT: { metadata: { path: ['interstate'], equals: true } } });
+  }
+
+  if (dateRange === 'today') {
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    andConditions.push({ createdAt: { gte: startOfDay } });
+  } else if (dateRange === 'this_week') {
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), diff);
+    startOfWeek.setHours(0, 0, 0, 0);
+    andConditions.push({ createdAt: { gte: startOfWeek } });
+  } else if (dateRange === 'this_month') {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    andConditions.push({ createdAt: { gte: startOfMonth } });
+  } else if (dateRange === 'last_month') {
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    andConditions.push({ createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } });
+  } else if (dateRange === 'this_quarter') {
+    const quarterMonth = Math.floor(now.getMonth() / 3) * 3;
+    const startOfQuarter = new Date(now.getFullYear(), quarterMonth, 1);
+    andConditions.push({ createdAt: { gte: startOfQuarter } });
+  } else if (dateRange === 'this_fy') {
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const fyStartYear = currentMonth >= 3 ? currentYear : currentYear - 1;
+    const startOfFy = new Date(fyStartYear, 3, 1);
+    andConditions.push({ createdAt: { gte: startOfFy } });
+  }
+
+  if (amountRange === 'under_50k') {
+    andConditions.push({ amount: { lt: 50000 } });
+  } else if (amountRange === '50k_to_2L') {
+    andConditions.push({ amount: { gte: 50000, lte: 200000 } });
+  } else if (amountRange === '2L_to_10L') {
+    andConditions.push({ amount: { gte: 200000, lte: 1000000 } });
+  } else if (amountRange === 'above_10L') {
+    andConditions.push({ amount: { gt: 1000000 } });
+  }
+
+  if (andConditions.length > 0) {
+    where.AND = andConditions;
+  }
+
+  let orderBy: any = { createdAt: 'desc' };
+  if (sortBy === 'invoiceNumber') {
+    orderBy = { invoiceNumber: sortOrder };
+  } else if (sortBy === 'poNumber') {
+    orderBy = { purchaseOrder: { poNumber: sortOrder } };
+  } else if (sortBy === 'party') {
+    orderBy = req.user?.role === 'seller' ? { buyer: { name: sortOrder } } : { seller: { name: sortOrder } };
+  } else if (sortBy === 'taxableAmount') {
+    orderBy = { taxableAmount: sortOrder };
+  } else if (sortBy === 'totalTaxAmount') {
+    orderBy = { totalTaxAmount: sortOrder };
+  } else if (sortBy === 'tdsAmount') {
+    orderBy = { tdsAmount: sortOrder };
+  } else if (sortBy === 'totalAmount') {
+    orderBy = { amount: sortOrder };
+  } else if (sortBy === 'status') {
+    orderBy = { status: sortOrder };
+  } else if (sortBy === 'updatedAt') {
+    orderBy = { updatedAt: sortOrder };
+  }
+
   const window = listWindow(query);
   const [invoices, total] = await Promise.all([
     db.invoice.findMany({
@@ -7590,12 +7715,75 @@ router.get('/invoices', authenticate, asyncRoute(async (req, res) => {
         purchaseOrder: { select: { id: true, poNumber: true, title: true } },
         payments: { orderBy: { createdAt: 'desc' }, take: 3 }
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy,
       ...window
     }),
     db.invoice.count({ where })
   ]);
   ok(res, paged(invoices, total, query, 'invoices'));
+}));
+
+router.get('/invoices/summary', authenticate, asyncRoute(async (req, res) => {
+  const where: any = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
+
+  const invoices = await db.invoice.findMany({
+    where,
+    select: {
+      id: true,
+      amount: true,
+      status: true,
+      invoiceStatus: true,
+      taxableAmount: true,
+      totalTaxAmount: true,
+      tdsAmount: true,
+      createdAt: true
+    }
+  });
+
+  const now = new Date();
+  const overdueThreshold = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
+  const statusOf = (inv: any) => String(inv.invoiceStatus || inv.status || 'draft').toLowerCase();
+
+  let totalValue = 0;
+  let pendingCount = 0;
+  let approvedCount = 0;
+  let overdueCount = 0;
+  let totalTax = 0;
+  let totalTds = 0;
+
+  for (const inv of invoices) {
+    const st = statusOf(inv);
+    totalValue += Number(inv.amount || 0);
+    totalTax += Number(inv.totalTaxAmount || 0);
+    totalTds += Number(inv.tdsAmount || 0);
+
+    if (['draft', 'submitted', 'pending'].includes(st)) {
+      pendingCount += 1;
+    }
+    if (['approved', 'paid', 'payment_initiated'].includes(st)) {
+      approvedCount += 1;
+    }
+    const isClosed = ['paid', 'cancelled', 'rejected'].includes(st);
+    if (!isClosed && inv.createdAt && new Date(inv.createdAt) < overdueThreshold) {
+      overdueCount += 1;
+    }
+  }
+
+  const summary = {
+    totalValue: Math.round(totalValue * 100) / 100,
+    pendingCount,
+    approvedCount,
+    overdueCount,
+    totalTax: Math.round(totalTax * 100) / 100,
+    totalTds: Math.round(totalTds * 100) / 100,
+    totalCount: invoices.length
+  };
+
+  res.json(maskSensitive({
+    success: true,
+    data: summary,
+    ...summary
+  }));
 }));
 
 router.get('/invoices/:id', authenticate, asyncRoute(async (req, res) => {

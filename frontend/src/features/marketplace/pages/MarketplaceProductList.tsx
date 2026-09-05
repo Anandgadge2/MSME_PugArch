@@ -1360,16 +1360,18 @@ export default function MarketplaceProductList() {
                                                                 <div className="flex-1 inline-flex h-7 sm:h-8 items-center justify-between rounded-xl border border-[#0b2447]/30 bg-white text-[#0b2447] shadow-sm px-1">
                                                                     <button
                                                                         type="button"
+                                                                        aria-label="Decrease quantity"
                                                                         onClick={() => handleCartQuantityChange(item, cartQuantity - 1)}
-                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200"
+                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200 active:scale-95 transition cursor-pointer text-slate-700"
                                                                     >
                                                                         <Minus className="h-3 w-3" />
                                                                     </button>
                                                                     <span className="text-[10px] sm:text-xs font-black tabular-nums">{cartQuantity}</span>
                                                                     <button
                                                                         type="button"
+                                                                        aria-label="Increase quantity"
                                                                         onClick={() => handleCartQuantityChange(item, cartQuantity + 1)}
-                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200"
+                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200 active:scale-95 transition cursor-pointer text-slate-700"
                                                                     >
                                                                         <Plus className="h-3 w-3" />
                                                                     </button>

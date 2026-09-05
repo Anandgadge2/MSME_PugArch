@@ -196,8 +196,13 @@ export default function BidResultsPage() {
       // If data has participations but no results, map participations to results
       if (data && Array.isArray(data.participations) && data.participations.length > 0 && (!Array.isArray(data.results) || data.results.length === 0)) {
         data.results = data.participations.map((r: any, idx: number) => {
-          const respData = typeof r.responseData === 'string' ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })() : (r.responseData || {});
-          const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || respData.offeredPrice || respData.quotedAmount || respData.totalAmount || 0);
+          const ackData = typeof r.acknowledgement === 'string'
+            ? (() => { try { return JSON.parse(r.acknowledgement); } catch { return {}; } })()
+            : (r.acknowledgement && typeof r.acknowledgement === 'object' ? r.acknowledgement : {});
+          const respData = typeof r.responseData === 'string'
+            ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })()
+            : (r.responseData && typeof r.responseData === 'object' ? r.responseData : {});
+          const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || ackData.quotedAmount || ackData.totalAmount || respData.offeredPrice || respData.quotedAmount || respData.totalAmount || 0);
           const sellerOrg = r.sellerOrgName
             || r.sellerOrganization?.organizationName
             || r.seller?.organization?.organizationName
@@ -210,16 +215,28 @@ export default function BidResultsPage() {
             || (r.sellerUserId || r.sellerId ? `Supplier #${r.sellerUserId || r.sellerId}` : `Supplier ${idx + 1}`);
           const contactPerson = r.contactPerson || r.sellerName || r.sellerUser?.name || r.seller?.name || 'Representative';
 
-          const lineItems = (Array.isArray(respData.lineItems) && respData.lineItems.length > 0)
+          const lineItems = (Array.isArray(r.lineItems) && r.lineItems.length > 0)
+            ? r.lineItems
+            : (Array.isArray(ackData.lineItems) && ackData.lineItems.length > 0)
+            ? ackData.lineItems
+            : (Array.isArray(ackData.lineQuotes) && ackData.lineQuotes.length > 0)
+            ? ackData.lineQuotes
+            : (Array.isArray(ackData.items) && ackData.items.length > 0)
+            ? ackData.items
+            : (Array.isArray(respData.lineItems) && respData.lineItems.length > 0)
             ? respData.lineItems
             : (Array.isArray(respData.lineQuotes) && respData.lineQuotes.length > 0)
             ? respData.lineQuotes
-            : (Array.isArray(r.lineItems) ? r.lineItems : []);
+            : [];
 
           const docs = normalizeQuotationDocuments({
             ...r,
+            acknowledgement: ackData,
             responseData: respData,
           });
+
+          const totalQty = lineItems.reduce((acc: number, item: any) => acc + (Number(item.quantity) || 0), 0);
+          const offeredQuantity = r.offeredQuantity || ackData.offeredQuantity || respData.offeredQuantity || (totalQty > 0 ? totalQty : (r.quantity || 1));
 
           return {
             id: r.id || `res-${idx}`,
@@ -231,19 +248,21 @@ export default function BidResultsPage() {
             submittedAt: r.createdAt || r.submittedAt,
             sellerType: 'Verified Seller',
             offeredItem: r.offeredItemDescription || r.message || respData.message || respData.coverNote || r.itemName || 'Procurement requirement',
-            makeBrand: r.makeBrand || respData.makeBrand || 'Standard',
-            model: r.model || respData.model || 'Standard',
+            makeBrand: r.makeBrand || ackData.makeBrand || respData.makeBrand || 'Standard',
+            model: r.model || ackData.model || respData.model || 'Standard',
             technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' || r.technicalStatus === 'QUALIFIED' ? 'Qualified' : (r.status === 'REJECTED' || r.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : 'Pending'),
             totalPrice: quotedAmt,
             quotedAmount: quotedAmt,
-            gstPercentage: Number(r.gstPercentage || respData.gstPercentage || 0),
+            gstPercentage: Number(r.gstPercentage || ackData.gstPercentage || respData.gstPercentage || 0),
             totalAmount: quotedAmt,
-            offeredQuantity: r.offeredQuantity || respData.offeredQuantity || r.quantity || 1,
-            deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
+            offeredQuantity,
+            deliveryTimeline: r.deliveryTimeline || ackData.deliveryTimeline || respData.deliveryTimeline || 'Standard',
             documents: docs,
             lineItems: lineItems,
+            acknowledgement: ackData,
             message: r.message || respData.message || respData.coverNote || r.offeredItemDescription || '',
-            terms: r.terms || respData.terms || '',
+            terms: r.terms || ackData.terms || respData.terms || '',
+            attachmentUrl: r.attachmentUrl || ackData.attachmentUrl || respData.attachmentUrl || '',
             responseData: respData,
             rawParticipation: r,
             finalRank: `L${idx + 1}`,
@@ -254,11 +273,15 @@ export default function BidResultsPage() {
               email: r.sellerEmail || r.sellerUser?.email || r.seller?.email || '',
               mobile: r.sellerMobile || r.sellerUser?.mobile || r.seller?.mobile || '',
               submittedAt: r.createdAt || r.submittedAt,
-              deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
-              complianceRemarks: r.complianceRemarks || 'Compliant',
+              deliveryTimeline: r.deliveryTimeline || ackData.deliveryTimeline || respData.deliveryTimeline || 'Standard',
+              complianceRemarks: r.complianceRemarks || ackData.complianceRemarks || 'Compliant',
               rfqNotes: r.message || respData.message || r.offeredItemDescription || '',
+              terms: r.terms || ackData.terms || respData.terms || '',
+              message: r.message || respData.message || respData.coverNote || r.offeredItemDescription || '',
+              attachmentUrl: r.attachmentUrl || ackData.attachmentUrl || respData.attachmentUrl || '',
               quotedAmount: quotedAmt,
               totalAmount: quotedAmt,
+              offeredQuantity,
               lineItems: lineItems,
               documents: docs,
             }
@@ -323,6 +346,7 @@ export default function BidResultsPage() {
                   lineItems: lineItems,
                   message: r.message || respData.message || respData.coverNote || r.offeredItemDescription || '',
                   terms: r.terms || respData.terms || '',
+                  attachmentUrl: r.attachmentUrl || respData.attachmentUrl || '',
                   responseData: respData,
                   rawParticipation: r,
                   finalRank: `L${idx + 1}`,
@@ -336,6 +360,9 @@ export default function BidResultsPage() {
                     deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
                     complianceRemarks: r.complianceRemarks || 'Compliant',
                     rfqNotes: r.message || respData.message || '',
+                    terms: r.terms || respData.terms || '',
+                    message: r.message || respData.message || respData.coverNote || r.offeredItemDescription || '',
+                    attachmentUrl: r.attachmentUrl || respData.attachmentUrl || '',
                     quotedAmount: quotedAmt,
                     totalAmount: quotedAmt,
                     lineItems: lineItems,

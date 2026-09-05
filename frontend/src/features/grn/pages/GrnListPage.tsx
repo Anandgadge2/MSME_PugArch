@@ -278,7 +278,7 @@ export default function GrnListPage() {
     return (
         <div className="space-y-6">
             {/* KPI Cards Grid */}
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3">
                 <KpiCard
                     label="Total"
                     value={counts.ALL}
@@ -297,7 +297,7 @@ export default function GrnListPage() {
                     onClick={() => setFilter('DRAFT')}
                     color="slate"
                 />
-                <KpiCard
+                {/* <KpiCard
                     label="Submitted"
                     value={counts.SUBMITTED}
                     subtext="Submitted GRNs"
@@ -305,7 +305,7 @@ export default function GrnListPage() {
                     active={filter === 'SUBMITTED'}
                     onClick={() => setFilter('SUBMITTED')}
                     color="amber"
-                />
+                /> */}
                 <KpiCard
                     label="Approved"
                     value={counts.APPROVED + counts.PARTIAL}
@@ -315,7 +315,7 @@ export default function GrnListPage() {
                     onClick={() => setFilter('APPROVED')}
                     color="green"
                 />
-                <KpiCard
+                {/* <KpiCard
                     label="Rejected"
                     value={counts.REJECTED}
                     subtext="Rejected GRNs"
@@ -323,7 +323,7 @@ export default function GrnListPage() {
                     active={filter === 'REJECTED'}
                     onClick={() => setFilter('REJECTED')}
                     color="red"
-                />
+                /> */}
             </div>
 
             {error && <InlineError message={(error as Error).message} onRetry={() => refetch()} />}
@@ -353,7 +353,7 @@ export default function GrnListPage() {
                                     <option value="DRAFT">Draft</option>
                                     <option value="SUBMITTED">Submitted</option>
                                     <option value="APPROVED">Approved</option>
-                                    <option value="PARTIAL">Partial</option>
+                                    {/* <option value="PARTIAL">Partial</option> */}
                                     <option value="REJECTED">Rejected</option>
                                 </select>
                             </div>

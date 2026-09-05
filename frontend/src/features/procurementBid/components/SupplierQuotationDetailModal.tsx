@@ -20,6 +20,7 @@ import {
   FileCheck2,
   Quote,
   Trophy,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
@@ -98,13 +99,32 @@ export function normalizeQuotationDocuments(source: any): NormalizedQuotationDoc
     ...(Array.isArray(source.documents) ? source.documents : []),
     ...(Array.isArray(source.details?.documents) ? source.details.documents : []),
     ...(Array.isArray(source.rawParticipation?.documents) ? source.rawParticipation.documents : []),
-    ...(source.attachmentUrl ? [{
-      name: 'Supporting Document',
-      fileName: source.attachmentFileName || 'Supporting Document',
-      fileUrl: source.attachmentUrl,
-      fileAssetId: source.fileAssetId,
-    }] : []),
+    ...(Array.isArray(source.rawParticipation?.responseData?.documents) ? source.rawParticipation.responseData.documents : []),
   ];
+
+  const candidateUrls: any[] = [
+    source.attachmentUrl,
+    source.responseData?.attachmentUrl,
+    source.details?.attachmentUrl,
+    source.rawParticipation?.attachmentUrl,
+    source.rawParticipation?.responseData?.attachmentUrl,
+    source.attachment,
+    source.details?.attachment,
+    source.fileUrl,
+    source.details?.fileUrl,
+  ].filter(Boolean);
+
+  for (const urlItem of candidateUrls) {
+    const urlStr = typeof urlItem === 'string' ? urlItem : (urlItem?.url || urlItem?.fileUrl);
+    if (urlStr) {
+      rawDocs.push({
+        name: typeof urlItem === 'object' && urlItem.name ? urlItem.name : 'Supporting Document',
+        fileName: typeof urlItem === 'object' && urlItem.fileName ? urlItem.fileName : (source.attachmentFileName || source.details?.attachmentFileName || urlStr.split('/').pop() || 'Supporting Document'),
+        fileUrl: urlStr,
+        fileAssetId: typeof urlItem === 'object' && urlItem.fileAssetId ? urlItem.fileAssetId : (source.fileAssetId || source.details?.fileAssetId),
+      });
+    }
+  }
 
   const docMap = new Map<string, NormalizedQuotationDocument>();
 
@@ -112,7 +132,8 @@ export function normalizeQuotationDocuments(source: any): NormalizedQuotationDoc
     if (!item) continue;
 
     const fileUrl = item.fileUrl || item.url || null;
-    const fileAssetId = item.fileAssetId || (typeof item.id === 'number' ? item.id : null);
+    const urlMatch = String(fileUrl || '').match(/\/api\/(?:public\/)?files\/(\d+)/);
+    const fileAssetId = item.fileAssetId || (typeof item.id === 'number' ? item.id : (urlMatch ? Number(urlMatch[1]) : null));
     const rawDiskFile = String(item.fileName || item.originalName || item.file || '').trim();
     const rawName = String(item.documentName || item.name || item.title || '').trim();
 
@@ -276,71 +297,136 @@ export function SupplierQuotationDetailView({
   const termsAndConditions =
     result.terms ||
     result.details?.terms ||
-    result.details?.rfqNotes ||
+    result.responseData?.terms ||
+    result.rawParticipation?.terms ||
+    result.rawParticipation?.responseData?.terms ||
     result.details?.paymentTerms ||
+    result.paymentTerms ||
     result.details?.complianceRemarks ||
+    result.complianceRemarks ||
     'Standard procurement terms and conditions apply.';
 
   const coverNoteMessage =
     result.message ||
+    result.details?.message ||
+    result.responseData?.message ||
+    result.rawParticipation?.message ||
+    result.rawParticipation?.responseData?.message ||
     result.details?.rfqNotes ||
     result.offeredItem ||
     result.details?.offeredItemDescription ||
     'No cover note provided by supplier.';
 
-  const makeBrand = result.makeBrand || result.details?.makeBrand || 'As quoted';
-  const model = result.model || result.details?.model || 'Standard';
+  const makeBrand = result.makeBrand || result.details?.makeBrand || result.responseData?.makeBrand || 'As quoted';
+  const model = result.model || result.details?.model || result.responseData?.model || 'Standard';
 
-  // Extract Line Items
-  const rawLineItems: any[] =
-    Array.isArray(result.lineItems) && result.lineItems.length > 0
-      ? result.lineItems
-      : Array.isArray(result.responseData?.lineItems) && result.responseData.lineItems.length > 0
-      ? result.responseData.lineItems
-      : Array.isArray(result.rawParticipation?.acknowledgement?.lineItems) &&
-        result.rawParticipation.acknowledgement.lineItems.length > 0
-      ? result.rawParticipation.acknowledgement.lineItems
-      : Array.isArray(result.rawParticipation?.lineItems) && result.rawParticipation.lineItems.length > 0
-      ? result.rawParticipation.lineItems
-      : Array.isArray(bid?.items) && bid.items.length > 0
-      ? bid.items.map((item: any) => {
-          const qty = Number(item.quantity || 1);
-          const uPrice =
-            item.estimatedUnitPrice ||
-            item.price ||
-            (totalEvaluatedPrice > 0 ? totalEvaluatedPrice / qty : 0);
-          return {
-            itemName: item.itemName || item.name || 'Requirement Item',
-            description: item.description || '',
-            quantity: qty,
-            unitOfMeasure: item.unitOfMeasure || item.unit || 'Nos',
-            unitPrice: uPrice,
-            gstPercent: gstPercentage,
-            makeBrand: makeBrand,
-            lineTotal: totalEvaluatedPrice || uPrice * qty,
-          };
-        })
-      : [
-          {
-            itemName:
-              result.offeredItem ||
-              result.details?.offeredItemDescription ||
-              bid?.title ||
-              'Procurement Item Quotation',
-            description:
-              result.offeredItem ||
-              'Supply of requested procurement items according to specifications',
-            quantity: Number(offeredQty) || 1,
-            unitOfMeasure: 'Nos',
-            unitPrice:
-              quotedBaseAmount > 0
-                ? Math.round((quotedBaseAmount / (Number(offeredQty) || 1)) * 100) / 100
-                : totalEvaluatedPrice,
-            gstPercent: gstPercentage,
-            makeBrand: makeBrand,
-            lineTotal: totalEvaluatedPrice,
-          },
-        ];
+  // Extract Line Items from all authentic quotation sources
+  const parseJsonSafe = (val: any) => {
+    if (typeof val === 'string') {
+      try { return JSON.parse(val); } catch { return {}; }
+    }
+    return (val && typeof val === 'object') ? val : {};
+  };
+
+  const parsedAck = parseJsonSafe(result.acknowledgement || result.rawParticipation?.acknowledgement);
+  const parsedResp = parseJsonSafe(result.responseData || result.rawParticipation?.responseData);
+  const parsedDesc = parseJsonSafe(result.offeredItemDescription || result.details?.offeredItemDescription);
+
+  const rawCandidateItems = [
+    result.lineItems,
+    result.details?.lineItems,
+    parsedAck.lineItems,
+    parsedAck.lineQuotes,
+    parsedAck.items,
+    parsedResp.lineItems,
+    parsedResp.lineQuotes,
+    parsedResp.items,
+    parsedDesc.lineItems,
+    parsedDesc.lineQuotes,
+    result.rawParticipation?.lineItems,
+    result.rawParticipation?.acknowledgement?.lineItems,
+    result.rawParticipation?.acknowledgement?.lineQuotes,
+    result.rawParticipation?.responseData?.lineItems,
+    result.rawParticipation?.responseData?.lineQuotes,
+  ];
+
+  let rawLineItems: any[] = [];
+  for (const cand of rawCandidateItems) {
+    if (Array.isArray(cand) && cand.length > rawLineItems.length) {
+      rawLineItems = cand;
+    }
+  }
+
+  // Gather tender items from bid for authentic item-wise mapping
+  const tenderItems: any[] = [
+    ...(Array.isArray(bid?.items) && bid.items.length ? bid.items : []),
+    ...(Array.isArray(bid?.technicalPacket?.items) && bid.technicalPacket.items.length ? bid.technicalPacket.items : []),
+    ...(Array.isArray(bid?.technicalPacket?.boq) && bid.technicalPacket.boq.length ? bid.technicalPacket.boq : [])
+  ];
+  const uniqueTenderItems: any[] = [];
+  const seenTenderKeys = new Set<string>();
+  for (const ti of tenderItems) {
+    const key = `${ti.id || ''}-${ti.itemName || ti.name || ''}`;
+    if (!seenTenderKeys.has(key)) {
+      seenTenderKeys.add(key);
+      uniqueTenderItems.push(ti);
+    }
+  }
+
+  // If rawLineItems is empty or has only 1 summary row while tender specifies multiple items:
+  if (rawLineItems.length <= 1 && uniqueTenderItems.length > 1) {
+    const tenderTotalQty = uniqueTenderItems.reduce((sum: number, it: any) => sum + Number(it.quantity || 1), 0) || 1;
+    const unitRateFromTotal = quotedBaseAmount > 0 ? (quotedBaseAmount / tenderTotalQty) : (totalEvaluatedPrice / tenderTotalQty);
+
+    rawLineItems = uniqueTenderItems.map((item: any) => {
+      const qty = Number(item.quantity || 1);
+      const uPrice = Number(item.unitPrice || item.unitRate || rawLineItems[0]?.unitPrice || rawLineItems[0]?.unitRate || unitRateFromTotal || 15);
+      const itemGst = Number(item.gstPercent ?? item.gstPercentage ?? gstPercentage ?? 18);
+      const lineTot = Math.round(uPrice * qty * (1 + itemGst / 100));
+      return {
+        itemName: item.itemName || item.name || 'Tender Item',
+        description: item.description || item.technicalSpecification || '',
+        technicalSpecs: item.technicalSpecification || item.technicalSpecs || item.specificationsText || 'As per tender requirements',
+        quantity: qty,
+        unitOfMeasure: item.unitOfMeasure || item.unit || 'Nos.',
+        unitPrice: uPrice,
+        unitRate: uPrice,
+        gstPercent: itemGst,
+        makeBrand: item.brand || item.makeBrand || item.brandPreference || makeBrand || 'Standard',
+        model: item.model || model || 'Standard',
+        hsn: item.hsn || item.hsnSac || 'HSN-SAC',
+        lineTotal: lineTot,
+        totalAmount: lineTot,
+      };
+    });
+  }
+
+  // Fallback for single item procurements
+  if (rawLineItems.length === 0) {
+    rawLineItems = [
+      {
+        itemName:
+          result.offeredItem ||
+          result.details?.offeredItemDescription ||
+          bid?.title ||
+          'Procurement Item Quotation',
+        description:
+          result.offeredItem ||
+          'Supply of requested procurement items according to specifications',
+        quantity: Number(offeredQty) || 1,
+        unitOfMeasure: 'Nos',
+        unitPrice:
+          quotedBaseAmount > 0
+            ? Math.round((quotedBaseAmount / (Number(offeredQty) || 1)) * 100) / 100
+            : totalEvaluatedPrice,
+        gstPercent: gstPercentage,
+        makeBrand: makeBrand,
+        lineTotal: totalEvaluatedPrice,
+      },
+    ];
+  }
+
+  const totalCommittedUnits = rawLineItems.reduce((acc: number, item: any) => acc + (Number(item.quantity) || 0), 0) || Number(offeredQty) || 1;
 
   // Extract & deduplicate authentic quotation documents
   const uniqueDocs = normalizeQuotationDocuments(result);
@@ -355,9 +441,11 @@ export function SupplierQuotationDetailView({
   ];
 
   const [previewDocument, setPreviewDocument] = React.useState<DocumentPreview | null>(null);
+  const [previewLoadingId, setPreviewLoadingId] = React.useState<string | number | null>(null);
 
   const handlePreviewDoc = async (doc: any) => {
     try {
+      setPreviewLoadingId(doc.id);
       if (doc.fileAssetId || doc.fileUrl || doc.url) {
         try {
           const prev = await getFileAssetPreview(
@@ -391,6 +479,8 @@ export function SupplierQuotationDetailView({
       }
     } catch (err: any) {
       toast.error(err instanceof Error ? err.message : 'Unable to preview file');
+    } finally {
+      setPreviewLoadingId(null);
     }
   };
 
@@ -582,7 +672,7 @@ export function SupplierQuotationDetailView({
               Supply Commitment
             </span>
             <p className="text-xs font-black text-slate-900 mt-0.5 leading-tight truncate">
-              {offeredQty} Units Committed
+              {totalCommittedUnits} Units Committed
             </p>
             <p className="text-[10px] text-emerald-700 font-bold leading-none mt-0.5 truncate">
               Full Supply (100% Covered)
@@ -761,9 +851,9 @@ export function SupplierQuotationDetailView({
       {/* ── 5. Balanced Operational 2-Column Grid (Zero Wasted Space) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         
-        {/* Left: Supplier Cover Note & Quoted Clauses */}
-        <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-xs space-y-2.5 flex flex-col justify-between">
-          <div className="space-y-2">
+        {/* Left: Supplier Cover Note, Terms & Conditions, and Supporting Documents */}
+        <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-xs space-y-3 flex flex-col justify-between">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between pb-1.5 border-b border-slate-150">
               <div className="flex items-center gap-1.5">
                 <FileText className="h-3.5 w-3.5 text-indigo-700" />
@@ -776,17 +866,91 @@ export function SupplierQuotationDetailView({
               </span>
             </div>
 
-            {/* Compact Quote Statement Box */}
+            {/* Compact Quote Statement Box (Screenshot 1: Quotation Message / Cover Note) */}
             <div className="rounded-lg bg-slate-50/80 border border-slate-200/70 p-2.5 relative">
               <Quote className="h-3.5 w-3.5 text-slate-300 absolute top-2 left-2 -scale-x-100" />
               <p className="text-xs font-medium text-slate-800 leading-relaxed pl-5 whitespace-pre-wrap">
                 {coverNoteMessage}
               </p>
             </div>
+
+            {/* Terms & Conditions (Screenshot 2: Terms & Conditions) */}
+            <div className="rounded-lg bg-slate-50/80 border border-slate-200/70 p-2.5 space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <FileText className="h-3 w-3 text-slate-600" />
+                  <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
+                    Terms & Conditions
+                  </span>
+                </div>
+                {termsAndConditions && termsAndConditions !== 'Standard procurement terms and conditions apply.' && (
+                  <span className="text-[8px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.2 rounded">
+                    Seller Specified
+                  </span>
+                )}
+              </div>
+              <p className="text-xs font-medium text-slate-800 leading-relaxed pl-4.5 whitespace-pre-wrap">
+                {termsAndConditions || 'Standard procurement terms, warranty and payment terms apply.'}
+              </p>
+            </div>
+
+            {/* Supporting Documents (Screenshot 1: Upload Supporting Documents) */}
+            <div className="rounded-lg bg-slate-50/80 border border-slate-200/70 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <FileCheck2 className="h-3 w-3 text-slate-600" />
+                  <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
+                    Supporting Documents
+                  </span>
+                </div>
+                <span className="text-[9px] font-bold text-slate-500">
+                  {uniqueDocs.length > 0 ? `${uniqueDocs.length} Attached` : 'No Attachment'}
+                </span>
+              </div>
+              {uniqueDocs.length > 0 ? (
+                <div className="space-y-1.5">
+                  {uniqueDocs.map((doc, idx) => (
+                    <div
+                      key={doc.id || idx}
+                      className="rounded-lg border border-slate-200 bg-white p-2 flex items-center justify-between gap-2 shadow-2xs hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="h-6 w-6 rounded bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0 border border-indigo-100">
+                          <FileText className="h-3 w-3" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-900 truncate leading-tight">
+                            {doc.name}
+                          </p>
+                          {doc.fileName && doc.fileName !== doc.name && (
+                            <p className="text-[9px] text-slate-400 font-mono truncate leading-tight mt-0.5">
+                              {doc.fileName}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handlePreviewDoc(doc)}
+                        className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100 transition-colors shrink-0 cursor-pointer"
+                        title="Preview Document"
+                      >
+                        <Eye className="h-3 w-3" />
+                        <span>Preview</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex min-h-10 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white/60 p-2 text-center">
+                  <span className="text-[11px] font-semibold text-slate-400">No supporting document attached</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 4 Compact Parameter Chips */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-slate-150 text-[11px]">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2 border-t border-slate-150 text-[11px]">
             <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
               <span className="text-[9px] font-bold text-slate-400 uppercase block">Brand</span>
               <span className="font-bold text-slate-900 truncate block">{makeBrand}</span>
@@ -796,12 +960,12 @@ export function SupplierQuotationDetailView({
               <span className="font-bold text-slate-900 truncate block">{model}</span>
             </div>
             <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
-              <span className="text-[9px] font-bold text-slate-400 uppercase block">Validity</span>
-              <span className="font-bold text-slate-900 truncate block">30 Days</span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase block">Delivery SLA</span>
+              <span className="font-bold text-slate-900 truncate block">{deliveryTimeline}</span>
             </div>
             <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
-              <span className="text-[9px] font-bold text-slate-400 uppercase block">Payment</span>
-              <span className="font-bold text-slate-900 truncate block">On Inspection</span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase block">Validity</span>
+              <span className="font-bold text-slate-900 truncate block">{result.validity || result.details?.validity || '30 Days'}</span>
             </div>
           </div>
         </div>
@@ -875,11 +1039,21 @@ export function SupplierQuotationDetailView({
                       <button
                         type="button"
                         onClick={() => handlePreviewDoc(doc)}
-                        className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50 hover:text-blue-900 transition-colors shadow-2xs shrink-0 cursor-pointer"
+                        disabled={previewLoadingId === doc.id}
+                        className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50 hover:text-blue-900 transition-colors shadow-2xs shrink-0 cursor-pointer disabled:opacity-60"
                         title="Preview Document"
                       >
-                        <Eye className="h-3 w-3 text-blue-700" />
-                        <span>Preview</span>
+                        {previewLoadingId === doc.id ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin text-blue-700" />
+                            <span>Loading...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-3 w-3 text-blue-700" />
+                            <span>Preview</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>

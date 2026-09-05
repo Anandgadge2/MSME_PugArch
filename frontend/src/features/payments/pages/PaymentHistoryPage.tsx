@@ -231,7 +231,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
 
       {/* KPI Cards Grid */}
       {typeof window !== 'undefined' && window.location.pathname.includes('/transactions') ? (
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
           <KpiCard
             label="Total Transactions"
             value={total || payments.length}
@@ -261,13 +261,13 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
             icon={CheckCircle2}
             color="purple"
           />
-          <KpiCard
+          {/* <KpiCard
             label="Refunded"
             value={paymentSummary.refunded}
             subtext="Refunded transactions"
             icon={RotateCcw}
             color="amber"
-          />
+          /> */}
           <KpiCard
             label="Failed"
             value={paymentSummary.failed}

@@ -8,6 +8,7 @@
 * If cart is in another state (submitted/approved/rejected), shows status with timeline.
 */
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Clock, History, Minus, Plus, RefreshCw, Send, ShoppingCart, Store, Trash2, X, XCircle, ArrowUpDown, ArrowUp, ArrowDown, FileText } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
@@ -262,13 +263,16 @@ export default function CartPage() {
         });
     };
 
-    const handleUpdate = async (id: number, qty: number) => {
+    const handleUpdate = (id: number, qty: number) => {
         if (qty < 1) return;
-        await runWithToast(() => updateMut.mutateAsync({ id, quantity: qty }), {
-            loading: 'Updating...',
-            success: 'Quantity updated',
-            error: 'Failed to update'
-        });
+        updateMut.mutate(
+            { id, quantity: qty },
+            {
+                onError: (err: any) => {
+                    toast.error(err?.message || 'Failed to update quantity');
+                }
+            }
+        );
     };
 
     if (cartQuery.isLoading) return <LoadingState label="Loading cart..." />;
@@ -504,21 +508,58 @@ export default function CartPage() {
                                                 </td>
                                                 <td className="px-3 py-2.5 font-mono text-[10px] font-bold text-slate-400">{String(idx + 1).padStart(2, '0')}</td>
                                                 <td className="px-3 py-2.5">
-                                                    <div className="flex flex-col gap-0.5">
-                                                        <p className="text-xs font-bold text-[#12335f] break-words leading-tight">{item.itemName}</p>
-                                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                                            <EntityIdLink
-                                                                label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId}`}
-                                                                id={item.productId || item.serviceId || 0}
-                                                                size="sm"
-                                                                onClick={() => { }}
-                                                            />
-                                                            <span className="text-[9px] font-medium text-slate-500">{item.unitOfMeasure}</span>
-                                                        </div>
-                                                    </div>
+                                                    {(() => {
+                                                        const itemUrl = item.productId
+                                                            ? `/marketplace/products/${item.productId}`
+                                                            : item.serviceId
+                                                                ? `/marketplace/services/${item.serviceId}`
+                                                                : null;
+                                                        return (
+                                                            <div className="flex flex-col gap-0.5">
+                                                                {itemUrl ? (
+                                                                    <Link
+                                                                        href={itemUrl}
+                                                                        className="text-xs font-bold text-[#12335f] break-words leading-tight hover:underline hover:text-blue-700 transition-colors"
+                                                                    >
+                                                                        {item.itemName}
+                                                                    </Link>
+                                                                ) : (
+                                                                    <p className="text-xs font-bold text-[#12335f] break-words leading-tight">{item.itemName}</p>
+                                                                )}
+                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                    {itemUrl ? (
+                                                                        <EntityIdLink
+                                                                            label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId}`}
+                                                                            id={item.productId || item.serviceId || 0}
+                                                                            size="sm"
+                                                                            to={itemUrl}
+                                                                            target="_blank"
+                                                                        />
+                                                                    ) : (
+                                                                        <EntityIdLink
+                                                                            label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId}`}
+                                                                            id={item.productId || item.serviceId || 0}
+                                                                            size="sm"
+                                                                            onClick={() => toast.info('Item details are not available')}
+                                                                        />
+                                                                    )}
+                                                                    <span className="text-[9px] font-medium text-slate-500">{item.unitOfMeasure}</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </td>
                                                 <td className="px-3 py-2.5">
-                                                    <p className="text-[11px] font-bold text-slate-900 break-words leading-tight">{item.seller?.name || `Seller #${item.sellerId}`}</p>
+                                                    {item.sellerId ? (
+                                                        <Link
+                                                            href={`/sellers/${item.sellerId}`}
+                                                            className="text-[11px] font-bold text-slate-900 break-words leading-tight hover:underline hover:text-blue-700 transition-colors"
+                                                        >
+                                                            {item.seller?.name || `Seller #${item.sellerId}`}
+                                                        </Link>
+                                                    ) : (
+                                                        <p className="text-[11px] font-bold text-slate-900 break-words leading-tight">{item.seller?.name || `Seller #${item.sellerId}`}</p>
+                                                    )}
                                                     {item.seller?.email && <p className="text-[9px] font-medium text-slate-500 break-all mt-0.5">{item.seller.email}</p>}
                                                 </td>
                                                 <td className="px-3 py-2.5 text-right text-[11px] font-bold text-slate-700 whitespace-nowrap">{formatCurrency(item.unitPrice)}</td>

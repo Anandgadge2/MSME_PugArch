@@ -877,13 +877,12 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
   const rawTotal = p.totalAmount ?? p.quotedAmount ?? p.responseData?.totalAmount ?? p.responseData?.quotedAmount ?? p.responseData?.totalPrice;
 
   // Merge all possible technical data sources in priority order:
-  // stored DB columns > responseData > acknowledgement (may hold pre-submit technical data)
   const ackData = (p.acknowledgement && typeof p.acknowledgement === 'object' && !Array.isArray(p.acknowledgement))
     ? (p.acknowledgement as Record<string, any>)
-    : {};
+    : (typeof p.acknowledgement === 'string' ? (() => { try { return JSON.parse(p.acknowledgement); } catch { return {}; } })() : {});
   const respData = (p.responseData && typeof p.responseData === 'object' && !Array.isArray(p.responseData))
     ? (p.responseData as Record<string, any>)
-    : {};
+    : (typeof p.responseData === 'string' ? (() => { try { return JSON.parse(p.responseData); } catch { return {}; } })() : {});
 
   // Parse offeredItemDescription if it's a JSON string
   let descData: Record<string, any> = {};
@@ -895,7 +894,19 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
 
   const first = (...vals: any[]) => vals.find(v => v !== undefined && v !== null && String(v).trim() !== '');
 
-  const lineItemsArr = p.lineItems || respData.lineItems || ackData.lineItems || descData.lineItems || [];
+  const lineItemsArr = (Array.isArray(p.lineItems) && p.lineItems.length > 0)
+    ? p.lineItems
+    : (Array.isArray(ackData.lineItems) && ackData.lineItems.length > 0)
+    ? ackData.lineItems
+    : (Array.isArray(ackData.lineQuotes) && ackData.lineQuotes.length > 0)
+    ? ackData.lineQuotes
+    : (Array.isArray(respData.lineItems) && respData.lineItems.length > 0)
+    ? respData.lineItems
+    : (Array.isArray(respData.lineQuotes) && respData.lineQuotes.length > 0)
+    ? respData.lineQuotes
+    : (Array.isArray(descData.lineItems) && descData.lineItems.length > 0)
+    ? descData.lineItems
+    : [];
   const firstItem = lineItemsArr.length ? lineItemsArr[0] : {};
   const techOffer = descData.technicalOffer || respData.technicalOffer || ackData.technicalOffer || {};
 

@@ -135,7 +135,8 @@ const cartIncludes = {
 
 // ─── GET /api/cart — my org's active cart ────────────────────────────────────
 
-router.get('/cart', authenticate, requirePermission('cart.view', orgScope), shortCache(10), asyncRoute(async (req, res) => {
+router.get('/cart', authenticate, requirePermission('cart.view', orgScope), asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     ensureOrg(req);
     const cart = await getOrCreateActiveCart(orgId(req), userId(req));
     ok(res, cart);
@@ -319,12 +320,17 @@ router.put(
             throw new ApiError(409, 'Cart is locked', 'CART_LOCKED');
         }
 
-        const updated = await prisma.cartItem.update({
+        await prisma.cartItem.update({
             where: { id },
             data: { quantity: body.quantity, technicalApproved: null, technicalNote: null }
         });
 
-        ok(res, updated);
+        const refreshed = await prisma.cart.findUnique({
+            where: { id: item.cartId },
+            include: cartIncludes
+        });
+
+        ok(res, refreshed);
     })
 );
 
@@ -364,7 +370,12 @@ router.delete(
             metadata: { cartId: item.cartId }
         });
 
-        ok(res, { success: true });
+        const refreshed = await prisma.cart.findUnique({
+            where: { id: item.cartId },
+            include: cartIncludes
+        });
+
+        ok(res, refreshed || { success: true });
     })
 );
 

@@ -97,10 +97,13 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
       const body = await res.json().catch(() => null);
       const data = unwrapApiData<any>(body);
       if (data?.signedUrl) {
+        const resolvedUrl = data.signedUrl.startsWith('http://') || data.signedUrl.startsWith('https://') || data.signedUrl.startsWith('data:') || data.signedUrl.startsWith('blob:')
+          ? data.signedUrl
+          : getAbsoluteApiUrl(data.signedUrl);
         return {
           label,
-          url: data.signedUrl,
-          mode: getDocumentPreviewMode(data.signedUrl, data.file?.mimeType || fileAsset?.mimeType || '', fileExt)
+          url: resolvedUrl,
+          mode: getDocumentPreviewMode(resolvedUrl, data.file?.mimeType || fileAsset?.mimeType || '', fileExt)
         };
       }
     }
@@ -201,10 +204,13 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
         const body = await res.json().catch(() => null);
         const data = unwrapApiData<any>(body);
         if (data?.signedUrl) {
+          const resolvedSignedUrl = data.signedUrl.startsWith('http://') || data.signedUrl.startsWith('https://') || data.signedUrl.startsWith('data:') || data.signedUrl.startsWith('blob:')
+            ? data.signedUrl
+            : getAbsoluteApiUrl(data.signedUrl);
           if (previewWindow) {
-            previewWindow.location.href = data.signedUrl;
+            previewWindow.location.href = resolvedSignedUrl;
           } else {
-            window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+            window.open(resolvedSignedUrl, '_blank', 'noopener,noreferrer');
           }
           return;
         }

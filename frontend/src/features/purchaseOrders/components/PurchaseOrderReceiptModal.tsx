@@ -177,7 +177,7 @@ export function PurchaseOrderReceiptModal({
 }: PurchaseOrderReceiptModalProps) {
   const [order, setOrder] = useState<PurchaseOrderDto | null>(initialOrder);
   const [activeTab, setActiveTab] = useState<'receipt' | 'audit'>('receipt');
-  const [isFullscreen, setIsFullscreen] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [canvasBg, setCanvasBg] = useState<'light' | 'dark'>('light');
 
   // Auto-fit page state to ensure the entire receipt is 100% visible on screen without scrolling
@@ -392,6 +392,9 @@ export function PurchaseOrderReceiptModal({
         'fixed inset-0 z-[100] flex flex-col bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200 overflow-hidden',
         !isFullscreen && 'p-3 sm:p-6 items-center justify-center'
       )}
+      onClick={e => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       role="dialog"
       aria-modal="true"
       aria-label="Purchase Order Receipt"
@@ -523,7 +526,7 @@ export function PurchaseOrderReceiptModal({
 
 
             {/* Zoom / Page Fit Switcher (Active on receipt tab) */}
-            {activeTab === 'receipt' && (
+            {/* {activeTab === 'receipt' && (
               <div className="hidden sm:flex items-center bg-white/10 p-1 rounded-xl border border-white/15 gap-1">
                 <button
                   type="button"
@@ -552,7 +555,7 @@ export function PurchaseOrderReceiptModal({
                   Fit Page {zoomMode === 'fit' && `(${Math.round(scaleFactor * 100)}%)`}
                 </button>
               </div>
-            )}
+            )} */}
           </div>
 
           {/* Right: Actions & Canvas Toggle */}
@@ -628,7 +631,7 @@ export function PurchaseOrderReceiptModal({
           ref={canvasRef}
           className={cn(
             "flex-1 overflow-auto p-2 sm:p-3 flex justify-center items-center transition-colors duration-200",
-            canvasBg === 'light' ? "bg-[#edf2f7]" : "bg-slate-950"
+            canvasBg === 'light' ? "bg-white" : "bg-slate-950"
           )}
         >
           {activeTab === 'receipt' ? (

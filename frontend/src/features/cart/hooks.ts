@@ -172,6 +172,19 @@ export const useUpdateCartItem = () => {
                 });
             }
         },
+        onSuccess: (data, variables) => {
+            if (data && 'items' in data) {
+                qc.setQueryData([...KEY, 'active'], data);
+            } else if (variables && 'id' in variables && 'quantity' in variables) {
+                qc.setQueryData<CartDto>([...KEY, 'active'], (old) => {
+                    if (!old) return old;
+                    return {
+                        ...old,
+                        items: old.items.map(item => item.id === variables.id ? { ...item, quantity: variables.quantity } : item)
+                    };
+                });
+            }
+        },
         onSettled: () => {
             void invalidate(qc);
         }
@@ -219,6 +232,19 @@ export const useRemoveCartItem = () => {
                     if (data) {
                         qc.setQueryData(queryKey, data);
                     }
+                });
+            }
+        },
+        onSuccess: (data, id) => {
+            if (data && 'items' in data) {
+                qc.setQueryData([...KEY, 'active'], data);
+            } else if (typeof id === 'number') {
+                qc.setQueryData<CartDto>([...KEY, 'active'], (old) => {
+                    if (!old) return old;
+                    return {
+                        ...old,
+                        items: old.items.filter(item => item.id !== id)
+                    };
                 });
             }
         },

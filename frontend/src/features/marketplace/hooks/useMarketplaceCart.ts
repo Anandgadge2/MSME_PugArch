@@ -24,7 +24,7 @@ export interface UnifiedCartItem {
 
 export function useMarketplaceCart() {
     const { user } = useAuth();
-    const isBuyer = user?.role === 'buyer';
+    const isBuyer = Boolean(user && (user.role === 'buyer' || (user.organizationId && user.role !== 'seller' && user.role !== 'shg')));
 
     // 1. Guest cart hooks
     const guestCart = useGuestCart();
@@ -59,7 +59,7 @@ export function useMarketplaceCart() {
         const count = mappedItems.reduce((sum, item) => sum + item.quantity, 0);
 
         const getQuantity = (itemId: number, type: 'product' | 'service') => {
-            return mappedItems.find(i => i.id === itemId && i.type === type)?.quantity || 0;
+            return mappedItems.find(i => Number(i.id) === Number(itemId) && i.type === type)?.quantity || 0;
         };
 
         const add = (
@@ -97,7 +97,7 @@ export function useMarketplaceCart() {
         };
 
         const update = (itemId: number, type: 'product' | 'service', qty: number) => {
-            const mappedItem = mappedItems.find(i => i.id === itemId && i.type === type);
+            const mappedItem = mappedItems.find(i => Number(i.id) === Number(itemId) && i.type === type);
             if (!mappedItem) return;
 
             if (qty <= 0) {
@@ -106,7 +106,17 @@ export function useMarketplaceCart() {
             }
 
             if (mappedItem.dbCartItemId) {
-                if (mappedItem.dbCartItemId < 0) return; // Ignore updates on optimistic items
+                // If it's an optimistic item (dbCartItemId < 0), update it optimistically in the cache
+                if (mappedItem.dbCartItemId < 0) {
+                    qc.setQueryData<CartDto>(['cart', 'active'], (old) => {
+                        if (!old) return old;
+                        return {
+                            ...old,
+                            items: old.items.map(it => it.id === mappedItem.dbCartItemId ? { ...it, quantity: qty } : it)
+                        };
+                    });
+                    return;
+                }
                 updateCartItemMut.mutate(
                     { id: mappedItem.dbCartItemId, quantity: qty },
                     {
@@ -208,7 +218,8 @@ export function useMarketplaceCart() {
             remove,
             clear,
             buyNow,
-            isLoading: activeCartQuery.isLoading
+            isLoading: activeCartQuery.isLoading,
+            isUpdating: updateCartItemMut.isPending || addToCartMut.isPending || removeCartItemMut.isPending
         };
     }
 
@@ -310,6 +321,7 @@ export function useMarketplaceCart() {
         remove: guestRemove,
         clear: guestCart.clear,
         buyNow: guestBuyNow,
-        isLoading: false
+        isLoading: false,
+        isUpdating: false
     };
 }
