@@ -90,42 +90,93 @@ const buildTimeline = (
   events: DeliveryEventDto[] = [],
   statusLogs: DeliveryStatusLogDto[] = []
 ): TimelineEntry[] => {
-  const merged: TimelineEntry[] = [
-    ...events.map(event => ({
+  const eventEntries: TimelineEntry[] = events
+    .filter(e => e && e.status)
+    .map(event => ({
       key: `event-${event.id}`,
       status: normalizeTrackingStatus(event.status) || event.status,
-      location: event.location,
-      remarks: event.remarks,
+      location: event.location || undefined,
+      remarks: event.remarks || undefined,
       actorRole: undefined,
       occurredAt: event.occurredAt
-    })),
-    ...statusLogs
-      .filter(log => !log.previousStatus || log.previousStatus !== log.newStatus)
-      .map(log => ({
+    }));
+
+  const logEntries: TimelineEntry[] = statusLogs
+    .filter(log => log && log.newStatus && (!log.previousStatus || log.previousStatus !== log.newStatus))
+    .map(log => ({
       key: `log-${log.id}`,
       status: normalizeTrackingStatus(log.newStatus) || log.newStatus,
       location: undefined,
-      remarks: log.remarks,
+      remarks: log.remarks || undefined,
       actorRole: log.actorRole,
       occurredAt: log.createdAt
-    }))
-  ].filter(entry => entry.status && TRACKING_STATUSES.has(String(entry.status)));
+    }));
 
-  // Bucket by status + nearest 5-second window.
-  const buckets = new Map<string, TimelineEntry>();
-  for (const entry of merged) {
-    const ts = entry.occurredAt ? Math.floor(new Date(entry.occurredAt).getTime() / 5000) : 'no-ts';
-    const bucketKey = `${entry.status}::${ts}`;
-    const existing = buckets.get(bucketKey);
-    if (!existing) {
-      buckets.set(bucketKey, entry);
-      continue;
+  const result: TimelineEntry[] = [];
+  const consumedLogKeys = new Set<string>();
+
+  for (const ev of eventEntries) {
+    if (!ev.status || !TRACKING_STATUSES.has(String(ev.status))) continue;
+
+    const evTime = ev.occurredAt ? new Date(ev.occurredAt).getTime() : 0;
+    let bestMatch: TimelineEntry | null = null;
+    let minDiff = Infinity;
+
+    for (const lg of logEntries) {
+      if (consumedLogKeys.has(lg.key)) continue;
+      if (lg.status !== ev.status) continue;
+      const lgTime = lg.occurredAt ? new Date(lg.occurredAt).getTime() : 0;
+      const diff = Math.abs(evTime - lgTime);
+      if (diff <= 120_000 || !evTime || !lgTime) {
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestMatch = lg;
+        }
+      }
     }
-    const score = (e: TimelineEntry) => (e.location ? 1 : 0) + (e.remarks ? 1 : 0) + (e.actorRole ? 1 : 0);
-    if (score(entry) > score(existing)) buckets.set(bucketKey, entry);
+
+    if (bestMatch) {
+      consumedLogKeys.add(bestMatch.key);
+      result.push({
+        key: `milestone-${ev.status}-${ev.key}`,
+        status: ev.status,
+        location: ev.location || bestMatch.location,
+        remarks: ev.remarks || bestMatch.remarks,
+        actorRole: bestMatch.actorRole,
+        occurredAt: ev.occurredAt || bestMatch.occurredAt
+      });
+    } else {
+      result.push({
+        key: `milestone-${ev.status}-${ev.key}`,
+        status: ev.status,
+        location: ev.location,
+        remarks: ev.remarks,
+        actorRole: ev.actorRole,
+        occurredAt: ev.occurredAt
+      });
+    }
   }
 
-  return [...buckets.values()].sort(
+  for (const lg of logEntries) {
+    if (!consumedLogKeys.has(lg.key) && lg.status && TRACKING_STATUSES.has(String(lg.status))) {
+      const lgTime = lg.occurredAt ? new Date(lg.occurredAt).getTime() : 0;
+      const alreadyHas = result.some(
+        r => r.status === lg.status && Math.abs((r.occurredAt ? new Date(r.occurredAt).getTime() : 0) - lgTime) <= 60_000
+      );
+      if (!alreadyHas) {
+        result.push({
+          key: `milestone-${lg.status}-${lg.key}`,
+          status: lg.status,
+          location: lg.location,
+          remarks: lg.remarks,
+          actorRole: lg.actorRole,
+          occurredAt: lg.occurredAt
+        });
+      }
+    }
+  }
+
+  return result.sort(
     (a, b) => new Date(b.occurredAt || 0).getTime() - new Date(a.occurredAt || 0).getTime()
   );
 };

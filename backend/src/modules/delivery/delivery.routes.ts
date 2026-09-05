@@ -66,7 +66,8 @@ const wrap =
 
 /* ============== Listing & detail ============== */
 
-router.get('/', authenticate, shortCache(15), wrap(async (req, res) => {
+router.get('/', authenticate, wrap(async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
   const query = parse<any>(deliveryListQuery, req.query);
   const result = await deliveryService.listForActor(actorFrom(req), query);
   ok(res, result);
@@ -102,13 +103,15 @@ router.post('/by-purchase-order/:purchaseOrderId', authenticate, wrap(async (req
   ok(res, delivery, 201);
 }));
 
-router.get('/:id', authenticate, shortCache(15), wrap(async (req, res) => {
+router.get('/:id', authenticate, wrap(async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
   const { id } = parse<any>(idParam, req.params);
   const delivery = await deliveryService.getDetail(actorFrom(req), id);
   ok(res, delivery);
 }));
 
-router.get('/:id/timeline', authenticate, shortCache(15), wrap(async (req, res) => {
+router.get('/:id/timeline', authenticate, wrap(async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
   const { id } = parse<any>(idParam, req.params);
   const timeline = await deliveryService.getTimeline(actorFrom(req), id);
   ok(res, timeline);

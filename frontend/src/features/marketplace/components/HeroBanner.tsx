@@ -157,28 +157,26 @@ export function HeroBanner({ banners }: Props) {
             >
                 <ChevronRight className="h-4 w-4 lg:h-5 lg:w-5 transition-transform duration-200 group-hover/arrow:translate-x-0.5" />
             </button>
+            {/* FLOATING CTA OVERLAY (Top Right) */}
+            <div className="absolute top-3 right-3 sm:top-4 sm:right-5 md:top-5 md:right-6 lg:top-6 lg:right-8 xl:top-7 xl:right-10 z-30 flex flex-col xs:flex-row items-end xs:items-center gap-2 sm:gap-2.5 pointer-events-auto">
+                <button 
+                    onClick={handlePostRequirement} 
+                    className="group inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full border border-white/40 bg-black/50 backdrop-blur-md text-white text-[11px] sm:text-xs lg:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/70 active:scale-95 transition-all shadow-lg shrink-0"
+                >
+                    <span>Post Requirement</span>
+                </button>
+                <button 
+                    onClick={handleStartSelling} 
+                    className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] sm:text-xs lg:text-sm font-black active:scale-95 transition-all shadow-xl shadow-black/30 hover:shadow-[0_0_20px_rgba(200,164,92,0.4)] shrink-0"
+                >
+                    {/* Shimmer light sweep */}
+                    <span className="absolute inset-0 -translate-x-full hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/30 to-transparent pointer-events-none" />
+                    <span>Start Selling</span>
+                </button>
+            </div>
 
             {/* Hero Main Content Container */}
             <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-6 sm:py-10 md:py-12 pb-10 sm:pb-14 lg:pb-16">
-                
-                {/* FLOATING CTA OVERLAY (Top Right) */}
-                <div className="absolute top-2 right-2 sm:top-5 sm:right-6 lg:top-6 lg:right-8 z-30 flex flex-row items-center gap-2 sm:gap-2.5 pointer-events-auto">
-                    <button 
-                        onClick={handlePostRequirement} 
-                        className="group inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full border border-white/40 bg-black/50 backdrop-blur-md text-white text-[11px] sm:text-xs lg:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/70 active:scale-95 transition-all shadow-lg"
-                    >
-                        <span>Post Requirement</span>
-                    </button>
-                    <button 
-                        onClick={handleStartSelling} 
-                        className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] sm:text-xs lg:text-sm font-black active:scale-95 transition-all shadow-xl shadow-black/30 hover:shadow-[0_0_20px_rgba(200,164,92,0.4)]"
-                    >
-                        {/* Shimmer light sweep */}
-                        <span className="absolute inset-0 -translate-x-full hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/30 to-transparent pointer-events-none" />
-                        <span>Start Selling</span>
-                    </button>
-                </div>
-
                 <div className="w-full max-w-xl lg:max-w-2xl">
                     <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
                         
