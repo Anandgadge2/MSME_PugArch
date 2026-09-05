@@ -172,6 +172,27 @@ const getShgPrerequisiteDocs = (selectedShgType: string) => ({
   ]
 });
 
+const PREREQUISITE_DOCS = {
+  seller: {
+    path: '/docs/Seller_Onboarding_Pre_Requisites.pdf',
+    fileName: 'Seller_Onboarding_Pre_Requisites.pdf',
+    title: 'Seller Onboarding Pre-requisites',
+    ariaLabel: 'View Seller Onboarding Pre-requisites document in a new tab'
+  },
+  buyer: {
+    path: '/docs/Buyer_Onboarding_Pre_Requisites.pdf',
+    fileName: 'Buyer_Onboarding_Pre_Requisites.pdf',
+    title: 'Buyer Onboarding Pre-requisites',
+    ariaLabel: 'View Buyer Onboarding Pre-requisites document in a new tab'
+  },
+  shg: {
+    path: '/docs/SHG_Onboarding_Pre_Requisites.pdf',
+    fileName: 'SHG_Onboarding_Pre_Requisites.pdf',
+    title: 'SHG Onboarding Pre-requisites',
+    ariaLabel: 'View SHG Onboarding Pre-requisites document in a new tab'
+  }
+} as const;
+
 interface PrerequisitesProps {
   onProceed: (type: string, selectedDocuments?: string[], shgType?: string) => void;
   role: 'buyer' | 'seller';
@@ -249,6 +270,42 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
     ? buyerRequiredDocs.every(item => checkedItems[item.id])
     : [...docs.personal, ...docs.business].every(item => checkedItems[item]);
   const allRequiredChecked = Boolean(selectedType) && hasRequiredShgType && sellerProceedReady;
+
+  const roleKey: 'seller' | 'buyer' | 'shg' = (isHerShg || selectedType === 'herSHG')
+    ? 'shg'
+    : (isBuyer || variant === 'buyer')
+      ? 'buyer'
+      : 'seller';
+
+  const activeDoc = PREREQUISITE_DOCS[roleKey];
+
+  const renderPrerequisitesDocLink = (extraClass?: string) => {
+    if (!activeDoc?.path) {
+      return (
+        <span
+          role="alert"
+          className={cn("min-h-10 inline-flex items-center text-left text-xs font-semibold text-rose-600", extraClass)}
+        >
+          Prerequisites document is currently unavailable. Please try again later.
+        </span>
+      );
+    }
+
+    return (
+      <a
+        href={activeDoc.path}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={activeDoc.ariaLabel}
+        className={cn(
+          "min-h-10 inline-flex items-center text-left text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded",
+          extraClass
+        )}
+      >
+        View Pre-requisites Document
+      </a>
+    );
+  };
 
   return (
     <div className="mx-auto w-full max-w-4xl">
@@ -360,14 +417,7 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
               )}
 
               <div className="flex flex-col items-stretch justify-between gap-4 pt-6 sm:pt-8 md:flex-row md:items-center">
-                <a
-                  href="/MSME_Registration_Pre_Requisites_PugArch.pdf"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="min-h-10 inline-flex items-center text-left text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:underline md:text-center"
-                >
-                  View Pre-requisites Document
-                </a>
+                {renderPrerequisitesDocLink("md:text-center")}
                 <Button
                   onClick={() => onProceed(selectedType, selectedSellerDocuments(), selectedShgType)}
                   disabled={!allRequiredChecked}
@@ -384,14 +434,7 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
 
           {!selectedType && (
             <div className="pt-2 sm:pt-4">
-              <a
-                href="/MSME_Registration_Pre_Requisites_PugArch.pdf"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-h-10 inline-flex items-center text-left text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:underline"
-              >
-                View Pre-requisites Document
-              </a>
+              {renderPrerequisitesDocLink()}
             </div>
           )}
         </CardContent>
