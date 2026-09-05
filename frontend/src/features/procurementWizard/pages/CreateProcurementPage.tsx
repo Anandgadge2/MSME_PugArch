@@ -392,8 +392,7 @@ const itemTemplateHeaders = [
   'Preferred Brand / Make',
   'Brand Flexible (Yes/No)',
   'Product Image URL',
-  'Specification Document URL',
-  'Required Delivery Date'
+  'Specification Document URL'
 ];
 
 const parseCsvText = (text: string): string[][] => {
@@ -782,7 +781,7 @@ const stepLibrary = {
   items: { id: 'items', label: 'Item / Service / BOQ', description: 'Quantities, specs and BOQ items', icon: Package },
   vendors: { id: 'vendors', label: 'Suppliers', description: 'MSME reach, invite selection pool', icon: Users },
   schedule: { id: 'schedule', label: 'Timeline & Rules', description: 'Envelope bids & deadline schedules', icon: CalendarClock },
-  terms: { id: 'terms', label: 'Commercial Terms', description: 'Payment, delivery and EM/PBG fees', icon: BadgeCheck },
+  terms: { id: 'terms', label: 'Commercial Terms', description: 'Payment & delivery', icon: BadgeCheck },
   documents: { id: 'documents', label: 'Required Documents', description: 'Checklists and validation requests', icon: Upload },
   evaluation: { id: 'evaluation', label: 'Evaluation Basis', description: 'QCBS weights and technical scores', icon: BarChart3 },
   publish: { id: 'publish', label: 'Approval & Publish', description: 'Summary review & workflow release', icon: BadgeCheck },
@@ -4512,7 +4511,6 @@ function ItemsDetailsForm({
         { header: 'Brand Flexible (Yes/No)', key: 'brandFlexible', width: 24 },
         { header: 'Product Image URL', key: 'imageUrl', width: 38 },
         { header: 'Specification Document URL', key: 'documentUrl', width: 40 },
-        { header: 'Required Delivery Date', key: 'deliveryDate', width: 24 },
       ];
 
       // Format Header Row
@@ -4548,8 +4546,7 @@ function ItemsDetailsForm({
           preferredBrand: 'UltraTech / PaverCo',
           brandFlexible: 'Yes',
           imageUrl: 'https://images.unsplash.com/photo-1588872657578-7efd1f1555ed?auto=format&fit=crop&w=600&q=80',
-          documentUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-          deliveryDate: nextFortnight
+          documentUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'
         },
         {
           itemType: 'Service',
@@ -4563,8 +4560,7 @@ function ItemsDetailsForm({
           preferredBrand: 'OEM Certified Partner',
           brandFlexible: 'Yes',
           imageUrl: '',
-          documentUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-          deliveryDate: nextFortnight
+          documentUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'
         }
       ];
 
@@ -4588,7 +4584,7 @@ function ItemsDetailsForm({
             left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
             right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
           };
-          if ([1, 4, 5, 7, 8, 10, 13].includes(colNumber)) {
+          if ([1, 4, 5, 7, 8, 10].includes(colNumber)) {
             cell.alignment = { vertical: 'middle', horizontal: 'center' };
           }
           if (colNumber === 6) {
@@ -4631,7 +4627,6 @@ function ItemsDetailsForm({
         { field: 'Brand Flexible (Yes/No)', required: 'Optional', format: 'Yes or No', notes: 'Indicate whether equivalent substitute brands are accepted (default: Yes).' },
         { field: 'Product Image URL', required: 'Optional', format: 'Valid HTTP/HTTPS image URL', notes: 'Direct link to an image file (PNG, JPG, WebP) displaying the product. Automatically displays a preview thumbnail.' },
         { field: 'Specification Document URL', required: 'Optional', format: 'Valid HTTP/HTTPS PDF or doc link', notes: 'Direct link to a specification sheet, CAD drawing, or PDF. Automatically attached and previewable in portal.' },
-        { field: 'Required Delivery Date', required: 'Optional', format: 'YYYY-MM-DD (e.g. 2026-09-20)', notes: 'Target delivery or service completion deadline date.' },
       ];
 
       guideData.forEach((item, idx) => {
@@ -4660,8 +4655,8 @@ function ItemsDetailsForm({
       console.error('Failed to generate Excel template:', err);
       downloadCsv('procurement_line_items_template.csv', [
         itemTemplateHeaders,
-        ['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness', 1000, 'Nos', 45, 18, '6810', '', 'Yes', '', '', nextFortnight],
-        ['Service', 'Annual Maintenance Contract', 'Preventive maintenance with quarterly visits', 1, 'Set', 25000, 18, '9987', '', 'Yes', '', '', nextFortnight],
+        ['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness', 1000, 'Nos', 45, 18, '6810', '', 'Yes', '', ''],
+        ['Service', 'Annual Maintenance Contract', 'Preventive maintenance with quarterly visits', 1, 'Set', 25000, 18, '9987', '', 'Yes', '', ''],
       ]);
     }
   };
@@ -6205,56 +6200,26 @@ function ScheduleStepForm({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Requirement Number">
-              <input
-                value={
-                  draft.id
-                    ? formatRefId('REQ', draft.id)
-                    : (draft.auctionConfig.auctionNumber && !draft.auctionConfig.auctionNumber.startsWith('RA-')
-                        ? draft.auctionConfig.auctionNumber
-                        : `REQ-${Math.floor(10000 + Math.random() * 90000)}`)
-                }
-                readOnly
-                className={cn(inputClass, 'bg-slate-100 text-slate-700 font-mono font-bold')}
-              />
-            </Field>
-            <Field label="Procurement Method">
-              <input
-                value="Reverse Auction"
-                readOnly
-                className={cn(inputClass, 'bg-slate-100 text-slate-700 font-semibold')}
-              />
-            </Field>
-            <Field label="Currency" required error={fieldError(showErrors && currencyMissing, 'Currency is required.')}>
-              <select
-                value={isOtherCurrency ? 'Other' : draft.auctionConfig.currency}
-                onChange={e => updateAuction('currency', e.target.value)}
-                className={controlClass(fieldError(showErrors && currencyMissing, 'Currency is required.'))}
-              >
-                <option value="">Select currency</option>
-                {currencyOptions.map(option => <option key={option} value={option}>{option}</option>)}
-              </select>
-              {isOtherCurrency && (
-                <input
-                  value={draft.auctionConfig.currency === 'Other' ? '' : draft.auctionConfig.currency}
-                  onChange={e => updateAuction('currency', e.target.value.toUpperCase().slice(0, 3))}
+            <div className="sm:col-span-2 sm:max-w-xs">
+              <Field label="Currency" required error={fieldError(showErrors && currencyMissing, 'Currency is required.')}>
+                <select
+                  value={isOtherCurrency ? 'Other' : draft.auctionConfig.currency}
+                  onChange={e => updateAuction('currency', e.target.value)}
                   className={controlClass(fieldError(showErrors && currencyMissing, 'Currency is required.'))}
-                  placeholder="Enter 3-letter currency code"
-                />
-              )}
-            </Field>
-            <Field label="Estimated Value">
-              <input value={draft.basics.estimatedValue || 0} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500 font-semibold')} />
-            </Field>
-            <Field label="Auction Status">
-              <input value={draft.auctionConfig.auctionStatus} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500 font-semibold')} />
-            </Field>
-            <Field label="Buyer Organization">
-              <input value={draft.auctionConfig.buyerOrganization || draft.internal.orgName} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
-              <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                Pulled from Internal Details. Purchase organization uses this buyer organization for this portal workflow.
-              </p>
-            </Field>
+                >
+                  <option value="">Select currency</option>
+                  {currencyOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
+                {isOtherCurrency && (
+                  <input
+                    value={draft.auctionConfig.currency === 'Other' ? '' : draft.auctionConfig.currency}
+                    onChange={e => updateAuction('currency', e.target.value.toUpperCase().slice(0, 3))}
+                    className={controlClass(fieldError(showErrors && currencyMissing, 'Currency is required.'))}
+                    placeholder="Enter 3-letter currency code"
+                  />
+                )}
+              </Field>
+            </div>
             <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
               <input type="datetime-local" value={draft.auctionConfig.startDateTime} onChange={e => updateAuction('startDateTime', e.target.value)} className={controlClass(fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.'))} />
             </Field>
@@ -6911,7 +6876,7 @@ function CommercialTermsForm({
             </select>
           </Field>
 
-          <Field label="Delivery terms location" required error={fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms location is required.')}>
+          <Field label="Delivery terms" required error={fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms location is required.')}>
             <select
               value={draft.terms.deliveryTerms}
               onChange={e => updateTerms('deliveryTerms', e.target.value)}
@@ -7128,7 +7093,6 @@ function EvaluationBasisForm({
           >
             <>
               <option value="L1 total value">L1 Total Value basis</option>
-              <option value="Item-wise L1">Item-wise L1 rates basis</option>
               <option value="Package-wise L1">Package-wise L1 rates basis</option>
               <option value="Technical qualification then L1">Technical Qualification then L1 Sourcing</option>
               <option value="QCBS / weighted technical-commercial score">Quality and Cost Based Selection (QCBS)</option>

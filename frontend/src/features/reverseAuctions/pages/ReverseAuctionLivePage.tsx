@@ -268,7 +268,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
             
             {auction.auctionCode && (
               <span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700">
-                {auction.auctionCode}
+                {auction.auctionCode.replace(/^RA-/, 'REQ-')}
               </span>
             )}
           </div>
@@ -591,7 +591,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
               <div className="space-y-2 text-xs font-semibold text-zinc-500">
                 <div className="flex justify-between"><span>Server Validation:</span> <span className="text-emerald-600 font-bold">Active</span></div>
-                <div className="flex justify-between"><span>Audit Log ID:</span> <span className="text-zinc-800 font-mono">MD-RA-{id}</span></div>
+                <div className="flex justify-between"><span>Audit Log ID:</span> <span className="text-zinc-800 font-mono">MD-REQ-{id}</span></div>
                 <div className="flex justify-between"><span>Auto Extension Window:</span> <span className="text-zinc-800">{auction.autoExtensionEnabled ? `${auction.autoExtensionWindowMinutes || 0} min` : 'Disabled'}</span></div>
                 <div className="flex justify-between"><span>Extension Period:</span> <span className="text-zinc-800">{auction.autoExtensionEnabled ? `${auction.autoExtensionByMinutes || 0} min` : 'Disabled'}</span></div>
               </div>

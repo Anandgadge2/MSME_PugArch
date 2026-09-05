@@ -174,11 +174,8 @@ export const ITEM_CONDITIONS = [
 
 // ── Payment Terms ───────────────────────────────────────────────────────────
 export const PAYMENT_TERMS = [
-  { value: 'ADVANCE_PAYMENT', label: 'Advance Payment' },
-  { value: 'CREDIT_PAYMENT', label: 'Credit Payment' },
-  { value: 'PARTIAL_ADVANCE', label: 'Partial Advance' },
-  { value: 'MILESTONE_BASED', label: 'Milestone Based' },
   { value: 'ON_DELIVERY', label: 'On Delivery' },
+  { value: 'ADVANCE_PAYMENT', label: 'Advance Payment' }
 ] as const;
 
 // ── Delivery Type ───────────────────────────────────────────────────────────
@@ -186,6 +183,5 @@ export const DELIVERY_TYPES = [
   { value: 'IMMEDIATE_DELIVERY', label: 'Immediate Delivery' },
   { value: 'SCHEDULED_DELIVERY', label: 'Scheduled Delivery' },
   { value: 'URGENT_DELIVERY', label: 'Urgent Delivery' },
-  { value: 'PARTIAL_DELIVERY', label: 'Partial Delivery' },
-  { value: 'PROJECT_DELIVERY', label: 'Project Delivery' },
+  { value: 'PARTIAL_DELIVERY', label: 'Partial Delivery' }
 ] as const;

@@ -14,6 +14,7 @@ import { logger } from '../config/logger.js';
 import { upload } from '../config/storage.js';
 import { uploadFile } from '../services/storage/storage.service.js';
 import { env } from '../config/env.js';
+import { formatRefId } from '../utils/refIdUtils.js';
 
 const router = Router();
 const db = prisma as any;
@@ -27,7 +28,7 @@ const toNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-const nextAuctionCode = () => `RA-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+const nextAuctionCode = () => `REQ-${Math.floor(10000 + Math.random() * 90000)}`;
 
 const actor = (req: AuthRequest) => ({
   actorUserId: req.user?.id,
@@ -486,8 +487,8 @@ router.post('/reverse-auctions', requirePermission('reverse_auction.create', org
         tenderId: payload.linkedTenderId || null,
         linkedBidId: payload.linkedBidId || null,
         linkedRequirementId: payload.linkedRequirementId || null,
-        auctionCode: nextAuctionCode(),
-        referenceNo: payload.linkedTenderId ? `TENDER-${payload.linkedTenderId}` : payload.linkedBidId ? `PBID-${payload.linkedBidId}` : `REQ-${payload.linkedRequirementId}`,
+        auctionCode: payload.linkedRequirementId ? formatRefId('REQ', payload.linkedRequirementId) : nextAuctionCode(),
+        referenceNo: payload.linkedTenderId ? `TENDER-${payload.linkedTenderId}` : payload.linkedBidId ? `PBID-${payload.linkedBidId}` : (payload.linkedRequirementId ? formatRefId('REQ', payload.linkedRequirementId) : nextAuctionCode()),
         title: payload.title,
         description: payload.description || null,
         procurementMethod: payload.procurementMethod,

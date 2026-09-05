@@ -115,7 +115,7 @@ const formatBidDisplayId = (item: any): string => {
     if (typeStr.includes('RFP') || typeStr.includes('PROPOSAL')) return `RFP-${num}`;
     if (typeStr.includes('RFQ') || typeStr.includes('QUOTATION')) return `RFQ-${num}`;
     if (typeStr.includes('LIMITED')) return `LT-${num}`;
-    if (typeStr.includes('AUCTION') || typeStr.includes('REVERSE')) return `RA-${num}`;
+    if (typeStr.includes('AUCTION') || typeStr.includes('REVERSE')) return `REQ-${num}`;
     if (typeStr.includes('RATE')) return `RC-${num}`;
     if (typeStr.includes('OPEN') || typeStr.includes('TENDER')) return `TND-${num}`;
     return `BID-${num}`;

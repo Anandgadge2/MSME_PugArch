@@ -53,6 +53,7 @@ import { procurementBidApi } from '../../procurementBid/api';
 import { marketplaceApi, type MarketplaceSeller } from '../../marketplace/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
+import { formatRefId } from '../../../utils/refIdUtils';
 import { KpiCard } from '../../shared/KpiCard';
 
 function formatEnumLabel(val?: string | null): string {
@@ -357,7 +358,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-md bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-black text-slate-700 font-mono tracking-wider">
-                  {auction.data.auctionCode || `RA-${id}`}
+                  {(auction.data.auctionCode?.replace(/^RA-/, 'REQ-')) || formatRefId('REQ', auction.data.linkedRequirementId || id)}
                 </span>
                 <span className={cn(
                   "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider",
@@ -607,7 +608,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
             )}>
               {status}
             </span>
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono">{auction.data.auctionCode || `RA-${effectiveId}`}</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono">{(auction.data.auctionCode?.replace(/^RA-/, 'REQ-')) || formatRefId('REQ', auction.data.linkedRequirementId || effectiveId)}</span>
           </div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">{auction.data.title || 'Reverse Auction Sourcing'}</h1>
         </div>
@@ -727,7 +728,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
                       <FileText className="h-4 w-4 text-blue-600" /> 1. Auction Overview
                     </h2>
                     <span className="text-[10px] font-bold text-slate-400 font-mono">
-                      {auction.data.auctionCode || `RA-${effectiveId}`}
+                      {(auction.data.auctionCode?.replace(/^RA-/, 'REQ-')) || formatRefId('REQ', auction.data.linkedRequirementId || effectiveId)}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3">

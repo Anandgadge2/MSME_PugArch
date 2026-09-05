@@ -1629,7 +1629,7 @@ const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procu
   return db.requirement.findUnique({ where: { id: saved.id }, include: procurementDraftInclude });
 };
 
-const nextProcurementAuctionCode = () => `RA-${Math.floor(10000 + Math.random() * 90000)}`;
+const nextProcurementAuctionCode = () => `REQ-${Math.floor(10000 + Math.random() * 90000)}`;
 const nextRateContractCode = () => `RC-${Math.floor(10000 + Math.random() * 90000)}`;
 
 const createAuctionForSubmittedProcurement = async (req: AuthRequest, requirement: any, draftBody: z.infer<typeof procurementDraftBody>) => {
@@ -1640,11 +1640,18 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
   if (existing) return existing;
 
   const config = validateAuctionConfigForDraft(normalizeAuctionConfigForDraft(draftBody), methodSlug, (draftBody.payload as any)?.vendors?.selection);
+  const targetRefNo = formatRequirementNumber(requirement.id, requirement.requirementNumber);
+  let resolvedAuctionCode = config.auctionNumber;
+  if (resolvedAuctionCode && resolvedAuctionCode.startsWith('RA-')) {
+    resolvedAuctionCode = `REQ-${resolvedAuctionCode.slice(3)}`;
+  }
+  const auctionCode = resolvedAuctionCode || targetRefNo || nextProcurementAuctionCode();
+
   const auction = await db.auction.create({
     data: {
       linkedRequirementId: requirement.id,
-      auctionCode: config.auctionNumber || nextProcurementAuctionCode(),
-      referenceNo: formatRequirementNumber(requirement.id, requirement.requirementNumber),
+      auctionCode,
+      referenceNo: targetRefNo || auctionCode,
       title: config.auctionTitle,
       description: config.auctionDescription || null,
       procurementMethod: config.procurementMethod,
@@ -11385,8 +11392,8 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       id: a.id,
       type: 'reverse_auction',
       typeLabel: 'Reverse Auction',
-      title: a.title || `Reverse Auction ${a.auctionCode || a.referenceNo || '#' + a.id}`,
-      referenceNumber: a.auctionCode || a.referenceNo || `RA-${a.id}`,
+      title: a.title || `Reverse Auction ${(a.auctionCode?.replace(/^RA-/, 'REQ-')) || (a.referenceNo?.replace(/^RA-/, 'REQ-')) || '#' + a.id}`,
+      referenceNumber: (a.auctionCode?.replace(/^RA-/, 'REQ-')) || (a.referenceNo?.replace(/^RA-/, 'REQ-')) || formatRequirementNumber(a.linkedRequirementId || a.id) || `REQ-${String(a.id).padStart(5, '0')}`,
       status: s,
       statusLabel: statusLabel(s),
       statusGroup: statusGroup,

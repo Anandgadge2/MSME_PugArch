@@ -784,7 +784,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           actionLabel: 'Join Auction',
           href: sellerRoutes.auctionLive(auction.id),
           detailsHref: sellerRoutes.detail('REVERSE_AUCTION', auction.id),
-          sourceRef: auction.auctionCode || `RA-${auction.id}`,
+          sourceRef: (auction.auctionCode?.replace(/^RA-/, 'REQ-')) || formatRefId('REQ', auction.linkedRequirementId || auction.id),
           publishedAt: auction.startTime,
           description: auction.description,
           documents,
