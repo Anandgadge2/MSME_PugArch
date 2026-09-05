@@ -158,12 +158,57 @@ const assertAuctionManager = (req: AuthRequest, auction: any) => {
  * try the auction primary key first, then fall back to the linked requirement id so a
  * stale/aliased link self-heals instead of 404-ing.
  */
-const resolveAuctionId = async (rawId: number): Promise<number | null> => {
-  if (!Number.isFinite(rawId)) return null;
-  const direct = await db.auction.findUnique({ where: { id: rawId }, select: { id: true } });
-  if (direct) return direct.id;
-  const linked = await db.auction.findFirst({ where: { linkedRequirementId: rawId }, select: { id: true }, orderBy: { createdAt: 'desc' } });
-  return linked?.id ?? null;
+const resolveAuctionId = async (rawId: number | string): Promise<number | null> => {
+  const strId = String(rawId ?? '').trim();
+  if (!strId || strId === 'NaN') return null;
+  const directNum = Number(strId);
+  if (Number.isFinite(directNum) && directNum > 0) {
+    const direct = await db.auction.findUnique({ where: { id: directNum }, select: { id: true } });
+    if (direct) return direct.id;
+  }
+  // Try by auctionCode or referenceNo
+  const byCode = await db.auction.findFirst({
+    where: {
+      OR: [
+        { auctionCode: strId },
+        { referenceNo: strId },
+        { auctionCode: `RA-${strId}` },
+        { referenceNo: `REQ-${strId}` }
+      ]
+    },
+    select: { id: true },
+    orderBy: { createdAt: 'desc' }
+  });
+  if (byCode) return byCode.id;
+
+  // Try extracting number if prefixed with REQ-, RA-, AUC-, etc.
+  const strippedNum = Number(strId.replace(/^(RA-|REQ-|AUC-|PBID-|TENDER-)/i, ''));
+  if (Number.isFinite(strippedNum) && strippedNum > 0) {
+    const linked = await db.auction.findFirst({
+      where: {
+        OR: [
+          { linkedRequirementId: strippedNum },
+          { id: strippedNum },
+          { linkedBidId: strippedNum },
+          { tenderId: strippedNum }
+        ]
+      },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (linked) return linked.id;
+  }
+
+  // Also check if strId matches requirement.requirementNumber
+  const req = await db.requirement.findFirst({
+    where: { OR: [{ requirementNumber: strId }, { requirementNumber: `REQ-${strId}` }] },
+    select: { id: true }
+  });
+  if (req) {
+    const linked = await db.auction.findFirst({ where: { linkedRequirementId: req.id }, select: { id: true } });
+    if (linked) return linked.id;
+  }
+  return null;
 };
 
 /**
@@ -247,7 +292,13 @@ const linkedRequirementSummary = async (auction: any) => {
       unitOfMeasure: item.unitOfMeasure,
       estimatedUnitPrice: item.estimatedUnitPrice
     })),
-    documents: documents.map((doc: any) => ({ name: doc.name, fileName: doc.fileName || null, required: doc.required !== false })),
+    documents: documents.map((doc: any) => ({
+      name: doc.name,
+      fileName: doc.fileName || null,
+      required: doc.required !== false,
+      fileAssetId: doc.fileAssetId || doc.fileId || null,
+      url: doc.url || (doc.fileAssetId ? `/api/files/${doc.fileAssetId}/view` : null)
+    })),
     consigneeDetails: Array.isArray(payload.consigneeDetails) ? payload.consigneeDetails : [],
     paymentTerms: payload.terms?.paymentTerms || basics.paymentTerms || null,
     bidStartDate: tender.bidStartDate || null,
@@ -325,7 +376,7 @@ const recalculateRanks = async (tx: any, auctionId: number) => {
 
 router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     let auction = await db.auction.findUnique({ where: { id }, include: auctionIncludeFor(req) });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -385,7 +436,7 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
 
 router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     let [auction, participant] = await Promise.all([
       db.auction.findUnique({ where: { id } }),
@@ -611,7 +662,8 @@ const assertEnoughQualifiedBidders = async (auction: any) => {
 const transition = (target: string, enumStatus: string, extra?: (req: AuthRequest) => Record<string, unknown>, guard?: (auction: any) => Promise<void>) =>
   async (req: AuthRequest, res: Response) => {
     try {
-      const id = Number(req.params.id);
+      const id = await resolveAuctionId(req.params.id);
+      if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
       const auction = await db.auction.findUnique({ where: { id } });
       if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
       assertAuctionManager(req, auction);
@@ -692,7 +744,7 @@ ${endsAt ? `<p><strong>Bidding closes:</strong> ${endsAt}</p>` : ''}
 
 router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -734,7 +786,7 @@ const isAuctionManagerUser = (req: AuthRequest, auction: any) =>
 
 router.post('/reverse-auctions/:id/clarifications', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -783,7 +835,7 @@ router.post('/reverse-auctions/:id/clarifications', requirePermission('reverse_a
 
 router.post('/reverse-auctions/:id/clarifications/:clarId/reply', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -828,7 +880,7 @@ router.post('/reverse-auctions/:id/clarifications/:clarId/reply', requirePermiss
 
 router.get('/reverse-auctions/:id/clarifications', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -911,7 +963,7 @@ const assertQualificationEditable = (participant: any) => {
 router.post('/reverse-auctions/:id/qualification/documents', requirePermission('reverse_auction.bid.submit', orgScope), upload.single('file'), async (req: AuthRequest & { file?: Express.Multer.File }, res: Response) => {
   try {
     if (req.user?.role !== 'seller') throw new ApiError(403, 'Only sellers can upload qualification documents', 'AUCTION_QUALIFICATION_FORBIDDEN');
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id: auctionId } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -962,7 +1014,7 @@ router.post('/reverse-auctions/:id/qualification/documents', requirePermission('
 router.post('/reverse-auctions/:id/qualification/initial-quote', requirePermission('reverse_auction.bid.submit', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     if (req.user?.role !== 'seller') throw new ApiError(403, 'Only sellers can submit an initial quote', 'AUCTION_QUALIFICATION_FORBIDDEN');
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id: auctionId } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -993,7 +1045,7 @@ router.post('/reverse-auctions/:id/qualification/initial-quote', requirePermissi
 router.post('/reverse-auctions/:id/qualification/submit', requirePermission('reverse_auction.bid.submit', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     if (req.user?.role !== 'seller') throw new ApiError(403, 'Only sellers can submit qualification', 'AUCTION_QUALIFICATION_FORBIDDEN');
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id: auctionId } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1037,7 +1089,7 @@ router.post('/reverse-auctions/:id/qualification/submit', requirePermission('rev
 // Qualification overview. Sellers see their own packet; buyers/managers see every participant.
 router.get('/reverse-auctions/:id/qualification', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id: auctionId } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1076,7 +1128,7 @@ router.get('/reverse-auctions/:id/qualification', requirePermission('reverse_auc
 // Buyer reviews a submitted seller: qualify (unlock bidding) or disqualify.
 router.post('/reverse-auctions/:id/qualification/:participantId/review', requirePermission('reverse_auction.invite_seller', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id: auctionId } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1131,7 +1183,7 @@ router.post('/reverse-auctions/:id/qualification/:participantId/review', require
 
 router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid.submit', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const payload = bidSchema.parse(req.body);
     const result = await withDistributedLock(redisKeys.lockAuction(auctionId), async () =>
@@ -1214,7 +1266,7 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
 
 router.get('/reverse-auctions/:id/bids', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1244,7 +1296,7 @@ router.get('/reverse-auctions/:id/bids', requirePermission('reverse_auction.view
 
 router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');

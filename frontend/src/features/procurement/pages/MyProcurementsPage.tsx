@@ -127,6 +127,7 @@ interface NormalizedProcurement {
   type: string;
   typeLabel: string;
   linkedAuctionId?: number | null;
+  auctionId?: number | null;
   title: string;
   referenceNumber: string;
   status: string;
@@ -518,17 +519,20 @@ export default function MyProcurementsPage() {
 
     const isReverseAuction =
       typeLower === 'reverse_auction' ||
+      typeLower.includes('auction') ||
       methodLower === 'reverse_auction' ||
       methodLower === 'reverse-auction' ||
+      methodLower.includes('auction') ||
       methodLower === 'bid-with-reverse-auction' ||
-      methodLower === 'bid_with_reverse_auction';
+      methodLower === 'bid_with_reverse_auction' ||
+      Boolean(p.linkedAuctionId || p.auctionId);
 
     let route: string | null = null;
     if (isReverseAuction) {
       // A reverse auction is stored as a Requirement; the biddable entity is the
-      // linked Auction. Use its id (falling back to the auction row's own id).
-      const auctionId = p.linkedAuctionId || (typeLower === 'reverse_auction' ? p.id : null);
-      route = auctionId ? sellerRoutes.detail('REVERSE_AUCTION', auctionId) : null;
+      // linked Auction. Use its id (falling back to linkedAuctionId, auctionId, referenceNumber, or id).
+      const auctionId = p.linkedAuctionId || p.auctionId || (typeLower === 'reverse_auction' ? p.id : null) || p.referenceNumber || p.id;
+      route = auctionId ? buyerRoutes.detail('REVERSE_AUCTION', auctionId) : null;
     } else if (typeLower === 'bid_tender') {
       const consolidated = getConsolidatedType(p);
       if (consolidated === 'OpenTender' || consolidated === 'Limited Tender') {

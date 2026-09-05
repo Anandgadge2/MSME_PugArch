@@ -62,7 +62,7 @@ const asyncRoute = (handler: (req: AuthRequest & { file?: Express.Multer.File },
       if (err instanceof ApiError) {
         return apiResponse.error(res, err.statusCode, err.message, err.code, err.details);
       }
-      return apiResponse.error(res, err?.statusCode || 500, err?.message || 'Unable to complete procurement request', err?.code || 'REQUEST_FAILED', { stack: err?.stack });
+      return apiResponse.error(res, err?.statusCode || 500, err?.message || 'Unable to complete procurement request', err?.code || 'INTERNAL_ERROR');
     }
   };
 
@@ -267,7 +267,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
               items: true,
               organization: { select: { id: true, organizationName: true, organizationType: true, verificationStatus: true, city: true, district: true, state: true } },
               category: true,
-              buyer: { select: { id: true, name: true, email: true, mobile: true, role: true, buyerProfile: { select: { departmentName: true, representativeName: true, email: true, mobile: true } } } },
+              buyer: { select: { id: true, name: true, email: true, mobile: true, role: true, buyerProfile: { select: { department: true, representativeName: true, email: true, mobile: true } } } },
             }
           }).catch(() => null);
         }
@@ -733,7 +733,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           include: {
             buyerOrganization: { select: { id: true, organizationName: true, organizationType: true, verificationStatus: true, city: true, district: true, state: true } },
             category: true,
-            createdBy: { select: { id: true, name: true, email: true, mobile: true, role: true, buyerProfile: { select: { departmentName: true, representativeName: true, email: true, mobile: true } } } },
+            createdBy: { select: { id: true, name: true, email: true, mobile: true, role: true, buyerProfile: { select: { department: true, representativeName: true, email: true, mobile: true } } } },
           }
         });
         if (buyerReq) {
@@ -780,7 +780,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             items: true,
             organization: { select: { id: true, organizationName: true, organizationType: true, verificationStatus: true, city: true, district: true, state: true } },
             category: true,
-            buyer: { select: { id: true, name: true, email: true, mobile: true, role: true, buyerProfile: { select: { departmentName: true, representativeName: true, email: true, mobile: true } } } },
+            buyer: { select: { id: true, name: true, email: true, mobile: true, role: true, buyerProfile: { select: { department: true, representativeName: true, email: true, mobile: true } } } },
           }
         });
       }
@@ -806,7 +806,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
                 items: true,
                 organization: { select: { id: true, organizationName: true, organizationType: true, verificationStatus: true, city: true, district: true, state: true } },
                 category: true,
-                buyer: { select: { id: true, name: true, email: true, mobile: true, role: true, buyerProfile: { select: { departmentName: true, representativeName: true, email: true, mobile: true } } } },
+                buyer: { select: { id: true, name: true, email: true, mobile: true, role: true, buyerProfile: { select: { department: true, representativeName: true, email: true, mobile: true } } } },
               }
             });
           }
@@ -1012,6 +1012,25 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           || (requirement.items && requirement.items[0] ? (requirement.items[0].itemName || requirement.items[0].name) : null)
           || (requirement.requirementNumber ? `${isRateContract ? 'Rate Contract' : 'Procurement'} ${requirement.requirementNumber}` : 'Procurement Opportunity');
 
+        const linkedAuction = await (prisma as any).auction.findFirst({
+          where: {
+            OR: [
+              { linkedRequirementId: requirement.id },
+              { referenceNo: requirement.requirementNumber },
+              { referenceNo: `REQ-${requirement.id}` }
+            ]
+          },
+          select: { id: true, auctionCode: true, status: true, statusEnum: true }
+        }).catch(() => null);
+
+        const isReverseAuction = Boolean(
+          linkedAuction ||
+          String(requirement.procurementMethod || '').toUpperCase().includes('AUCTION') ||
+          String(requirement.canonicalMethod || '').toUpperCase().includes('AUCTION') ||
+          String(payload.fullProcurementMethod || '').toUpperCase().includes('AUCTION') ||
+          String(payload.methodSlug || '').toLowerCase().includes('auction')
+        );
+
         const synthesized = {
           id: requirement.id,
           bidNumber: requirement.requirementNumber || `REQ-${requirement.id}`,
@@ -1021,10 +1040,15 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           buyerOrganizationName: requirement.organization?.organizationName || internal.orgName || basics.buyerOrganizationName || '',
           buyerType: basics.buyerType || requirement.organization?.organizationType || 'Private Enterprise',
           departmentName: requirement.buyer?.buyerProfile?.departmentName || internal.departmentName || 'Procurement',
-          category: basics.category || requirement.category?.name || (isRateContract ? 'Rate Contract' : 'General procurement'),
+          category: basics.category || requirement.category?.name || (isRateContract ? 'Rate Contract' : isReverseAuction ? 'Reverse Auction' : 'General procurement'),
           subCategory: basics.subCategory || '',
-          bidType: isRateContract ? 'Rate Contract' : (basics.whatAreYouBuying || 'Product'),
-          procurementType: isRateContract ? 'Rate Contract' : (requirement.procurementMethod || payload.recommendation?.id || 'RFQ'),
+          bidType: isRateContract ? 'Rate Contract' : (isReverseAuction ? 'Reverse Auction' : (basics.whatAreYouBuying || 'Product')),
+          procurementType: isRateContract ? 'Rate Contract' : (isReverseAuction ? 'Reverse Auction' : (requirement.procurementMethod || payload.recommendation?.id || 'RFQ')),
+          canonicalMethod: isReverseAuction ? 'REVERSE_AUCTION' : (isRateContract ? 'RATE_CONTRACT' : (requirement.canonicalMethod || requirement.procurementMethod || 'RFQ')),
+          procurementMethod: isReverseAuction ? 'REVERSE_AUCTION' : (isRateContract ? 'RATE_CONTRACT' : (requirement.procurementMethod || 'RFQ')),
+          linkedAuctionId: linkedAuction?.id || null,
+          auctionId: linkedAuction?.id || null,
+          actionUrl: linkedAuction ? `/reverse-auctions/${linkedAuction.id}` : undefined,
           quantity: basics.quantity ? Number(basics.quantity) : (requirement.items?.[0]?.quantity || null),
           unit: basics.unit || requirement.items?.[0]?.unitOfMeasure || '',
           estimatedValue: Number(requirement.estimatedValue || basics.estimatedValue || 0),

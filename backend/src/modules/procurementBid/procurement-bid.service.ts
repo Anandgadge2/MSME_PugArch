@@ -292,7 +292,7 @@ export const bidInclude: any = {
       role: true,
       buyerProfile: {
         select: {
-          departmentName: true,
+          department: true,
           representativeName: true,
           email: true,
           mobile: true
@@ -486,7 +486,8 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
         where: {
           OR: [
             { bidNumber: reqNumber },
-            { sourceModel: 'REQUIREMENT', sourceId: reqId }
+            { bidNumber: `REQ-${reqId}` },
+            { bidNumber: `PB-${reqId}` }
           ]
         },
         include
@@ -720,7 +721,7 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     buyerId: bid.buyerId,
     buyerOrganizationName: bid.buyerOrganizationName,
     buyerType: bid.buyerType,
-    departmentName: bid.buyer?.buyerProfile?.departmentName || null,
+    departmentName: bid.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.departmentName || null,
     consigneeDetails: bid.technicalPacket && typeof bid.technicalPacket === 'object' && (bid.technicalPacket as any).wizardData ? (bid.technicalPacket as any).wizardData : null,
     category: bid.category,
     subCategory: bid.subCategory,
@@ -765,7 +766,7 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       email: bid.buyer.email,
       mobile: bid.buyer.mobile,
       buyerProfile: bid.buyer.buyerProfile ? {
-        departmentName: bid.buyer.buyerProfile.departmentName,
+        departmentName: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName,
         representativeName: bid.buyer.buyerProfile.representativeName,
         email: bid.buyer.buyerProfile.email,
         mobile: bid.buyer.buyerProfile.mobile
@@ -1211,7 +1212,7 @@ export const listPublicBids = async (query: any, actor?: any) => {
             role: true,
             buyerProfile: {
               select: {
-                departmentName: true
+                department: true
               }
             }
           }

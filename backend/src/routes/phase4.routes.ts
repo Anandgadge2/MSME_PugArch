@@ -709,6 +709,18 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
     });
   }
 
+  if (tender && tender.requirementId) {
+    const req = await db.requirement.findUnique({ where: { id: tender.requirementId } });
+    const reqMethod = req?.canonicalMethod || (req?.payload as any)?.type || (req?.payload as any)?.fullProcurementMethod;
+    if (reqMethod === 'LIMITED_TENDER' || String(reqMethod || '').toUpperCase().includes('LIMITED')) {
+      (tender as any).tenderType = 'LIMITED_TENDER';
+      (tender as any).bidType = 'LIMITED_TENDER';
+      (tender as any).visibility = 'LIMITED';
+      (tender as any).procurementMethod = 'Limited Tender';
+      (tender as any).procurementType = 'LIMITED_TENDER';
+    }
+  }
+
   if (!tender) {
     let bid = null;
     if (numericId) {
@@ -731,11 +743,24 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
     }
 
     if (bid) {
+      const isLimited =
+        bid.bidType === 'LIMITED_TENDER' ||
+        (bid.technicalPacket as any)?.type === 'LIMITED_TENDER' ||
+        (bid.technicalPacket as any)?.fullProcurementMethod === 'LIMITED_TENDER' ||
+        (bid.technicalPacket as any)?.canonicalMethod === 'LIMITED_TENDER' ||
+        bid.visibility === 'LIMITED' ||
+        bid.visibility === 'PRIVATE';
+
       tender = {
         ...bid,
         id: bid.id,
         tenderId: bid.bidNumber,
         title: bid.title,
+        tenderType: isLimited ? 'LIMITED_TENDER' : (bid.bidType || 'OPEN_TENDER'),
+        bidType: bid.bidType || (isLimited ? 'LIMITED_TENDER' : 'OPEN_TENDER'),
+        visibility: isLimited ? 'LIMITED' : (bid.visibility || 'OPEN'),
+        procurementMethod: isLimited ? 'Limited Tender' : 'Open Tender',
+        procurementType: isLimited ? 'LIMITED_TENDER' : 'OPEN_TENDER',
         category: bid.category,
         subCategory: bid.subCategory,
         budget: Number(bid.estimatedValue || 0),
@@ -794,7 +819,9 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
         financialPacket: bid.financialPacket,
         termsAndConditions: bid.termsAndConditions,
         eligibilityCriteria: bid.eligibilityCriteria,
-        requiredDocuments: bid.requiredDocuments
+        requiredDocuments: bid.requiredDocuments,
+        invitations: (bid as any).invitations || [],
+        invitedCount: (bid as any).invitations?.length || (bid.technicalPacket as any)?.vendors?.invitedSellers?.length || (bid.technicalPacket as any)?.vendors?.inviteCount || 0
       } as any;
       
       if (bid.technicalPacket && typeof bid.technicalPacket === 'object') {

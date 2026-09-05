@@ -2554,7 +2554,13 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
             }
             if (!requirement) {
                 const legacyReq = await db.requirement.findFirst({
-                    where: hasNumericId ? { id } : { requirementNumber: idToken },
+                    where: {
+                        OR: [
+                            { requirementNumber: idToken },
+                            { requirementNumber: idToken.startsWith('REQ-') ? idToken : `REQ-${idToken}` },
+                            ...(hasNumericId ? [{ id }] : [])
+                        ]
+                    },
                     select: publicLegacyRequirementDetailSelect
                 });
                 if (legacyReq) {
@@ -2702,6 +2708,27 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         ]);
         similar = similarList.map(decorateRequirement);
         ownResponse = response;
+
+        const lookupReqId = isLegacy ? Math.abs(Number(requirement.id)) : Number(requirement.id);
+        const linkedAuction = await db.auction.findFirst({
+            where: {
+                OR: [
+                    ...(Number.isFinite(lookupReqId) && lookupReqId > 0 ? [{ linkedRequirementId: lookupReqId }] : []),
+                    ...(requirement.requirementNumber ? [{ referenceNo: requirement.requirementNumber }] : []),
+                    ...(Number.isFinite(lookupReqId) && lookupReqId > 0 ? [{ referenceNo: `REQ-${lookupReqId}` }] : [])
+                ]
+            },
+            select: { id: true, auctionCode: true, status: true, statusEnum: true }
+        }).catch(() => null);
+
+        if (linkedAuction) {
+            requirement.linkedAuctionId = linkedAuction.id;
+            requirement.auctionId = linkedAuction.id;
+            requirement.canonicalMethod = 'REVERSE_AUCTION';
+            requirement.procurementMethod = 'REVERSE_AUCTION';
+            requirement.procurementType = 'Reverse Auction';
+            requirement.bidType = 'Reverse Auction';
+        }
 
         return ok(res, { requirement, similarRequirements: similar, ownResponse });
     } catch (error) {

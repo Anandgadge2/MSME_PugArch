@@ -2681,7 +2681,59 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
   const statusLabel = (props.status || 'ACTIVE').toUpperCase();
   const displayIdStr = String(props.displayId || props.id);
-  const procurementTypeLabel = props.procurementLabel || props.procurementType || 'PROCUREMENT';
+
+  const isLimitedTenderType =
+    props.procurementType === 'LIMITED_TENDER' ||
+    String(props.procurementType || '').toUpperCase().includes('LIMITED_TENDER') ||
+    String(props.procurementType || '').toUpperCase().includes('LIMITED TENDER') ||
+    String(props.procurementLabel || '').toUpperCase().includes('LIMITED TENDER') ||
+    String(props.procurementMethod || '').toUpperCase().includes('LIMITED TENDER') ||
+    String(payload.fullProcurementMethod || '').toUpperCase().includes('LIMITED') ||
+    String(payload.type || '').toUpperCase().includes('LIMITED') ||
+    String(payload.canonicalMethod || '').toUpperCase().includes('LIMITED') ||
+    String(payload.basics?.procurementMethod || '').toUpperCase().includes('LIMITED') ||
+    String(payload.basics?.canonicalMethod || '').toUpperCase().includes('LIMITED') ||
+    pathname.includes('/limited-tender') ||
+    pathname.includes('/limited');
+  const isBuyerLimitedTender = isBuyerSide && isLimitedTenderType;
+
+  const isOpenTenderType = !isLimitedTenderType && (
+    props.procurementType === 'OPEN_TENDER' ||
+    String(props.procurementType || '').toUpperCase().includes('OPEN_TENDER') ||
+    String(props.procurementType || '').toUpperCase().includes('OPEN TENDER') ||
+    String(props.procurementLabel || '').toUpperCase().includes('OPEN TENDER') ||
+    String(props.procurementMethod || '').toUpperCase().includes('OPEN TENDER') ||
+    pathname.includes('/open-tender') ||
+    (pathname.includes('/tender') && !pathname.includes('/limited'))
+  );
+  const isBuyerOpenTender = isBuyerSide && isOpenTenderType;
+
+  const isRfqType =
+    props.procurementType === 'RFQ' ||
+    String(props.procurementType || '').toUpperCase().includes('RFQ') ||
+    String(props.procurementLabel || '').toUpperCase().includes('QUOTATION') ||
+    String(props.procurementLabel || '').toUpperCase().includes('RFQ');
+  const isBuyerRfq = isBuyerSide && (isRfqType || pathname.includes('/rfq'));
+
+  const isRateContractType =
+    props.procurementType === 'RATE_CONTRACT' ||
+    String(props.procurementType || '').toUpperCase().includes('RATE_CONTRACT') ||
+    String(props.procurementType || '').toUpperCase().includes('RATE CONTRACT') ||
+    String(props.procurementLabel || '').toUpperCase().includes('RATE CONTRACT') ||
+    String(props.procurementMethod || '').toUpperCase().includes('RATE CONTRACT') ||
+    pathname.includes('/rate-contract');
+  const isBuyerRateContract = isBuyerSide && isRateContractType;
+  const resolvedRateContractConfig = props.rateContractConfig || payload.rateContractConfig || payload.rateContract || {};
+
+  const procurementTypeLabel = isLimitedTenderType
+    ? 'Limited Tender'
+    : (isOpenTenderType
+        ? 'Open Tender'
+        : (isRfqType
+            ? 'Request for Quotation'
+            : (isRateContractType
+                ? 'Rate Contract'
+                : (props.procurementLabel || props.procurementType || 'PROCUREMENT'))));
 
   // Title / Procurement Name Resolution
   const isGenericTitle = (val?: string | null) => {
@@ -2742,43 +2794,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.id && Number(props.id) > 0 ? `${procurementTypeLabel.toUpperCase().replace(/\s+/g, '_')}-${props.id}` : undefined
   ) || `RFQ-${Math.abs(Number(props.id || 1))}`;
 
-  const isRfqType =
-    props.procurementType === 'RFQ' ||
-    String(props.procurementType || '').toUpperCase().includes('RFQ') ||
-    String(props.procurementLabel || '').toUpperCase().includes('QUOTATION') ||
-    String(props.procurementLabel || '').toUpperCase().includes('RFQ');
-  const isBuyerRfq = isBuyerSide && (isRfqType || pathname.includes('/rfq'));
-
-  const isOpenTenderType =
-    props.procurementType === 'OPEN_TENDER' ||
-    String(props.procurementType || '').toUpperCase().includes('OPEN_TENDER') ||
-    String(props.procurementType || '').toUpperCase().includes('OPEN TENDER') ||
-    String(props.procurementLabel || '').toUpperCase().includes('OPEN TENDER') ||
-    String(props.procurementMethod || '').toUpperCase().includes('OPEN TENDER') ||
-    pathname.includes('/open-tender') ||
-    (pathname.includes('/tender') && !pathname.includes('/limited'));
-  const isBuyerOpenTender = isBuyerSide && isOpenTenderType;
-
-  const isLimitedTenderType =
-    props.procurementType === 'LIMITED_TENDER' ||
-    String(props.procurementType || '').toUpperCase().includes('LIMITED_TENDER') ||
-    String(props.procurementType || '').toUpperCase().includes('LIMITED TENDER') ||
-    String(props.procurementLabel || '').toUpperCase().includes('LIMITED TENDER') ||
-    String(props.procurementMethod || '').toUpperCase().includes('LIMITED TENDER') ||
-    pathname.includes('/limited-tender') ||
-    pathname.includes('/limited');
-  const isBuyerLimitedTender = isBuyerSide && isLimitedTenderType;
-
-  const isRateContractType =
-    props.procurementType === 'RATE_CONTRACT' ||
-    String(props.procurementType || '').toUpperCase().includes('RATE_CONTRACT') ||
-    String(props.procurementType || '').toUpperCase().includes('RATE CONTRACT') ||
-    String(props.procurementLabel || '').toUpperCase().includes('RATE CONTRACT') ||
-    String(props.procurementMethod || '').toUpperCase().includes('RATE CONTRACT') ||
-    pathname.includes('/rate-contract');
-  const isBuyerRateContract = isBuyerSide && isRateContractType;
-  const resolvedRateContractConfig = props.rateContractConfig || payload.rateContractConfig || payload.rateContract || {};
-
   const cleanBuyerTerms = (val: any): any => {
     if (!isBuyerSide || !val) return val;
     if (typeof val === 'string') {
@@ -2837,6 +2852,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   };
 
   const rawMethod = firstPresent(
+    isLimitedTenderType ? 'Limited Tender' : undefined,
+    isOpenTenderType ? 'Open Tender' : undefined,
     props.procurementMethod,
     payload.fullProcurementMethod,
     payload.type,
@@ -2846,7 +2863,13 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
   const procurementMethod = isRfqType
     ? 'Request for Quotation'
-    : (rawMethod === 'RFQ' ? 'Request for Quotation' : rawMethod);
+    : (rawMethod === 'RFQ'
+        ? 'Request for Quotation'
+        : (isLimitedTenderType || String(rawMethod).toUpperCase() === 'LIMITED_TENDER' || String(rawMethod).toUpperCase() === 'LIMITED TENDER'
+            ? 'Limited Tender'
+            : (isOpenTenderType || String(rawMethod).toUpperCase() === 'OPEN_TENDER' || String(rawMethod).toUpperCase() === 'OPEN TENDER'
+                ? 'Open Tender'
+                : rawMethod)));
 
   const buyingType = firstPresent(
     props.buyingType,

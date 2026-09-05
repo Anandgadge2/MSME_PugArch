@@ -57,7 +57,7 @@ const getCurrentLowest = (auction?: ReverseAuction) =>
 
 const getBidAmount = (bid: ReverseAuctionBid) => numberValue(bid.amount ?? bid.bidAmount, 0);
 
-const liveSummaryCache = new Map<number, any>();
+const liveSummaryCache = new Map<number | string, any>();
 
 const liveAwareRefetch = (query: any) => {
   const auction = query?.state?.data?.auction || query?.state?.data;
@@ -65,7 +65,7 @@ const liveAwareRefetch = (query: any) => {
   return isAuctionLive(auction, query?.state?.data?.serverTime) ? 3_000 : 20_000;
 };
 
-export default function ReverseAuctionLivePage({ id }: { id: number }) {
+export default function ReverseAuctionLivePage({ id }: { id: number | string }) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';

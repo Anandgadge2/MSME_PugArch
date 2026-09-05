@@ -691,20 +691,21 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
           case 'rate-contract':    return <RateContractDetailPage />;
           case 'reverse-auction': {
             const numId = Number(id);
-            if (Number.isFinite(numId) && numId > 0) return <ReverseAuctionDetailPage id={numId} />;
-            break;
+            return <ReverseAuctionDetailPage id={Number.isFinite(numId) && numId > 0 ? numId : id} />;
           }
         }
       }
       const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/live$/);
       if (procAuctionLiveMatch) {
-        const id = Number(decodeURIComponent(procAuctionLiveMatch[2]));
-        if (Number.isFinite(id) && id > 0) return <ReverseAuctionLivePage id={id} />;
+        const raw = decodeURIComponent(procAuctionLiveMatch[2]);
+        const id = Number(raw);
+        return <ReverseAuctionLivePage id={Number.isFinite(id) && id > 0 ? id : raw} />;
       }
       const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/results$/);
       if (procAuctionResultMatch) {
-        const id = Number(decodeURIComponent(procAuctionResultMatch[2]));
-        if (Number.isFinite(id) && id > 0) return <AuctionResultPage id={id} />;
+        const raw = decodeURIComponent(procAuctionResultMatch[2]);
+        const id = Number(raw);
+        return <AuctionResultPage id={Number.isFinite(id) && id > 0 ? id : raw} />;
       }
     }
 
@@ -713,10 +714,11 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/seller/rfp' || pathname === '/shg/rfp') return <RfpDetailPage />;
     if (pathname === '/seller/rate-contract' || pathname === '/shg/rate-contract') return <RateContractDetailPage />;
     {
-      const reverseAuctionDetailMatch = pathname.match(/^\/reverse-auctions\/(\d+)$/);
+      const reverseAuctionDetailMatch = pathname.match(/^\/reverse-auctions\/([^/]+)$/);
       if (reverseAuctionDetailMatch) {
-        const id = Number(reverseAuctionDetailMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <ReverseAuctionDetailPage id={id} />;
+        const raw = decodeURIComponent(reverseAuctionDetailMatch[1]);
+        const id = Number(raw);
+        return <ReverseAuctionDetailPage id={Number.isFinite(id) && id > 0 ? id : raw} />;
       }
     }
 

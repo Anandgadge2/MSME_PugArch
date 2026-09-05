@@ -9,6 +9,7 @@ import RfqDetailPage from '../../rfq/pages/RfqDetailPage';
 import RateContractDetailPage from '../../rfq/pages/RateContractDetailPage';
 import OpenTenderDetailPage from '../../rfq/pages/OpenTenderDetailPage';
 import LimitedTenderDetailPage from '../../rfq/pages/LimitedTenderDetailPage';
+import ReverseAuctionDetailPage from '../../reverseAuctions/pages/ReverseAuctionDetailPage';
 import { procurementBidApi } from '../api';
 import { getApi } from '../../shared/apiClient';
 import { Skeleton } from '../../../components/ui/skeleton';
@@ -225,7 +226,25 @@ export default function BidDetailsPage() {
   const title = String(bidObj.title || bidObj.subject || '').toUpperCase();
   const reqNum = String(bidObj.requirementNumber || bidObj.referenceNumber || bidObj.bidNumber || requestId || '').toUpperCase();
 
-  // 1. Rate Contract (Check FIRST before generic Open Tender)
+  // 1. Reverse Auction (Check FIRST before generic Open Tender)
+  if (
+    Boolean(bidObj.linkedAuctionId || bidObj.auctionId) ||
+    rawMethod.includes('AUCTION') ||
+    rawMethod.includes('REVERSE') ||
+    queryType.includes('AUCTION') ||
+    queryType.includes('REVERSE') ||
+    title.includes('REVERSE AUCTION') ||
+    desc.includes('REVERSE AUCTION') ||
+    reqNum.startsWith('RA-') ||
+    String(bidObj.bidType || '').toUpperCase() === 'REVERSE AUCTION' ||
+    String(bidObj.procurementType || '').toUpperCase() === 'REVERSE AUCTION' ||
+    String(bidObj.canonicalMethod || '').toUpperCase() === 'REVERSE_AUCTION'
+  ) {
+    const auctionTargetId = bidObj.linkedAuctionId || bidObj.auctionId || bidObj.id || requestId;
+    return <ReverseAuctionDetailPage id={auctionTargetId} />;
+  }
+
+  // 2. Rate Contract (Check before generic Open Tender)
   if (
     rawMethod.includes('RATE') ||
     title.includes('RATE CONTRACT') ||

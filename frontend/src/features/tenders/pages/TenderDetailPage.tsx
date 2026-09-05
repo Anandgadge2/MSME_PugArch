@@ -37,6 +37,13 @@ interface TenderDetail {
   status: string;
   statusEnum?: string;
   visibility?: string;
+  bidType?: string;
+  tenderType?: string;
+  procurementType?: string;
+  procurementMethod?: string;
+  invitedCount?: number;
+  invitedSellers?: any[];
+  invitations?: any[];
   publishedAt?: string | Date;
   closesAt?: string | Date;
   createdAt?: string | Date;
@@ -338,6 +345,29 @@ export default function TenderDetailPage() {
   const consigneeDetails = draft.consigneeDetails || [];
   const auctionConfig = draft.auctionConfig || {};
 
+  const isLimitedTender = Boolean(
+    tender.category?.toUpperCase().includes('LIMITED') ||
+    tender.visibility === 'LIMITED' ||
+    (tender as any).bidType === 'LIMITED_TENDER' ||
+    (tender as any).tenderType === 'LIMITED_TENDER' ||
+    (tender as any).tenderType === 'LIMITED' ||
+    (tender as any).procurementType === 'LIMITED_TENDER' ||
+    (tender as any).procurementMethod === 'LIMITED_TENDER' ||
+    String((tender as any).procurementMethod || '').toUpperCase().includes('LIMITED') ||
+    draft.type === 'LIMITED_TENDER' ||
+    draft.type === 'LIMITED' ||
+    draft.fullProcurementMethod === 'LIMITED_TENDER' ||
+    draft.canonicalMethod === 'LIMITED_TENDER' ||
+    draft.method === 'LIMITED_TENDER' ||
+    draft.procurementMethod === 'LIMITED_TENDER' ||
+    basics.procurementMethod === 'LIMITED_TENDER' ||
+    basics.fullProcurementMethod === 'LIMITED_TENDER' ||
+    basics.canonicalMethod === 'LIMITED_TENDER' ||
+    basics.type === 'LIMITED_TENDER' ||
+    String(draft.basics?.description || '').toUpperCase().includes('LIMITED_TENDER') ||
+    String(tender.description || '').toUpperCase().includes('LIMITED_TENDER')
+  );
+
   const tenderItems = (tender.tenderItems || []).map((it, idx) => ({
     id: it.id || idx + 1,
     name: it.itemName,
@@ -359,10 +389,18 @@ export default function TenderDetailPage() {
     required: true,
   }));
 
+  const invitedCountVal =
+    (tender as any).invitedCount ||
+    (tender as any).invitationsCount ||
+    (Array.isArray(vendors.invitedSellers) ? vendors.invitedSellers.length : 0) ||
+    Number(vendors.inviteCount) ||
+    (Array.isArray((tender as any).invitations) ? (tender as any).invitations.length : 0) ||
+    0;
+
   return (
     <ProcurementDetailUnifiedView
-      procurementType={tender.category?.includes('LIMITED') || tender.visibility === 'LIMITED' ? 'LIMITED_TENDER' : 'OPEN_TENDER'}
-      procurementLabel={tender.category?.includes('LIMITED') || tender.visibility === 'LIMITED' ? 'Limited Tender' : 'Open Tender'}
+      procurementType={isLimitedTender ? 'LIMITED_TENDER' : 'OPEN_TENDER'}
+      procurementLabel={isLimitedTender ? 'Limited Tender' : 'Open Tender'}
       id={tender.id}
       displayId={tenderIdString}
       subject={title}
@@ -381,7 +419,10 @@ export default function TenderDetailPage() {
       bidValidityDate={schedule.bidValidityDate ? formatDateString(schedule.bidValidityDate) : undefined}
       requiredByDate={basics.requiredByDate ? formatDateString(basics.requiredByDate) : ((tender as any).deliveryDate ? formatDateString((tender as any).deliveryDate) : undefined)}
       category={tender.category}
-      procurementMethod={tender.visibility === 'LIMITED' ? 'Limited Tender' : 'Open Tender'}
+      procurementMethod={isLimitedTender ? 'Limited Tender' : 'Open Tender'}
+      invitedCount={invitedCountVal}
+      invitedSellers={(tender as any).invitedSellers || vendors.invitedSellers || draft.invitedSellers}
+      invitations={(tender as any).invitations || vendors.invitations || draft.invitations}
       buyingType={basics.buyingType || 'Goods'}
       deliveryLocation={basics.deliveryLocation || internal.deliveryAddress || tender.buyer?.buyerProfile?.address}
       paymentTerms={tender.paymentTerms || terms.paymentTerms}
@@ -404,7 +445,7 @@ export default function TenderDetailPage() {
       emdAmount={tender.emdAmount}
       isEmdRequired={Boolean(tender.emdAmount && tender.emdAmount > 0)}
       backRoute={user?.role === 'seller' ? '/seller/opportunities' : '/buyer/tenders'}
-      backRouteLabel="Tender Opportunities"
+      backRouteLabel={isLimitedTender ? 'Limited Tender Opportunities' : 'Tender Opportunities'}
       submitButtonLabel="Submit Tender Proposal"
       onSubmitClick={handleParticipate}
     />

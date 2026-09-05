@@ -6,7 +6,7 @@ import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureState
 import { formatCurrency } from '../../shared/format';
 import { reverseAuctionApi } from '../api';
 
-export default function AuctionResultPage({ id }: { id: number }) {
+export default function AuctionResultPage({ id }: { id: number | string }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ['reverse-auction-result', id], queryFn: () => reverseAuctionApi.result(id), staleTime: 10_000 });
   const award = useMutation({

@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { sellerRoutes } from '@/lib/routes';
+import { buyerRoutes, sellerRoutes } from '@/lib/routes';
 import {
   Search,
   RefreshCw,
@@ -404,6 +404,8 @@ export default function SupplierResponsesPage() {
         id: p.referenceNumber || String(p.id),
         bidNumber: p.referenceNumber || `PB-${p.id}`,
         requirementId: p.id,
+        linkedAuctionId: p.linkedAuctionId || p.rawProcurement?.linkedAuctionId || p.auctionId || null,
+        auctionId: p.auctionId || p.linkedAuctionId || p.rawProcurement?.linkedAuctionId || null,
         buyerId: user?.id,
         sourceModel: p.type?.toUpperCase() || 'PROCUREMENT',
         sourceId: p.id,
@@ -482,10 +484,21 @@ export default function SupplierResponsesPage() {
       router.push(`/bids/${bid.id}?method=RATE_CONTRACT`);
       return;
     }
+    if (
+      typeStr === 'Reverse Auction' ||
+      String(bid.method || '').toLowerCase().includes('auction') ||
+      String(bid.procurementType || '').toUpperCase().includes('AUCTION') ||
+      String(bid.canonicalMethod || '').toUpperCase().includes('AUCTION') ||
+      Boolean(bid.linkedAuctionId || bid.auctionId)
+    ) {
+      const targetId = bid.linkedAuctionId || bid.rawProcurement?.linkedAuctionId || bid.auctionId || bid.requirementId || bid.id;
+      router.push(buyerRoutes.detail('REVERSE_AUCTION', targetId));
+      return;
+    }
     if (bid.isMarketplaceRequirement) {
       const method = String(bid.procurementType || '').toUpperCase();
       if (method === 'REVERSE_AUCTION' || method.includes('AUCTION')) {
-        router.push(sellerRoutes.detail('REVERSE_AUCTION', bid.requirementId));
+        router.push(buyerRoutes.detail('REVERSE_AUCTION', bid.linkedAuctionId || bid.auctionId || bid.requirementId));
       } else {
         router.push(`/marketplace/requirements/${bid.requirementId}`);
       }
