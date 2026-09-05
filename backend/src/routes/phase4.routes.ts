@@ -7278,7 +7278,34 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
 
 router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
-  const po = await db.purchaseOrder.findUnique({ where: { id }, include: { items: { include: { product: { select: { name: true, unitOfMeasure: true } } } }, invoices: true, deliveryTrackings: true, inspectionReports: true } });
+  const po = await db.purchaseOrder.findUnique({
+    where: { id },
+    include: {
+      buyer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          buyerProfile: true,
+          organization: { select: { organizationName: true, address: true, city: true, state: true, pincode: true } }
+        }
+      },
+      seller: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          sellerProfile: true,
+          organization: { select: { organizationName: true, address: true, city: true, state: true, pincode: true } }
+        }
+      },
+      items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
+      invoices: true,
+      deliveryTrackings: true,
+      inspectionReports: true
+    }
+  });
   
   let isAllowed = false;
   if (po) {

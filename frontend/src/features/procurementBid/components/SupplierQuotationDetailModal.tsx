@@ -23,7 +23,8 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
-import { openFileAsset } from '../../../lib/files';
+import { openFileAsset, getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
+import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { toast } from 'sonner';
 
 export interface SupplierQuotationDetailViewProps {
@@ -353,9 +354,29 @@ export function SupplierQuotationDetailView({
     { label: 'UDYAM / MSME', verified: uniqueDocs.some(d => /udyam|msme/i.test(`${d.name} ${d.category}`)) },
   ];
 
+  const [previewDocument, setPreviewDocument] = React.useState<DocumentPreview | null>(null);
+
   const handlePreviewDoc = async (doc: any) => {
     try {
       if (doc.fileAssetId || doc.fileUrl || doc.url) {
+        try {
+          const prev = await getFileAssetPreview(
+            {
+              id: doc.fileAssetId || doc.id,
+              fileAssetId: doc.fileAssetId,
+              url: doc.fileUrl || doc.url,
+              fileName: doc.fileName || doc.name,
+            },
+            doc.name || doc.fileName || 'Document'
+          );
+          if (prev) {
+            setPreviewDocument(prev);
+            return;
+          }
+        } catch {
+          // Fallback to openFileAsset below
+        }
+
         await openFileAsset(
           {
             id: doc.fileAssetId || doc.id,
@@ -917,6 +938,12 @@ export function SupplierQuotationDetailView({
           Back to Results
         </Button>
       </div>
+
+      {/* Regular Document Preview Modal */}
+      <DocumentPreviewModal
+        previewDocument={previewDocument}
+        onClose={() => setPreviewDocument(null)}
+      />
 
     </div>
   );

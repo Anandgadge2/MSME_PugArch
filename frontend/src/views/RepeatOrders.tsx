@@ -42,6 +42,7 @@ import { PageToolbar } from '../features/shared/PageToolbar';
 import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
 import { PageTableSkeleton } from '../components/ui/skeleton';
+import { PurchaseOrderReceiptModal } from '../features/purchaseOrders/components/PurchaseOrderReceiptModal';
 
 type StatusTab = 'Delivered' | 'All';
 
@@ -781,65 +782,18 @@ export default function RepeatOrders() {
         </div>
       )}
 
-      {/* View Order Details Modal */}
+      {/* Purchase Order Receipt Modal (Full Screen & 1st Page Format) */}
       {viewingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
-          <div className="w-full max-w-lg overflow-hidden rounded-[24px] bg-white shadow-2xl ring-1 ring-slate-200">
-            <div className="border-b border-slate-100 bg-slate-50/50 px-5 py-4 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Order Details</p>
-                <h3 className="text-sm font-black text-slate-900">{viewingOrder.poNumber}</h3>
-              </div>
-              <Button variant="ghost" onClick={() => setViewingOrder(null)} className="h-8 w-8 p-0 rounded-full">
-                <XCircle className="h-5 w-5 text-slate-400" />
-              </Button>
-            </div>
-            <div className="p-5 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-                <InfoTile label="Title" value={viewingOrder.title || '-'} />
-                <InfoTile label="Status" value={String(viewingOrder.status || '-').replace(/_/g, ' ')} />
-                <InfoTile label="Supplier" value={viewingOrder.seller?.name || `Seller #${viewingOrder.sellerId || '-'}`} />
-                <InfoTile label="Total Value" value={formatCurrency(viewingOrder.amount || viewingOrder.totalValue)} />
-                <InfoTile label="Expected Delivery" value={formatDate(viewingOrder.expectedDelivery)} />
-                <InfoTile label="Updated" value={formatDate(viewingOrder.updatedAt)} />
-                <InfoTile label="Delivery Address" value={viewingOrder.deliveryAddress || '-'} />
-                <InfoTile label="Created" value={formatDate(viewingOrder.createdAt)} />
-              </div>
-
-              {viewingOrder.items && viewingOrder.items.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">Line Items</p>
-                  <div className="rounded-xl border border-slate-200 overflow-x-auto">
-                    <table className="w-full text-xs min-w-[500px]">
-                      <thead><tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                        <th className="p-2 text-left">Item</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Unit Price</th><th className="p-2 text-right">Total</th>
-                      </tr></thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {viewingOrder.items.map((it: any, idx: number) => (
-                          <tr key={idx} className="font-semibold text-slate-700">
-                            <td className="p-2">{it.itemName || it.description || `Item ${idx + 1}`}</td>
-                            <td className="p-2 text-right">{Number(it.quantity || 0).toLocaleString()}</td>
-                            <td className="p-2 text-right">{formatCurrency(it.unitPrice)}</td>
-                            <td className="p-2 text-right font-bold text-slate-900">{formatCurrency(Number(it.quantity || 0) * Number(it.unitPrice || 0))}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-                <Button variant="outline" onClick={() => setViewingOrder(null)} className="h-9 text-[10px] font-black uppercase">Close</Button>
-                {String(viewingOrder.status || '').toLowerCase() === 'delivered' && (
-                  <Button onClick={() => { setViewingOrder(null); handleOpenRepeatModal(viewingOrder); }} className="h-9 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445]">
-                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Repeat This Order
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <PurchaseOrderReceiptModal
+          order={viewingOrder}
+          onClose={() => setViewingOrder(null)}
+          isBuyer={true}
+          isSeller={false}
+          onRepeatOrder={(order) => {
+            setViewingOrder(null);
+            handleOpenRepeatModal(order as PurchaseOrderDto);
+          }}
+        />
       )}
 
       {/* Repeat Order Modal */}
