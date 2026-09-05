@@ -50,8 +50,8 @@ import { ratingsService } from '../modules/ratings/ratings.service.js';
 import { enrichBidsWithResponses } from '../modules/procurementBid/procurement-bid.routes.js';
 import { STRICT_VERIFICATION } from '../config/verification.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
+import { nextBidNumber, deriveVisibility, syncBidInvitations, extractInvitedSellerIds } from '../modules/procurementBid/procurement-bid.service.js';
 import { canonicalMethodFromRecord } from '../utils/procurement-methods.js';
-import { nextBidNumber, deriveVisibility, syncBidInvitations } from '../modules/procurementBid/procurement-bid.service.js';
 
 
 const safeCoercedDate = z.preprocess((val) => {
@@ -1882,6 +1882,37 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
       });
 
   await syncBidInvitations(bid.id, baseData.technicalPacket, userId(req));
+
+  const invitedSellerIds = extractInvitedSellerIds(baseData.technicalPacket);
+  const isInviteOnly = vendors.selection === 'Category' || vendors.selection === 'Selected' || baseData.visibility === 'PRIVATE';
+  if (isInviteOnly && invitedSellerIds.length > 0) {
+    try {
+      const sellerUsers = await db.user.findMany({
+        where: {
+          OR: [
+            { id: { in: invitedSellerIds } },
+            { organizationId: { in: invitedSellerIds } }
+          ],
+          role: { in: ['seller', 'shg'] },
+          accountStatus: 'ACTIVE'
+        },
+        select: { id: true }
+      });
+      const isCategory = vendors.selection === 'Category';
+      const notifTitle = isCategory
+        ? `Category Procurement Invitation: ${baseData.category || 'New Opportunity'}`
+        : `New Procurement Invitation: ${baseData.title}`;
+      const notifMessage = isCategory
+        ? `You have been invited to participate in procurement "${bid.title}" as a category-matched supplier for ${baseData.category || 'this opportunity'}.`
+        : `You have been invited to participate in procurement "${bid.title}".`;
+
+      for (const u of sellerUsers) {
+        notifySafe(u.id, notifTitle, notifMessage, 'bid.invitation', `/seller/procurement/events/${bid.id}`, 'high');
+      }
+    } catch (notifErr) {
+      console.warn('[ProcurementSubmit] Failed to dispatch invited seller notifications:', notifErr);
+    }
+  }
 
   await db.requirement.update({
     where: { id: requirement.id },

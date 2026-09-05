@@ -40,8 +40,15 @@ export function DocumentPreviewModal({
     if (!previewDocument) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [previewDocument]);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [previewDocument, onClose]);
 
   if (!previewDocument) return null;
 
@@ -64,10 +71,14 @@ export function DocumentPreviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/80 p-2 sm:p-4 backdrop-blur-md"
+      className="fixed inset-0 z-[1000000] flex items-center justify-center bg-slate-950/80 p-2 sm:p-4 backdrop-blur-md animate-in fade-in duration-150"
       onWheel={handleOverlayWheel}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={previewDocument.label || 'Document Preview'}
     >
-      <div className="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-white/10">
+      <div className="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-white/10 animate-in zoom-in-95 duration-200">
         {/* Top Header Bar matching PO Receipt Modal */}
         <header className="bg-[#0b1f3a] text-white px-4 sm:px-6 py-3 shrink-0 flex items-center justify-between border-b border-white/10 shadow-md">
           <div className="flex items-center gap-3 min-w-0">

@@ -615,7 +615,7 @@ export default function ProcurementDraftsPage() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {/* <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard
           label="Total Drafts"
           value={kpiData.total}
@@ -655,7 +655,7 @@ export default function ProcurementDraftsPage() {
           active={false}
           color="slate"
         />
-      </div>
+      </div> */}
 
       {/* ── Search + Filter + View Toggle Toolbar ── */}
       <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">

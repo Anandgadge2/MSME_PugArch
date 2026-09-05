@@ -2133,8 +2133,49 @@ router.get('/marketplace/sellers', shortCache(60), async (req: Request, res: Res
         const skip = (page - 1) * pageSize;
 
         const where: any = { ...sellerOrganizationWhere };
+        const conditions: any[] = [];
+
         if (query.q) {
-            where.organizationName = { contains: query.q, mode: 'insensitive' };
+            conditions.push({ organizationName: { contains: query.q, mode: 'insensitive' } });
+        }
+
+        if (query.categoryId || query.category) {
+            const categoryFilterConditions: any[] = [];
+            if (query.categoryId) {
+                categoryFilterConditions.push(
+                    { products: { some: { status: 'ACTIVE', categoryId: query.categoryId } } },
+                    { services: { some: { status: 'ACTIVE', categoryId: query.categoryId } } }
+                );
+            }
+            if (query.category) {
+                const catName = query.category.trim();
+                const FRONTEND_CATEGORY_TO_DB_MAP: Record<string, string> = {
+                    'IT Hardware': 'IT & Computer Equipment',
+                    'Office Equipment': 'Office Equipment & Stationery',
+                    'Electrical': 'Electrical & Electronics',
+                    'Mechanical': 'Mechanical & Engineering',
+                    'Civil Works': 'Construction & Civil Work Services',
+                    'Facility Management': 'Industrial Maintenance Services',
+                    'Professional Services': 'Engineering Consultancy Services'
+                };
+                const mappedName = FRONTEND_CATEGORY_TO_DB_MAP[catName] || catName;
+                const searchTerms = Array.from(new Set([catName, mappedName].filter(Boolean)));
+
+                for (const term of searchTerms) {
+                    categoryFilterConditions.push(
+                        { products: { some: { status: 'ACTIVE', category: { name: { contains: term, mode: 'insensitive' } } } } },
+                        { services: { some: { status: 'ACTIVE', category: { name: { contains: term, mode: 'insensitive' } } } } },
+                        { sellerProfiles: { some: { productCategories: { has: term } } } }
+                    );
+                }
+            }
+            if (categoryFilterConditions.length > 0) {
+                conditions.push({ OR: categoryFilterConditions });
+            }
+        }
+
+        if (conditions.length > 0) {
+            where.AND = conditions;
         }
 
         const rawSort = String(req.query.sort || '').toLowerCase();
@@ -2467,15 +2508,21 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
         ]);
 
         const currentUserId = req.user?.id ? Number(req.user.id) : null;
+        const currentUserOrgId = req.user?.organizationId ? Number(req.user.organizationId) : null;
         const filteredLegacy = (legacyRequirements || []).filter((reqItem: any) => {
             const method = reqItem.canonicalMethod || reqItem.procurementMethod || '';
             const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
             const isLimitedRfq = method.toUpperCase() === 'RFQ' && reqItem.payload && typeof reqItem.payload === 'object' && (reqItem.payload as any).rfqType === 'LIMITED';
+            const selection = String((reqItem.payload as any)?.vendors?.selection || '').toUpperCase();
+            const isInviteOnly = selection === 'SELECTED' || selection === 'CATEGORY' || selection === 'SELECT' || selection === 'LIMITED';
             
-            if (isRestricted || isLimitedRfq) {
+            if (isRestricted || isLimitedRfq || isInviteOnly) {
                 if (!currentUserId) return false;
+                const isOwner = Number(reqItem.buyerId || reqItem.createdById) === currentUserId;
+                const isAdmin = ['admin', 'master_admin'].includes(req.user?.role || '');
+                if (isOwner || isAdmin) return true;
                 const invited = Array.isArray((reqItem.payload as any)?.vendors?.invitedSellers) ? (reqItem.payload as any).vendors.invitedSellers : [];
-                return invited.includes(currentUserId);
+                return invited.includes(currentUserId) || (currentUserOrgId && invited.includes(currentUserOrgId));
             }
             return true;
         });
@@ -2628,17 +2675,25 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         }
 
         const currentUserId = req.user?.id ? Number(req.user.id) : null;
+        const currentUserOrgId = req.user?.organizationId ? Number(req.user.organizationId) : null;
         const method = requirement.canonicalMethod || requirement.procurementMethod || '';
         const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
         const isLimitedRfq = method.toUpperCase() === 'RFQ' && requirement.payload && typeof requirement.payload === 'object' && (requirement.payload as any).rfqType === 'LIMITED';
+        const selection = String((requirement.payload as any)?.vendors?.selection || '').toUpperCase();
+        const isInviteOnly = selection === 'SELECTED' || selection === 'CATEGORY' || selection === 'SELECT' || selection === 'LIMITED' || requirement.visibility === 'PRIVATE';
         
-        if (isRestricted || isLimitedRfq) {
+        if (isRestricted || isLimitedRfq || isInviteOnly) {
             if (!currentUserId) {
                 return apiResponse.error(res, 403, 'Access denied. This is a restricted procurement event.', 'FORBIDDEN');
             }
-            const invited = Array.isArray((requirement.payload as any)?.vendors?.invitedSellers) ? (requirement.payload as any).vendors.invitedSellers : [];
-            if (!invited.includes(currentUserId)) {
-                return apiResponse.error(res, 403, 'Access denied. You are not invited to this procurement event.', 'FORBIDDEN');
+            const isOwner = Boolean(req.user?.id && (requirement.buyerId === req.user.id || requirement.createdById === req.user.id || (req.user.organizationId && requirement.buyerOrganizationId === req.user.organizationId)));
+            const isAdmin = ['admin', 'master_admin'].includes(req.user?.role || '');
+            if (!isOwner && !isAdmin) {
+                const invited = Array.isArray((requirement.payload as any)?.vendors?.invitedSellers) ? (requirement.payload as any).vendors.invitedSellers : [];
+                const isInvited = invited.includes(currentUserId) || (currentUserOrgId && invited.includes(currentUserOrgId));
+                if (!isInvited) {
+                    return apiResponse.error(res, 403, 'Access denied. You are not invited to this procurement event.', 'FORBIDDEN');
+                }
             }
         }
 

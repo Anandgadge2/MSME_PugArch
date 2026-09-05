@@ -48,6 +48,17 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
     }
   }
 
+  const fileName = typeof fileAsset === 'object' ? (fileAsset?.fileName || fileAsset?.originalName || fileAsset?.name || '') : '';
+  const fileExt = (fileName || label || '').match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() || '';
+
+  if (typeof fileAsset === 'object' && fileAsset?.signedUrl) {
+    return {
+      label,
+      url: fileAsset.signedUrl,
+      mode: getDocumentPreviewMode(fileAsset.signedUrl, fileAsset?.mimeType || '', fileExt)
+    };
+  }
+
   const fallbackUrl = typeof fileAsset === 'object'
     ? (fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
     : null;
@@ -68,7 +79,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
     return {
       label,
       url: absoluteFallbackUrl,
-      mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '')
+      mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '', fileExt)
     };
   }
 
@@ -89,7 +100,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
         return {
           label,
           url: data.signedUrl,
-          mode: getDocumentPreviewMode(data.signedUrl, data.file?.mimeType || fileAsset?.mimeType || '')
+          mode: getDocumentPreviewMode(data.signedUrl, data.file?.mimeType || fileAsset?.mimeType || '', fileExt)
         };
       }
     }
@@ -110,7 +121,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
       return {
         label,
         url: blobUrl,
-        mode: getDocumentPreviewMode(blobUrl, contentType)
+        mode: getDocumentPreviewMode(blobUrl, contentType, fileExt)
       };
     }
   } catch {
@@ -121,7 +132,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
     return {
       label,
       url: absoluteFallbackUrl,
-      mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '')
+      mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '', fileExt)
     };
   }
 

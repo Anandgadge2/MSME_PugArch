@@ -189,7 +189,7 @@ export const isPrivateBid = (bid: any) => {
     ?? bid?.technicalPacket?.wizardData?.vendors?.selection
     ?? ''
   ).toUpperCase();
-  return selection === 'SELECT' || selection === 'LIMITED';
+  return selection === 'SELECT' || selection === 'LIMITED' || selection === 'CATEGORY' || selection === 'SELECTED';
 };
 
 // Derive the visibility value to persist at create/publish time from the method + vendor selection.
@@ -201,7 +201,7 @@ export const deriveVisibility = (input: { procurementType?: string | null; bidTy
   ).toUpperCase();
   const restricted = restrictedProcurementMethods.includes(String(input?.procurementType || '').toUpperCase())
     || restrictedProcurementMethods.includes(String(input?.bidType || '').toUpperCase());
-  return (restricted || selection === 'SELECT' || selection === 'LIMITED') ? 'PRIVATE' : 'PUBLIC';
+  return (restricted || selection === 'SELECT' || selection === 'LIMITED' || selection === 'CATEGORY' || selection === 'SELECTED') ? 'PRIVATE' : 'PUBLIC';
 };
 
 // Extract invited-seller ids (as numbers) from a technicalPacket blob, tolerant of the
@@ -218,7 +218,7 @@ export const extractInvitedSellerIds = (technicalPacket: any): number[] => {
   for (const entry of list) {
     let value: any;
     if (entry && typeof entry === 'object') {
-      value = entry.sellerOrgId ?? entry.supplierId ?? entry.organizationId ?? entry.sellerUserId ?? entry.userId ?? entry.id;
+      value = entry.sellerOrgId ?? entry.sellerId ?? entry.vendorId ?? entry.supplierId ?? entry.organizationId ?? entry.sellerUserId ?? entry.userId ?? entry.id;
     } else {
       value = entry;
     }
@@ -232,8 +232,37 @@ export const extractInvitedSellerIds = (technicalPacket: any): number[] => {
 export const syncBidInvitations = async (bidId: number, technicalPacket: any, invitedById?: number) => {
   const ids = extractInvitedSellerIds(technicalPacket);
   if (!ids.length) return;
+
+  const orgsWithUsers = await (db.organization as any).findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      users: {
+        where: { role: { in: ['seller', 'shg'] }, accountStatus: 'ACTIVE' },
+        select: { id: true }
+      }
+    }
+  }).catch(() => []);
+
+  const orgUserMap = new Map<number, number[]>();
+  for (const org of orgsWithUsers) {
+    orgUserMap.set(org.id, (org.users || []).map((u: any) => u.id));
+  }
+
+  const invitationRows: Array<{ bidId: number; sellerOrgId?: number | null; sellerUserId?: number | null; invitedById?: number | null }> = [];
+  for (const id of ids) {
+    const userIds = orgUserMap.get(id);
+    if (userIds && userIds.length > 0) {
+      for (const uid of userIds) {
+        invitationRows.push({ bidId, sellerOrgId: id, sellerUserId: uid, invitedById: invitedById ?? null });
+      }
+    } else {
+      invitationRows.push({ bidId, sellerOrgId: id, sellerUserId: null, invitedById: invitedById ?? null });
+    }
+  }
+
   await db.procurementBidInvitation.createMany({
-    data: ids.map(sellerOrgId => ({ bidId, sellerOrgId, invitedById: invitedById ?? null })),
+    data: invitationRows,
     skipDuplicates: true
   }).catch(() => undefined);
 };
@@ -246,7 +275,7 @@ export const canActorViewBid = (actor: Actor | null | undefined, bid: any) => {
   if (!isPrivateBid(bid)) return true;
   if (!actor) return false;
   if (actor.role === 'admin' || actor.role === 'master_admin') return true;
-  if (actor.role === 'buyer' && bid.buyerId === Number(actor.id)) return true;
+  if (actor.role === 'buyer' && (bid.buyerId === Number(actor.id) || (bid.buyerOrganizationId && Number(bid.buyerOrganizationId) === Number(actor.organizationId)))) return true;
   if (actor.role === 'seller') {
     const hasParticipation = (bid.participations || []).some((p: any) => p.sellerId === Number(actor.id));
     if (hasParticipation) return true;
@@ -1615,7 +1644,7 @@ export const startParticipation = async (req: AuthRequest, bidId: string) => {
   await assertSellerVerified(req.user!);
   const bid = await resolveBid(bidId, {});
   assertBidOpen(bid);
-  if (isRestrictedBidMethod(bid) && !isActorInvitedToBid(req.user!, bid)) {
+  if ((isPrivateBid(bid) || isRestrictedBidMethod(bid)) && !isActorInvitedToBid(req.user!, bid)) {
     throw new ApiError(404, 'Bid not found', 'BID_NOT_FOUND');
   }
 

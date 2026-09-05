@@ -580,6 +580,9 @@ export interface Supplier {
   pastOrdersCount?: number;
   onTimeDeliveryRate?: number;
   gstVerified?: boolean;
+  categories?: string[];
+  state?: string;
+  district?: string;
 }
 
 interface SupplierSelectorProps {
@@ -591,6 +594,9 @@ interface SupplierSelectorProps {
   onSearchChange: (q: string) => void;
   msmeOnly?: boolean;
   onMsmeOnlyChange?: (val: boolean) => void;
+  onSelectAll?: () => void;
+  onDeselectAll?: () => void;
+  categoryTitle?: string;
 }
 
 export function SupplierSelector({
@@ -601,7 +607,10 @@ export function SupplierSelector({
   searchQuery,
   onSearchChange,
   msmeOnly = false,
-  onMsmeOnlyChange
+  onMsmeOnlyChange,
+  onSelectAll,
+  onDeselectAll,
+  categoryTitle
 }: SupplierSelectorProps) {
   return (
     <div className="space-y-3">
@@ -613,39 +622,67 @@ export function SupplierSelector({
             onChange={e => onSearchChange(e.target.value)}
             className="h-9 w-full border border-slate-200 rounded-lg pl-9 pr-3 font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f]"
             placeholder="Search verified suppliers database..."
+            aria-label="Search verified suppliers"
           />
         </div>
-        {onMsmeOnlyChange && (
-          <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={msmeOnly}
-              onChange={e => onMsmeOnlyChange(e.target.checked)}
-              className="h-4 w-4 rounded accent-[#12335f]"
-            />
-            <span>Filter MSME / Udyam verified only</span>
-          </label>
-        )}
+        <div className="flex items-center gap-3">
+          {onMsmeOnlyChange && (
+            <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={msmeOnly}
+                onChange={e => onMsmeOnlyChange(e.target.checked)}
+                className="h-4 w-4 rounded accent-[#12335f]"
+                aria-label="Filter MSME or Udyam verified only"
+              />
+              <span>Filter MSME / Udyam verified only</span>
+            </label>
+          )}
+          {(onSelectAll || onDeselectAll) && suppliers.length > 0 && (
+            <div className="flex items-center gap-2 text-xs">
+              {onSelectAll && (
+                <button
+                  type="button"
+                  onClick={onSelectAll}
+                  className="font-bold text-blue-700 hover:text-blue-900 underline text-[11px]"
+                >
+                  Select All ({suppliers.length})
+                </button>
+              )}
+              {onSelectAll && onDeselectAll && <span className="text-slate-300">|</span>}
+              {onDeselectAll && (
+                <button
+                  type="button"
+                  onClick={onDeselectAll}
+                  className="font-bold text-slate-600 hover:text-slate-800 underline text-[11px]"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-lg max-h-[320px] overflow-y-auto">
+      <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-lg max-h-[360px] overflow-y-auto">
         {isLoading ? (
-          <div className="p-10 flex items-center justify-center text-slate-450 text-xs font-semibold">
+          <div className="p-10 flex items-center justify-center text-slate-450 text-xs font-semibold" role="status" aria-live="polite">
             <Loader2 className="h-5 w-5 animate-spin mr-2" /> Searching supplier repository...
           </div>
         ) : suppliers.length === 0 ? (
-          <div className="p-10 text-center text-slate-450 text-xs font-semibold">No category matched suppliers found.</div>
+          <div className="p-10 text-center text-slate-450 text-xs font-semibold" role="status">
+            {categoryTitle
+              ? `No registered suppliers found matching "${categoryTitle}".`
+              : 'No category matched suppliers found.'}
+          </div>
         ) : (
-          <table className="w-full border-collapse text-left text-xs">
-            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200 sticky top-0">
+          <table className="w-full border-collapse text-left text-xs" aria-label="Available Suppliers">
+            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200 sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-2 w-14 text-center">Select</th>
-                <th className="px-3 py-2">Supplier Name</th>
-                {/* <th className="px-3 py-2">MSME / Udyam</th> */}
+                <th className="px-3 py-2">Supplier & Category</th>
                 <th className="px-3 py-2">Location</th>
-                {/* <th className="px-3 py-2">Rating</th>
-                <th className="px-3 py-2">On-Time</th>
-                <th className="px-3 py-2">Compliance</th> */}
+                <th className="px-3 py-2 text-right">Verification</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-750">
@@ -653,26 +690,43 @@ export function SupplierSelector({
                 const isSelected = invitedIds.includes(seller.id);
                 return (
                   <tr key={seller.id} className="align-middle hover:bg-slate-50/50">
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-3 py-2.5 text-center">
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => onToggleInvite(seller.id, seller.organizationName)}
                         className="h-4 w-4 rounded accent-[#12335f] cursor-pointer"
+                        aria-label={`Select ${seller.organizationName}`}
                       />
                     </td>
-                    <td className="px-3 py-2 font-extrabold text-slate-900">{seller.organizationName}</td>
-                    {/* <td className="px-3 py-2">{seller.msmeCategory || 'General'}</td> */}
-                    <td className="px-3 py-2 truncate max-w-[150px]">{seller.officeCity || 'N/A'}</td>
-                    {/* <td className="px-3 py-2">
-                      <span className="text-amber-500">&#9733; {seller.rating || '4.0'}</span>
+                    <td className="px-3 py-2.5">
+                      <div className="font-extrabold text-slate-900">{seller.organizationName}</div>
+                      {seller.categories && seller.categories.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {seller.categories.slice(0, 3).map((cat, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 ring-1 ring-inset ring-blue-700/10"
+                            >
+                              {cat}
+                            </span>
+                          ))}
+                          {seller.categories.length > 3 && (
+                            <span className="text-[9px] text-slate-400 font-medium self-center">
+                              +{seller.categories.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
-                    <td className="px-3 py-2">{seller.onTimeDeliveryRate ? `${seller.onTimeDeliveryRate}%` : 'N/A'}</td>
-                    <td className="px-3 py-2">
-                      <span className="bg-emerald-50 text-emerald-700 text-[8px] font-black uppercase px-2 py-0.5 rounded border border-emerald-100">
+                    <td className="px-3 py-2.5 truncate max-w-[150px]">
+                      {seller.officeCity && seller.officeCity !== 'N/A' ? `${seller.officeCity}${seller.state ? `, ${seller.state}` : ''}` : (seller.state || 'N/A')}
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <span className="inline-flex items-center bg-emerald-50 text-emerald-700 text-[9px] font-black uppercase px-2 py-0.5 rounded border border-emerald-100">
                         GST Verified
                       </span>
-                    </td> */}
+                    </td>
                   </tr>
                 );
               })}

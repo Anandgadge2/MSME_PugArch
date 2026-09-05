@@ -88,10 +88,16 @@ const nextConfig: NextConfig = {
         fallback: [],
       };
     }
+    const devBackend = backendUrl || "http://localhost:5000";
     return {
       beforeFiles: [],
       afterFiles: [],
-      fallback: [],
+      fallback: [
+        {
+          source: "/api/:path*",
+          destination: `${devBackend}/api/:path*`,
+        },
+      ],
     };
   },
   webpack: (config) => {
