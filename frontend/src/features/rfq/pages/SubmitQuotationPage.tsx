@@ -317,17 +317,24 @@ const chooseOwnResponse = (primary: any, fallback: any) => {
 export default function SubmitQuotationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname() || (typeof window !== 'undefined' ? window.location.pathname : '');
   const { user } = useAuth();
-  const pathname = usePathname() || '';
-  
-  const pathTokens = pathname.split('/').filter(Boolean);
-  const pathId = (pathTokens.length >= 2 && pathTokens[pathTokens.length - 1] === 'respond')
-    ? decodeURIComponent(pathTokens[pathTokens.length - 2])
-    : '';
-
   const conversationIdParam = searchParams?.get('conversationId');
   const quoteRequestIdParam = searchParams?.get('quoteRequestId');
-  const requirementIdParam = searchParams?.get('requirementId') || searchParams?.get('id') || searchParams?.get('requestId') || pathId;
+
+  // Extract ID from pathname if not in searchParams (e.g. /seller/procurement/rfq/REQ-51952/respond or /bids/123/participate)
+  const procRespondMatch = pathname.match(/^\/(?:seller|shg|buyer)\/procurement\/(?:rfq|rfp|open-tender|limited-tender|rate-contract)\/([^/]+)\/respond/i);
+  const bidParticipateMatch = pathname.match(/^\/bids\/([^/]+)\/participate/i);
+  const pathTokens = pathname.split('/').filter(Boolean);
+  const respondIdx = pathTokens.indexOf('respond');
+  const participateIdx = pathTokens.indexOf('participate');
+  const fallbackPathId = respondIdx > 0 ? pathTokens[respondIdx - 1] : (participateIdx > 0 ? pathTokens[participateIdx - 1] : '');
+
+  const extractedPathId = procRespondMatch
+    ? decodeURIComponent(procRespondMatch[1])
+    : (bidParticipateMatch ? decodeURIComponent(bidParticipateMatch[1]) : (fallbackPathId ? decodeURIComponent(fallbackPathId) : ''));
+
+  const requirementIdParam = searchParams?.get('requirementId') || searchParams?.get('id') || searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || extractedPathId;
   const isMarketplaceQuoteFlow = Boolean(conversationIdParam);
   const requirementId = isMarketplaceQuoteFlow
     ? 0

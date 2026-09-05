@@ -1006,8 +1006,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         highValueCount++;
         highValueTotal += val;
       }
-      if (isParticipatedOpportunity(item)) participated++;
-      if (isUnderEvaluationOpportunity(item, nowMs)) evaluation++;
+      if (isParticipatedOpportunity(item)) {
+        participated++;
+        if (isUnderEvaluationOpportunity(item, nowMs)) evaluation++;
+      }
     });
 
     return {
@@ -1204,8 +1206,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Live Opportunity Pool"
-          value={formatCurrency(kpis.liveValue)}
-          subtext={`${kpis.live} active sourcing events`}
+          value={kpis.live}
+          subtext={`${formatCurrency(kpis.liveValue)} total value`}
           icon={IndianRupee}
           tone="blue"
           active={kpiFilter === 'live'}

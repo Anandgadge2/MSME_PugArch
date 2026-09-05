@@ -253,7 +253,6 @@ export default function AdminOnboarding() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [progressFilter, setProgressFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
-  const [adminView, setAdminView] = useState("applications");
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showcaseItems, setShowcaseItems] = useState<any[]>([]);
   const [showcaseItemsLoading, setShowcaseItemsLoading] = useState(false);
@@ -1092,8 +1091,17 @@ export default function AdminOnboarding() {
     [sellers],
   );
 
+  const sellerApplications = useMemo(
+    () => sellers.filter((item) => !isShgUser({ ...item, sellerProfile: item.profile })),
+    [sellers],
+  );
+
   const currentData =
-    activeTab === "sellers" ? filterData(sellers) : activeTab === "buyers" ? filterData(buyers) : filterData(shgApplications);
+    activeTab === "sellers"
+      ? filterData(sellerApplications)
+      : activeTab === "buyers"
+        ? filterData(buyers)
+        : filterData(shgApplications);
   const currentPage = Math.min(
     page,
     Math.max(1, Math.ceil(currentData.length / pageSize)),
@@ -1125,30 +1133,22 @@ export default function AdminOnboarding() {
     });
   }, [activeTab, searchTerm, statusFilter, progressFilter, sortBy]);
 
-  const pendingTotal =
-    sellers.filter((s) =>
-      ["pending", "pending_validation", "manual_review_required", "under_compliance_review"].includes(
-        s.onboardingStatus,
-      ),
-    ).length +
-    buyers.filter((b) =>
-      ["pending", "pending_validation", "manual_review_required", "under_compliance_review"].includes(
-        b.onboardingStatus,
-      ),
-    ).length;
-  const activeSellers = sellers.filter(
+  const pendingSellersCount = sellerApplications.filter((s) => isPendingStatus(s.onboardingStatus)).length;
+  const pendingBuyersCount = buyers.filter((b) => isPendingStatus(b.onboardingStatus)).length;
+  const pendingShgCount = shgApplications.filter((s) => isPendingStatus(s.onboardingStatus)).length;
+
+  const pendingTotal = adminStats?.pendingApproval ?? (pendingSellersCount + pendingBuyersCount + pendingShgCount);
+
+  const activeSellers = adminStats?.activeSellers ?? sellerApplications.filter(
     (s) => s.onboardingStatus === "approved_for_procurement",
   ).length;
-  const activeBuyers = buyers.filter(
+  const activeBuyers = adminStats?.activeBuyers ?? buyers.filter(
     (b) => b.onboardingStatus === "approved_for_procurement",
   ).length;
+  const activeShg = adminStats?.activeShg ?? shgApplications.filter(
+    (s) => s.onboardingStatus === "approved_for_procurement",
+  ).length;
   const totalNetwork = sellers.length + buyers.length;
-  const rejectedTotal = [...sellers, ...buyers].filter(
-    (item) => item.onboardingStatus === "rejected",
-  ).length;
-  const correctionTotal = [...sellers, ...buyers].filter(
-    (item) => item.onboardingStatus === "resubmission_required",
-  ).length;
   const averageProgress = totalNetwork
     ? Math.round(
       [...sellers, ...buyers].reduce(
@@ -1224,20 +1224,48 @@ export default function AdminOnboarding() {
 
   const handleKpiClick = (target: string) => {
     if (target === "pending") {
-      setStatusFilter("pending");
-      setAdminView("scrutiny");
+      setStatusFilter((prev) => {
+        if (prev === "pending") return "all";
+        
+        // Intelligently switch to a tab that has pending items if the current tab is empty
+        if (activeTab === "shg" && pendingShgCount === 0) {
+          if (pendingSellersCount > 0) setActiveTab("sellers");
+          else if (pendingBuyersCount > 0) setActiveTab("buyers");
+        } else if (activeTab === "sellers" && pendingSellersCount === 0) {
+          if (pendingBuyersCount > 0) setActiveTab("buyers");
+          else if (pendingShgCount > 0) setActiveTab("shg");
+        } else if (activeTab === "buyers" && pendingBuyersCount === 0) {
+          if (pendingSellersCount > 0) setActiveTab("sellers");
+          else if (pendingShgCount > 0) setActiveTab("shg");
+        }
+        
+        return "pending";
+      });
     } else if (target === "sellers") {
-      setActiveTab("sellers");
-      setStatusFilter("approved");
-      setAdminView("applications");
+      if (activeTab === "sellers" && statusFilter === "approved") {
+        setStatusFilter("all");
+      } else {
+        setActiveTab("sellers");
+        setStatusFilter("approved");
+      }
     } else if (target === "buyers") {
-      setActiveTab("buyers");
-      setStatusFilter("approved");
-      setAdminView("applications");
+      if (activeTab === "buyers" && statusFilter === "approved") {
+        setStatusFilter("all");
+      } else {
+        setActiveTab("buyers");
+        setStatusFilter("approved");
+      }
+    } else if (target === "shg") {
+      if (activeTab === "shg" && statusFilter === "approved") {
+        setStatusFilter("all");
+      } else {
+        setActiveTab("shg");
+        setStatusFilter("approved");
+      }
     } else {
       setStatusFilter("all");
       setProgressFilter("all");
-      setAdminView("reports");
+      setSearchTerm("");
     }
   };
 
@@ -1314,7 +1342,7 @@ export default function AdminOnboarding() {
                   sub: "Approved supplier base",
                   icon: ShoppingBag,
                   target: "sellers",
-                  tone: "indigo" as const,
+                  tone: "emerald" as const,
                 },
                 {
                   label: "Active Buyers",
@@ -1325,12 +1353,12 @@ export default function AdminOnboarding() {
                   tone: "blue" as const,
                 },
                 {
-                  label: "Total Network",
-                  value: totalNetwork,
-                  sub: `${averageProgress}% average verification`,
-                  icon: Users,
-                  target: "network",
-                  tone: "slate" as const,
+                  label: "Active SHG",
+                  value: activeShg,
+                  sub: "Approved SHG groups",
+                  icon: BarChart3,
+                  target: "shg",
+                  tone: "indigo" as const,
                 },
               ].map((stat) => (
                 <KpiCard
@@ -1342,54 +1370,23 @@ export default function AdminOnboarding() {
                   tone={stat.tone}
                   onClick={() => handleKpiClick(stat.target)}
                   active={
-                    (stat.target === "pending" && statusFilter === "pending" && adminView === "scrutiny") ||
+                    (stat.target === "pending" && statusFilter === "pending") ||
                     (stat.target === "sellers" && activeTab === "sellers" && statusFilter === "approved") ||
                     (stat.target === "buyers" && activeTab === "buyers" && statusFilter === "approved") ||
-                    (stat.target === "network" && adminView === "reports")
+                    (stat.target === "shg" && activeTab === "shg" && statusFilter === "approved") ||
+                    (stat.target === "network" && statusFilter === "all" && progressFilter === "all" && !searchTerm)
                   }
                 />
               ))}
             </div>
 
-            {adminView !== "applications" && (
-              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm md:grid-cols-3">
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
-                    Current Desk
-                  </p>
-                  <p className="mt-2 text-sm font-black text-[#12335f]">
-                    {adminView === "scrutiny"
-                      ? "Pending Scrutiny Queue"
-                      : adminView === "reports"
-                        ? "MIS Compliance Snapshot"
-                        : "Correction & Rejection Flags"}
-                  </p>
-                  <p className="mt-1 text-xs font-medium text-slate-600">
-                    {adminView === "scrutiny"
-                      ? "Prioritise applications waiting for section-wise verification."
-                      : adminView === "reports"
-                        ? "Review the overall health of seller and buyer onboarding."
-                        : "Track applications that need correction, resubmission, or closure."}
-                  </p>
-                </div>
-                <MetricTile
-                  label="Correction Required"
-                  value={correctionTotal}
-                />
-                <MetricTile
-                  label="Rejected Applications"
-                  value={rejectedTotal}
-                />
-              </div>
-            )}
-
             <Card className="border-none shadow-sm border border-slate-200/80 rounded-2xl overflow-hidden">
               <CardHeader className="bg-white p-0 border-b border-slate-100">
                 <Tabs
                   tabs={[
-                    { id: "sellers", label: "Seller Onboarding" },
-                    { id: "buyers", label: "Buyer Onboarding" },
-                    { id: "shg", label: "SHG Onboarding" },
+                    { id: "sellers", label: `Seller Onboarding${statusFilter === 'pending' && pendingSellersCount > 0 ? ` (${pendingSellersCount})` : ''}` },
+                    { id: "buyers", label: `Buyer Onboarding${statusFilter === 'pending' && pendingBuyersCount > 0 ? ` (${pendingBuyersCount})` : ''}` },
+                    { id: "shg", label: `SHG Onboarding${statusFilter === 'pending' && pendingShgCount > 0 ? ` (${pendingShgCount})` : ''}` },
                   ]}
                   activeTab={activeTab}
                   onChange={setActiveTab}
@@ -1496,14 +1493,6 @@ export default function AdminOnboarding() {
                       }
                     />
                   </div>
-
-                  {adminView !== "applications" && (
-                    <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#12335f]">
-                        View: {adminView.replace("_", " ")}
-                      </span>
-                    </div>
-                  )}
                 </div>
 
                 {isLoading ? (
@@ -3616,19 +3605,6 @@ export default function AdminOnboarding() {
         <DocumentPreviewModal previewDocument={previewDocument} onClose={handleClosePreview} />
       )}
     </div>
-  );
-}
-
-
-function MetricTile({ label, value, subtext }: { label: string; value: number; subtext?: string }) {
-  return (
-    <KpiCard
-      label={label}
-      value={value}
-      subtext={subtext || (label.toLowerCase().includes('reject') ? 'Denied submissions' : 'Requires stakeholder action')}
-      tone={label.toLowerCase().includes('reject') ? 'red' : 'amber'}
-      icon={label.toLowerCase().includes('reject') ? XCircle : AlertTriangle}
-    />
   );
 }
 

@@ -34,10 +34,10 @@ const ADMIN_REVIEW_CHECKLIST = [
 
 type AdminTile = {
   label: string;
-  value: number;
+  value: number | string;
   helper: string;
   icon: React.ComponentType<{ className?: string }>;
-  path: string;
+  path?: string;
   tone: string;
 };
 
@@ -129,7 +129,7 @@ const AdminKpiLink = React.memo(function AdminKpiLink({ stat, isLoading }: { sta
       icon={stat.icon}
       tone={stat.tone}
       loading={isLoading}
-      onClick={() => router.push(stat.path)}
+      onClick={() => stat.path ? router.push(stat.path) : undefined}
     />
   );
 });
@@ -139,16 +139,19 @@ const AdminModuleLink = React.memo(function AdminModuleLink({ module }: { module
   return (
     <Link
       href={module.path}
-      className="rounded-xl bg-slate-50/80 p-3 ring-1 ring-slate-200/70 transition-all duration-200 hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_4px_12px_rgba(15,23,42,0.05)] hover:ring-[#12335f]/25 active:scale-[0.98] active:translate-y-px focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+      className="group rounded-2xl bg-gradient-to-br from-slate-50/80 to-slate-50/40 p-4 ring-1 ring-slate-200/70 transition-all duration-300 hover:-translate-y-1 hover:bg-white hover:shadow-lg hover:shadow-indigo-500/10 hover:ring-[#12335f]/30 active:scale-[0.98] active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-[#12335f]"
     >
-      <div className="flex items-start gap-2.5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#12335f] shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#12335f] shadow-sm ring-1 ring-slate-100 transition-all duration-300 group-hover:bg-[#12335f] group-hover:text-white group-hover:shadow-md group-hover:scale-110">
           <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-900">{module.title}</h3>
-          <p className="mt-0.5 text-[10px] font-medium leading-snug text-slate-500 line-clamp-2">{module.detail}</p>
-          <span className="mt-1.5 inline-flex text-[9px] font-bold uppercase tracking-widest text-[#12335f]">Open Module</span>
+          <h3 className="text-xs font-extrabold uppercase tracking-widest text-slate-900 transition-colors group-hover:text-[#12335f]">{module.title}</h3>
+          <p className="mt-1 text-[11px] font-medium leading-relaxed text-slate-500 line-clamp-2">{module.detail}</p>
+          <div className="mt-2.5 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-[#12335f] opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-1">
+            <span>Open Module</span>
+            <ArrowRight className="h-3 w-3" />
+          </div>
         </div>
       </div>
     </Link>
@@ -503,27 +506,27 @@ export default function Dashboard() {
       tone: 'bg-slate-50 text-[#12335f]'
     },
     {
-      label: 'Total Network',
-      value: adminStats?.totalNetwork ?? 0,
-      helper: 'Stakeholders registered',
+      label: 'Active SHG',
+      value: adminStats?.activeShg ?? 0,
+      helper: 'Approved SHG groups',
       icon: BarChart3,
       path: '/admin/reports',
-      tone: 'bg-slate-100 text-slate-700'
+      tone: 'bg-indigo-50 text-indigo-700'
     },
+    // {
+    //   label: 'Tender Queue',
+    //   value: adminStats?.pendingTenders ?? adminStats?.tenders ?? 0,
+    //   helper: 'Procurement tenders and bids',
+    //   icon: Gavel,
+    //   path: '/admin/bids',
+    //   tone: 'bg-purple-50 text-purple-700'
+    // },
     {
-      label: 'Tender Queue',
-      value: adminStats?.pendingTenders ?? adminStats?.tenders ?? 0,
-      helper: 'Procurement tenders and bids',
-      icon: Gavel,
-      path: '/admin/bids',
-      tone: 'bg-purple-50 text-purple-700'
-    },
-    {
-      label: 'Purchase Orders',
-      value: adminStats?.purchaseOrders ?? 0,
-      helper: 'Procurement orders generated',
+      label: 'Top Buyers',
+      value: adminStats?.topBuyers ?? 'N/A',
+      helper: 'Top Buyer Name',
       icon: FileText,
-      path: '/admin/reports',
+      // path: '/admin/reports',
       tone: 'bg-cyan-50 text-cyan-700'
     }
   ], [adminStats]);
@@ -535,12 +538,12 @@ export default function Dashboard() {
       path: '/admin/onboarding',
       icon: ClipboardCheck
     },
-    {
-      title: 'Onboarding Console',
-      detail: 'Approve, reject, request section changes, and send administrator feedback.',
-      path: '/admin/onboarding',
-      icon: FileSearch
-    },
+    // {
+    //   title: 'Onboarding Console',
+    //   detail: 'Approve, reject, request section changes, and send administrator feedback.',
+    //   path: '/admin/onboarding',
+    //   icon: FileSearch
+    // },
     {
       title: 'Roles & Invite Permissions',
       detail: 'Create role policies, assign permission scopes, and use invite-based team access for organizations.',
@@ -586,33 +589,36 @@ export default function Dashboard() {
 
   if (user?.role === 'admin') {
     return (
-      <div className="space-y-3 animate-in fade-in duration-500">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-[#12335f] tracking-tight">Admin Control Center</h1>
-            <p className="text-[11px] font-medium text-slate-500">Manage approvals, compliance, and MIS reporting.</p>
+      <div className="space-y-4 animate-in fade-in duration-500">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between rounded-2xl bg-gradient-to-r from-[#12335f] to-indigo-900 p-5 sm:p-6 text-white shadow-lg overflow-hidden relative">
+          <div className="absolute right-0 top-0 h-full w-1/2 bg-gradient-to-l from-white/10 to-transparent pointer-events-none" />
+          <div className="relative z-10">
+            <h1 className="text-2xl font-extrabold tracking-tight">Admin Control Center</h1>
+            <p className="text-xs font-medium text-indigo-100/80 mt-1 max-w-xl">
+              Command center for managing approvals, marketplace compliance, and comprehensive MIS reporting.
+            </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="relative z-10 flex flex-wrap gap-3">
             <Link href="/admin/onboarding">
-              <Button className="bg-[#12335f] hover:bg-[#0b2445] text-white h-8 px-3 rounded text-[10px] font-bold uppercase tracking-wide">
-                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+              <Button className="bg-white text-[#12335f] hover:bg-slate-50 h-9 px-4 rounded-lg text-[11px] font-bold uppercase tracking-widest shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
+                <ShieldCheck className="mr-2 h-4 w-4 text-emerald-600" />
                 Review Submissions
               </Button>
             </Link>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
           {adminTiles.map(stat => <AdminKpiLink key={stat.label} stat={stat} isLoading={isAdminStatsLoading} />)}
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr]">
+        <div className="grid gap-4 lg:grid-cols-3">
           <AdminActionPanel
             title="Review Command Center"
             description="Fast path for stakeholder approval, tender approval, and final award checks."
             actions={[
               ['Stakeholder approvals', '/admin/onboarding', ShieldCheck],
-              ['Tender approvals', '/admin/bids', Gavel],
+              // ['Tender approvals', '/admin/bids', Gavel],
               ['Final award approvals', '/admin/procurement-orders', Trophy],
             ]}
           />
@@ -620,8 +626,8 @@ export default function Dashboard() {
             title="Operations Monitoring"
             description="Track marketplace, orders, delivery, payments, and compliance signals from one row."
             actions={[
-              ['Catalogue moderation', '/admin/catalogue-moderation', Store],
-              ['Orders & delivery', '/admin/delivery', Truck],
+              // ['Catalogue moderation', '/admin/catalogue-moderation', Store],
+              // ['Orders & delivery', '/admin/delivery', Truck],
               ['Payments & escrow', '/payments/transactions', CreditCard],
             ]}
           />
@@ -638,33 +644,15 @@ export default function Dashboard() {
 
         {/* <AIInsightBox dashboardData={dashboardData} /> */}
 
-        <div className="grid gap-3 xl:grid-cols-[1.35fr_0.65fr]">
-          <section className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70">
-            <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/50 rounded-t-xl">
-              <h2 className="text-[11px] font-bold uppercase tracking-wide text-slate-900">Admin Work Areas</h2>
+        <div className="grid gap-4 xl:grid-cols-[1fr]">
+          <section className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/70 overflow-hidden">
+            <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-5 py-4">
+              <h2 className="text-xs font-extrabold uppercase tracking-widest text-[#12335f]">Comprehensive Admin Modules</h2>
             </div>
-            <div className="grid gap-2 p-3 md:grid-cols-2">
+            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {adminModules.map(module => <AdminModuleLink key={module.title} module={module} />)}
             </div>
           </section>
-
-          <aside className="rounded-xl bg-[#12335f] p-4 text-white shadow-md">
-            <div className="flex items-center gap-2 border-b border-white/10 pb-3">
-              <ShieldCheck className="h-5 w-5 text-emerald-300" />
-              <h2 className="text-[11px] font-bold uppercase tracking-wide">Daily review checklist</h2>
-            </div>
-            <div className="mt-4 space-y-3">
-              {ADMIN_REVIEW_CHECKLIST.map(item => (
-                <div key={item} className="flex items-start gap-2 text-xs font-semibold text-blue-50">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
-            <Link href="/admin/onboarding" className="mt-5 inline-flex text-xs font-black uppercase tracking-wide text-white underline">
-              Open stakeholder approvals
-            </Link>
-          </aside>
         </div>
       </div>
     );
@@ -1015,14 +1003,16 @@ function AdminActionPanel({ title, description, actions }: {
   actions: Array<[string, string, React.ComponentType<{ className?: string }>]>;
 }) {
   return (
-    <section className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70">
-      <h2 className="text-[11px] font-bold uppercase tracking-wide text-slate-900">{title}</h2>
-      <p className="mt-0.5 text-[10px] font-medium leading-relaxed text-slate-500 line-clamp-2">{description}</p>
-      <div className="mt-3 space-y-1.5">
+    <section className="group rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70 transition-all duration-300 hover:shadow-md hover:ring-[#12335f]/20">
+      <div className="mb-4">
+        <h2 className="text-xs font-extrabold uppercase tracking-widest text-[#12335f]">{title}</h2>
+        <p className="mt-1 text-[11px] font-medium leading-relaxed text-slate-500 line-clamp-2">{description}</p>
+      </div>
+      <div className="space-y-2">
         {actions.map(([label, href, Icon]) => (
-          <Link key={href} href={href} className="flex items-center justify-between rounded-lg bg-slate-50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#12335f] transition hover:bg-slate-100 border border-slate-100">
-            <span className="flex items-center gap-1.5"><Icon className="h-3.5 w-3.5" />{label}</span>
-            <ArrowRight className="h-3 w-3 opacity-70" />
+          <Link key={href} href={href} className="flex items-center justify-between rounded-xl bg-slate-50/50 px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-slate-700 transition-all duration-200 hover:bg-[#12335f] hover:text-white hover:shadow-md hover:-translate-y-px group/link border border-slate-100">
+            <span className="flex items-center gap-2"><Icon className="h-4 w-4 text-[#12335f] transition-colors group-hover/link:text-emerald-400" />{label}</span>
+            <ArrowRight className="h-3.5 w-3.5 opacity-50 transition-transform group-hover/link:translate-x-1 group-hover/link:opacity-100" />
           </Link>
         ))}
       </div>
