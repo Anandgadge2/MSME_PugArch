@@ -2848,7 +2848,7 @@ router.get('/files/:id/signed-url', authenticate, asyncRoute(async (req: AuthReq
 router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
   const pendingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review'];
-  const where: any = { role: { in: query.role ? [query.role] : ['buyer', 'seller'] } };
+  const where: any = { role: { in: query.role ? [query.role] : ['buyer', 'seller', 'shg'] } };
   const conditions: any[] = [];
 
   if (query.status) {
@@ -2943,18 +2943,18 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
     db.user.count({ where }),
     db.user.groupBy({
       by: ['onboardingStatus'],
-      where: { role: { in: ['buyer', 'seller'] } },
+      where: { role: { in: ['buyer', 'seller', 'shg'] } },
       _count: { _all: true }
     }),
     db.user.groupBy({
       by: ['role'],
-      where: { role: { in: ['buyer', 'seller'] }, onboardingStatus: 'approved_for_procurement' },
+      where: { role: { in: ['buyer', 'seller', 'shg'] }, onboardingStatus: 'approved_for_procurement' },
       _count: { _all: true }
     }),
     db.complianceViolation.count({
       where: {
         status: 'open',
-        user: { role: { in: ['buyer', 'seller'] } }
+        user: { role: { in: ['buyer', 'seller', 'shg'] } }
       }
     })
   ]);
@@ -2966,7 +2966,7 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
       ? Object.entries(documents as Record<string, any>)
       : [];
   const documentOwners = users
-    .filter((u: any) => getDocumentEntries((u.role === 'seller' ? u.sellerProfile : u.buyerProfile)?.documents).length > 0)
+    .filter((u: any) => getDocumentEntries((['seller', 'shg'].includes(u.role) ? u.sellerProfile : u.buyerProfile)?.documents).length > 0)
     .map((u: any) => u.id);
   const documentAssets = documentOwners.length > 0
     ? await db.fileAsset.findMany({
@@ -3005,7 +3005,7 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
   };
 
   for (const u of users) {
-    const profile = u.role === 'seller' ? u.sellerProfile : u.buyerProfile;
+    const profile = ['seller', 'shg'].includes(u.role) ? u.sellerProfile : u.buyerProfile;
     const item = {
       _id: String(u.id),
       id: u.id,
@@ -3020,7 +3020,7 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
       complianceViolations: u.complianceViolations,
       profile: profile ? { ...profile, documents: enrichDocuments(u.id, profile.documents) } : profile
     };
-    if (u.role === 'seller') sellers.push(item);
+    if (['seller', 'shg'].includes(u.role)) sellers.push(item);
     else buyers.push(item);
   }
 
@@ -8348,6 +8348,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
   let totalNetwork = 0;
   let activeSellers = 0;
   let activeBuyers = 0;
+  let activeShg = 0;
   let pendingApproval = 0;
   let tenders = 0;
   let bids = 0;
@@ -8358,6 +8359,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
   let approvalRate = '0%';
   let activeProcurementValue = '₹0.00Cr';
   let tenderSuccessRate = '0%';
+  let topBuyers = 'N/A';
 
   if (!detailsOnly) {
     const cachedKpis = await getOrSetCache(
@@ -8365,15 +8367,21 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
       async () => {
         const countsPromise = Promise.all([
           db.user.count({ where: { ...globalWhere, ...userRoleWhere } }),
-          db.user.count({ where: { role: 'seller', onboardingStatus: 'approved_for_procurement', ...globalWhere, ...userRoleWhere } }),
+          Promise.resolve(0), // Placeholder for sellers (calculated below)
           db.user.count({ where: { role: 'buyer', onboardingStatus: 'approved_for_procurement', ...globalWhere, ...userRoleWhere } }),
-          db.user.count({ where: { role: { in: ['seller', 'buyer'] }, onboardingStatus: { in: pendingOnboardingStatuses }, ...globalWhere, ...userRoleWhere } }),
+          db.user.count({ where: { role: { in: ['seller', 'buyer', 'shg'] }, onboardingStatus: { in: pendingOnboardingStatuses }, ...globalWhere, ...userRoleWhere } }),
           db.tender.count({ where: globalWhere }),
           db.bid.count({ where: globalWhere }),
           db.purchaseOrder.count({ where: globalWhere }),
           db.paymentTransaction.count({ where: globalWhere }),
-          db.dispute.count({ where: globalWhere })
+          db.dispute.count({ where: globalWhere }),
+          Promise.resolve(0) // Placeholder for shg (calculated below)
         ]);
+
+        const approvedSellersAndShgPromise = db.user.findMany({
+          where: { role: { in: ['seller', 'shg'] }, onboardingStatus: 'approved_for_procurement', ...globalWhere, ...userRoleWhere },
+          include: { organization: true }
+        });
 
         const aggregatesPromise = (async () => {
           // Active PO Sum
@@ -8424,13 +8432,54 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
             }
           }
 
-          return { activeVal, successRate, onboardingTime };
+          let topBuyerName = 'N/A';
+          try {
+            const topBuyerAgg = await db.purchaseOrder.groupBy({
+              by: ['buyerId'],
+              _count: { id: true },
+              where: globalWhere,
+              orderBy: { _count: { id: 'desc' } },
+              take: 1
+            });
+            if (topBuyerAgg.length > 0 && topBuyerAgg[0].buyerId) {
+              const buyerUser = await db.user.findUnique({
+                where: { id: topBuyerAgg[0].buyerId },
+                include: { organization: true }
+              });
+              topBuyerName = buyerUser?.organization?.organizationName || buyerUser?.name || 'Unknown';
+            }
+          } catch (e) {
+            console.error('Failed to fetch top buyer', e);
+          }
+
+          return { activeVal, successRate, onboardingTime, topBuyerName };
         })();
 
-        const [counts, aggregates] = await Promise.all([countsPromise, aggregatesPromise]);
+        const [counts, aggregates, approvedUsers] = await Promise.all([countsPromise, aggregatesPromise, approvedSellersAndShgPromise]);
+
+        const isShgUserBackend = (user: any) => {
+          if (!user) return false;
+          if (user.role === 'shg') return true;
+          if (user.role !== 'seller') return false;
+          
+          const isShgBusinessType = (value: unknown) => {
+            const normalized = String(value || '').trim().toLowerCase();
+            return ['hershg', 'her_shg', 'shg', 'women shg', 'self help group', 'women_self_help_group', 'women_shg', 'women-shg', 'farmer_producer_group', 'farmer_shg', 'artisan_handicraft_shg', 'artisan_shg', 'dairy_cooperative_shg', 'dairy_shg', 'livelihood_shg', 'tribal_shg', 'youth_shg', 'other_shg'].includes(normalized);
+          };
+
+          return isShgBusinessType(user?.registrationDetails?.businessType)
+            || isShgBusinessType(user?.registrationDetails?.stakeholderCategory)
+            || isShgBusinessType(user?.registrationDetails?.shgType)
+            || isShgBusinessType(user?.profile?.organizationType)
+            || isShgBusinessType(user?.organization?.organizationType)
+            || isShgBusinessType(user?.organizationType)
+            || isShgBusinessType(user?.businessType);
+        };
+
+        const activeShg_val = approvedUsers.filter(isShgUserBackend).length;
+        const activeSellers_val = approvedUsers.filter((u: any) => u.role === 'seller' && !isShgUserBackend(u)).length;
 
         const totalNetwork_val = counts[0];
-        const activeSellers_val = counts[1];
         const activeBuyers_val = counts[2];
         const pendingApproval_val = counts[3];
         const tenders_val = counts[4];
@@ -8442,6 +8491,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
         const activeProcurementValue_val = aggregates.activeVal;
         const tenderSuccessRate_val = aggregates.successRate;
         const avgOnboardingTime_val = aggregates.onboardingTime;
+        const topBuyerName_val = aggregates.topBuyerName;
 
         const totalOnboarded = await db.user.count({ where: { onboardingStatus: { not: 'pending' }, ...globalWhere, ...userRoleWhere } });
         const approvalRate_val = totalOnboarded > 0 ? ((activeSellers_val + activeBuyers_val) / totalOnboarded * 100).toFixed(1) + '%' : '0%';
@@ -8460,7 +8510,9 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
           avgOnboardingTime: avgOnboardingTime_val,
           approvalRate: approvalRate_val,
           activeProcurementValue: activeProcurementValue_val,
-          tenderSuccessRate: tenderSuccessRate_val
+          tenderSuccessRate: tenderSuccessRate_val,
+          topBuyers: topBuyerName_val,
+          activeShg: activeShg_val
         };
       },
       60 // 60 seconds TTL
@@ -8479,6 +8531,8 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
     approvalRate = cachedKpis.approvalRate;
     activeProcurementValue = cachedKpis.activeProcurementValue;
     tenderSuccessRate = cachedKpis.tenderSuccessRate;
+    topBuyers = cachedKpis.topBuyers;
+    activeShg = cachedKpis.activeShg;
 
     if (kpiOnly) {
       return ok(res, {
@@ -8495,7 +8549,9 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
         avgOnboardingTime,
         approvalRate,
         activeProcurementValue,
-        tenderSuccessRate
+        tenderSuccessRate,
+        topBuyers,
+        activeShg
       });
     }
   }
