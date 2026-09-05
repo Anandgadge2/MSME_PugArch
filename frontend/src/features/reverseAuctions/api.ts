@@ -74,14 +74,33 @@ export type ReverseAuction = {
     estimatedValue?: number | string | null;
     currency?: string | null;
     requiredBy?: string | null;
+    // Procurement Intent
+    whatAreYouBuying?: string | null;
     category?: string | null;
+    subCategory?: string | null;
+    urgencyPriority?: string | null;
     deliveryLocation?: string | null;
+    // Commercial & Payment Terms
+    paymentTerms?: string | null;
+    deliveryTerms?: string | null;
+    freightIncluded?: boolean | null;
+    gstIncluded?: boolean | null;
+    penaltyClause?: string | null;
+    // Timeline & Schedule
+    packetType?: string | null;
+    submissionStartDate?: string | null;
+    submissionEndDate?: string | null;
+    bidValidityDays?: number | null;
+    clarificationAllowed?: boolean | null;
+    clarificationDeadline?: string | null;
+    bidStartDate?: string | null;
+    bidClosingDate?: string | null;
+    // Evaluation
+    evaluationMethod?: string | null;
+    // Items, documents, consignees
     items?: Array<{ itemName?: string; description?: string | null; quantity?: number | string | null; unitOfMeasure?: string | null; estimatedUnitPrice?: number | string | null }>;
     documents?: Array<{ name?: string; fileName?: string | null; required?: boolean }>;
     consigneeDetails?: Array<{ name?: string; location?: string; quantity?: number | string }>;
-    paymentTerms?: string | null;
-    bidStartDate?: string | null;
-    bidClosingDate?: string | null;
   } | null;
 };
 

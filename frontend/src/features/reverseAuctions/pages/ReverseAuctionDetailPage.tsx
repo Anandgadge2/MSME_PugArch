@@ -834,65 +834,9 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
                       )}
                     </div>
                     <InfoRow label="Auction Trigger" value={formatEnumLabel(auction.data.auctionTrigger || (auction.data.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'TECHNICAL_QUALIFICATION' : 'DIRECT_AUCTION'))} />
-                    <InfoRow label="Taxes Rule" value="Excluded from bid values" />
                   </div>
 
-                  {/* Prominent Attached Document Card with Preview */}
-                  {termsDocName && (
-                    <div className="mt-4 rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-50/70 via-indigo-50/30 to-white p-4.5 shadow-xs">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3.5 min-w-0">
-                          {isTermsImage && termsDocFileId ? (
-                            <div
-                              onClick={() => openDocumentPreview(termsDocName, termsDocFileId)}
-                              className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-blue-200 bg-white shadow-xs cursor-pointer group"
-                              title="Click to view full preview"
-                            >
-                              <img
-                                src={`/api/files/${termsDocFileId}/view`}
-                                alt={termsDocName}
-                                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-110"
-                              />
-                              <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                                <Eye className="h-4 w-4 drop-shadow" />
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
-                              <FileText className="h-6 w-6" />
-                            </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-black uppercase tracking-wider text-blue-700/80">Terms &amp; Conditions Document</p>
-                            <p className="mt-0.5 text-xs sm:text-sm font-black text-slate-900 truncate" title={termsDocName}>
-                              {termsDocName}
-                            </p>
-                            <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
-                              Attached document for reverse auction terms and guidelines
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button
-                            type="button"
-                            onClick={() => openDocumentPreview(termsDocName, termsDocFileId || { name: termsDocName })}
-                            className="h-9 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
-                          >
-                            <Eye className="h-4 w-4" /> View Document
-                          </Button>
-                          {termsDocFileId && (
-                            <a
-                              href={`/api/files/${termsDocFileId}/view`}
-                              download={termsDocName}
-                              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
-                            >
-                              <Download className="h-3.5 w-3.5" /> Download
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+
                 </CardContent>
               </Card>
             )}
@@ -1088,112 +1032,185 @@ function LinkedRequirementPanel({
   const consignees = requirement.consigneeDetails || [];
 
   return (
-    <section className="border border-slate-200/80 rounded-3xl bg-white p-6 sm:p-7 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-100">
-        <div className="flex items-center gap-2.5">
-          <div className="h-5 w-1.5 rounded-full bg-gradient-to-b from-blue-600 to-indigo-600" />
-          <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-            <Package className="h-4 w-4 text-blue-600" /> {prefix}Procurement Requirement
-          </h2>
+    <section className="space-y-6">
+      <div className="border border-slate-200/80 rounded-3xl bg-white p-6 sm:p-7 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="h-5 w-1.5 rounded-full bg-gradient-to-b from-blue-600 to-indigo-600" />
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <Package className="h-4 w-4 text-blue-600" /> {prefix}Procurement Details
+            </h2>
+          </div>
+          {requirement.requirementNumber && (
+            <span className="rounded-md bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-black text-slate-700 font-mono tracking-wider">
+              {requirement.requirementNumber}
+            </span>
+          )}
         </div>
-        {requirement.requirementNumber && (
-          <span className="rounded-md bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-black text-slate-700 font-mono tracking-wider">
-            {requirement.requirementNumber}
-          </span>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <InfoRow label="Title" value={requirement.title || '—'} />
+          <InfoRow label="Procurement Method" value={formatEnumLabel(requirement.canonicalMethod)} />
+          <InfoRow label="Category" value={requirement.category || 'Not specified'} />
+        </div>
+
+        {requirement.description && (
+          <div className="mt-4 text-xs font-semibold text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100">
+            <p className="font-black text-slate-800 mb-1 uppercase tracking-wider text-[10px]">Scope of Work</p>
+            {requirement.description}
+          </div>
         )}
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <InfoRow label="Title" value={requirement.title || '—'} />
-        <InfoRow label="Category" value={requirement.category || 'Not specified'} />
-        <InfoRow label="Estimated Value" value={requirement.estimatedValue ? formatCurrency(Number(requirement.estimatedValue)) : 'Not disclosed'} />
-        <InfoRow label="Delivery Location" value={requirement.deliveryLocation || 'Not specified'} />
-        {requirement.requiredBy && <InfoRow label="Required By" value={formatDate(requirement.requiredBy)} />}
-        {requirement.paymentTerms && <InfoRow label="Payment Terms" value={requirement.paymentTerms} />}
-        {requirement.bidStartDate && <InfoRow label="Bid Start" value={formatDateTime(requirement.bidStartDate)} />}
-        {requirement.bidClosingDate && <InfoRow label="Bid Closing" value={formatDateTime(requirement.bidClosingDate)} />}
+      <div className="border border-slate-200/80 rounded-3xl bg-white p-6 sm:p-7 shadow-sm">
+        <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 mb-5 flex items-center gap-2">
+          <div className="h-1.5 w-1.5 rounded-full bg-blue-600" /> Financial & Timeline
+        </h3>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <InfoRow label="Estimated Value" value={requirement.estimatedValue ? formatCurrency(Number(requirement.estimatedValue)) : 'Not disclosed'} />
+          <InfoRow label="Currency" value={requirement.currency || 'INR'} />
+          <InfoRow label="Required By" value={requirement.requiredBy ? formatDate(requirement.requiredBy) : 'ASAP'} />
+          <InfoRow label="Payment Terms" value={requirement.paymentTerms || 'Standard'} />
+        </div>
       </div>
 
-      {items.length > 0 && (
-        <div className="mt-6">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2.5">Line Items ({items.length})</p>
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
-            <div className="overflow-x-auto w-full">
-              <table className="w-full min-w-[560px] text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <tr>
-                    <th className="p-3 w-12 text-center">#</th>
-                    <th className="p-3">Item</th>
-                    <th className="p-3">Description</th>
-                    <th className="p-3 text-right">Qty</th>
-                    <th className="p-3">Unit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                  {items.map((item, i) => (
-                    <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="p-3 text-slate-400 font-black text-center">{i + 1}</td>
-                      <td className="p-3 font-bold text-slate-900">{item.itemName || '—'}</td>
-                      <td title={item.description || '—'} className="p-3 text-slate-500 max-w-[260px] truncate">{item.description || '—'}</td>
-                      <td className="p-3 text-right tabular-nums font-bold text-slate-900">{item.quantity ?? '—'}</td>
-                      <td className="p-3">{item.unitOfMeasure || '—'}</td>
+      {(items.length > 0 || documents.length > 0 || consignees.length > 0) && (
+        <div className="border border-slate-200/80 rounded-3xl bg-white p-6 sm:p-7 shadow-sm">
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 mb-5 flex items-center gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-blue-600" /> Line Items & Compliance
+          </h3>
+          
+          {items.length > 0 && (
+            <div className="mb-6">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2.5">Items ({items.length})</p>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th className="p-3 w-12 text-center">#</th>
+                      <th className="p-3">Item</th>
+                      <th className="p-3 text-right">Qty</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                    {items.map((item, i) => (
+                      <tr key={i}>
+                        <td className="p-3 text-slate-400 font-black text-center">{i + 1}</td>
+                        <td className="p-3 font-bold text-slate-900">{item.itemName}</td>
+                        <td className="p-3 text-right tabular-nums">{item.quantity} {item.unitOfMeasure}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
+          )}
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {documents.length > 0 && (
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2.5">Documents ({documents.length})</p>
+                <ul className="space-y-2">
+                  {documents.map((doc, i) => {
+                    const docFileId = (doc as any).fileAssetId || (doc as any).fileId;
+                    const docLabel = doc.name || doc.fileName || `Document ${i + 1}`;
+                    return (
+                      <li key={i} className="flex items-center justify-between gap-2 text-xs p-3 rounded-xl border border-slate-100 bg-slate-50">
+                        <span className="font-bold text-slate-700 truncate">{docLabel}</span>
+                        {onPreviewDocument && docFileId && (
+                          <button type="button" onClick={() => onPreviewDocument(docLabel, docFileId)} className="text-blue-600 font-bold hover:underline">View</button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+            {consignees.length > 0 && (
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2.5">Consignees ({consignees.length})</p>
+                <ul className="space-y-2">
+                  {consignees.map((consignee, i) => (
+                    <li key={i} className="text-xs p-3 rounded-xl border border-slate-100 bg-slate-50">
+                      <p className="font-bold text-slate-900">{consignee.name}</p>
+                      <p className="text-slate-500">{consignee.location}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {documents.length > 0 && (
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Required Documents ({documents.length})</p>
-            <ul className="mt-2.5 space-y-2">
-              {documents.map((doc, i) => {
-                const docFileId = (doc as any).fileAssetId || (doc as any).fileId;
-                const docUrl = (doc as any).url || (docFileId ? `/api/files/${docFileId}/view` : null);
-                const docLabel = doc.name || doc.fileName || `Document ${i + 1}`;
-                return (
-                  <li key={i} className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <FileText className="h-4 w-4 shrink-0 text-blue-600" />
-                      <span title={docLabel} className="flex-1 truncate font-bold">{docLabel}</span>
-                      {doc.required && <span className="text-red-500 font-black text-[10px] uppercase bg-red-50 px-1.5 py-0.5 rounded border border-red-200 shrink-0">Required</span>}
-                    </div>
-                    {onPreviewDocument && (docFileId || docUrl) && (
-                      <button
-                        type="button"
-                        onClick={() => onPreviewDocument(docLabel, docFileId || { url: docUrl })}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-[10px] font-black uppercase transition shrink-0 cursor-pointer"
-                      >
-                        <Eye className="h-3 w-3" /> View
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+      {/* ── Procurement Intent & Strategy ─────────────────────────── */}
+      {(requirement.whatAreYouBuying || requirement.subCategory || requirement.urgencyPriority || requirement.deliveryLocation) && (
+        <div className="border border-slate-200/80 rounded-3xl bg-white p-6 sm:p-7 shadow-sm">
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 mb-4 flex items-center gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Procurement Intent & Strategy
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {requirement.whatAreYouBuying && <InfoRow label="What Are You Buying" value={requirement.whatAreYouBuying} />}
+            {requirement.subCategory && <InfoRow label="Sub-Category" value={requirement.subCategory} />}
+            {requirement.urgencyPriority && <InfoRow label="Urgency Priority" value={requirement.urgencyPriority} />}
+            {requirement.deliveryLocation && <InfoRow label="Delivery Location" value={requirement.deliveryLocation} />}
           </div>
-        )}
-        {consignees.length > 0 && (
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Consignees / Delivery Points ({consignees.length})</p>
-            <ul className="mt-2.5 space-y-2">
-              {consignees.map((consignee, i) => (
-                <li key={i} className="text-xs font-semibold text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
-                  <span className="font-black text-slate-900 block">{consignee.name || `Consignee ${i + 1}`}</span>
-                  <span className="text-[11px] text-slate-500">
-                    {consignee.location ? `${consignee.location}` : ''}
-                    {consignee.quantity != null ? ` · Qty: ${consignee.quantity}` : ''}
-                  </span>
-                </li>
-              ))}
-            </ul>
+        </div>
+      )}
+
+      {/* ── Commercial & Payment Terms ─────────────────────────────── */}
+      {(requirement.deliveryTerms || requirement.freightIncluded != null || requirement.gstIncluded != null || requirement.penaltyClause) && (
+        <div className="border border-slate-200/80 rounded-3xl bg-white p-6 sm:p-7 shadow-sm">
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 mb-4 flex items-center gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-emerald-600" /> Commercial & Payment Terms
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {requirement.deliveryTerms && <InfoRow label="Delivery Terms" value={requirement.deliveryTerms} />}
+            {requirement.freightIncluded != null && <InfoRow label="Freight Included" value={requirement.freightIncluded ? 'Yes' : 'No'} />}
+            {requirement.gstIncluded != null && <InfoRow label="GST Included in Budget" value={requirement.gstIncluded ? 'Yes' : 'No'} />}
+            {requirement.penaltyClause && <InfoRow label="Late Delivery (LD) Penalty Clause" value={requirement.penaltyClause} />}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* ── Timeline & Schedule ────────────────────────────────────── */}
+      {(requirement.packetType || requirement.submissionStartDate || requirement.submissionEndDate || requirement.bidValidityDays != null || requirement.clarificationAllowed != null) && (
+        <div className="border border-slate-200/80 rounded-3xl bg-white p-6 sm:p-7 shadow-sm">
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 mb-4 flex items-center gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-indigo-600" /> Timeline & Auction Rules
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {requirement.packetType && (
+              <InfoRow label="Packet Envelope Configuration" value={
+                requirement.packetType === 'Single' ? 'Single Packet Envelope (Commercial Only)'
+                : requirement.packetType === 'Two' ? 'Two Packet Envelope (Technical + Commercial)'
+                : requirement.packetType
+              } />
+            )}
+            {requirement.submissionStartDate && <InfoRow label="Submission Start Date" value={formatDateTime(requirement.submissionStartDate)} />}
+            {requirement.submissionEndDate && <InfoRow label="Submission End Date (Deadline)" value={formatDateTime(requirement.submissionEndDate)} />}
+            {requirement.bidValidityDays != null && <InfoRow label="Bid Validity Period (Days)" value={String(requirement.bidValidityDays)} />}
+            {requirement.clarificationAllowed != null && <InfoRow label="Allow Bidder Clarifications" value={requirement.clarificationAllowed ? 'Yes' : 'No'} />}
+            {requirement.clarificationDeadline && <InfoRow label="Clarification Deadline Date" value={formatDateTime(requirement.clarificationDeadline)} />}
+          </div>
+        </div>
+      )}
+
+      {/* ── Evaluation Basis ──────────────────────────────────────── */}
+      {requirement.evaluationMethod && (
+        <div className="border border-slate-200/80 rounded-3xl bg-white p-6 sm:p-7 shadow-sm">
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 mb-4 flex items-center gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-purple-600" /> Evaluation Basis & Weightages
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            <InfoRow label="Evaluation Method Basis" value={
+              requirement.evaluationMethod === 'L1' ? 'L1 Total Value basis'
+              : requirement.evaluationMethod === 'QCBS' ? 'QCBS (Quality & Cost Based Selection)'
+              : requirement.evaluationMethod
+            } />
+          </div>
+        </div>
+      )}
     </section>
   );
 }

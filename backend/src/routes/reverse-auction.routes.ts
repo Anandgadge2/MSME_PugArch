@@ -273,7 +273,12 @@ const linkedRequirementSummary = async (auction: any) => {
   const payload = (requirement.payload || {}) as any;
   const basics = payload.basics || {};
   const tender = payload.tender || {};
-  const documents = Array.isArray(payload.documents) ? payload.documents : [];
+  const terms = payload.terms || {};
+  const schedule = payload.schedule || {};
+  const evaluation = payload.evaluation || {};
+  const documents = Array.isArray(payload.documents) ? payload.documents
+    : Array.isArray(payload.requiredDocs) ? payload.requiredDocs
+    : [];
   return {
     id: requirement.id,
     requirementNumber: requirement.requirementNumber,
@@ -286,6 +291,9 @@ const linkedRequirementSummary = async (auction: any) => {
     requiredBy: requirement.requiredBy,
     category: requirement.category?.name || basics.category || null,
     deliveryLocation: basics.deliveryLocation || tender.deliveryLocation || null,
+    whatAreYouBuying: basics.whatAreYouBuying || null,
+    urgencyPriority: basics.priority || basics.urgencyPriority || null,
+    subCategory: basics.subCategory || requirement.subCategory || null,
     items: (requirement.items || []).map((item: any) => ({
       itemName: item.itemName,
       description: item.description,
@@ -301,9 +309,23 @@ const linkedRequirementSummary = async (auction: any) => {
       url: doc.url || (doc.fileAssetId ? `/api/files/${doc.fileAssetId}/view` : null)
     })),
     consigneeDetails: Array.isArray(payload.consigneeDetails) ? payload.consigneeDetails : [],
-    paymentTerms: payload.terms?.paymentTerms || basics.paymentTerms || null,
-    bidStartDate: tender.bidStartDate || null,
-    bidClosingDate: tender.bidClosingDate || null
+    // Commercial & Payment Terms
+    paymentTerms: terms.paymentTerms || basics.paymentTerms || null,
+    deliveryTerms: terms.deliveryTerms || null,
+    freightIncluded: terms.freightIncluded ?? null,
+    gstIncluded: terms.gstIncluded ?? null,
+    penaltyClause: terms.penaltyClause || null,
+    // Timeline & Schedule
+    packetType: schedule.packetType || null,
+    submissionStartDate: schedule.submissionStartDate || tender.bidStartDate || null,
+    submissionEndDate: schedule.submissionDate || tender.bidClosingDate || null,
+    bidValidityDays: schedule.validityDays ?? null,
+    clarificationAllowed: schedule.clarificationAllowed ?? null,
+    clarificationDeadline: schedule.clarificationDeadline || null,
+    bidStartDate: tender.bidStartDate || schedule.submissionStartDate || null,
+    bidClosingDate: tender.bidClosingDate || schedule.submissionDate || null,
+    // Evaluation
+    evaluationMethod: evaluation.method || null
   };
 };
 
