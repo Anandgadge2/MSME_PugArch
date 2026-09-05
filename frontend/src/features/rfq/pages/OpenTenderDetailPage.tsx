@@ -10,6 +10,7 @@ import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
 import { toast } from 'sonner';
+import { isShgUser } from '../../../lib/shg';
 
 function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
   if (!dateVal) return undefined;
@@ -38,6 +39,9 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   const pathname = usePathname() || '';
   const { user } = useAuth();
   const currentUser: any = user;
+
+  const isShg = isShgUser(currentUser) || currentUser?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
 
   const explicitReqId = searchParams?.get('requirementId') || '';
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || '';
@@ -190,7 +194,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
       participantsCount={bid.participantsCount ?? participationsList.length}
       emdAmount={bid.emdAmount || reqObj.emdAmount || basics.emdAmount}
       isEmdRequired={bid.isEmdRequired ?? reqObj.isEmdRequired ?? basics.isEmdRequired}
-      backRoute={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "/buyer/my-procurements" : "/seller/opportunities"}
+      backRoute={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "/buyer/my-procurements" : `/${rolePrefix}/opportunities`}
       backRouteLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "My Procurements" : "Opportunities"}
       submitButtonLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? 'View Evaluation & Results' : 'Submit Tender Proposal'}
       onSubmitClick={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal}

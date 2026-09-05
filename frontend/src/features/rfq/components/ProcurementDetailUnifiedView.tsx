@@ -54,6 +54,7 @@ import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { KpiCard } from '../../shared/KpiCard';
 import ClarificationPanel from './ClarificationPanel';
+import { isShgUser } from '../../../lib/shg';
 import { EmdCard, EmdInfo, isEmdApplicable } from './EmdCard';
 import { EmdPaymentModal } from './EmdPaymentModal';
 
@@ -2079,6 +2080,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
   const [nowMs] = useState(() => Date.now());
   const targetId = String(props.id);
+  const isShg = isShgUser(currentUser) || currentUser?.role === 'shg' || pathname.startsWith('/shg') || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
   const userRoleStr = String(currentUser?.role || '').toLowerCase();
   const isBuyerOrAdmin = userRoleStr === 'buyer' || userRoleStr === 'admin' || userRoleStr === 'master_admin' || (!!currentUser?.id && String(currentUser?.id) === String(props.buyer?.id));
   const isBuyerSide = userRoleStr === 'buyer' || pathname.startsWith('/buyer') || (isBuyerOrAdmin && !pathname.startsWith('/seller') && !pathname.startsWith('/shg'));
@@ -2194,7 +2197,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         return null;
       }
     },
-    enabled: currentUser?.role === 'seller' && !!targetId,
+    enabled: (currentUser?.role === 'seller' || isShg) && !!targetId,
   });
 
   const isEmdPaid = emdRes?.status === 'PAID' || emdRes?.status === 'VERIFIED';
@@ -3141,7 +3144,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               } else if (typeof window !== 'undefined' && window.history.length > 1) {
                 router.back();
               } else {
-                router.push(props.backRoute || '/seller/opportunities');
+                router.push(props.backRoute || `/${rolePrefix}/opportunities`);
               }
             }}
             className="h-8 gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors"
@@ -3155,7 +3158,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               type="button"
               onClick={() => {
                 if (props.onBack) props.onBack();
-                else router.push(props.backRoute || '/seller/opportunities');
+                else router.push(props.backRoute || `/${rolePrefix}/opportunities`);
               }}
               className="hover:text-slate-900 transition-colors"
             >
@@ -3250,7 +3253,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 props.invoiceStatus.exists ? (
                   <Button
                     type="button"
-                    onClick={() => router.push(`/seller/invoices/${props.invoiceStatus!.invoiceId}`)}
+                    onClick={() => router.push(`/${rolePrefix}/invoices/${props.invoiceStatus!.invoiceId}`)}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 h-9 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                   >
                     <Eye className="h-4 w-4 mr-0.5" />

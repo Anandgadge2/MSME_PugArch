@@ -918,7 +918,7 @@ export default function Dashboard() {
                         </p>
                       </div>
                       <Button
-                        onClick={() => router.push(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding')}
+                        onClick={() => router.push(isShgUser(user) || user?.role === 'shg' ? '/shg/onboarding' : (user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding'))}
                         className="bg-slate-50 hover:bg-slate-100 text-[#12335f] ring-1 ring-slate-200/70 rounded h-7 px-2.5 font-bold uppercase text-[9px] tracking-wide shrink-0 transition"
                       >
                         {user?.onboardingStatus === 'approved_for_procurement' ? 'View Profile' : 'Complete'}
@@ -976,7 +976,7 @@ export default function Dashboard() {
               <Button
                 onClick={() => {
                   setShowPendingModal(false);
-                  router.push(user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding');
+                  router.push(isShgUser(user) || user?.role === 'shg' ? '/shg/onboarding' : (user?.role === 'seller' ? '/seller/onboarding' : '/buyer/onboarding'));
                 }}
                 className="w-full bg-[#12335f] hover:bg-[#0b2445] text-white rounded h-10 px-4 font-bold uppercase text-[11px] tracking-wide transition-all"
               >

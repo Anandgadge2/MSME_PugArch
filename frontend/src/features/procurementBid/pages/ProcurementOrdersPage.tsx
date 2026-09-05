@@ -446,8 +446,8 @@ function OrderDetail({ order, role, busy, remarks, setRemarks, run }: any) {
           <h2 className="text-sm font-black text-[#0b2447]">Actions</h2>
           <textarea value={remarks} onChange={e => setRemarks(e.target.value)} className="mt-3 min-h-20 w-full rounded-md border border-slate-200 p-3 text-xs font-bold outline-none" placeholder="Remarks or reason" />
           <div className="mt-3 grid gap-2">
-            {role === 'seller' && <button disabled={!!busy} onClick={() => run('Delivery dispatched', () => procurementOrderApi.updateDelivery(order.id, { status: 'DISPATCHED', remarks }))} className="h-10 rounded-md bg-[#0b2447] px-3 text-xs font-black text-white disabled:opacity-50">Update Delivery</button>}
-            {role === 'seller' && <button disabled={!!busy} onClick={() => run('Invoice submitted', () => procurementOrderApi.createInvoice(order.id, { amount: Number(order.amount || 0) }))} className="h-10 rounded-md bg-[#c86413] px-3 text-xs font-black text-white disabled:opacity-50">Create Invoice</button>}
+            {(role === 'seller' || role === 'shg') && <button disabled={!!busy} onClick={() => run('Delivery dispatched', () => procurementOrderApi.updateDelivery(order.id, { status: 'DISPATCHED', remarks }))} className="h-10 rounded-md bg-[#0b2447] px-3 text-xs font-black text-white disabled:opacity-50">Update Delivery</button>}
+            {(role === 'seller' || role === 'shg') && <button disabled={!!busy} onClick={() => run('Invoice submitted', () => procurementOrderApi.createInvoice(order.id, { amount: Number(order.amount || 0) }))} className="h-10 rounded-md bg-[#c86413] px-3 text-xs font-black text-white disabled:opacity-50">Create Invoice</button>}
             {role === 'buyer' && !grn && <button disabled={!!busy} onClick={() => run('GRN created', () => procurementOrderApi.createGrn(order.id, { remarks }))} className="h-10 rounded-md bg-[#0b2447] px-3 text-xs font-black text-white disabled:opacity-50">Create GRN</button>}
             {role === 'buyer' && grn && grn.status !== 'APPROVED' && <button disabled={!!busy} onClick={() => run('GRN approved', () => procurementOrderApi.approveGrn(order.id, grn.id, { inspectionNote: remarks }))} className="h-10 rounded-md bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50">Approve GRN</button>}
             {role === 'buyer' && invoice && invoice.status !== 'approved' && <button disabled={!!busy} onClick={() => run('Invoice approved', () => procurementOrderApi.approveInvoice(order.id, invoice.id))} className="h-10 rounded-md bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50">Approve Invoice</button>}
@@ -455,7 +455,7 @@ function OrderDetail({ order, role, busy, remarks, setRemarks, run }: any) {
             {role === 'admin' && payment && <button disabled={!!busy} onClick={() => run('Settlement confirmed', () => procurementOrderApi.markSettlementConfirmed(order.id, { remarks }))} className="h-10 rounded-md bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50">Confirm Settlement</button>}
           </div>
         </div>
-        <Link href={role === 'seller' ? '/seller/awards' : role === 'admin' ? '/admin/procurement-orders' : '/buyer/procurement-orders'} className="flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">Back to orders</Link>
+        <Link href={role === 'shg' ? '/shg/awards' : role === 'seller' ? '/seller/awards' : role === 'admin' ? '/admin/procurement-orders' : '/buyer/procurement-orders'} className="flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">Back to orders</Link>
       </aside>
     </div>
   );

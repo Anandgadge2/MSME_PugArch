@@ -1,4 +1,4 @@
-import { getSellerPortalPath } from './shg';
+import { getSellerPortalPath, isShgUser } from './shg';
 import { safeInternalPath } from './safeNavigation';
 
 export interface PortalNotification {
@@ -21,6 +21,8 @@ export const routeForNotification = (
   if (explicitRoute) return safeInternalPath(explicitRoute, '/notifications');
 
   const type = String(item.type || '').toLowerCase();
+  const isShg = isShgUser(user) || role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
 
   if (type.includes('onboarding') || type.includes('section_') || type.includes('admin_feedback') || type.includes('gst_verified')) {
     if (role === 'admin') return '/admin/onboarding';
@@ -29,17 +31,17 @@ export const routeForNotification = (
   }
 
   if (type.includes('quote') || type.includes('rfq')) return '/quotations';
-  if (type.includes('direct_purchase')) return role === 'buyer' ? '/buyer/direct-purchase' : '/seller/orders';
-  if (type.includes('tender') || type.includes('auction')) return role === 'buyer' ? '/buyer/tenders' : '/seller/tenders';
+  if (type.includes('direct_purchase')) return role === 'buyer' ? '/buyer/direct-purchase' : `/${rolePrefix}/orders`;
+  if (type.includes('tender') || type.includes('auction')) return role === 'buyer' ? '/buyer/tenders' : `/${rolePrefix}/tenders`;
   if (type.includes('payment')) return role === 'buyer' ? '/buyer/payments' : '/payments';
   if (type.includes('escrow')) return '/escrow';
   if (type.includes('message')) {
     if (role === 'admin' || role === 'master_admin') return '/admin/messages';
-    return role === 'buyer' ? '/buyer/messages' : '/seller/messages';
+    return role === 'buyer' ? '/buyer/messages' : `/${rolePrefix}/messages`;
   }
   if (type.includes('dispute')) {
     if (role === 'admin') return '/admin/disputes';
-    return role === 'buyer' ? '/buyer/disputes' : '/seller/disputes';
+    return role === 'buyer' ? '/buyer/disputes' : `/${rolePrefix}/disputes`;
   }
   if (type.includes('grievance')) return role === 'admin' ? '/admin/disputes?tab=grievances' : '/dashboard';
   if (type.includes('organization')) return role === 'admin' ? '/admin/organizations' : '/dashboard';

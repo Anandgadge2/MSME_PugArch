@@ -30,6 +30,7 @@ import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import type { DocumentPreview } from '../../../lib/files';
 import { getDocumentPreviewMode } from '../../../lib/files';
 import { useAuth } from '../../../hooks/useAuth';
+import { isShgUser } from '../../../lib/shg';
 import { EmdCard, EmdInfo, isEmdApplicable } from '../../rfq/components/EmdCard';
 import { EmdPaymentModal } from '../../rfq/components/EmdPaymentModal';
 import {
@@ -203,6 +204,8 @@ export default function BidParticipationPage() {
   const { user } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '';
+  const isShg = isShgUser(user) || user?.role === 'shg' || pathname.startsWith('/shg') || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
   const bidId = pathname.split('/')[2];
   const [bid, setBid] = useState<ProcurementBid | null>(null);
   const [participation, setParticipation] = useState<ParticipationState | null>(null);
@@ -1821,6 +1824,9 @@ function SubmitStep({
   onPayClick?: () => void;
   procurementType?: string | null;
 }) {
+  const { user } = useAuth();
+  const isShg = isShgUser(user) || user?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
   return (
     <div className={panelClass + " p-6 text-center space-y-6"}>
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-50">
@@ -1857,7 +1863,7 @@ function SubmitStep({
           <h2 className="text-xl font-bold text-slate-800">Bid Submitted Successfully</h2>
           <p className="mt-2 text-sm text-slate-600">Your bid ID is: <strong>{participation?.participationNumber || participation?.id}</strong></p>
           <div className="mt-6">
-            <Link href="/seller/bids" className="inline-flex h-10 items-center justify-center rounded-xl bg-slate-900 px-6 text-sm font-semibold text-white transition-colors hover:bg-slate-800">
+            <Link href={`/${rolePrefix}/bids`} className="inline-flex h-10 items-center justify-center rounded-xl bg-slate-900 px-6 text-sm font-semibold text-white transition-colors hover:bg-slate-800">
               Return to Dashboard
             </Link>
           </div>

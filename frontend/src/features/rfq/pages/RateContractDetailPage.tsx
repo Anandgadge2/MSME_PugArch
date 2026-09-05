@@ -53,6 +53,7 @@ import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
+import { isShgUser } from '../../../lib/shg';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
 
 /* ─── Helper Utilities ─────────────────────────────────── */
@@ -100,6 +101,10 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
+
+  const isShg = isShgUser(user) || user?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
+
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
   const [expandedDocs, setExpandedDocs] = useState(false);
 
@@ -591,7 +596,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       return;
     }
     const targetId = rcData.id || requirementId || requestId;
-    router.push(`/seller/procurement/rate-contract/${targetId}/respond`);
+    router.push(`/${rolePrefix}/procurement/rate-contract/${targetId}/respond`);
   };
 
   const handleViewDoc = (doc: typeof uploadedDocuments[0]) => {
@@ -684,7 +689,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       ownResponse={ownResponse}
       emdAmount={rcData.emdAmount}
       isEmdRequired={rcData.isEmdRequired}
-      backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rate-contracts"}
+      backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : `/${rolePrefix}/opportunities/rate-contracts`}
       backRouteLabel={isBuyerOrAdmin ? "My Procurements" : "Rate Contract Opportunities"}
       submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (isRateQuotationSubmitted ? 'View Rate Proposal' : 'Submit Rate Quote')}
       onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : handleSubmitQuotation}

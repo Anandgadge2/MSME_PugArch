@@ -44,38 +44,78 @@ export function slugToMethod(slug: string): ProcurementMethodId | undefined {
   return SLUG_TO_METHOD[slug];
 }
 
+/* ── role resolver ────────────────────────────────────────────────── */
+
+/**
+ * Determine if current supplier context is 'shg' or 'seller'.
+ * Checks:
+ * 1. Explicit role parameter
+ * 2. Active browser URL path (`/shg/...`)
+ * 3. Fallback to 'seller'
+ */
+export function resolveSupplierRole(role?: string): 'seller' | 'shg' {
+  if (role) {
+    const normalized = role.toLowerCase();
+    if (normalized === 'shg') return 'shg';
+    if (normalized === 'seller') return 'seller';
+  }
+  if (typeof window !== 'undefined') {
+    const path = window.location?.pathname || '';
+    if (path.startsWith('/shg') || path.includes('/shg/')) {
+      return 'shg';
+    }
+  }
+  return 'seller';
+}
+
 /* ── route builders ───────────────────────────────────────────────── */
 
-export const sellerRoutes = {
-  /** Seller opportunities listing with optional type filter */
-  opportunities: (type?: ProcurementMethodId) =>
-    type
-      ? `/seller/procurement/opportunities?type=${methodToSlug(type)}`
-      : '/seller/procurement/opportunities',
+export const createSupplierRoutes = (forcedRole?: string) => {
+  const getRole = (overrideRole?: string) => resolveSupplierRole(overrideRole || forcedRole);
 
-  /** Procurement detail view: /seller/procurement/{type}/{id} */
-  detail: (type: string, id: string | number) =>
-    `/seller/procurement/${methodToSlug(type)}/${encodeURIComponent(String(id))}`,
+  return {
+    /** Supplier opportunities listing with optional type filter */
+    opportunities: (type?: ProcurementMethodId, role?: string) => {
+      const r = getRole(role);
+      return type
+        ? `/${r}/procurement/opportunities?type=${methodToSlug(type)}`
+        : `/${r}/procurement/opportunities`;
+    },
 
-  /** Respond / submit quotation: /seller/procurement/{type}/{id}/respond */
-  respond: (type: string, id: string | number) =>
-    `/seller/procurement/${methodToSlug(type)}/${encodeURIComponent(String(id))}/respond`,
+    /** Procurement detail view: /{role}/procurement/{type}/{id} */
+    detail: (type: string, id: string | number, role?: string) =>
+      `/${getRole(role)}/procurement/${methodToSlug(type)}/${encodeURIComponent(String(id))}`,
 
-  /** Reverse auction live room */
-  auctionLive: (id: string | number) =>
-    `/seller/procurement/reverse-auction/${encodeURIComponent(String(id))}/live`,
+    /** Respond / submit quotation: /{role}/procurement/{type}/{id}/respond */
+    respond: (type: string, id: string | number, role?: string) =>
+      `/${getRole(role)}/procurement/${methodToSlug(type)}/${encodeURIComponent(String(id))}/respond`,
 
-  /** Reverse auction results */
-  auctionResults: (id: string | number) =>
-    `/seller/procurement/reverse-auction/${encodeURIComponent(String(id))}/results`,
+    /** Reverse auction live room */
+    auctionLive: (id: string | number, role?: string) =>
+      `/${getRole(role)}/procurement/reverse-auction/${encodeURIComponent(String(id))}/live`,
 
-  /** Submitted bids listing */
-  bids: {
-    submitted: '/seller/bids/submitted' as const,
-    draft: '/seller/bids/draft' as const,
-    awarded: '/seller/bids/awarded' as const,
-  },
-} as const;
+    /** Reverse auction results */
+    auctionResults: (id: string | number, role?: string) =>
+      `/${getRole(role)}/procurement/reverse-auction/${encodeURIComponent(String(id))}/results`,
+
+    /** Bids listing routes (dynamic based on active supplier role) */
+    get bids() {
+      const r = getRole();
+      return {
+        submitted: `/${r}/bids/submitted` as const,
+        draft: `/${r}/bids/draft` as const,
+        awarded: `/${r}/bids/awarded` as const,
+      };
+    },
+  };
+};
+
+export const sellerRoutes = createSupplierRoutes();
+export const shgRoutes = createSupplierRoutes('shg');
+export const supplierRoutes = Object.assign(
+  (role?: string) => createSupplierRoutes(role),
+  createSupplierRoutes()
+);
 
 export const buyerRoutes = {
   /** Buyer procurement detail view */

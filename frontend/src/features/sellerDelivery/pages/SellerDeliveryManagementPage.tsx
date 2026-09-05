@@ -294,7 +294,8 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                                     role="menuitem"
                                     onClick={() => {
                                         setOpen(false);
-                                        router.push(`/seller/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`);
+                                        const rolePrefix = (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/'))) ? 'shg' : 'seller';
+                                        router.push(`/${rolePrefix}/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`);
                                     }}
                                     className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
                                 >

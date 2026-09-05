@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { sellerRoutes } from '@/lib/routes';
+import { supplierRoutes } from '@/lib/routes';
+import { isShgUser } from '../../../lib/shg';
 import { useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -296,6 +297,8 @@ function CountdownTimer({ endDate }: { endDate?: string }) {
 export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRouteType?: OpportunityType | '' }) {
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const isShg = isShgUser(user) || user?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
   const queryClient = useQueryClient();
   const [items, setItems] = useState<SellerOpportunity[]>(() => globalOpportunitiesCache || []);
   const [loading, setLoading] = useState(() => !globalOpportunitiesCache);
@@ -561,24 +564,24 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         let detailsHref = `/bids/${bid.id}`;
 
         if (opportunityType === 'Rate Contract') {
-          href = sellerRoutes.respond('RATE_CONTRACT', bid.id);
-          detailsHref = sellerRoutes.detail('RATE_CONTRACT', bid.id);
+          href = supplierRoutes.respond('RATE_CONTRACT', bid.id);
+          detailsHref = supplierRoutes.detail('RATE_CONTRACT', bid.id);
           actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
         } else if (opportunityType === 'Open Tender') {
-          href = sellerRoutes.detail('OPEN_TENDER', bid.id);
-          detailsHref = sellerRoutes.detail('OPEN_TENDER', bid.id);
+          href = supplierRoutes.detail('OPEN_TENDER', bid.id);
+          detailsHref = supplierRoutes.detail('OPEN_TENDER', bid.id);
           actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
         } else if (bid.sourceModel === 'TENDER' && bid.sourceId) {
-          href = `/seller/tenders/${bid.sourceId}/bid`;
+          href = `/${rolePrefix}/tenders/${bid.sourceId}/bid`;
           detailsHref = `/tenders?tender=${bid.sourceId}`;
           actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
         } else if (method === 'RFP' || opportunityType === 'RFP') {
-          href = sellerRoutes.detail('RFP', bid.id);
-          detailsHref = sellerRoutes.detail('RFP', bid.id);
+          href = supplierRoutes.detail('RFP', bid.id);
+          detailsHref = supplierRoutes.detail('RFP', bid.id);
           actionLabel = 'Submit Proposal';
         } else {
-          href = sellerRoutes.detail('RFQ', bid.id);
-          detailsHref = sellerRoutes.detail('RFQ', bid.id);
+          href = supplierRoutes.detail('RFQ', bid.id);
+          detailsHref = supplierRoutes.detail('RFQ', bid.id);
           actionLabel = 'Submit Quote';
         }
 
@@ -676,18 +679,18 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const linkedBidId = req.payload?.linkedProcurementBidId;
         const canonicalReqId = req.requirementNumber || req.sourceId || (typeof req.id === 'number' && req.id < 0 ? Math.abs(req.id) : req.id);
         const buildDetailHref = () => {
-          if (opportunityType === 'Rate Contract') return sellerRoutes.detail('RATE_CONTRACT', canonicalReqId);
-          if (opportunityType === 'RFQ') return sellerRoutes.detail('RFQ', canonicalReqId);
-          if (opportunityType === 'RFP') return sellerRoutes.detail('RFP', canonicalReqId);
-          if (opportunityType === 'Open Tender') return sellerRoutes.detail('OPEN_TENDER', canonicalReqId);
-          if (opportunityType === 'Limited Tender') return sellerRoutes.detail('LIMITED_TENDER', canonicalReqId);
-          if (opportunityType === 'Reverse Auction') return sellerRoutes.detail('REVERSE_AUCTION', req.sourceId || canonicalReqId);
+          if (opportunityType === 'Rate Contract') return supplierRoutes.detail('RATE_CONTRACT', canonicalReqId);
+          if (opportunityType === 'RFQ') return supplierRoutes.detail('RFQ', canonicalReqId);
+          if (opportunityType === 'RFP') return supplierRoutes.detail('RFP', canonicalReqId);
+          if (opportunityType === 'Open Tender') return supplierRoutes.detail('OPEN_TENDER', canonicalReqId);
+          if (opportunityType === 'Limited Tender') return supplierRoutes.detail('LIMITED_TENDER', canonicalReqId);
+          if (opportunityType === 'Reverse Auction') return supplierRoutes.detail('REVERSE_AUCTION', req.sourceId || canonicalReqId);
           return `/marketplace/requirements/${canonicalReqId}`;
         };
         const detailHref = buildDetailHref();
         const responseHref = linkedBidId 
-          ? (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', linkedBidId) : `/bids/${linkedBidId}/participate`)
-          : (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', canonicalReqId) : detailHref);
+          ? (opportunityType === 'Rate Contract' ? supplierRoutes.respond('RATE_CONTRACT', linkedBidId) : `/bids/${linkedBidId}/participate`)
+          : (opportunityType === 'Rate Contract' ? supplierRoutes.respond('RATE_CONTRACT', canonicalReqId) : detailHref);
         const opportunity: SellerOpportunity = {
           id: `req-${req.id}`,
           type: opportunityType,
@@ -767,8 +770,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           eligibility: isQrPrivate ? 'Invited Sellers Only' : 'Open Sourcing',
           status: qr.status || 'OPEN',
           actionLabel: 'Submit Quote',
-          href: sellerRoutes.detail('RFQ', qr.id),
-          detailsHref: sellerRoutes.detail('RFQ', qr.id),
+          href: supplierRoutes.detail('RFQ', qr.id),
+          detailsHref: supplierRoutes.detail('RFQ', qr.id),
           sourceRef: qr.quoteNumber || `RFQ-${qr.id}`,
           publishedAt: qr.createdAt,
           quantity: qr.quantity,
@@ -813,8 +816,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           eligibility: 'Check invitation',
           status: auction.statusEnum || auction.status || 'Scheduled',
           actionLabel: 'Join Auction',
-          href: sellerRoutes.auctionLive(auction.id),
-          detailsHref: sellerRoutes.detail('REVERSE_AUCTION', auction.id),
+          href: supplierRoutes.auctionLive(auction.id),
+          detailsHref: supplierRoutes.detail('REVERSE_AUCTION', auction.id),
           sourceRef: auction.auctionCode || `RA-${auction.id}`,
           publishedAt: auction.startTime,
           description: auction.description,
@@ -870,11 +873,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           status: rc.status || meta.activeState || 'ACTIVE',
           actionLabel: 'Submit Quote',
           href: hasReqId
-            ? sellerRoutes.respond('RATE_CONTRACT', meta.requirementId)
-            : sellerRoutes.respond('RATE_CONTRACT', rc.id),
+            ? supplierRoutes.respond('RATE_CONTRACT', meta.requirementId)
+            : supplierRoutes.respond('RATE_CONTRACT', rc.id),
           detailsHref: hasReqId
-            ? sellerRoutes.detail('RATE_CONTRACT', meta.requirementId)
-            : sellerRoutes.detail('RATE_CONTRACT', rc.id),
+            ? supplierRoutes.detail('RATE_CONTRACT', meta.requirementId)
+            : supplierRoutes.detail('RATE_CONTRACT', rc.id),
           sourceRef: refNo,
           publishedAt: rc.startDate || rc.createdAt,
           quantity: meta.minimumOrderQuantity ? `${meta.minimumOrderQuantity} min qty` : undefined,

@@ -11,6 +11,7 @@ import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
 import RfqDetailPage from './RfqDetailPage';
 import { toast } from 'sonner';
+import { isShgUser } from '../../../lib/shg';
 
 function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
   if (!dateVal) return undefined;
@@ -41,8 +42,10 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname() || '';
-  const { user } = useAuth();
-  const currentUser: any = user;
+  const { user: currentUser } = useAuth();
+
+  const isShg = isShgUser(currentUser) || currentUser?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
 
   const explicitReqId = searchParams?.get('requirementId') || '';
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || '';
@@ -191,7 +194,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       toast.error('Unable to locate the participation record for this RFP.');
       return;
     }
-    router.push(`/seller/procurement/rfp/${targetBidId}/respond`);
+    router.push(`/${rolePrefix}/procurement/rfp/${targetBidId}/respond`);
   };
 
   const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin';
@@ -265,7 +268,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       ownResponse={ownResponse}
       emdAmount={bid.emdAmount || reqObj.emdAmount || basics.emdAmount}
       isEmdRequired={bid.isEmdRequired ?? reqObj.isEmdRequired ?? basics.isEmdRequired}
-      backRoute={isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities'}
+      backRoute={isBuyerOrAdmin ? '/buyer/my-procurements' : `/${rolePrefix}/opportunities`}
       backRouteLabel={isBuyerOrAdmin ? 'My Procurements' : 'Opportunities'}
       submitButtonLabel={isBuyerOrAdmin ? undefined : (hasSubmittedProposal ? 'View Proposal' : 'Submit Proposal')}
       onSubmitClick={isBuyerOrAdmin ? undefined : handleSubmitProposal}

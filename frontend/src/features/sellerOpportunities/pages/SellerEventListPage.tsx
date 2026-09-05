@@ -13,6 +13,8 @@ import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
+import { useAuth } from '../../../hooks/useAuth';
+import { isShgUser } from '../../../lib/shg';
 
 type SellerEventView = 'all' | 'invited' | 'submitted' | 'clarifications';
 
@@ -36,6 +38,9 @@ const hasClarification = (bid: ProcurementBid) => {
 
 export default function SellerEventListPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const isShg = isShgUser(user) || user?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
   const searchParams = useSearchParams();
   const filterParam = searchParams.get('filter');
   const activeView = getEventView(filterParam);
@@ -191,10 +196,10 @@ export default function SellerEventListPage() {
   }[activeView];
 
   const viewTabs: Array<{ label: string; href: string; view: SellerEventView }> = [
-    { label: 'All', href: '/seller/procurement/events', view: 'all' },
-    { label: 'Invited', href: '/seller/procurement/events?filter=invited', view: 'invited' },
-    { label: 'Submitted', href: '/seller/procurement/events?filter=submitted', view: 'submitted' },
-    { label: 'Clarifications', href: '/seller/procurement/events?filter=clarifications', view: 'clarifications' },
+    { label: 'All', href: `/${rolePrefix}/procurement/events`, view: 'all' },
+    { label: 'Invited', href: `/${rolePrefix}/procurement/events?filter=invited`, view: 'invited' },
+    { label: 'Submitted', href: `/${rolePrefix}/procurement/events?filter=submitted`, view: 'submitted' },
+    { label: 'Clarifications', href: `/${rolePrefix}/procurement/events?filter=clarifications`, view: 'clarifications' },
   ];
 
   /* KPI counts */
@@ -218,7 +223,7 @@ export default function SellerEventListPage() {
             <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-500">{viewMeta.desc}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => router.push('/seller/procurement')} className="h-10 rounded-lg text-xs font-black uppercase shadow-sm">
+            <Button type="button" variant="outline" onClick={() => router.push(`/${rolePrefix}/procurement`)} className="h-10 rounded-lg text-xs font-black uppercase shadow-sm">
               Hub Dashboard
             </Button>
             <Button type="button" variant="outline" onClick={loadData} className="h-10 rounded-lg text-xs font-black uppercase shadow-sm">
@@ -246,10 +251,10 @@ export default function SellerEventListPage() {
 
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Total Bids" value={kpiTotal} subtext="Available opportunities" icon={ClipboardList} tone="blue" onClick={() => router.push('/seller/opportunities?filter=all')} active={activeView === 'all'} />
-        <KpiCard label="Invited" value={kpiInvited} subtext="Direct buyer invitations" icon={Users} tone="purple" onClick={() => router.push('/seller/opportunities?filter=invited')} active={activeView === 'invited'} />
-        <KpiCard label="Submitted" value={kpiSubmitted} subtext="Bids submitted" icon={CheckCircle2} tone="green" onClick={() => router.push('/seller/opportunities?filter=submitted')} active={activeView === 'submitted'} />
-        <KpiCard label="Closing in 7 Days" value={kpiClosingSoon} subtext="Expiring soon" icon={CalendarDays} tone="amber" onClick={() => router.push('/seller/opportunities?filter=clarifications')} active={activeView === 'clarifications'} />
+        <KpiCard label="Total Bids" value={kpiTotal} subtext="Available opportunities" icon={ClipboardList} tone="blue" onClick={() => router.push(`/${rolePrefix}/opportunities?filter=all`)} active={activeView === 'all'} />
+        <KpiCard label="Invited" value={kpiInvited} subtext="Direct buyer invitations" icon={Users} tone="purple" onClick={() => router.push(`/${rolePrefix}/opportunities?filter=invited`)} active={activeView === 'invited'} />
+        <KpiCard label="Submitted" value={kpiSubmitted} subtext="Bids submitted" icon={CheckCircle2} tone="green" onClick={() => router.push(`/${rolePrefix}/opportunities?filter=submitted`)} active={activeView === 'submitted'} />
+        <KpiCard label="Closing in 7 Days" value={kpiClosingSoon} subtext="Expiring soon" icon={CalendarDays} tone="amber" onClick={() => router.push(`/${rolePrefix}/opportunities?filter=clarifications`)} active={activeView === 'clarifications'} />
       </div>
 
       {activeView === 'submitted' ? (
@@ -375,7 +380,7 @@ export default function SellerEventListPage() {
                         </td>
                         <td className="px-4 py-3.5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            <Link href={`/seller/procurement/events/${bid.id}`}>
+                            <Link href={`/${rolePrefix}/procurement/events/${bid.id}`}>
                               <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px] font-extrabold uppercase tracking-wide">
                                 <Eye className="mr-1 h-3.5 w-3.5" /> View
                               </Button>

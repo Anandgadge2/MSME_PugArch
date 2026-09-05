@@ -33,6 +33,7 @@ import { cn } from '../../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { getCookieValue } from '../../../lib/auth';
 import { BASE_URL } from '../../../lib/api';
+import { isShgUser } from '../../../lib/shg';
 import { EmdCard, EmdInfo, isEmdApplicable } from '../components/EmdCard';
 import { EmdPaymentModal } from '../components/EmdPaymentModal';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
@@ -809,6 +810,9 @@ export default function SubmitQuotationPage() {
   const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
   const isReadOnly = isClosed || isDeadlinePassed || isSubmittedQuote;
 
+  const isShg = isShgUser(user) || user?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
+
   const procurementTypeBadgeLabel = isMarketplaceQuoteFlow ? 'Product Quotation'
     : isLimitedTender ? 'Limited Tender'
     : isOpenTender ? 'Open Tender'
@@ -823,12 +827,12 @@ export default function SubmitQuotationPage() {
     : isRfp ? 'RFPs'
     : 'RFQs';
 
-  const procurementBackRoute = isMarketplaceQuoteFlow ? `/seller/messages?conversationId=${conversationId}`
-    : isLimitedTender ? '/seller/opportunities/invitations'
-    : isOpenTender ? '/seller/opportunities/open-tenders'
-    : isRateContract ? '/seller/opportunities/rate-contracts'
-    : isRfp ? '/seller/opportunities/rfps'
-    : '/seller/opportunities/rfqs';
+  const procurementBackRoute = isMarketplaceQuoteFlow ? `/${rolePrefix}/messages?conversationId=${conversationId}`
+    : isLimitedTender ? `/${rolePrefix}/opportunities/invitations`
+    : isOpenTender ? `/${rolePrefix}/opportunities/open-tenders`
+    : isRateContract ? `/${rolePrefix}/opportunities/rate-contracts`
+    : isRfp ? `/${rolePrefix}/opportunities/rfps`
+    : `/${rolePrefix}/opportunities/rfqs`;
 
   const submitActionHeaderLabel = isSubmittedQuote
     ? (isMarketplaceQuoteFlow ? 'Submitted Product Quotation' : isRfp ? 'Submitted Proposal' : isRateContract ? 'Submitted Rate Quotation' : isOpenTender ? 'Submitted Quotation' : 'Submitted Quotation')
@@ -1496,15 +1500,19 @@ export default function SubmitQuotationPage() {
   const handleBackToRfq = () => {
     if (isMarketplaceQuoteFlow || rfqData?.isMarketplaceQuote) {
       const targetConvId = conversationId || rfqData?.conversationId;
-      window.location.href = `/seller/messages?conversationId=${targetConvId}`;
+      window.location.href = `/${rolePrefix}/messages?conversationId=${targetConvId}`;
       return;
     }
     if (isRfp) {
-      window.location.href = `/seller/procurement/rfp/${requirementId}`;
+      window.location.href = `/${rolePrefix}/procurement/rfp/${requirementId}`;
     } else if (isRateContract) {
-      window.location.href = `/seller/procurement/rate-contract/${requirementId}`;
+      window.location.href = `/${rolePrefix}/procurement/rate-contract/${requirementId}`;
+    } else if (isOpenTender) {
+      window.location.href = `/${rolePrefix}/procurement/open-tender/${requirementId}`;
+    } else if (isLimitedTender) {
+      window.location.href = `/${rolePrefix}/procurement/limited-tender/${requirementId}`;
     } else {
-      window.location.href = `/seller/procurement/rfq/${requirementId}`;
+      window.location.href = `/${rolePrefix}/procurement/rfq/${requirementId}`;
     }
   };
 
@@ -1515,7 +1523,7 @@ export default function SubmitQuotationPage() {
           <AlertTriangle className="mx-auto h-12 w-12 text-red-400" />
           <h2 className="mt-4 text-lg font-black text-red-800">Invalid Quotation Request</h2>
           <p className="mt-2 text-sm text-red-600">No requirement or conversation ID provided.</p>
-          <Button onClick={() => window.location.href = '/seller/opportunities'} className="mt-4 bg-[#12335f] text-white">
+          <Button onClick={() => window.location.href = `/${rolePrefix}/opportunities`} className="mt-4 bg-[#12335f] text-white">
             Back to Opportunities
           </Button>
         </div>
@@ -1586,7 +1594,7 @@ export default function SubmitQuotationPage() {
         </Button>
 
         <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 bg-white border border-slate-200/80 rounded-xl px-4 py-1.5 shadow-2xs">
-          <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = '/seller/opportunities'}>
+          <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = `/${rolePrefix}/opportunities`}>
             Opportunities
           </span>
           <ChevronRight className="h-3.5 w-3.5 text-slate-300" />

@@ -19,6 +19,7 @@ import {
   Search
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
+import { isShgUser } from '../../../lib/shg';
 import { BidCard, EmptyState, PageShell, ProcurementEmptyState, ProcurementErrorState, ProcurementHero, ProcurementLoadingState, StatusBadge } from '../components';
 import { formatDate, money, type ProcurementBid } from '../data';
 import { procurementBidApi } from '../api';
@@ -72,15 +73,18 @@ export default function BidsListingPage() {
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useResponsiveViewMode('phase7:bids-listing:view-mode');
 
+  const isShg = isShgUser(user) || user?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
+
   // Route-based initial filter preset for seller bids sidebar links
   useEffect(() => {
     const path = window.location.pathname;
-    if (path === '/seller/bids/submitted') {
+    if (path === '/seller/bids/submitted' || path === '/shg/bids/submitted') {
       setParticipation('Participated');
       setStatus('All');
-    } else if (path === '/seller/bids/draft') {
+    } else if (path === '/seller/bids/draft' || path === '/shg/bids/draft') {
       setStatus('DRAFT');
-    } else if (path === '/seller/bids/awarded') {
+    } else if (path === '/seller/bids/awarded' || path === '/shg/bids/awarded') {
       setStatus('AWARDED');
     }
   }, []);
@@ -103,7 +107,7 @@ export default function BidsListingPage() {
   const isTenderBid = (bid: ProcurementBid) => bid.sourceModel === 'TENDER';
   const viewHref = (bid: ProcurementBid) => isTenderBid(bid) && bid.sourceId ? `/tenders?tender=${bid.sourceId}` : `/bids/${bid.id}`;
   const participationHref = (bid: ProcurementBid) => {
-    const target = isTenderBid(bid) && bid.sourceId ? `/seller/tenders/${bid.sourceId}/bid` : `/bids/${bid.id}/participate`;
+    const target = isTenderBid(bid) && bid.sourceId ? `/${rolePrefix}/tenders/${bid.sourceId}/bid` : `/bids/${bid.id}/participate`;
     return user ? target : `/login?returnUrl=${encodeURIComponent(target)}`;
   };
 

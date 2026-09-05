@@ -43,6 +43,7 @@ import { reverseAuctionApi } from '../api';
 import AuctionClarificationPanel from '../components/AuctionClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { marketplaceApi, type MarketplaceSeller } from '../../marketplace/api';
+import { isShgUser } from '../../../lib/shg';
 import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
 import { KpiCard } from '../../shared/KpiCard';
@@ -67,14 +68,16 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   const qc = useQueryClient();
   const router = useRouter();
   const { user } = useAuth();
-  const isSeller = user?.role === 'seller';
+  const isShg = isShgUser(user) || user?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
+  const isSeller = user?.role === 'seller' || isShg;
   const [message, setMessage] = useState('');
   const [selectedSeller, setSelectedSeller] = useState<MarketplaceSeller | null>(null);
 
   // Return to the page the seller came from; fall back to their opportunities list on a cold open.
   const goBack = () => {
     if (typeof window !== 'undefined' && window.history.length > 1) router.back();
-    else router.push(isSeller ? '/seller/opportunities' : '/buyer/my-procurements?type=Reverse Auction');
+    else router.push(isSeller ? `/${rolePrefix}/opportunities` : '/buyer/my-procurements?type=Reverse Auction');
   };
 
   // Queries
@@ -251,9 +254,9 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
               </p>
             </div>
 
-            {user && user.role === 'seller' && (
+            {user && isSeller && (
               hasJoined ? (
-                <Link href={`/seller/procurement/reverse-auction/${id}/live`} className="shrink-0">
+                <Link href={`/${rolePrefix}/procurement/reverse-auction/${id}/live`} className="shrink-0">
                   <Button type="button" className="h-11 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:via-indigo-500 hover:to-blue-600 px-6 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-blue-500/25 transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2">
                     <Play className="h-4 w-4 fill-white" /> Live Bid Console
                   </Button>
@@ -461,7 +464,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/seller/procurement/reverse-auction/${id}/live`} className="w-full sm:w-auto">
+          <Link href={`/${rolePrefix}/procurement/reverse-auction/${id}/live`} className="w-full sm:w-auto">
             <Button type="button" className="w-full h-10 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold shadow-md shadow-blue-500/20">
               <Activity className="mr-2 h-4 w-4" /> Open Full Live Board
             </Button>

@@ -25,6 +25,7 @@ import { ViewModeToggle } from '../features/shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { PageToolbar } from '../features/shared/PageToolbar';
 import { useAuth } from '../hooks/useAuth';
+import { isShgUser } from '../lib/shg';
 import type { PurchaseOrderDto } from '../features/shared/types';
 import { useDeliveryByPO } from '../features/delivery/hooks';
 import { PageTableSkeleton } from '../components/ui/skeleton';
@@ -100,6 +101,7 @@ const OrderActionsMenu = ({
   onClose,
   isSeller,
   isBuyer,
+  rolePrefix = 'seller',
   isIssued,
   isAccepted,
   isDelivered,
@@ -213,7 +215,7 @@ const OrderActionsMenu = ({
               onClick={() => {
                 onClose();
                 const amountVal = order.amount || order.totalValue || 0;
-                router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+                router.push(`/${rolePrefix}/invoices?convertPoId=${order.id}&amount=${amountVal}`);
               }}
               className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
             >
@@ -268,7 +270,9 @@ const OrderActionsMenu = ({
 export default function PurchaseOrders() {
   const { user } = useAuth();
   const router = useRouter();
-  const isSeller = user?.role === 'seller' || user?.role === 'shg';
+  const isShg = isShgUser(user) || user?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
+  const isSeller = user?.role === 'seller' || isShg;
   const isBuyer = user?.role === 'buyer';
 
   const [activeTab, setActiveTab] = useState<'Open' | 'Delivered' | 'Cancelled' | 'All'>('All');
@@ -549,7 +553,7 @@ export default function PurchaseOrders() {
 
   const handleConvertToInvoice = (order: PurchaseOrderDto) => {
     const amountVal = order.amount || order.totalValue || 0;
-    router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+    router.push(`/${rolePrefix}/invoices?convertPoId=${order.id}&amount=${amountVal}`);
   };
 
   const formatTimestamp = (value?: string | Date | null) => {
@@ -605,8 +609,9 @@ export default function PurchaseOrders() {
   };
 
   const handleAcceptOrder = async (order: PurchaseOrderDto) => {
+    if (!window.confirm(`Are you sure you want to ACCEPT purchase order ${order.poNumber || `PO-${order.id}`}?`)) return;
     try {
-      const endpoint = `/api/purchase-orders/${order.id}/acknowledge`;
+      const endpoint = `/api/purchase-orders/${order.id}/accept`;
       const updated = await postApi<PurchaseOrderDto>(endpoint, {});
       setPagedOrders(current => current.map(o => o.id === updated.id ? { ...o, ...updated, status: 'accepted' } : o));
       if (viewingOrder && viewingOrder.id === order.id) {
@@ -615,7 +620,7 @@ export default function PurchaseOrders() {
       toast.success(`Purchase Order ${order.poNumber || `PO-${order.id}`} ACCEPTED successfully! Redirecting to generate Invoice before Delivery Management...`);
       await refreshPurchaseOrders();
       const amountVal = order.amount || order.totalValue || 0;
-      router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+      router.push(`/${rolePrefix}/invoices?convertPoId=${order.id}&amount=${amountVal}`);
     } catch (err: any) {
       toast.error(err?.message || 'Unable to accept purchase order');
     }
@@ -642,13 +647,13 @@ export default function PurchaseOrders() {
     if (!hasInvoice) {
       toast.info(`Please generate the Tax Invoice for ${order.poNumber || `PO-${order.id}`} first before proceeding to Delivery Management.`);
       const amountVal = order.amount || order.totalValue || 0;
-      router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+      router.push(`/${rolePrefix}/invoices?convertPoId=${order.id}&amount=${amountVal}`);
       return;
     }
     if (order.poNumber) {
-      router.push(`/seller/delivery-management?search=${encodeURIComponent(order.poNumber)}`);
+      router.push(`/${rolePrefix}/delivery-management?search=${encodeURIComponent(order.poNumber)}`);
     } else {
-      router.push('/seller/delivery-management');
+      router.push(`/${rolePrefix}/delivery-management`);
     }
   };
 
@@ -681,6 +686,7 @@ export default function PurchaseOrders() {
             onClose={() => setOpenKebabId(null)}
             isSeller={isSeller}
             isBuyer={isBuyer}
+            rolePrefix={rolePrefix}
             isIssued={isIssued}
             isAccepted={isAccepted}
             isDelivered={isDelivered}
@@ -1277,7 +1283,7 @@ export default function PurchaseOrders() {
                                 size="sm"
                                 onClick={() => {
                                   setViewingOrder(null);
-                                  router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || `DLV-${dt.id}`)}`);
+                                  router.push(`/${rolePrefix}/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || `DLV-${dt.id}`)}`);
                                 }}
                               />
                               <span className="text-[10px] font-bold text-slate-600 uppercase">({readableStatus(dt.status || 'pending')})</span>
@@ -1335,7 +1341,7 @@ export default function PurchaseOrders() {
                     className="w-full bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-black uppercase tracking-wider h-10 rounded-xl shadow-sm transition-all"
                     onClick={() => {
                       setViewingOrder(null);
-                      router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
+                      router.push(`/${rolePrefix}/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
                     }}
                   >
                     <Truck className="mr-2 h-4 w-4" /> Track Shipment Details
@@ -1579,7 +1585,7 @@ export default function PurchaseOrders() {
                               onClick={() => {
                                 setViewingOrder(null);
                                 const amountVal = viewingOrder.amount || viewingOrder.totalValue || 0;
-                                router.push(`/seller/invoices?convertPoId=${viewingOrder.id}&amount=${amountVal}`);
+                                router.push(`/${rolePrefix}/invoices?convertPoId=${viewingOrder.id}&amount=${amountVal}`);
                               }}
                               className="h-10 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-4"
                             >

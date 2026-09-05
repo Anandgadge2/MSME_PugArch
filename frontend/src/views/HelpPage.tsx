@@ -479,14 +479,14 @@ export default function HelpPage() {
         {
           icon: Store,
           title: 'SHG Products Catalogue',
-          href: '/seller/catalogue',
+          href: '/shg/products',
           text: 'Showcase handcrafted goods, organic agricultural produce, and cluster goods to verified buyers.',
           badge: 'Storefront'
         },
         {
           icon: CheckCircle2,
           title: 'My Bids & Orders',
-          href: '/seller/bids',
+          href: '/shg/bids',
           text: 'Track quotation submissions, delivery dispatch milestones, and direct beneficiary bank credits.',
           badge: 'Order Tracking'
         },

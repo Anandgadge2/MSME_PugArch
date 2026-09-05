@@ -37,6 +37,7 @@ import { toast } from 'sonner';
 import { api } from '../../../lib/api';
 import { sellerRoutes } from '@/lib/routes';
 import { useAuth } from '../../../hooks/useAuth';
+import { isShgUser } from '../../../lib/shg';
 import { procurementBidApi } from '../api';
 import { formatDate } from '../../shared/format';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
@@ -184,6 +185,9 @@ const CACHE_TTL_MS = 60000;
 export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?: BidTypeFilter }) {
   const { user } = useAuth();
   const router = useRouter();
+
+  const isShg = isShgUser(user) || user?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
 
   // Data state: initialize from in-memory cache if available for instant display
   const [participations, setParticipations] = useState<any[]>(() => cachedSellerParticipations || []);
@@ -685,7 +689,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
 
   const handleAction = (item: any) => {
     const rfqId = getActualRfqId(item);
-    router.push(`/seller/procurement/rfq/${encodeURIComponent(rfqId)}/respond`);
+    router.push(`/${rolePrefix}/procurement/rfq/${encodeURIComponent(rfqId)}/respond`);
   };
 
   const handleConvertToInvoice = async (e: React.MouseEvent, item: any) => {
@@ -701,9 +705,9 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       const createdInvoiceId = (result as any)?.data?.id || (result as any)?.id;
       
       if (createdInvoiceId) {
-        router.push(`/seller/invoices/${createdInvoiceId}`);
+        router.push(`/${rolePrefix}/invoices/${createdInvoiceId}`);
       } else {
-        router.push('/seller/invoices');
+        router.push(`/${rolePrefix}/invoices`);
       }
     } catch (err: any) {
       console.error('[Convert Invoice Error]', err);
@@ -896,10 +900,10 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       {/* ── Bid Category Navigation Pills ── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 -mt-1 scrollbar-none" role="tablist" aria-label="Bid Categories">
         {[
-          { label: 'All Bids', key: 'all', href: '/seller/bids', count: kpiData.totalAll, icon: ClipboardList },
-          { label: 'Submitted Bids', key: 'submitted', href: '/seller/bids/submitted', count: kpiData.totalSubmitted, icon: CheckCircle2 },
-          { label: 'Draft Bids', key: 'draft', href: '/seller/bids/draft', count: kpiData.totalDrafts, icon: FileEdit },
-          { label: 'Awarded Contracts', key: 'awarded', href: '/seller/bids/awarded', count: kpiData.totalAwarded, icon: Trophy },
+          { label: 'All Bids', key: 'all', href: `/${rolePrefix}/bids`, count: kpiData.totalAll, icon: ClipboardList },
+          { label: 'Submitted Bids', key: 'submitted', href: `/${rolePrefix}/bids/submitted`, count: kpiData.totalSubmitted, icon: CheckCircle2 },
+          { label: 'Draft Bids', key: 'draft', href: `/${rolePrefix}/bids/draft`, count: kpiData.totalDrafts, icon: FileEdit },
+          { label: 'Awarded Contracts', key: 'awarded', href: `/${rolePrefix}/bids/awarded`, count: kpiData.totalAwarded, icon: Trophy },
         ].map(tab => {
           const isActive = subRouteType === tab.key;
           const Icon = tab.icon;

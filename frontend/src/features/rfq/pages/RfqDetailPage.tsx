@@ -20,6 +20,7 @@ import { cn } from '../../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
+import { isShgUser } from '../../../lib/shg';
 import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
@@ -153,6 +154,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const searchParams = useSearchParams();
   const pathname = usePathname() || '';
   const { user } = useAuth();
+
+  const isShg = isShgUser(user) || user?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
 
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [expandedAccordion, setExpandedAccordion] = useState<string | null>('commercial');
@@ -850,7 +854,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     const id = requestId || rawBid?.bidNumber || requirementId || reqObj?.id || linkedRequirementId || rawBid?.id;
     if (!id) { toast.error('Procurement ID not found'); return; }
     const param = requestId || rawBid?.bidNumber ? 'requestId' : 'requirementId';
-    router.push(`/seller/procurement/rfq/${encodeURIComponent(String(id))}/respond`);
+    router.push(`/${rolePrefix}/procurement/rfq/${encodeURIComponent(String(id))}/respond`);
   };
 
   const isAwarded = String(status).toUpperCase() === 'AWARDED' || 
@@ -867,7 +871,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         return { exists: false };
       }
     },
-    enabled: !!requestId && user?.role === 'seller' && isAwarded,
+    enabled: !!requestId && (user?.role === 'seller' || user?.role === 'shg' || isShg) && isAwarded,
     staleTime: 0,
   });
 
@@ -883,9 +887,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       const createdInvoiceId = result?.id || result?.data?.id;
       
       if (createdInvoiceId) {
-        router.push(`/seller/invoices/${createdInvoiceId}`);
+        router.push(`/${rolePrefix}/invoices/${createdInvoiceId}`);
       } else {
-        router.push('/seller/invoices');
+        router.push(`/${rolePrefix}/invoices`);
       }
     } catch (err: any) {
       console.error('[Convert Invoice Error]', err);
@@ -979,7 +983,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         <p className="text-xs text-slate-500 leading-relaxed">
           The requested RFQ opportunity could not be loaded or may no longer be available.
         </p>
-        <Button onClick={() => router.push('/seller/opportunities')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 h-10 rounded-xl">
+        <Button onClick={() => router.push(`/${rolePrefix}/opportunities`)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 h-10 rounded-xl">
           Return to Opportunities
         </Button>
       </div>
@@ -1036,11 +1040,11 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       ownResponse={ownResponse}
       emdAmount={emdRes?.emdAmount}
       isEmdRequired={emdRes?.isEmdRequired}
-      backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rfqs"}
+      backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : `/${rolePrefix}/opportunities/rfqs`}
       submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (submitted ? 'View Quotation' : 'Submit Quotation')}
       onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}
       onDownloadClick={handleDownloadPdf}
-      invoiceStatus={user?.role === 'seller' && isAwarded ? { 
+      invoiceStatus={(user?.role === 'seller' || user?.role === 'shg' || isShg) && isAwarded ? { 
         exists: Boolean(invoiceStatusData?.exists), 
         invoiceId: invoiceStatusData?.invoiceId, 
         loading: invoiceStatusLoading 

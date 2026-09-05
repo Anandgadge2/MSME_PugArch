@@ -15,6 +15,7 @@ import type { ProcurementBid } from '../../procurementBid/data';
 import { MethodBadge, ProcurementStatusBadge, BuyerTypeBadge } from '../../procurementWizard/components/SourcingWizardComponents';
 import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
+import { isShgUser } from '../../../lib/shg';
 import { ProcurementDetailUnifiedView } from '../../rfq/components/ProcurementDetailUnifiedView';
 import { peekApi } from '../../shared/apiClient';
 
@@ -25,6 +26,8 @@ interface PageProps {
 export default function SellerEventDetailPage({ id }: PageProps) {
   const router = useRouter();
   const { user } = useAuth();
+  const isShg = isShgUser(user) || user?.role === 'shg' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/shg') || window.location.pathname.includes('/shg/')));
+  const rolePrefix = isShg ? 'shg' : 'seller';
   
   // Instant Cache Hydration: If already visited in this session, render instantly without skeleton flicker
   const cachedBid = useMemo(() => {
@@ -144,7 +147,7 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       <div className="p-12 text-center space-y-4">
         <AlertTriangle className="h-10 w-10 text-rose-500 mx-auto" />
         <p className="text-sm font-bold text-rose-600">{error || 'Opportunity details not found'}</p>
-        <Button type="button" variant="outline" onClick={() => router.push('/seller/procurement/events')}>
+        <Button type="button" variant="outline" onClick={() => router.push(`/${rolePrefix}/procurement/events`)}>
           Back to Bids & Tenders
         </Button>
       </div>
@@ -152,7 +155,7 @@ export default function SellerEventDetailPage({ id }: PageProps) {
   }
 
   const participationUrl = bid.sourceModel === 'TENDER' && bid.sourceId 
-    ? `/seller/tenders/${bid.sourceId}/bid` 
+    ? `/${rolePrefix}/tenders/${bid.sourceId}/bid` 
     : `/bids/${bid.id}`;
 
   return (
@@ -202,7 +205,7 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       ownParticipation={myParticipation}
       emdAmount={bid.emdAmount}
       isEmdRequired={bid.isEmdRequired}
-      backRoute="/seller/procurement/events"
+      backRoute={`/${rolePrefix}/procurement/events`}
       backRouteLabel="Bids & Tenders"
       submitButtonLabel={isSubmitted ? 'View Proposal' : 'Submit Proposal'}
       onSubmitClick={() => router.push(`/bids/${bid.id}/participate`)}
