@@ -2488,7 +2488,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     basics.subCategoryName,
     payload.subCategory,
     payload.subcategory
-  ) || 'General Sub-category';
+  );
 
   const publishedDateValue = firstPresent(
     schedule.publishDate,
@@ -3163,8 +3163,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             >
               {props.backRouteLabel || `${procurementTypeLabel} Opportunities`}
             </button>
-            <span className="text-slate-300">/</span>
-            <span className="text-slate-900">{displayIdStr}</span>
           </nav>
         </div>
 
@@ -3347,12 +3345,11 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             <div className="grid gap-5 lg:grid-cols-2">
               <DataCard title={`Buyer ${procurementTypeLabel} Information`} icon={ClipboardList}>
                 <PropertyGrid columns={2}>
-                  <PropertyItem label={`${procurementTypeLabel} Number`} value={procurementNumber} mono highlight />
                   <PropertyItem label="Procurement Method" value={procurementMethod} />
                   <PropertyItem label="Buying Type" value={buyingType} />
                   <PropertyItem label="Category" value={category} />
-                  {/* Sub Category - hidden on buyer side */}
-                  {!isBuyerSide && (
+                  {/* Sub Category - displayed if exists */}
+                  {subCategory && (
                     <PropertyItem label="Sub Category" value={subCategory} />
                   )}
                   <PropertyItem label="Published Date" value={publishedDateFormatted} />

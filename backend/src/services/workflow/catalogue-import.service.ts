@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import path from 'path';
+import sharp from 'sharp';
 import { ApiError } from '../../utils/ApiError.js';
 import { auditWorkflow, db, type WorkflowActor } from './workflow-common.js';
 import { catalogueWorkflow } from './catalogue-workflow.service.js';
@@ -8,9 +9,8 @@ import { uploadFile } from '../storage/storage.service.js';
 const parseUrls = (value: unknown): string[] => {
   const str = String(value ?? '').trim();
   if (!str) return [];
-  const splitChar = str.includes(',') ? ',' : (str.includes(';') ? ';' : ' ');
   return str
-    .split(splitChar)
+    .split(/[\r\n,;]+|\s+/)
     .map(u => u.trim())
     .filter(u => u && (u.startsWith('http://') || u.startsWith('https://')));
 };
@@ -27,6 +27,7 @@ const downloadedFileTypes: DownloadedFileType[] = [
   { ext: '.jpeg', mimeType: 'image/jpeg', resourceKind: 'image' },
   { ext: '.png', mimeType: 'image/png', resourceKind: 'image' },
   { ext: '.webp', mimeType: 'image/webp', resourceKind: 'image' },
+  { ext: '.avif', mimeType: 'image/avif', resourceKind: 'image' },
   { ext: '.doc', mimeType: 'application/msword', resourceKind: 'document' },
   { ext: '.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', resourceKind: 'document' },
   { ext: '.xls', mimeType: 'application/vnd.ms-excel', resourceKind: 'document' },
@@ -46,6 +47,9 @@ const detectDownloadedFileType = (buffer: Buffer, declaredMime: string): Downloa
   if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return fileTypeForMime('image/jpeg') || null;
   if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return fileTypeForMime('image/png') || null;
   if (buffer.subarray(0, 4).equals(Buffer.from([0x52, 0x49, 0x46, 0x46])) && buffer.subarray(8, 12).equals(Buffer.from([0x57, 0x45, 0x42, 0x50]))) return fileTypeForMime('image/webp') || null;
+  if (buffer.subarray(4, 8).equals(Buffer.from([0x66, 0x74, 0x79, 0x70])) && (buffer.subarray(8, 12).toString('latin1').startsWith('avif') || buffer.subarray(8, 12).toString('latin1').startsWith('avis'))) {
+    return fileTypeForMime('image/avif') || null;
+  }
   if (buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
     const archiveIndex = buffer.toString('latin1');
     if (archiveIndex.includes('[Content_Types].xml') || archiveIndex.includes('word/')) {
@@ -149,6 +153,15 @@ const extractImageFromHtml = (html: string, baseUrl: string): string | null => {
   return null;
 };
 
+type DownloadResult = {
+  success: true;
+  assetId: number;
+} | {
+  success: false;
+  url: string;
+  reason: string;
+};
+
 async function downloadAndUploadUrl(
   url: string,
   userId: number,
@@ -156,26 +169,29 @@ async function downloadAndUploadUrl(
   entityType: 'catalogue_product' | 'catalogue_service',
   expectedKind: 'image' | 'document',
   depth = 0
-) {
+): Promise<DownloadResult> {
   try {
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': expectedKind === 'image' ? 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8' : '*/*'
-      }
+        'Accept': expectedKind === 'image'
+          ? 'image/webp,image/jpeg,image/png,image/*;q=0.8,*/*;q=0.5'
+          : 'application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/msword,text/csv,*/*;q=0.8'
+      },
+      signal: AbortSignal.timeout(20000)
     });
     if (!res.ok) {
       console.warn(`[Catalogue Import] Failed to fetch URL: ${url}, status: ${res.status}`);
-      return null;
+      return { success: false, url, reason: `HTTP ${res.status}${res.statusText ? ' ' + res.statusText : ''}` };
     }
     const arrayBuffer = await res.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    let buffer = Buffer.from(arrayBuffer);
     if (buffer.length === 0) {
       console.warn(`[Catalogue Import] Empty file downloaded from URL: ${url}`);
-      return null;
+      return { success: false, url, reason: 'Downloaded file is empty (0 bytes)' };
     }
 
-    const detectedType = detectDownloadedFileType(buffer, res.headers.get('content-type') || 'application/octet-stream');
+    let detectedType = detectDownloadedFileType(buffer, res.headers.get('content-type') || 'application/octet-stream');
 
     // If user provided a product webpage URL and we are importing an image, automatically extract the product image from HTML
     if (!detectedType && expectedKind === 'image' && depth === 0) {
@@ -189,13 +205,42 @@ async function downloadAndUploadUrl(
       }
     }
 
+    // Advanced image inspection and normalization via Sharp for full cross-format compatibility (AVIF, WebP, JPEG, PNG)
+    if (expectedKind === 'image') {
+      try {
+        const meta = await sharp(buffer).metadata();
+        if (meta.format) {
+          let finalMime = 'image/jpeg';
+          let finalExt = '.jpg';
+          if (meta.format === 'webp') {
+            finalMime = 'image/webp';
+            finalExt = '.webp';
+          } else if (meta.format === 'png') {
+            finalMime = 'image/png';
+            finalExt = '.png';
+          } else if (meta.format === 'jpeg' || meta.format === 'jpg') {
+            finalMime = 'image/jpeg';
+            finalExt = '.jpg';
+          } else {
+            // Normalize any other image formats (AVIF, TIFF, GIF, HEIF, SVG) to standard WebP for storage compatibility
+            buffer = await sharp(buffer).webp({ quality: 90 }).toBuffer();
+            finalMime = 'image/webp';
+            finalExt = '.webp';
+          }
+          detectedType = { ext: finalExt, mimeType: finalMime, resourceKind: 'image' };
+        }
+      } catch (err: any) {
+        console.warn(`[Catalogue Import] Sharp could not decode image from ${url}:`, err?.message);
+      }
+    }
+
     if (!detectedType) {
       console.warn(`[Catalogue Import] Skipped URL with unsupported or invalid file content: ${url}`);
-      return null;
+      return { success: false, url, reason: 'Unsupported or invalid file content' };
     }
     if (detectedType.resourceKind !== expectedKind) {
       console.warn(`[Catalogue Import] Skipped ${expectedKind} URL with ${detectedType.resourceKind} content: ${url}`);
-      return null;
+      return { success: false, url, reason: `File is ${detectedType.resourceKind}, expected ${expectedKind}` };
     }
     const originalName = fileNameForDownloadedUrl(url, detectedType);
 
@@ -218,10 +263,10 @@ async function downloadAndUploadUrl(
       entityType
     });
 
-    return asset.id;
+    return { success: true, assetId: asset.id };
   } catch (err: any) {
     console.warn(`[Catalogue Import] Skipped URL ${url}: ${err?.message || 'download/upload failed'}`);
-    return null;
+    return { success: false, url, reason: err?.message || 'Download/upload failed' };
   }
 }
 
@@ -706,16 +751,26 @@ export const catalogueImportService = {
       const imageResults = await Promise.all(
         imageUrls.map(url => downloadAndUploadUrl(url, actor.id, actor.role, type === 'PRODUCT' ? 'catalogue_product' : 'catalogue_service', 'image'))
       );
-      for (const id of imageResults) {
-        if (id) imageIds.push(id);
+      for (const res of imageResults) {
+        if (!res) continue;
+        if ('assetId' in res) {
+          imageIds.push(res.assetId);
+        } else if ('url' in res) {
+          warnings.push(`Row ${rowNumber}: Image "${res.url}" could not be downloaded (${res.reason})`);
+        }
       }
 
       const documentIds: number[] = [];
       const docResults = await Promise.all(
         docUrls.map(url => downloadAndUploadUrl(url, actor.id, actor.role, type === 'PRODUCT' ? 'catalogue_product' : 'catalogue_service', 'document'))
       );
-      for (const id of docResults) {
-        if (id) documentIds.push(id);
+      for (const res of docResults) {
+        if (!res) continue;
+        if ('assetId' in res) {
+          documentIds.push(res.assetId);
+        } else if ('url' in res) {
+          warnings.push(`Row ${rowNumber}: Document "${res.url}" could not be downloaded (${res.reason})`);
+        }
       }
 
       const rawOriginalPrice = parseNumber(col(row, 'Original Price'));
@@ -748,7 +803,9 @@ export const catalogueImportService = {
         taxRate: gst ?? 0,
         specifications: specs,
         imageIds,
+        expectedImageCount: imageUrls.length,
         documentIds,
+        expectedDocCount: docUrls.length,
         originalPrice: effectiveOriginalPrice,
         discountPrice: finalDiscountPrice,
         discountPercent: finalDiscountPercent,
@@ -841,7 +898,7 @@ export const catalogueImportService = {
       await db.$transaction(async (tx) => {
         for (const row of rows) {
           const status = publish && row.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT';
-          const { specifications, rowNumber, categoryId, ...data } = row;
+          const { specifications, rowNumber, categoryId, expectedImageCount, expectedDocCount, ...data } = row;
           if (batch.type === 'PRODUCT') {
             await catalogueWorkflow.createProductWithClient(tx, actor, {
               ...data,

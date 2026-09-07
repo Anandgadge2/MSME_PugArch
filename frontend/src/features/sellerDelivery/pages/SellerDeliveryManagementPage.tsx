@@ -288,22 +288,20 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
 
                     {['READY_FOR_PICKUP', 'PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status) && (
                         <>
-                            {status === 'READY_FOR_PICKUP' && (
-                                <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setOpen(false);
-                                        onAction('dispatch-details');
-                                    }}
-                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
-                                >
-                                    <Send className="h-3.5 w-3.5 text-[#12335f]" />
-                                    <span>Dispatch Order</span>
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setOpen(false);
+                                    onAction('dispatch-details');
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+                            >
+                                <Send className="h-3.5 w-3.5 text-[#12335f]" />
+                                <span>{status === 'READY_FOR_PICKUP' ? 'Dispatch Order' : 'Dispatch Order / Fulfillment'}</span>
+                            </button>
                             <button
                                 type="button"
                                 role="menuitem"
@@ -353,6 +351,20 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                                 <Upload className="h-3.5 w-3.5 text-emerald-600" />
                                 <span>Upload POD</span>
                             </button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setOpen(false);
+                                    onAction('dispatch-details');
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+                            >
+                                <Send className="h-3.5 w-3.5 text-[#12335f]" />
+                                <span>Fulfillment & Invoice</span>
+                            </button>
                         </>
                     )}
                 </div>,
@@ -365,6 +377,26 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
 export default function SellerDeliveryManagementPage() {
     const { data, isLoading, error, refetch, isFetching } = useDeliveries({ role: 'seller' });
     const [actionTarget, setActionTarget] = useState<{ kind: string; delivery: DeliveryDto } | null>(null);
+
+    const openAction = useCallback((kind: string, delivery: DeliveryDto) => {
+        setActionTarget({ kind, delivery });
+        if (typeof window !== 'undefined' && kind === 'dispatch-details') {
+            const url = new URL(window.location.href);
+            url.searchParams.set('dispatch', String(delivery.id));
+            window.history.pushState({ dispatchId: delivery.id }, '', url.toString());
+        }
+    }, []);
+
+    const closeAction = useCallback(() => {
+        setActionTarget(null);
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            if (url.searchParams.has('dispatch')) {
+                url.searchParams.delete('dispatch');
+                window.history.replaceState({}, '', url.toString());
+            }
+        }
+    }, []);
 
     const [viewMode, setViewMode] = useResponsiveViewMode('seller-delivery-management:view-mode');
     const [searchQuery, setSearchQuery] = useState(() => {
@@ -386,6 +418,42 @@ export default function SellerDeliveryManagementPage() {
     const [sortBy, setSortBy] = useState('newest');
 
     const items = (data?.records || data?.items || []) as DeliveryDto[];
+
+    // Deep-link & browser back restoration for dispatch order fulfillment
+    useEffect(() => {
+        if (typeof window !== 'undefined' && items.length > 0 && !actionTarget) {
+            const params = new URLSearchParams(window.location.search);
+            const dispatchId = params.get('dispatch') || params.get('deliveryId');
+            if (dispatchId) {
+                const found = items.find(d => String(d.id) === dispatchId);
+                if (found) {
+                    setActionTarget({ kind: 'dispatch-details', delivery: found });
+                }
+            }
+        }
+    }, [items, actionTarget]);
+
+    useEffect(() => {
+        const handlePopState = () => {
+            if (typeof window !== 'undefined') {
+                const params = new URLSearchParams(window.location.search);
+                const dispatchId = params.get('dispatch') || params.get('deliveryId');
+                if (dispatchId && items.length > 0) {
+                    const found = items.find(d => String(d.id) === dispatchId);
+                    if (found) {
+                        setActionTarget({ kind: 'dispatch-details', delivery: found });
+                        return;
+                    }
+                }
+                if (!dispatchId && actionTarget) {
+                    setActionTarget(null);
+                }
+            }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [items, actionTarget]);
+
     const pendingCount = items.filter(item => item.status === 'CREATED' || item.status === 'PENDING_ACCEPTANCE').length;
     const inTransitCount = items.filter(item => ['PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(String(item.status))).length;
     const completedCount = items.filter(item => ['DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(item.status))).length;
@@ -630,7 +698,7 @@ export default function SellerDeliveryManagementPage() {
                             {viewMode === 'grid' ? (
                                 <div className="grid gap-3 lg:grid-cols-2">
                                     {pagedDeliveries.map(delivery => (
-                                        <DeliveryCard key={delivery.id} delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
+                                        <DeliveryCard key={delivery.id} delivery={delivery} onAction={(kind) => openAction(kind, delivery)} />
                                     ))}
                                 </div>
                             ) : (
@@ -718,7 +786,7 @@ export default function SellerDeliveryManagementPage() {
                                                                 )}
                                                             </TableCell>
                                                             <TableCell className="text-right p-3">
-                                                                <ActionButtons delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
+                                                                <ActionButtons delivery={delivery} onAction={(kind) => openAction(kind, delivery)} />
                                                             </TableCell>
                                                         </TableRow>
                                                     );
@@ -748,7 +816,7 @@ export default function SellerDeliveryManagementPage() {
                 <ActionDialog
                     kind={actionTarget.kind}
                     delivery={actionTarget.delivery}
-                    onClose={() => setActionTarget(null)}
+                    onClose={closeAction}
                 />
             )}
         </div>
@@ -844,9 +912,10 @@ function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: Del
                                 onClick={onClose}
                                 className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-bold text-white transition focus:outline-none focus:ring-2 focus:ring-white/40 cursor-pointer"
                                 aria-label="Back to Deliveries"
+                                title="Back to Deliveries"
                             >
                                 <ArrowLeft className="h-4 w-4" />
-                                <span>Back</span>
+                                <span>Back to Deliveries</span>
                             </button>
                             <div>
                                 <div className="flex items-center gap-2">
@@ -862,7 +931,7 @@ function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: Del
                                 </h2>
                             </div>
                         </div>
-                        <button type="button" onClick={onClose} className="rounded-lg p-2 text-white/80 hover:bg-white/15 hover:text-white transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40" aria-label="Close dialog">
+                        <button type="button" onClick={onClose} className="rounded-lg p-2 text-white/80 hover:bg-white/15 hover:text-white transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40" aria-label="Close dialog" title="Close dialog">
                             <X className="h-5 w-5" />
                         </button>
                     </div>
@@ -1290,6 +1359,46 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
     const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
     const [isViewInvoiceModalOpen, setIsViewInvoiceModalOpen] = useState(false);
     const [fetchedInvoice, setFetchedInvoice] = useState<any | null>(null);
+
+    const openInvoiceModal = useCallback(() => {
+        setIsViewInvoiceModalOpen(true);
+        if (typeof window !== 'undefined') {
+            window.history.pushState({ modal: 'tax-invoice' }, '', '#tax-invoice');
+        }
+    }, []);
+
+    const closeInvoiceModal = useCallback(() => {
+        setIsViewInvoiceModalOpen(false);
+        if (typeof window !== 'undefined' && window.location.hash === '#tax-invoice') {
+            window.history.back();
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!isViewInvoiceModalOpen) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                closeInvoiceModal();
+            }
+        };
+
+        const handlePopState = () => {
+            if (window.location.hash !== '#tax-invoice') {
+                setIsViewInvoiceModalOpen(false);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown, { capture: true });
+        window.addEventListener('popstate', handlePopState);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown, { capture: true });
+            window.removeEventListener('popstate', handlePopState);
+        };
+    }, [isViewInvoiceModalOpen, closeInvoiceModal]);
 
     // Branding / Stamp & Sign State
     const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
@@ -1778,10 +1887,7 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
                 <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 space-y-3">
                     <div 
-                        onClick={() => {
-                            const invNo = invData.invoiceNumber || fetchedInvoice?.invoiceNumber || (delivery.purchaseOrder?.poNumber ? `INV-${delivery.purchaseOrder.poNumber}` : `INV-${delivery.purchaseOrderId || delivery.id}`);
-                            router.push(`/payments/invoices?search=${encodeURIComponent(invNo)}&viewInvoiceNo=${encodeURIComponent(invNo)}`);
-                        }}
+                        onClick={openInvoiceModal}
                         className="flex items-start justify-between gap-3 cursor-pointer hover:bg-blue-100/50 p-1.5 rounded-lg transition-colors"
                         title="Click to view full Tax Invoice"
                     >
@@ -1807,10 +1913,7 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                     <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-blue-200/60">
                         <Button
                             type="button"
-                            onClick={() => {
-                                const invNo = invData.invoiceNumber || fetchedInvoice?.invoiceNumber || (delivery.purchaseOrder?.poNumber ? `INV-${delivery.purchaseOrder.poNumber}` : `INV-${delivery.purchaseOrderId || delivery.id}`);
-                                router.push(`/payments/invoices?search=${encodeURIComponent(invNo)}&viewInvoiceNo=${encodeURIComponent(invNo)}`);
-                            }}
+                            onClick={openInvoiceModal}
                             className="h-9 px-4 bg-[#12335f] hover:bg-[#0b1f3a] text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1.5 cursor-pointer"
                         >
                             <Eye className="h-3.5 w-3.5" /> View Tax Invoice
@@ -1842,32 +1945,55 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
             {/* FULL TAX INVOICE VIEWER MODAL OVERLAY */}
             {isViewInvoiceModalOpen && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-3 sm:p-5">
-                    <div className="relative flex flex-col w-full max-w-5xl max-h-[94vh] bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden p-5 sm:p-6 animate-in fade-in zoom-in-95 duration-150">
+                <div 
+                    className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-3 sm:p-5"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) {
+                            closeInvoiceModal();
+                        }
+                    }}
+                >
+                    <div 
+                        className="relative flex flex-col w-full max-w-5xl max-h-[94vh] bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden p-5 sm:p-6 animate-in fade-in zoom-in-95 duration-150"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         {/* Modal Header */}
                         <div className="flex items-start justify-between border-b border-slate-200 pb-3 mb-3 shrink-0">
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">TAX INVOICE REGISTRY</p>
-                                <h2 className="text-xl font-black text-slate-950">{invData.invoiceNumber}</h2>
-                                <p className="text-xs text-slate-500">Created on {invData.dateStr}</p>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={closeInvoiceModal}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 transition focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer"
+                                    aria-label="Back to Dispatch Order Fulfillment"
+                                    title="Back to Dispatch Order Fulfillment"
+                                >
+                                    <ArrowLeft className="h-4 w-4" />
+                                    <span>Back</span>
+                                </button>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">TAX INVOICE REGISTRY</p>
+                                    <h2 className="text-xl font-black text-slate-950">{invData.invoiceNumber}</h2>
+                                    <p className="text-xs text-slate-500">Created on {invData.dateStr}</p>
+                                </div>
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        setIsViewInvoiceModalOpen(false);
                                         const invNo = invData.invoiceNumber;
-                                        router.push(`/payments/invoices?search=${encodeURIComponent(invNo)}&viewInvoiceNo=${encodeURIComponent(invNo)}`);
+                                        window.open(`/payments/invoices?search=${encodeURIComponent(invNo)}&viewInvoiceNo=${encodeURIComponent(invNo)}`, '_blank');
                                     }}
-                                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#12335f] hover:bg-slate-100 transition flex items-center gap-1"
+                                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#12335f] hover:bg-slate-100 transition flex items-center gap-1 cursor-pointer"
+                                    title="Open full page view in new tab"
                                 >
                                     <ExternalLink className="h-3.5 w-3.5" /> Full Page View
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setIsViewInvoiceModalOpen(false)}
-                                    className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 transition"
+                                    onClick={closeInvoiceModal}
+                                    className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 transition cursor-pointer"
                                     aria-label="Close invoice viewer"
+                                    title="Close Tax Invoice"
                                 >
                                     <X className="h-4 w-4" />
                                 </button>

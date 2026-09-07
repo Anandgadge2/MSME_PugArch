@@ -266,6 +266,43 @@ const getDaysLeftText = (closingDate?: string) => {
   return `${days} Day${days > 1 ? 's' : ''} Left`;
 };
 
+const formatBuyerType = (type?: string): string => {
+  if (!type) return 'Not specified';
+  const cleanType = type.trim().toUpperCase();
+  if (cleanType === 'PRIVATE_BUYER' || cleanType === 'PRIVATE ENTERPRISE' || cleanType === 'PRIVATE') {
+    return 'Private Enterprise';
+  }
+  if (cleanType === 'GOVERNMENT_BUYER' || cleanType === 'GOVERNMENT' || cleanType === 'GOVT') {
+    return 'Government / Department';
+  }
+  if (cleanType === 'PUBLIC_BUYER' || cleanType === 'PUBLIC_LIMITED' || cleanType === 'PUBLIC') {
+    return 'Public Enterprise';
+  }
+  if (cleanType === 'ENTERPRISE') {
+    return 'Enterprise';
+  }
+  return type
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase());
+};
+
+const formatLocation = (loc?: string): string => {
+  if (!loc) return 'Location not specified';
+  let cleaned = loc.trim();
+  if (!cleaned || cleaned.toLowerCase() === 'location not specified') {
+    return 'Location not specified';
+  }
+  cleaned = cleaned
+    .replace(/\bundefined\b/gi, '')
+    .replace(/\bnull\b/gi, '')
+    .replace(/^,\s*|,\s*$/g, '')
+    .replace(/,\s*,+/g, ',')
+    .trim();
+  if (!cleaned) return 'Location not specified';
+  return cleaned;
+};
+
 function CountdownTimer({ endDate }: { endDate?: string }) {
   const [timeLeft, setTimeLeft] = useState('');
 
@@ -557,7 +594,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           title: bid.title || bid.itemName || 'Procurement opportunity',
           buyer: bid.buyerName,
           category: bid.category,
-          location: bid.location,
+          location: bid.location || bid.deliveryLocation || [bid.district, bid.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: bid.endDate,
           estimatedValue: toNumber(bid.estimatedValue),
           eligibility: bid.participated ? 'Already participated' : 'Check documents',
@@ -663,7 +700,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           title: req.title || req.description || 'Procurement requirement',
           buyer: req.buyerOrganization?.organizationName || req.organization?.organizationName || req.buyerName || 'Verified Buyer',
           category: req.category?.name || req.category || 'General Sourcing',
-          location: req.location || req.deliveryLocation || 'Location not specified',
+          location: req.location || req.deliveryLocation || [req.district, req.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: req.lastDate || req.requiredBy,
           estimatedValue: toNumber(req.budgetMax || req.estimatedValue),
           eligibility: req.verifiedSellersOnly ? 'Verified sellers only' : 'All eligible sellers',
@@ -730,7 +767,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           title: qr.title || qr.itemName || 'Request for Quotation',
           buyer: qr.buyerOrganizationName || qr.buyer?.name || 'Verified Buyer',
           category: qr.category || 'Direct RFQ',
-          location: qr.deliveryLocation || 'Location not specified',
+          location: qr.deliveryLocation || qr.location || [qr.district, qr.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: qr.deadlineDate || qr.endDate,
           estimatedValue: toNumber(qr.estimatedValue),
           eligibility: isQrPrivate ? 'Invited Sellers Only' : 'Open Sourcing',
@@ -777,6 +814,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           title: auction.title || auction.itemName || 'Reverse Auction Opportunity',
           buyer: auction.buyerOrgName || auction.buyerName || 'Verified Buyer',
           category: 'Negotiate Price',
+          location: auction.location || auction.deliveryLocation || [auction.district, auction.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: auction.endTime,
           estimatedValue: toNumber(auction.currentLowestAmount || auction.startPrice),
           eligibility: 'Check invitation',
@@ -832,7 +870,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           title: reqTitle && reqTitle.length > 5 ? reqTitle : (rc.title || 'Rate Contract Opportunity'),
           buyer: buyerName,
           category: catName,
-          location: meta.deliveryLocation || meta.deliverySla || 'Location not specified',
+          location: meta.deliveryLocation || meta.deliverySla || [meta.district, meta.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: rc.endDate || meta.periodEndDate,
           estimatedValue: rawVal,
           eligibility: 'Open Rate Contract',
@@ -1486,7 +1524,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                       {/* Source Ref & Buyer */}
                       <div className="text-[11px] text-slate-500 font-bold space-y-1">
                         <p className="font-mono text-slate-400">Ref: {item.sourceRef}</p>
-                        <p>Buyer: {item.buyer || 'Buyer details controlled'}</p>
+                        <p className="text-slate-800 font-bold">Buyer: {item.buyer?.trim() || 'Buyer details controlled'}</p>
+                        <p className="flex items-center gap-1 font-semibold text-slate-500 text-[10px]">
+                          <MapPin className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
+                          <span>{formatLocation(item.location)}</span>
+                        </p>
                       </div>
                     </div>
 
@@ -1528,12 +1570,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                       </div>
 
                       {/* Action Button */}
-                      <div className="flex justify-end pt-1">
+                      <div className="pt-1">
                         <Link
-                          href={item.detailsHref}
-                          className="inline-flex h-8 w-full items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all duration-200"
+                          href={item.href}
+                          className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#12335f] to-[#1c4980] text-xs font-bold text-white shadow-sm transition hover:shadow-md hover:from-[#0d2647] hover:to-[#153863] active:scale-[0.99]"
                         >
-                          View Details
+                          {item.actionLabel}
+                          <ChevronDown className="h-3.5 w-3.5 -rotate-90 text-white/70" />
                         </Link>
                       </div>
                     </div>
@@ -1635,23 +1678,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
                         {/* Buyer and Location */}
                         <td className="px-4 py-4 space-y-1">
-                          <p className="text-xs font-bold text-slate-800 leading-tight">
-                            {item.buyer || 'Buyer details controlled'}
+                          <p className="text-xs font-bold text-slate-900 leading-tight">
+                            {item.buyer?.trim() || 'Buyer details controlled'}
                           </p>
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                            {item.buyerType && 
-                             item.buyerType.toUpperCase() !== item.type.toUpperCase() && 
-                             item.buyerType.toUpperCase() !== 'RATE CONTRACT' && (
-                              <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">
-                                {item.buyerType}
-                              </span>
-                            )}
-                            {item.location && (
-                              <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-400">
-                                <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
-                                {item.location}
-                              </span>
-                            )}
+                          <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
+                            <MapPin className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
+                            <span>{formatLocation(item.location)}</span>
                           </div>
                         </td>
 
@@ -1809,7 +1841,7 @@ function OpportunityDetailsDialog({ item, onClose }: { item: SellerOpportunity; 
                 <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">{item.status}</span>
               </div>
               <h2 id="opportunity-dialog-title" className="mt-2 text-xl font-black text-slate-950 text-wrap-anywhere">{item.title}</h2>
-              <p className="mt-1 text-sm font-semibold text-slate-600">{[item.buyer || 'Buyer details controlled', item.category || 'General procurement', item.location || 'Location not specified'].join(' / ')}</p>
+              <p className="mt-1 text-sm font-semibold text-slate-600">{[item.buyer?.trim() || 'Buyer details controlled', item.category || 'General procurement', formatLocation(item.location)].join(' / ')}</p>
             </div>
             <button
               type="button"
@@ -1841,11 +1873,11 @@ function OpportunityDetailsDialog({ item, onClose }: { item: SellerOpportunity; 
               <section className="rounded-[22px] bg-white p-4 ring-1 ring-slate-200/70">
                 <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Commercial And Buyer Information</p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  <Metric label="Buyer" value={item.buyer || 'Buyer details controlled'} />
-                  <Metric label="Buyer type" value={item.buyerType || 'Not specified'} />
+                  <Metric label="Buyer" value={item.buyer?.trim() || 'Buyer details controlled'} />
+                  <Metric label="Buyer type" value={formatBuyerType(item.buyerType)} />
                   <Metric label="Department" value={item.department || 'Not specified'} />
                   <Metric label="Procurement type" value={item.procurementType || item.type} />
-                  <Metric label="Delivery location" value={item.deliveryLocation || item.location || 'Not specified'} />
+                  <Metric label="Delivery location" value={formatLocation(item.deliveryLocation || item.location)} />
                   <Metric label="Responses" value={item.responseCount !== undefined ? item.responseCount.toLocaleString('en-IN') : 'Not shown'} />
                 </div>
                 {detailRows.length > 0 && (
@@ -1960,7 +1992,7 @@ function OpportunityCard({ item, serial, onView }: { item: SellerOpportunity; se
             <TypeBadge type={item.type} />
           </div>
           <h2 className="mt-2 text-base font-black text-slate-950 text-wrap-anywhere">{item.title}</h2>
-          <p className="mt-1 text-xs font-semibold text-slate-500">{[item.buyer || 'Buyer details controlled', item.category || 'General procurement', item.quantity].filter(Boolean).join(' / ')}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{[item.buyer?.trim() || 'Buyer details controlled', item.category || 'General procurement', item.quantity].filter(Boolean).join(' / ')}</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <button type="button" onClick={onView} className="inline-flex h-9 items-center justify-center rounded-2xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:border-[#12335f] hover:text-[#12335f]">
@@ -1972,7 +2004,7 @@ function OpportunityCard({ item, serial, onView }: { item: SellerOpportunity; se
         </div>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-4">
-        <Metric label="Location" value={item.location || 'Not specified'} />
+        <Metric label="Location" value={formatLocation(item.location)} />
         <Metric label="Published" value={formatDate(item.publishedAt)} />
         <Metric label="Closing" value={formatDate(item.closingDate)} />
         <Metric label="Value" value={formatMoney(item.estimatedValue)} />

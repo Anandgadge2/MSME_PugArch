@@ -275,8 +275,8 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
         if (reqItems && reqItems.length > 0) {
           const req = await prisma.quoteRequest.findUnique({ where: { id: reqItems[0].quoteRequestId } });
           if (req) {
-            const bid = await prisma.procurementBid.findFirst({
-              where: { bidReference: req.quoteRequestNumber },
+            const bid = await (prisma.procurementBid as any).findFirst({
+              where: { bidNumber: (req as any).quoteRequestNumber || String(req.id) },
               include: { invitations: true, participations: true }
             });
             if (bid && canSellerViewBid(user.id, bid)) return true;
