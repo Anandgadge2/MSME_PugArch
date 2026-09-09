@@ -609,110 +609,107 @@ export default function HelpPage() {
       {/* 1. Hero Banner: JSG SMILE Brand Identity & Direct Contact */}
       <section
         aria-labelledby="help-desk-heading"
-        className="relative overflow-hidden rounded-3xl border border-blue-100 bg-gradient-to-br from-white via-blue-50/50 to-amber-50/30 p-6 sm:p-8 shadow-sm"
+        className="relative overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-white via-blue-50/50 to-amber-50/30 p-4 sm:p-5 shadow-sm"
       >
         {/* Decorative ambient background */}
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-blue-100/50 blur-3xl pointer-events-none" />
         <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-amber-100/40 blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-3">
-          
-            <h1 id="help-desk-heading" className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-[#0b2447]">
+        <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex-1 space-y-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-[#c8a45c]">Collectorate Jharsuguda Governance</span>
+            <h1 id="help-desk-heading" className="text-xl sm:text-2xl font-black tracking-tight text-[#0b2447]">
               Help, Standard Procedure and User Support
             </h1>
-            <p className="max-w-3xl text-sm font-medium leading-relaxed text-slate-600 sm:text-base">
-              Official operating guidance for buyers, sellers, MSMEs, SHG producers, and administrators to complete portal workflows with full documentation, statutory auditability, and grievance support.
-            </p>
+            
+            {/* Real-time topic search bar - Compact */}
+            <div className="relative pt-1 max-w-lg">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" aria-hidden="true" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search procedures, documentation rules, legal policies, or FAQs..."
+                  className="w-full rounded-xl border border-slate-200/90 bg-white py-2 pl-9 pr-9 text-sm font-medium text-slate-900 placeholder:text-slate-400 shadow-xs focus:border-[#0b2447] focus:outline-none focus:ring-1 focus:ring-[#0b2447]/20"
+                  aria-label="Search procedures and support topics"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-full focus-visible:ring-1 focus-visible:ring-[#0b2447] focus-visible:outline-none"
+                    aria-label="Clear search input"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              {searchQuery && (
+                <p className="mt-1 text-[10px] font-medium text-slate-500" aria-live="polite">
+                  Filtering results for <span className="font-bold text-slate-800">"{searchQuery}"</span>
+                </p>
+              )}
+            </div>
           </div>
 
-          {/* Contact Badges */}
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center lg:flex-col lg:items-end">
+          {/* Contact Badges - Stacked cleanly */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:flex-col lg:items-end shrink-0 pt-2 lg:pt-0">
             <div className="flex flex-wrap gap-2">
-              <div className="group relative inline-flex items-center rounded-xl bg-[#0b2447] p-1 text-white shadow-sm transition hover:bg-[#12335f]">
+              <div className="group relative inline-flex items-center rounded-lg bg-[#0b2447] p-0.5 text-white shadow-sm transition hover:bg-[#12335f]">
                 <a
                   href="tel:18001234567"
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold tracking-wide uppercase focus-visible:outline-none"
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold tracking-wide uppercase focus-visible:outline-none"
                   aria-label="Call Toll-Free Helpline at 1800-123-4567"
                 >
-                  <Phone className="h-3.5 w-3.5 text-[#c8a45c]" />
+                  <Phone className="h-3 w-3 text-[#c8a45c]" />
                   <span>1800-123-4567</span>
                 </a>
                 <button
                   type="button"
                   onClick={() => handleCopy('1800-123-4567', 'phone', 'Helpline number')}
-                  className="rounded-lg p-1.5 hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:outline-none"
+                  className="rounded-md p-1 hover:bg-white/15 focus-visible:ring-1 focus-visible:ring-amber-300 focus-visible:outline-none"
                   title="Copy Phone Number"
                   aria-label="Copy helpline phone number"
                 >
                   {copiedKey === 'phone' ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                    <Check className="h-3 w-3 text-emerald-400" />
                   ) : (
-                    <Copy className="h-3.5 w-3.5 text-slate-300" />
+                    <Copy className="h-3 w-3 text-slate-300" />
                   )}
                 </button>
               </div>
 
-              <div className="group relative inline-flex items-center rounded-xl border border-slate-200 bg-white p-1 text-[#0b2447] shadow-2xs transition hover:bg-slate-50">
+              <div className="group relative inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 text-[#0b2447] shadow-2xs transition hover:bg-slate-50">
                 <a
                   href="mailto:support@jsgsmile.in"
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wide focus-visible:outline-none"
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide focus-visible:outline-none"
                   aria-label="Send email to support@jsgsmile.in"
                 >
-                  <Mail className="h-3.5 w-3.5 text-[#0b2447]" />
+                  <Mail className="h-3 w-3 text-[#0b2447]" />
                   <span>support@jsgsmile.in</span>
                 </a>
                 <button
                   type="button"
                   onClick={() => handleCopy('support@jsgsmile.in', 'email', 'Support email')}
-                  className="rounded-lg p-1.5 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-[#0b2447] focus-visible:outline-none"
+                  className="rounded-md p-1 hover:bg-slate-100 focus-visible:ring-1 focus-visible:ring-[#0b2447] focus-visible:outline-none"
                   title="Copy Email Address"
                   aria-label="Copy support email address"
                 >
                   {copiedKey === 'email' ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-600" />
+                    <Check className="h-3 w-3 text-emerald-600" />
                   ) : (
-                    <Copy className="h-3.5 w-3.5 text-slate-400" />
+                    <Copy className="h-3 w-3 text-slate-400" />
                   )}
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
-              <Clock className="h-3.5 w-3.5 text-[#c8a45c]" />
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
+              <Clock className="h-3 w-3 text-[#c8a45c]" />
               <span>District Desk: Mon–Sat, 9:30 AM – 6:00 PM IST</span>
             </div>
           </div>
-        </div>
-
-        {/* Real-time topic search bar */}
-        <div className="relative mt-6 z-10">
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" aria-hidden="true" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search procedures, documentation rules, legal policies, or FAQs (e.g. Udyam, 45-day payment, GRN, tender)..."
-              className="w-full rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm font-medium text-slate-900 placeholder:text-slate-400 shadow-xs focus:border-[#0b2447] focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20"
-              aria-label="Search procedures and support topics"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-full focus-visible:ring-2 focus-visible:ring-[#0b2447] focus-visible:outline-none"
-                aria-label="Clear search input"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-          {searchQuery && (
-            <p className="mt-2 text-xs font-medium text-slate-500" aria-live="polite">
-              Filtering results for <span className="font-bold text-slate-800">"{searchQuery}"</span>
-            </p>
-          )}
         </div>
       </section>
 

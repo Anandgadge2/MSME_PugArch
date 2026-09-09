@@ -1031,7 +1031,7 @@ router.post(
         });
 
         const roleName = customRole?.name || fallbackRole.replace(/_/g, ' ');
-        const loginUrl = `${env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+        const loginUrl = `${env.FRONTEND_URL || 'https://msme-pugarch-frontend.vercel.app'}/login`;
 
         await sendSubUserInvitationEmail(body.email, {
             name: body.name || targetUser.name,
@@ -1133,7 +1133,7 @@ router.post(
         });
 
         const roleName = invite.customRole?.name || String(invite.orgRole).replace(/_/g, ' ');
-        const loginUrl = `${env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+        const loginUrl = `${env.FRONTEND_URL || 'https://msme-pugarch-frontend.vercel.app'}/login`;
 
         await sendSubUserInvitationEmail(invite.email, {
             name: targetUser?.name || 'Team Member',

@@ -243,7 +243,7 @@ export interface SendAdminWelcomeEmailParams {
 export const sendAdminWelcomeEmail = async (params: SendAdminWelcomeEmailParams): Promise<boolean> => {
   const { email, name, role, userId, temporaryPassword, isReset = false } = params;
   try {
-    const rawPortalUrl = env.FRONTEND_URL || process.env.PRODUCTION_URL || process.env.PUBLIC_URL || process.env.APP_URL || process.env.PORTAL_URL || 'http://localhost:3000';
+    const rawPortalUrl = env.FRONTEND_URL || process.env.PRODUCTION_URL || process.env.PUBLIC_URL || process.env.APP_URL || process.env.PORTAL_URL || 'https://msme-pugarch-frontend.vercel.app';
     const portalUrl = rawPortalUrl.trim().replace(/\/+$/, '');
     const loginUrl = `${portalUrl}/login`;
     const resetUrl = `${portalUrl}/forgot-password`;
