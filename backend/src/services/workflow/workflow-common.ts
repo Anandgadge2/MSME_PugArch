@@ -13,12 +13,15 @@ export type WorkflowActor = {
   userAgent?: string;
 };
 
-export const numberSeries = (prefix: string, id?: number | string) => {
+export const numberSeries = (prefix: string, id?: number | string, year?: number | string) => {
+  let p = (prefix || 'REQ').toUpperCase();
+  if (p === 'PRQ' || p === 'PR') p = 'DP';
+  const y = year || 2026;
   if (id != null && !isNaN(Number(id))) {
-    return `${prefix.toUpperCase()}-${String(Math.abs(Number(id))).padStart(5, '0')}`;
+    return `${p}-${y}-${String(Math.abs(Number(id))).padStart(5, '0')}`;
   }
   const seq = Math.floor(10000 + Math.random() * 90000);
-  return `${prefix.toUpperCase()}-${seq}`;
+  return `${p}-${y}-${seq}`;
 };
 
 export const roundMoney = (value: number) => Number((Math.round(value * 100) / 100).toFixed(2));

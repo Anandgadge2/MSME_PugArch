@@ -298,7 +298,7 @@ export const confirmProcurementMethod = async (params: {
 
   const request = await prisma.procurementRequest.create({
     data: {
-      requestNumber: numberSeries('PRQ'),
+      requestNumber: numberSeries('DP'),
       cartId: params.cartId,
       buyerId: params.buyerId,
       organizationId: params.organizationId,

@@ -10,6 +10,7 @@ import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
 import RateContractDetailPage from './RateContractDetailPage';
+import { formatRefId } from '../../../utils/refIdUtils';
 import { toast } from 'sonner';
 
 function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
@@ -126,7 +127,8 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   }
 
   const title = bid.title || bid.subject || reqObj.title || basics.title || 'Open Tender Procurement';
-  const openTenderNumber = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber || bid.id || `TND-${requestId}`;
+  const rawTndRef = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber;
+  const openTenderNumber = formatRefId('TND', bid.id || reqObj.id || requestId, rawTndRef, 'TENDER');
 
   const isRc =
     bid.canonicalMethod === 'RATE_CONTRACT' ||

@@ -17,6 +17,7 @@ import {
   CalendarClock,
   FileText,
   Upload,
+  Gavel,
   BarChart3,
   BadgeCheck,
   ArrowRight,
@@ -58,6 +59,7 @@ import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi } from '../../marketplace/api';
 import { DELIVERY_TYPES, PAYMENT_TERMS, QUANTITY_UNITS } from '../../../constants/dropdowns';
+import { formatRefId } from '../../../utils/refIdUtils';
 import {
   PROCUREMENT_DRAFTS_ROUTE,
   fetchProcurementDraft,
@@ -157,7 +159,7 @@ type AuctionConfig = {
   auctionNumber: string;
   auctionTitle: string;
   auctionDescription: string;
-  procurementMethod: 'REVERSE_AUCTION';
+  procurementMethod: 'REVERSE_AUCTION' | 'BID_WITH_REVERSE_AUCTION';
   auctionCategory: string;
   auctionSubCategory: string;
   currency: string;
@@ -191,6 +193,9 @@ type AuctionConfig = {
     trigger: 'AFTER_TECHNICAL_QUALIFICATION' | 'TOP_N_BIDDERS' | 'ALL_TECHNICALLY_QUALIFIED';
     topN: number;
     preBidStageRequired: boolean;
+    auctionAfterTechnicalQualification?: boolean;
+    auctionAmongAllTechnicallyQualified?: boolean;
+    auctionAmongTopNBidders?: number | null;
   };
 };
 
@@ -991,6 +996,12 @@ export default function CreateProcurementPage() {
     }
     return defaultDraft(initialMethod, initialBuyerType);
   });
+  const draftIdRef = React.useRef<number | undefined>(draft?.id);
+  useEffect(() => {
+    if (draft?.id) {
+      draftIdRef.current = draft.id;
+    }
+  }, [draft?.id]);
   const [activeStep, setActiveStep] = useState<number>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -1233,6 +1244,7 @@ export default function CreateProcurementPage() {
 
         const internalPayload = payload.internal || {};
 
+        draftIdRef.current = res.id;
         setDraft({
           ...base,
           ...payload,
@@ -1399,12 +1411,17 @@ export default function CreateProcurementPage() {
         list.push({ label: 'Financial opening date must be after technical envelope opening', ok: new Date(d.schedule.financialOpeningDate) > new Date(d.schedule.technicalOpeningDate), severity: 'error', stepIdx: 5 });
       }
     }
-    if (isReverseAuctionMethod(d.type)) {
+    const hasReverseAuction = isReverseAuctionMethod(d.type) || Boolean(d.basics.isReverseAuctionNeeded);
+    if (hasReverseAuction) {
       const effectiveCategory = d.auctionConfig.auctionCategory.trim() || d.basics.category.trim();
       list.push({ label: 'Procurement category is required', ok: Boolean(effectiveCategory) && effectiveCategory !== 'Other', severity: 'error', stepIdx: 1 });
       list.push({ label: 'Auction currency is required', ok: Boolean(d.auctionConfig.currency.trim()) && d.auctionConfig.currency !== 'Other', severity: 'error', stepIdx: 5 });
       list.push({ label: 'Starting bid price must be greater than 0', ok: d.auctionConfig.startingBidPrice > 0, severity: 'error', stepIdx: 5 });
-      list.push({ label: 'Minimum bid decrement must be greater than 0', ok: d.auctionConfig.minimumBidDecrement > 0, severity: 'error', stepIdx: 5 });
+      list.push({ label: 'Minimum bid decrement must be greater than 0', ok: d.auctionConfig.minimumBidDecrement > 0, severity: 'error', stepIdx: 8 });
+      if (d.auctionConfig.reservePrice !== null && d.auctionConfig.startingBidPrice > 0) {
+        list.push({ label: 'Reserve price cannot exceed starting price', ok: d.auctionConfig.reservePrice <= d.auctionConfig.startingBidPrice, severity: 'error', stepIdx: 8 });
+      }
+    }
     }
 
     // Step 6 Commercial Terms - Errors
@@ -1590,11 +1607,7 @@ export default function CreateProcurementPage() {
       if (d.requiredDocs.length === 0) return false;
     } else if (stepIdx === 8) {
       if (!d.evaluation.method) return false;
-      // QCBS weightage check commented out as requested
-      // if (d.evaluation.method === 'QCBS / weighted technical-commercial score') {
-      //   const total = d.evaluation.technicalCriteria.reduce((sum, c) => sum + Number(c.weightage || 0), 0);
-      //   if (total !== 100) return false;
-      // }
+      if (d.basics.isReverseAuctionNeeded && d.auctionConfig.minimumBidDecrement <= 0) return false;
     }
     return true;
   };
@@ -1608,10 +1621,16 @@ export default function CreateProcurementPage() {
 
   // Save Draft to Backend
   const saveDraftLocally = async (silent = false, stepOverride?) => {
+    if (savingDraft) return;
     setSavingDraft(true);
     try {
       const stepToSave = stepOverride !== undefined ? stepOverride : activeStep;
-      const payload = buildProcurementApiPayload(draft, stepToSave);
+      const effectiveDraftId = draftIdRef.current || draft.id;
+      const currentDraftWithId = {
+        ...draft,
+        id: effectiveDraftId
+      };
+      const payload = buildProcurementApiPayload(currentDraftWithId, stepToSave);
       let savedAsNewDraft = false;
       let res: any;
       try {
@@ -1623,9 +1642,17 @@ export default function CreateProcurementPage() {
         res = await saveProcurementDraft(withoutServerDraftId(payload));
         savedAsNewDraft = true;
       }
-      const serverId = Number(res?.id || res?.data?.id || draft.id || 0);
+      const serverId = Number(res?.id || res?.data?.id || effectiveDraftId || draft.id || 0);
       if (serverId) {
+        draftIdRef.current = serverId;
         updateDraft(current => ({ ...current, id: serverId }));
+        if (typeof window !== 'undefined' && !draftIdParam) {
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('id', String(serverId));
+            window.history.replaceState(null, '', url.toString());
+          } catch {}
+        }
       }
       if (!silent) toast.success(savedAsNewDraft ? 'Draft saved as a new draft' : 'Draft saved successfully');
     } catch (err: any) {
@@ -1952,8 +1979,6 @@ export default function CreateProcurementPage() {
     setTriedNext(false);
     const currentKind = ALL_STEPS[activeStep];
     setCompletedStepIds(prev => Array.from(new Set([...prev, currentKind])));
-    const nextStep = activeStep < ALL_STEPS.length - 1 ? activeStep + 1 : activeStep;
-    saveDraftLocally(true, nextStep).catch(err => console.warn('Autosave error:', err));
     if (activeStep < ALL_STEPS.length - 1) {
       changeActiveStep(activeStep + 1);
     }
@@ -1963,7 +1988,6 @@ export default function CreateProcurementPage() {
     setTriedNext(false);
     if (activeStep > 0) {
       const prevStep = activeStep - 1;
-      saveDraftLocally(true, prevStep).catch(err => console.warn('Autosave error:', err));
       changeActiveStep(prevStep);
     } else {
       router.push('/buyer/my-procurements');
@@ -1982,7 +2006,12 @@ export default function CreateProcurementPage() {
     }
     setSubmittingDraft(true);
     try {
-      const payload = buildProcurementApiPayload(draft, activeStep);
+      const effectiveDraftId = draftIdRef.current || draft.id;
+      const currentDraftWithId = {
+        ...draft,
+        id: effectiveDraftId
+      };
+      const payload = buildProcurementApiPayload(currentDraftWithId, activeStep);
       console.log('[SubmitProcurement] Sending payload with method:', payload.methodSlug, 'id:', payload.id);
       try {
         await submitProcurementDraft(payload);
@@ -2066,13 +2095,11 @@ export default function CreateProcurementPage() {
                 onStepClick={async (idx) => {
                   if (idx <= maxVisitedStep || effectiveCompletedSteps.includes(ALL_STEPS[idx])) {
                     setTriedNext(false);
-                    saveDraftLocally(true, idx).catch(err => console.warn('Autosave error:', err));
                     changeActiveStep(idx);
                   } else if (validateStep(activeStep)) {
                     const currentKind = ALL_STEPS[activeStep];
                     setCompletedStepIds(prev => Array.from(new Set([...prev, currentKind])));
                     setTriedNext(false);
-                    saveDraftLocally(true, idx).catch(err => console.warn('Autosave error:', err));
                     changeActiveStep(idx);
                   } else {
                     setTriedNext(true);
@@ -2127,14 +2154,12 @@ export default function CreateProcurementPage() {
                     onStepClick={async (idx) => {
                       if (idx <= maxVisitedStep || effectiveCompletedSteps.includes(ALL_STEPS[idx])) {
                         setTriedNext(false);
-                        saveDraftLocally(true, idx).catch(err => console.warn('Autosave error:', err));
                         changeActiveStep(idx);
                         setIsMobileStepperOpen(false);
                       } else if (validateStep(activeStep)) {
                         const currentKind = ALL_STEPS[activeStep];
                         setCompletedStepIds(prev => Array.from(new Set([...prev, currentKind])));
                         setTriedNext(false);
-                        saveDraftLocally(true, idx).catch(err => console.warn('Autosave error:', err));
                         changeActiveStep(idx);
                         setIsMobileStepperOpen(false);
                       } else {
@@ -2267,6 +2292,7 @@ export default function CreateProcurementPage() {
                 onBack={goBack}
                 onSaveDraft={() => saveDraftLocally()}
                 onContinue={goNext}
+                continueText={activeStep === ALL_STEPS.length - 2 ? 'Review & Submit' : 'Next Step'}
                 onSubmit={submitProcurement}
                 isSaving={savingDraft}
                 isSubmitting={submittingDraft}
@@ -2300,7 +2326,7 @@ function SelectionsStepForm({
   updateDraft: (updater: (current: Draft) => Draft) => void;
 }) {
   const availableMethods = useMemo(() => {
-    const allowed = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'RATE_CONTRACT'];
+    const allowed = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'RATE_CONTRACT', 'REPEAT_ORDER'];
     return METHOD_DEFINITIONS.filter(m => allowed.includes(m.id) && m.buyerTypes.includes(draft.basics.buyerType));
   }, [draft.basics.buyerType]);
 
@@ -2509,11 +2535,9 @@ function BasicsStepForm({
             <input
               type="text"
               value={
-                draft.id
-                  ? formatRefId('REQ', draft.id)
-                  : (draft.auctionConfig.auctionNumber && !draft.auctionConfig.auctionNumber.startsWith('RA-')
-                      ? draft.auctionConfig.auctionNumber
-                      : 'Auto-generated after first save')
+                (draft as any).requirementNumber
+                  ? formatRefId(draft.type, draft.id, (draft as any).requirementNumber, draft.type)
+                  : (draft.id ? formatRefId(draft.type, draft.id, null, draft.type) : 'Auto-generated upon creation')
               }
               disabled
               className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-500 outline-none cursor-not-allowed"
@@ -5879,7 +5903,7 @@ function ScheduleStepForm({
 }) {
   // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   const isTwoPacket = draft.schedule.packetType === 'Two';
-  const isAuction = isReverseAuctionMethod(draft.type);
+  const isAuction = isReverseAuctionMethod(draft.type) || Boolean(draft.basics.isReverseAuctionNeeded);
   const isRateContract = isRateContractMethod(draft.type);
 
   const updateSchedule = (key: keyof Draft['schedule'], val: any) => {
@@ -7067,35 +7091,22 @@ function EvaluationBasisForm({
     updateDraft(c => ({ ...c, evaluation: { ...c.evaluation, [key]: val } }));
   };
 
-  const handleAddCriteria = () => {
+  const updateAuction = <K extends keyof AuctionConfig>(key: K, val: AuctionConfig[K]) => {
     updateDraft(c => ({
       ...c,
-      evaluation: {
-        ...c.evaluation,
-        technicalCriteria: [
-          ...c.evaluation.technicalCriteria,
-          { id: makeId(), name: '', description: '', maxScore: 20, weightage: 20, mandatory: false, minMarks: 0 }
-        ]
-      }
+      auctionConfig: { ...c.auctionConfig, [key]: val }
     }));
   };
 
-  const handleRemoveCriteria = (id: string) => {
+  const updateTrigger = <K extends keyof AuctionConfig['triggerConfiguration']>(
+    key: K,
+    val: AuctionConfig['triggerConfiguration'][K]
+  ) => {
     updateDraft(c => ({
       ...c,
-      evaluation: {
-        ...c.evaluation,
-        technicalCriteria: c.evaluation.technicalCriteria.filter(x => x.id !== id)
-      }
-    }));
-  };
-
-  const handleCriteriaChange = (id: string, key: keyof EvalCriteria, val: any) => {
-    updateDraft(c => ({
-      ...c,
-      evaluation: {
-        ...c.evaluation,
-        technicalCriteria: c.evaluation.technicalCriteria.map(x => x.id === id ? { ...x, [key]: val } : x)
+      auctionConfig: {
+        ...c.auctionConfig,
+        triggerConfiguration: { ...c.auctionConfig.triggerConfiguration, [key]: val }
       }
     }));
   };
@@ -7108,20 +7119,44 @@ function EvaluationBasisForm({
         <Field label="Evaluation Method basis" required>
           <select
             value={draft.evaluation.method}
-            onChange={e => updateEval('method', e.target.value)}
+            onChange={e => {
+              const val = e.target.value;
+              updateEval('method', val);
+              if (val === 'Two-stage bid with Reverse Auction (e-RA)' || val === 'Reverse auction final rank') {
+                updateDraft(c => ({
+                  ...c,
+                  basics: { ...c.basics, isReverseAuctionNeeded: true },
+                  auctionConfig: {
+                    ...c.auctionConfig,
+                    procurementMethod: 'BID_WITH_REVERSE_AUCTION',
+                    auctionTitle: c.auctionConfig.auctionTitle || c.basics.title || 'Live Reverse Auction',
+                    auctionCategory: c.auctionConfig.auctionCategory || c.basics.category,
+                    auctionSubCategory: c.auctionConfig.auctionSubCategory || c.basics.subCategory,
+                    startingBidPrice: c.auctionConfig.startingBidPrice || c.basics.estimatedValue || 0,
+                    minimumBidDecrement: c.auctionConfig.minimumBidDecrement > 0 ? c.auctionConfig.minimumBidDecrement : Math.max(500, Math.round((c.basics.estimatedValue || 100000) * 0.01)),
+                    autoExtensionEnabled: true,
+                    extensionTriggerMinutes: 5,
+                    extensionDurationMinutes: 5,
+                    maximumExtensions: 3,
+                    rankVisibility: 'SHOW_RANK_ONLY',
+                  }
+                }));
+              }
+            }}
             className={inputClass}
           >
             <>
               <option value="L1 total value">L1 Total Value basis</option>
               <option value="Package-wise L1">Package-wise L1 rates basis</option>
               <option value="Technical qualification then L1">Technical Qualification then L1 Sourcing</option>
+              <option value="Two-stage bid with Reverse Auction (e-RA)">Two-Stage Bid with Live Reverse Auction (e-RA)</option>
               <option value="QCBS / weighted technical-commercial score">Quality and Cost Based Selection (QCBS)</option>
               <option value="Reverse auction final rank">Reverse Auction Final Bid Rank</option>
               <option value="Lowest landed cost">Lowest Landed Cost</option>
             </>
           </select>
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            QCBS evaluates both technical capabilities (e.g. 70% weight) and commercial offer rates. L1 total value selects purely the lowest total landed cost.
+            Choose how vendor proposals are evaluated. Enable Reverse Auction below to conduct real-time price compression among qualified bidders.
           </p>
         </Field>
 
@@ -7164,14 +7199,252 @@ function EvaluationBasisForm({
         )}
       </div>
 
-      {/* Evaluation Criteria Builder table commented out completely as requested */}
-      {/* <EvaluationCriteriaBuilder
-        criteria={draft.evaluation.technicalCriteria}
-        onChange={handleCriteriaChange}
-        onAddRow={handleAddCriteria}
-        onDeleteRow={handleRemoveCriteria}
-        isQCBS={isQCBS}
-      /> */}
+      {/* Live Reverse Auction (e-RA) Stage Card */}
+      <div className="border border-indigo-200/90 rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-indigo-50/70 via-slate-50 to-white shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100/80 pb-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#12335f] text-white shadow-sm ring-2 ring-indigo-100">
+              <Gavel className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-xs font-black uppercase tracking-wide text-slate-900">
+                  Live Reverse Auction (e-RA) Stage
+                </h4>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                  Dynamic Price Discovery
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 font-semibold mt-1">
+                Conduct an interactive downward bidding auction among technically qualified sellers after initial bids are evaluated.
+              </p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer shrink-0 select-none">
+            <input
+              type="checkbox"
+              id="enable-reverse-auction-stage"
+              checked={Boolean(draft.basics.isReverseAuctionNeeded)}
+              onChange={e => {
+                const enabled = e.target.checked;
+                updateDraft(c => ({
+                  ...c,
+                  basics: { ...c.basics, isReverseAuctionNeeded: enabled },
+                  auctionConfig: {
+                    ...c.auctionConfig,
+                    procurementMethod: 'BID_WITH_REVERSE_AUCTION',
+                    auctionTitle: c.auctionConfig.auctionTitle || c.basics.title || 'Live Reverse Auction',
+                    auctionCategory: c.auctionConfig.auctionCategory || c.basics.category,
+                    auctionSubCategory: c.auctionConfig.auctionSubCategory || c.basics.subCategory,
+                    startingBidPrice: c.auctionConfig.startingBidPrice || c.basics.estimatedValue || 0,
+                    minimumBidDecrement: c.auctionConfig.minimumBidDecrement > 0 ? c.auctionConfig.minimumBidDecrement : Math.max(500, Math.round((c.basics.estimatedValue || 100000) * 0.01)),
+                    autoExtensionEnabled: true,
+                    extensionTriggerMinutes: 5,
+                    extensionDurationMinutes: 5,
+                    maximumExtensions: 3,
+                    rankVisibility: 'SHOW_RANK_ONLY',
+                  }
+                }));
+              }}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#12335f]/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#12335f]" />
+            <span className="ml-2.5 text-xs font-bold text-slate-800">
+              {draft.basics.isReverseAuctionNeeded ? 'Enabled' : 'Disabled'}
+            </span>
+          </label>
+        </div>
+
+        {draft.basics.isReverseAuctionNeeded && (
+          <div className="space-y-4 pt-1">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Auction Trigger Eligibility" required>
+                <select
+                  value={draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders ? 'TOP_N_BIDDERS' : 'ALL_QUALIFIED'}
+                  onChange={e => {
+                    const isTopN = e.target.value === 'TOP_N_BIDDERS';
+                    updateTrigger('auctionAmongTopNBidders', isTopN ? 3 : null);
+                    updateTrigger('auctionAmongAllTechnicallyQualified', !isTopN);
+                  }}
+                  className={inputClass}
+                >
+                  <option value="ALL_QUALIFIED">All Technically Qualified Bidders (Standard)</option>
+                  <option value="TOP_N_BIDDERS">Top Qualified Initial Bidders Only (e.g. Top 3 or Top 5)</option>
+                </select>
+                <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                  Determines which shortlisted vendors qualify into the live reverse auction room.
+                </p>
+              </Field>
+
+              {draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders && (
+                <Field label="Number of Top Bidders (N)" required>
+                  <input
+                    type="number"
+                    min={2}
+                    max={10}
+                    value={draft.auctionConfig.triggerConfiguration.auctionAmongTopNBidders || 3}
+                    onChange={e => updateTrigger('auctionAmongTopNBidders', Math.max(2, Number(e.target.value || 3)))}
+                    className={inputClass}
+                  />
+                  <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                    Only the top N lowest sealed price bidders will enter the live auction console.
+                  </p>
+                </Field>
+              )}
+
+              <Field label="Minimum Bid Decrement (₹)" required>
+                <input
+                  type="number"
+                  min={1}
+                  value={draft.auctionConfig.minimumBidDecrement || ''}
+                  onChange={e => updateAuction('minimumBidDecrement', Number(e.target.value || 0))}
+                  className={inputClass}
+                  placeholder="e.g. 5000"
+                />
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <span className="text-[10px] font-bold text-slate-500">Quick Step:</span>
+                  {[
+                    { label: '0.5%', val: Math.max(500, Math.round((draft.basics.estimatedValue || 100000) * 0.005)) },
+                    { label: '1%', val: Math.max(1000, Math.round((draft.basics.estimatedValue || 100000) * 0.01)) },
+                    { label: '₹5,000', val: 5000 },
+                    { label: '₹10,000', val: 10000 },
+                    { label: '₹25,000', val: 25000 },
+                  ].map(preset => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => updateAuction('minimumBidDecrement', preset.val)}
+                      className={cn(
+                        "text-[10px] font-bold px-2 py-0.5 rounded-md border transition",
+                        draft.auctionConfig.minimumBidDecrement === preset.val
+                          ? "border-[#12335f] bg-[#12335f] text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Starting Opening Price (₹ Ceiling)">
+                <input
+                  type="number"
+                  min={0}
+                  value={draft.auctionConfig.startingBidPrice || ''}
+                  onChange={e => updateAuction('startingBidPrice', Number(e.target.value || 0))}
+                  className={inputClass}
+                  placeholder={`Default: ₹${(draft.basics.estimatedValue || 0).toLocaleString('en-IN')}`}
+                />
+                <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                  Opening ceiling. In live execution, the starting price will automatically lock to the lowest qualified sealed bid (L1).
+                </p>
+              </Field>
+
+              <Field label="Internal Reserve Price (Optional ₹)">
+                <input
+                  type="number"
+                  min={0}
+                  value={draft.auctionConfig.reservePrice ?? ''}
+                  onChange={e => updateAuction('reservePrice', e.target.value ? Number(e.target.value) : null)}
+                  className={inputClass}
+                  placeholder="Leave blank if no reserve threshold"
+                />
+                <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                  Confidential threshold. Bids must meet or beat this price to win. Strictly hidden from sellers.
+                </p>
+              </Field>
+
+              <Field label="Supplier Rank & Competitor Visibility" required>
+                <select
+                  value={draft.auctionConfig.rankVisibility}
+                  onChange={e => updateAuction('rankVisibility', e.target.value as AuctionConfig['rankVisibility'])}
+                  className={inputClass}
+                >
+                  <option value="SHOW_RANK_ONLY">Show Rank Only (Mask competitor names & prices — Recommended)</option>
+                  <option value="SHOW_LOWEST_PRICE">Show Lowest Bid (L1) & Rank</option>
+                  <option value="HIDDEN">Hidden (Blind Bidding)</option>
+                </select>
+                <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                  Protects bidder privacy and prevents collusion or price-fixing cartels during live bidding.
+                </p>
+              </Field>
+            </div>
+
+            {/* Anti-sniping auto-extension settings */}
+            <div className="rounded-xl border border-indigo-100 bg-white p-3.5 space-y-3">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.auctionConfig.autoExtensionEnabled)}
+                  onChange={e => updateAuction('autoExtensionEnabled', e.target.checked)}
+                  className="h-4 w-4 rounded accent-[#12335f]"
+                />
+                <div>
+                  <span className="text-xs font-bold text-slate-900">Anti-Sniping Auto-Extension</span>
+                  <span className="block text-[10px] text-slate-500 font-medium mt-0.5">
+                    Prevents last-second bids by extending the auction clock when a competitive bid arrives near closing time.
+                  </span>
+                </div>
+              </label>
+
+              {draft.auctionConfig.autoExtensionEnabled && (
+                <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-slate-100">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-600 block mb-1">Trigger Window</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={draft.auctionConfig.extensionTriggerMinutes || 5}
+                        onChange={e => updateAuction('extensionTriggerMinutes', Number(e.target.value || 5))}
+                        className={cn(inputClass, 'h-8 text-xs text-center')}
+                      />
+                      <span className="text-[10px] text-slate-500 font-bold">min</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-600 block mb-1">Extension Duration</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={draft.auctionConfig.extensionDurationMinutes || 5}
+                        onChange={e => updateAuction('extensionDurationMinutes', Number(e.target.value || 5))}
+                        className={cn(inputClass, 'h-8 text-xs text-center')}
+                      />
+                      <span className="text-[10px] text-slate-500 font-bold">min</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-600 block mb-1">Max Extensions</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={draft.auctionConfig.maximumExtensions || 3}
+                        onChange={e => updateAuction('maximumExtensions', Number(e.target.value || 3))}
+                        className={cn(inputClass, 'h-8 text-xs text-center')}
+                      />
+                      <span className="text-[10px] text-slate-500 font-bold">times</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 font-semibold">
+              <Info className="h-4 w-4 shrink-0 text-indigo-700" />
+              <span>
+                The live auction schedule, duration, and optional terms document can be fine-tuned under <strong>Step 5 (Timeline & Rules)</strong>.
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -7441,23 +7714,27 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     subCategory: draft.basics.subCategory,
   };
 
-  const auctionConfigPayload = isReverseAuctionMethod(draft.type) ? {
+  const hasReverseAuction = isReverseAuctionMethod(draft.type) || Boolean(draft.basics.isReverseAuctionNeeded);
+  const auctionConfigPayload = hasReverseAuction ? {
     ...draft.auctionConfig,
+    procurementMethod: isReverseAuctionMethod(draft.type) ? 'REVERSE_AUCTION' : 'BID_WITH_REVERSE_AUCTION',
     auctionNumber: draft.id
       ? formatRefId('REQ', draft.id)
       : (draft.auctionConfig.auctionNumber && !draft.auctionConfig.auctionNumber.startsWith('RA-')
           ? draft.auctionConfig.auctionNumber
           : `REQ-${Math.floor(10000 + Math.random() * 90000)}`),
-    auctionTitle: draft.basics.title || draft.auctionConfig.auctionTitle || title,
-    auctionDescription: draft.basics.justification || draft.auctionConfig.auctionDescription || basics.description,
-    auctionCategory: draft.basics.category || draft.auctionConfig.auctionCategory,
-    auctionSubCategory: draft.basics.subCategory || draft.auctionConfig.auctionSubCategory,
+    auctionTitle: draft.auctionConfig.auctionTitle || draft.basics.title || title,
+    auctionDescription: draft.auctionConfig.auctionDescription || draft.basics.justification || basics.description,
+    auctionCategory: draft.auctionConfig.auctionCategory || draft.basics.category,
+    auctionSubCategory: draft.auctionConfig.auctionSubCategory || draft.basics.subCategory,
     auctionType: draft.auctionConfig.auctionType || 'ENGLISH_REVERSE',
     auctionMode: draft.auctionConfig.auctionMode || 'ONLINE',
     buyerOrganization: draft.auctionConfig.buyerOrganization || draft.internal.orgName,
     department: draft.auctionConfig.department || draft.internal.department || draft.basics.department,
     purchaseOrganization: draft.auctionConfig.purchaseOrganization || draft.auctionConfig.buyerOrganization || draft.internal.orgName,
     estimatedValue,
+    startingBidPrice: Number(draft.auctionConfig.startingBidPrice || estimatedValue || 0),
+    minimumBidDecrement: Number(draft.auctionConfig.minimumBidDecrement || Math.max(100, Math.round(estimatedValue * 0.01)) || 1000),
     termsDocumentName: cleanDocName(draft.auctionConfig.termsDocumentName, ''),
     termsDocumentFileId: draft.auctionConfig.termsDocumentFileId || null,
     auctionTermsDocument: draft.auctionConfig.termsDocumentName && draft.auctionConfig.termsDocumentName !== 'NOT REQUIRED' ? {
@@ -7474,10 +7751,10 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
       })
       .filter((v): v is { sellerOrgId: number } => v !== null),
     triggerConfiguration: {
-      preBidStageRequired: false,
-      auctionAfterTechnicalQualification: false,
-      auctionAmongAllTechnicallyQualified: true,
-      auctionAmongTopNBidders: null,
+      preBidStageRequired: !isReverseAuctionMethod(draft.type),
+      auctionAfterTechnicalQualification: true,
+      auctionAmongAllTechnicallyQualified: draft.auctionConfig.triggerConfiguration?.auctionAmongAllTechnicallyQualified ?? true,
+      auctionAmongTopNBidders: draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders ?? null,
     }
   } : null;
 
@@ -7514,7 +7791,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     startPrice: auctionConfigPayload?.startingBidPrice ?? draft.basics.estimatedValue ?? 0,
     minimumDecrement: auctionConfigPayload?.minimumBidDecrement ?? 0,
     auctionConfig: auctionConfigPayload,
-    evaluationMethod: chosenEvaluationMethod
+    evaluationMethod: chosenEvaluationMethod,
+    allowReverseAuction: hasReverseAuction
   };
 
   // Run suggestion engine to capture recommendation result
@@ -7535,6 +7813,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const payloadJson = {
     ...draft,
+    allowReverseAuction: hasReverseAuction,
     serviceDetails: {
       ...draft.serviceDetails,
       serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),

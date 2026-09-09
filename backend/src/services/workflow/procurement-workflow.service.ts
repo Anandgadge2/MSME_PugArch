@@ -1,4 +1,5 @@
 import { ApiError } from '../../utils/ApiError.js';
+import { deriveMethodPrefix } from '../../utils/refIdUtils.js';
 import { auditWorkflow, auditWorkflowSoon, db, notifyWorkflow, notifyWorkflowSoon, numberSeries, roundMoney, type WorkflowActor } from './workflow-common.js';
 import { statusTransitions, poStatusEnumFor } from './status-transition.service.js';
 import { notifyPurchaseOrderCreated } from '../invoice-pdf.service.js';
@@ -28,9 +29,10 @@ export const procurementWorkflow = {
       const u = await db.user.findUnique({ where: { id: actor.id }, select: { organizationId: true } });
       orgId = u?.organizationId || null;
     }
+    const methodPrefix = deriveMethodPrefix(input.procurementMethod || input.canonicalMethod, null, 'REQ');
     const requirement = await db.requirement.create({
       data: {
-        requirementNumber: numberSeries('REQ'),
+        requirementNumber: numberSeries(methodPrefix),
         buyerId: actor.id,
         organizationId: orgId,
         title: input.title,

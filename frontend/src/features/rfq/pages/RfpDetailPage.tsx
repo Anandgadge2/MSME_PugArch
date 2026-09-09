@@ -9,6 +9,7 @@ import { Button } from '../../../components/ui/button';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import { formatRefId } from '../../../utils/refIdUtils';
 import RfqDetailPage from './RfqDetailPage';
 import { toast } from 'sonner';
 
@@ -134,7 +135,8 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   }
 
   const title = bid.title || bid.subject || reqObj.title || basics.title || 'Request for Proposal';
-  const rfpNumber = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber || bid.id || `RFP-${requestId}`;
+  const rawRfpRef = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber;
+  const rfpNumber = formatRefId('RFP', bid.id || reqObj.id || requestId, rawRfpRef, 'RFP');
 
   const methodUpper = String(
     bid.procurementType ||

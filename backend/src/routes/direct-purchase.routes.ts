@@ -266,7 +266,7 @@ router.post(
                 // 1. Create requirement
                 const requirement = await tx.requirement.create({
                     data: {
-                        requirementNumber: numberSeries('REQ'),
+                        requirementNumber: numberSeries('DP'),
                         buyerId,
                         organizationId: orgId,
                         title: `Direct Purchase Requirement for Seller #${sellerId}`,

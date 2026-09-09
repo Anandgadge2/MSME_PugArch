@@ -320,7 +320,7 @@ export const finalizeDirectPurchaseFromCheckout = async (
 
       const requirement = await tx.requirement.create({
         data: {
-          requirementNumber: numberSeries('REQ'),
+          requirementNumber: numberSeries('DP'),
           buyerId,
           organizationId,
           title: `Marketplace ${request.selectedMethod} — Seller #${sellerId}`,

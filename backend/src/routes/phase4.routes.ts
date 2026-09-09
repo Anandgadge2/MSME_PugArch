@@ -28,7 +28,7 @@ import { maskSensitive } from '../utils/maskSensitive.js';
 import { sha256 } from '../utils/crypto.js';
 import { panVerificationService } from '../services/verification/pan.service.js';
 import { udyamVerificationService } from '../services/verification/udyam.service.js';
-import { formatRequirementNumber } from '../utils/refIdUtils.js';
+import { formatRequirementNumber, formatRefId } from '../utils/refIdUtils.js';
 import { bankVerificationService } from '../services/verification/bank.service.js';
 import { GstService, hasValidGstinChecksum } from '../services/gstService.js';
 import {
@@ -1383,8 +1383,8 @@ const validateAuctionConfigForDraft = (configInput: Record<string, unknown>, met
   if (methodSlug === 'reverse-auction' && config.procurementMethod !== 'REVERSE_AUCTION') {
     throw new ApiError(400, 'Reverse Auction configuration must use REVERSE_AUCTION', 'PROCUREMENT_AUCTION_METHOD_INVALID');
   }
-  if (methodSlug === 'bid-with-reverse-auction' && config.procurementMethod !== 'BID_WITH_REVERSE_AUCTION') {
-    throw new ApiError(400, 'Bid with Reverse Auction configuration must use BID_WITH_REVERSE_AUCTION', 'PROCUREMENT_AUCTION_METHOD_INVALID');
+  if (methodSlug !== 'reverse-auction' && config.procurementMethod !== 'BID_WITH_REVERSE_AUCTION') {
+    config.procurementMethod = 'BID_WITH_REVERSE_AUCTION';
   }
   if (config.auctionStartDateTime >= config.auctionEndDateTime) {
     throw new ApiError(400, 'Auction start date/time must be before auction end date/time', 'PROCUREMENT_AUCTION_DATE_INVALID');
@@ -1398,13 +1398,15 @@ const validateAuctionConfigForDraft = (configInput: Record<string, unknown>, met
   if (config.autoExtensionEnabled && (!config.extensionTriggerMinutes || !config.extensionDurationMinutes || !config.maximumExtensions)) {
     throw new ApiError(400, 'Auto extension trigger, duration, and maximum extensions are required when auto extension is enabled', 'PROCUREMENT_AUCTION_EXTENSION_REQUIRED');
   }
-  if (methodSlug === 'bid-with-reverse-auction') {
+  if (config.procurementMethod === 'BID_WITH_REVERSE_AUCTION') {
     const trigger = config.triggerConfiguration;
-    if (!trigger?.auctionAfterTechnicalQualification) {
-      throw new ApiError(400, 'Bid with Reverse Auction requires auction after technical qualification trigger', 'PROCUREMENT_AUCTION_TRIGGER_REQUIRED');
-    }
-    if (!trigger.auctionAmongAllTechnicallyQualified && !trigger.auctionAmongTopNBidders) {
-      throw new ApiError(400, 'Select top N bidders or all technically qualified bidders for auction stage', 'PROCUREMENT_AUCTION_TRIGGER_SCOPE_REQUIRED');
+    if (trigger) {
+      if (!trigger.auctionAfterTechnicalQualification) {
+        trigger.auctionAfterTechnicalQualification = true;
+      }
+      if (!trigger.auctionAmongAllTechnicallyQualified && !trigger.auctionAmongTopNBidders) {
+        trigger.auctionAmongAllTechnicallyQualified = true;
+      }
     }
   }
   return config;
@@ -1634,13 +1636,20 @@ const nextRateContractCode = () => `RC-${Math.floor(10000 + Math.random() * 9000
 
 const createAuctionForSubmittedProcurement = async (req: AuthRequest, requirement: any, draftBody: z.infer<typeof procurementDraftBody>) => {
   const methodSlug = methodSlugForDraft(draftBody);
-  if (!['reverse-auction', 'bid-with-reverse-auction'].includes(methodSlug)) return null;
+  const payload = (draftBody.payload || {}) as Record<string, any>;
+  const hasAuction = ['reverse-auction', 'bid-with-reverse-auction'].includes(methodSlug) ||
+    Boolean(payload.basics?.isReverseAuctionNeeded || payload.rules?.auctionConfig || payload.auctionConfig || payload.allowReverseAuction);
+  if (!hasAuction) return null;
 
   const existing = await db.auction.findFirst({ where: { linkedRequirementId: requirement.id } });
   if (existing) return existing;
 
-  const config = validateAuctionConfigForDraft(normalizeAuctionConfigForDraft(draftBody), methodSlug, (draftBody.payload as any)?.vendors?.selection);
-  const targetRefNo = formatRequirementNumber(requirement.id, requirement.requirementNumber);
+  const normalized = normalizeAuctionConfigForDraft(draftBody);
+  if (methodSlug !== 'reverse-auction') {
+    normalized.procurementMethod = 'BID_WITH_REVERSE_AUCTION';
+  }
+  const config = validateAuctionConfigForDraft(normalized, methodSlug, (draftBody.payload as any)?.vendors?.selection);
+  const targetRefNo = formatRequirementNumber(requirement.id, requirement.requirementNumber, requirement.procurementMethod || requirement.canonicalMethod);
   let resolvedAuctionCode = config.auctionNumber;
   if (resolvedAuctionCode && resolvedAuctionCode.startsWith('RA-')) {
     resolvedAuctionCode = `REQ-${resolvedAuctionCode.slice(3)}`;
@@ -1856,7 +1865,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     emdAmount: terms.emdAmount || tender.emdAmount || null,
     documentFee: tender.documentFee || null,
     allowClarification: true,
-    allowReverseAuction: methodSlug === 'bid-with-reverse-auction',
+    allowReverseAuction: methodSlug === 'bid-with-reverse-auction' || Boolean(payload.allowReverseAuction || payload.basics?.isReverseAuctionNeeded || payload.rules?.auctionConfig || payload.auctionConfig),
     allowBoq: methodSlug === 'boq-based-bid',
     packetType: String(schedule.packetType || '').toLowerCase().includes('two') || methodSlug === 'two-packet-bid' ? 'TWO_PACKET' : 'SINGLE_PACKET',
     visibility: deriveVisibility({ procurementType: canonicalMethod, bidType, technicalPacket: { vendors } }),
@@ -4960,7 +4969,7 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
       procurementBid,
       auction,
       rateContract,
-      referenceNumber: submitted.requirementNumber
+      referenceNumber: formatRequirementNumber(submitted.id, submitted.requirementNumber, submitted.procurementMethod || submitted.canonicalMethod)
     });
   } catch (error) {
     await db.requirement.update({
@@ -10937,7 +10946,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       type: 'bid_draft',
       typeLabel: 'Bid Draft',
       title: fd?.basicDetails?.title || fd?.title || step3.title || `Draft #${d.id}`,
-      referenceNumber: `BWD-${d.id}`,
+      referenceNumber: formatRefId(bidTypeSlug, d.id, null, bidTypeSlug),
       status: String(d.draftStatus || 'DRAFT'),
       statusLabel: statusLabel(String(d.draftStatus || 'DRAFT')),
       statusGroup: statusGroupFor(String(d.draftStatus || 'DRAFT')),
@@ -10968,6 +10977,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
   for (const b of procurementBids) {
     const methodCanonical = canonicalMethodFromRecord(b);
     const methodSlug = methodCanonical.toLowerCase().replace(/_/g, '-');
+    const bidRef = formatRefId(methodCanonical, b.id, b.bidNumber, methodCanonical);
 
     const documents = (b.documents || []).map((doc: any) => ({
       fileAssetId: doc.fileAssetId,
@@ -10992,8 +11002,8 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       id: b.id,
       type: 'bid_tender',
       typeLabel: 'Bid / Tender',
-      title: b.title || `Bid #${b.bidNumber}`,
-      referenceNumber: b.bidNumber || `PB-${b.id}`,
+      title: b.title || `Bid #${bidRef}`,
+      referenceNumber: bidRef,
       status: String(b.status || 'DRAFT'),
       statusLabel: statusLabel(String(b.status || 'DRAFT')),
       statusGroup: statusGroupFor(String(b.status || 'DRAFT')),
@@ -11129,12 +11139,17 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       detailSection('Warnings & Declarations', { ...(pr.warnings as any || {}), ...(pr.declarations as any || {}) }),
     ].filter(Boolean) as Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
 
+    const prRef = formatRefId('DP', pr.id, pr.requestNumber, selectedMethod);
+    const prTitle = (items.length > 0 && items[0]?.itemName && items[0]?.itemName !== 'Product/Service')
+      ? `${items[0].itemName}${items.length > 1 ? ` (+${items.length - 1} more items)` : ''}`
+      : `Direct Purchase ${prRef}`;
+
     all.push({
       id: pr.id,
       type: 'procurement_request',
       typeLabel: 'Cart Checkout',
-      title: `Procurement Request ${pr.requestNumber}`,
-      referenceNumber: pr.requestNumber || `PR-${pr.id}`,
+      title: prTitle,
+      referenceNumber: prRef,
       status: prStatus,
       statusLabel: statusLabel(prStatus),
       statusGroup: prStatusGroup,
@@ -11252,12 +11267,17 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       }
     }
 
+    const dpRef = formatRefId('DP', dp.id, dp.purchaseNumber, 'DIRECT_PURCHASE');
+    const dpTitle = (items.length > 0 && items[0]?.itemName)
+      ? `${items[0].itemName}${items.length > 1 ? ` (+${items.length - 1} more items)` : ''}`
+      : `Direct Purchase ${dpRef}`;
+
     all.push({
       id: dp.id,
       type: 'direct_purchase',
       typeLabel: 'Direct Purchase',
-      title: `Direct Purchase ${dp.purchaseNumber}`,
-      referenceNumber: dp.purchaseNumber || `DP-${dp.id}`,
+      title: dpTitle,
+      referenceNumber: dpRef,
       status: String(dp.status || 'DRAFT'),
       statusLabel: statusLabel(String(dp.status || 'DRAFT')),
       statusGroup: statusGroupFor(String(dp.status || 'DRAFT')),
@@ -11382,13 +11402,16 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       detailSection('Reverse Auction', payload.auctionConfig),
     ].filter(Boolean) as Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
 
+    const reqMethod = r.procurementMethod || (r as any).canonicalMethod || payload.basics?.procurementMethod || 'TENDER';
+    const reqRef = formatRequirementNumber(r.id, r.requirementNumber, reqMethod);
+
     all.push({
       id: r.id,
       type: 'requirement',
       typeLabel: 'Requirement',
       linkedAuctionId: auctionsByRequirementId[r.id]?.id || null,
-      title: r.title || `Requirement ${r.requirementNumber}`,
-      referenceNumber: formatRequirementNumber(r.id, r.requirementNumber),
+      title: r.title || `Requirement ${reqRef}`,
+      referenceNumber: reqRef,
       status: rStatusUpper,
       statusLabel: statusLabel(rStatusUpper),
       statusGroup: statusGroupFor(rStatusUpper),
@@ -11522,12 +11545,14 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
 
     const participantsCount = responses.length;
 
+    const rcRef = formatRefId('RC', contract.id, contract.contractNumber || metadata.requirementNumber, 'RATE_CONTRACT');
+
     all.push({
       id: contract.id,
       type: 'rate_contract',
       typeLabel: 'Rate Contract',
-      title: contract.title || srcReq?.title || `Rate Contract ${contract.contractNumber}`,
-      referenceNumber: contract.contractNumber || `RC-${contract.id}`,
+      title: contract.title || srcReq?.title || `Rate Contract ${rcRef}`,
+      referenceNumber: rcRef,
       status: expired ? 'EXPIRED' : String(contract.status || 'ACTIVE'),
       statusLabel: expired ? 'Expired' : statusLabel(String(contract.status || 'ACTIVE')),
       statusGroup: expired ? 'cancelled' : 'active',
@@ -11545,7 +11570,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       participantsCount,
       createdAt: contract.createdAt?.toISOString?.() || '',
       updatedAt: contract.updatedAt?.toISOString?.() || '',
-      actionUrl: `/bids/${contract.contractNumber || `RC-${contract.id}`}`,
+      actionUrl: `/bids/${rcRef}`,
       documents: [...contractDocs, ...reqDocs],
       items,
       paymentTerms: metadata.priceVariationClause || srcPayload.terms?.paymentTerms || '',
@@ -11576,12 +11601,14 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       return `/reverse-auctions/${a.id}`;
     })();
 
+    const raRef = formatRefId('RA', a.id, a.auctionCode || a.referenceNo, 'REVERSE_AUCTION');
+
     all.push({
       id: a.id,
       type: 'reverse_auction',
       typeLabel: 'Reverse Auction',
-      title: a.title || `Reverse Auction ${(a.auctionCode?.replace(/^RA-/, 'REQ-')) || (a.referenceNo?.replace(/^RA-/, 'REQ-')) || '#' + a.id}`,
-      referenceNumber: (a.auctionCode?.replace(/^RA-/, 'REQ-')) || (a.referenceNo?.replace(/^RA-/, 'REQ-')) || formatRequirementNumber(a.linkedRequirementId || a.id) || `REQ-${String(a.id).padStart(5, '0')}`,
+      title: a.title || `Reverse Auction ${raRef}`,
+      referenceNumber: raRef,
       status: s,
       statusLabel: statusLabel(s),
       statusGroup: statusGroup,
