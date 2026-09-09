@@ -947,6 +947,12 @@ export default function CreateProcurementPage() {
     }
     return defaultDraft(initialMethod, initialBuyerType);
   });
+  const draftIdRef = React.useRef<number | undefined>(draft?.id);
+  useEffect(() => {
+    if (draft?.id) {
+      draftIdRef.current = draft.id;
+    }
+  }, [draft?.id]);
   const [activeStep, setActiveStep] = useState<number>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -1127,6 +1133,7 @@ export default function CreateProcurementPage() {
 
         const internalPayload = payload.internal || {};
 
+        draftIdRef.current = res.id;
         setDraft({
           ...base,
           ...payload,
@@ -1490,10 +1497,16 @@ export default function CreateProcurementPage() {
 
   // Save Draft to Backend
   const saveDraftLocally = async (silent = false, stepOverride?) => {
+    if (savingDraft) return;
     setSavingDraft(true);
     try {
       const stepToSave = stepOverride !== undefined ? stepOverride : activeStep;
-      const payload = buildProcurementApiPayload(draft, stepToSave);
+      const effectiveDraftId = draftIdRef.current || draft.id;
+      const currentDraftWithId = {
+        ...draft,
+        id: effectiveDraftId
+      };
+      const payload = buildProcurementApiPayload(currentDraftWithId, stepToSave);
       let savedAsNewDraft = false;
       let res: any;
       try {
@@ -1505,9 +1518,17 @@ export default function CreateProcurementPage() {
         res = await saveProcurementDraft(withoutServerDraftId(payload));
         savedAsNewDraft = true;
       }
-      const serverId = Number(res?.id || res?.data?.id || draft.id || 0);
+      const serverId = Number(res?.id || res?.data?.id || effectiveDraftId || draft.id || 0);
       if (serverId) {
+        draftIdRef.current = serverId;
         updateDraft(current => ({ ...current, id: serverId }));
+        if (typeof window !== 'undefined' && !draftIdParam) {
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('id', String(serverId));
+            window.history.replaceState(null, '', url.toString());
+          } catch {}
+        }
       }
       if (!silent) toast.success(savedAsNewDraft ? 'Draft saved as a new draft' : 'Draft saved successfully');
     } catch (err: any) {
@@ -1830,8 +1851,6 @@ export default function CreateProcurementPage() {
     setTriedNext(false);
     const currentKind = ALL_STEPS[activeStep];
     setCompletedStepIds(prev => Array.from(new Set([...prev, currentKind])));
-    const nextStep = activeStep < ALL_STEPS.length - 1 ? activeStep + 1 : activeStep;
-    saveDraftLocally(true, nextStep).catch(err => console.warn('Autosave error:', err));
     if (activeStep < ALL_STEPS.length - 1) {
       changeActiveStep(activeStep + 1);
     }
@@ -1841,7 +1860,6 @@ export default function CreateProcurementPage() {
     setTriedNext(false);
     if (activeStep > 0) {
       const prevStep = activeStep - 1;
-      saveDraftLocally(true, prevStep).catch(err => console.warn('Autosave error:', err));
       changeActiveStep(prevStep);
     } else {
       router.push('/buyer/my-procurements');
@@ -1860,7 +1878,12 @@ export default function CreateProcurementPage() {
     }
     setSubmittingDraft(true);
     try {
-      const payload = buildProcurementApiPayload(draft, activeStep);
+      const effectiveDraftId = draftIdRef.current || draft.id;
+      const currentDraftWithId = {
+        ...draft,
+        id: effectiveDraftId
+      };
+      const payload = buildProcurementApiPayload(currentDraftWithId, activeStep);
       console.log('[SubmitProcurement] Sending payload with method:', payload.methodSlug, 'id:', payload.id);
       try {
         await submitProcurementDraft(payload);
@@ -1944,13 +1967,11 @@ export default function CreateProcurementPage() {
                 onStepClick={async (idx) => {
                   if (idx <= maxVisitedStep || effectiveCompletedSteps.includes(ALL_STEPS[idx])) {
                     setTriedNext(false);
-                    saveDraftLocally(true, idx).catch(err => console.warn('Autosave error:', err));
                     changeActiveStep(idx);
                   } else if (validateStep(activeStep)) {
                     const currentKind = ALL_STEPS[activeStep];
                     setCompletedStepIds(prev => Array.from(new Set([...prev, currentKind])));
                     setTriedNext(false);
-                    saveDraftLocally(true, idx).catch(err => console.warn('Autosave error:', err));
                     changeActiveStep(idx);
                   } else {
                     setTriedNext(true);
@@ -2005,14 +2026,12 @@ export default function CreateProcurementPage() {
                     onStepClick={async (idx) => {
                       if (idx <= maxVisitedStep || effectiveCompletedSteps.includes(ALL_STEPS[idx])) {
                         setTriedNext(false);
-                        saveDraftLocally(true, idx).catch(err => console.warn('Autosave error:', err));
                         changeActiveStep(idx);
                         setIsMobileStepperOpen(false);
                       } else if (validateStep(activeStep)) {
                         const currentKind = ALL_STEPS[activeStep];
                         setCompletedStepIds(prev => Array.from(new Set([...prev, currentKind])));
                         setTriedNext(false);
-                        saveDraftLocally(true, idx).catch(err => console.warn('Autosave error:', err));
                         changeActiveStep(idx);
                         setIsMobileStepperOpen(false);
                       } else {
@@ -2142,6 +2161,7 @@ export default function CreateProcurementPage() {
                 onBack={goBack}
                 onSaveDraft={() => saveDraftLocally()}
                 onContinue={goNext}
+                continueText={activeStep === ALL_STEPS.length - 2 ? 'Review & Submit' : 'Next Step'}
                 onSubmit={submitProcurement}
                 isSaving={savingDraft}
                 isSubmitting={submittingDraft}
