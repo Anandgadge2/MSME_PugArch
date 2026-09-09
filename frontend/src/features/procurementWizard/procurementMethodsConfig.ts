@@ -58,7 +58,7 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     estimatedTime: '5-7 Days',
     buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation', 'requiredByDate'],
-    allowedEvaluations: ['L1 total value', 'Item-wise L1']
+    allowedEvaluations: ['L1 total value', 'Item-wise L1', 'Two-stage bid with Reverse Auction (e-RA)', 'Reverse auction final rank']
   },
   {
     id: 'RFP',
@@ -90,7 +90,7 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     estimatedTime: '21-45 Days',
     buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation', 'submissionDate'],
-    allowedEvaluations: ['L1 total value', 'Technical qualification then L1']
+    allowedEvaluations: ['L1 total value', 'Technical qualification then L1', 'Two-stage bid with Reverse Auction (e-RA)', 'Reverse auction final rank']
   },
   {
     id: 'LIMITED_TENDER',
@@ -106,23 +106,7 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     estimatedTime: '10-15 Days',
     buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation', 'submissionDate'],
-    allowedEvaluations: ['L1 total value', 'Technical qualification then L1']
-  },
-  {
-    id: 'REVERSE_AUCTION',
-    title: 'Reverse Auction',
-    subtitle: 'Dynamic real-time online price competition among qualified sellers',
-    icon: Gavel,
-    accent: 'border-rose-200 bg-rose-50 text-rose-800',
-    badge: 'Price Discovery',
-    valueHint: 'Best to push pricing down for commodity items',
-    fit: ['High quantity commodities', 'Pre-qualified active pool', 'Transparent rank / lowest bid rules'],
-    gates: ['Start price & decrement rules', 'Auction window definition', 'Auto-extension rules'],
-    complexity: 'High',
-    estimatedTime: '3-5 Days',
-    buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
-    requiredFields: ['title', 'estimatedValue', 'deliveryLocation', 'submissionDate'],
-    allowedEvaluations: ['Reverse auction final rank']
+    allowedEvaluations: ['L1 total value', 'Technical qualification then L1', 'Two-stage bid with Reverse Auction (e-RA)', 'Reverse auction final rank']
   },
   {
     id: 'RATE_CONTRACT',
@@ -138,7 +122,7 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     estimatedTime: '10-20 Days',
     buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
-    allowedEvaluations: ['L1 total value', 'Item-wise L1']
+    allowedEvaluations: ['L1 total value', 'Item-wise L1', 'Two-stage bid with Reverse Auction (e-RA)', 'Reverse auction final rank']
   },
   {
     id: 'REPEAT_ORDER',
@@ -278,11 +262,12 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
 
   // Reverse Auction needed
   if (isReverseAuctionNeeded) {
-    result.id = 'REVERSE_AUCTION';
-    result.reason = 'Reverse Auction is recommended because you want to drive real-time price compression for commodity products with a pre-qualified vendor pool.';
+    const isLowValue = estimatedValue > 0 && estimatedValue <= 250000;
+    result.id = isLowValue ? 'RFQ' : 'OPEN_TENDER';
+    result.reason = `${result.id === 'RFQ' ? 'RFQ' : 'Open Tender'} with Live Reverse Auction (e-RA) stage is recommended to qualify suppliers and drive dynamic real-time price compression.`;
     result.confidence = 'HIGH';
-    result.alternativeMethods = ['RFQ'];
-    result.warnings.push('Verify that a competitive pool of at least 3 suppliers will participate, otherwise the auction may fail.');
+    result.alternativeMethods = result.id === 'RFQ' ? ['OPEN_TENDER', 'LIMITED_TENDER'] : ['RFQ', 'LIMITED_TENDER'];
+    result.warnings.push('Ensure at least 2-3 suppliers qualify technically so the live reverse auction stage is competitive.');
     return result;
   }
 

@@ -347,19 +347,25 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
   logger.info({ token }, '[RESOLVE_BID] Resolving bid for token');
 
   const isNum = /^\d+$/.test(token);
-  const rawNum = (token.startsWith('REQ-') || token.startsWith('RFQ-'))
-    ? Number(token.replace(/^(REQ-|RFQ-)/, ''))
-    : (isNum ? Number(token) : null);
-  const parsedNum = (rawNum && Number.isFinite(rawNum) && rawNum > 0 && rawNum <= 2147483647)
-    ? rawNum
-    : null;
+  const numMatches = token.match(/\d+/g);
+  const lastDigits = numMatches ? numMatches[numMatches.length - 1] : null;
+  const cleanDigits = lastDigits ? (lastDigits.length > 5 ? lastDigits.slice(-5) : lastDigits) : null;
+  const parsedNum = (isNum && Number(token) <= 2147483647)
+    ? Number(token)
+    : (cleanDigits && !isNaN(Number(cleanDigits)) && Number(cleanDigits) <= 2147483647 ? Number(cleanDigits) : null);
 
-  const tokenVariants = [
-    token,
-    token.startsWith('RFQ-') ? token.replace('RFQ-', 'REQ-') : (token.startsWith('REQ-') ? token.replace('REQ-', 'RFQ-') : token)
-  ];
+  const candidateTokens = new Set<string>([token]);
+  if (cleanDigits) {
+    const padded5 = cleanDigits.padStart(5, '0');
+    for (const p of ['REQ', 'RFP', 'RFQ', 'TND', 'LTND', 'RC', 'DP', 'RA', 'PB', 'PRQ']) {
+      candidateTokens.add(`${p}-${cleanDigits}`);
+      candidateTokens.add(`${p}-${padded5}`);
+      candidateTokens.add(`${p}-2026-${padded5}`);
+      candidateTokens.add(`${p}-2026-${cleanDigits}`);
+    }
+  }
 
-  const whereConditions: any[] = tokenVariants.flatMap(t => [{ bidNumber: t }, { bidNumber: `RFQ-${t}` }, { bidNumber: `REQ-${t}` }]);
+  const whereConditions: any[] = Array.from(candidateTokens).map(t => ({ bidNumber: t }));
   if (parsedNum) {
     whereConditions.push({ id: parsedNum });
   }
@@ -373,13 +379,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
     logger.info({ token, bidId: bid.id, bidNumber: bid.bidNumber }, '[RESOLVE_BID] Found existing procurementBid in database');
   } else {
     logger.info({ token }, '[RESOLVE_BID] Not found in procurementBid table, searching requirement tables...');
-    const searchToken = token.startsWith('RFQ-') ? token.replace('RFQ-', 'REQ-') : token;
-    const reqWhere: any[] = [
-      { requirementNumber: token },
-      { requirementNumber: searchToken },
-      { requirementNumber: `REQ-${token}` },
-      { requirementNumber: `RFQ-${token}` },
-    ];
+    const reqWhere: any[] = Array.from(candidateTokens).map(t => ({ requirementNumber: t }));
     if (parsedNum) {
       reqWhere.push({ id: parsedNum });
     }
@@ -403,10 +403,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
     }
 
     if (!buyerReq) {
-      const qReqWhere: any[] = [
-        { subject: token },
-        { subject: searchToken },
-      ];
+      const qReqWhere: any[] = Array.from(candidateTokens).map(t => ({ subject: t }));
       if (parsedNum) {
         qReqWhere.push({ id: parsedNum });
       }

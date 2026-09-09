@@ -342,7 +342,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
 
   /* ── Core Display Fields ── */
   const subject = rcData.subject || rateContractConfig.contractTitle || 'Rate Contract Opportunity';
-  const contractNumber = formatRefId('RC', rcData.id, rcData.requirementNumber || (rcData as any).contractNumber || rateContractConfig.rateContractNumber);
+  const contractNumber = formatRefId('RC', rcData.id, rcData.requirementNumber || (rcData as any).contractNumber || rateContractConfig.rateContractNumber, 'RATE_CONTRACT');
 
   /* ── Buyer Info ── */
   const orgName = rcData.buyerOrganization?.organizationName

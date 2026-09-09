@@ -486,7 +486,7 @@ export default function AdminBidManagementPage() {
                           <div className="space-y-3 w-full">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <p className="text-[10px] font-black uppercase tracking-wider text-[#c86413]">{formatRefId('REQ', record.id, record.requirementNumber)}</p>
+                                <p className="text-[10px] font-black uppercase tracking-wider text-[#c86413]">{formatRefId('REQ', record.id, record.requirementNumber, record.methodSlug || record.procurementMethod)}</p>
                                 <h3 className="mt-1 text-sm font-black text-slate-900 group-hover:text-[#12335f] transition-colors line-clamp-2 leading-snug">{record.title}</h3>
                               </div>
                               <StatusBadge label={readable(record.status)} />
@@ -542,7 +542,7 @@ export default function AdminBidManagementPage() {
                           const canAct = !['APPROVED', 'REJECTED', 'PUBLISHED', 'OPEN'].includes(String(record.status || '').toUpperCase());
                           return (
                             <tr key={record.id} className="cursor-pointer transition hover:bg-slate-50/50 align-top">
-                              <td className="p-3 font-mono font-bold text-slate-900 whitespace-nowrap">{formatRefId('REQ', record.id, record.requirementNumber)}</td>
+                              <td className="p-3 font-mono font-bold text-slate-900 whitespace-nowrap">{formatRefId('REQ', record.id, record.requirementNumber, record.methodSlug || record.procurementMethod)}</td>
                               <td className="p-3">
                                 <p className="font-bold text-slate-900 line-clamp-1 max-w-[220px]">{record.title}</p>
                               </td>
