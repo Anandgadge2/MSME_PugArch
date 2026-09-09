@@ -6,8 +6,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import { 
   Download, Trophy, FileText, X, Scale, CheckCircle2,
   LayoutGrid, List, Users, Eye, Mail, Phone, Clock, Tag, Package,
-  CheckSquare, Square, Check, ArrowUp, ArrowDown, ArrowUpDown
+  CheckSquare, Square, Check, ArrowUp, ArrowDown, ArrowUpDown, Gavel
 } from 'lucide-react';
+import StartReverseAuctionModal from '../../reverseAuctions/components/StartReverseAuctionModal';
 import { useAuth } from '../../../hooks/useAuth';
 import { PageShell, ProcurementEmptyState, ProcurementErrorState, ProcurementHero, ProcurementLoadingState, ResultsTable, StatusBadge } from '../components';
 import { money, type BidResultRow, type ProcurementBid } from '../data';
@@ -90,6 +91,7 @@ export default function BidResultsPage() {
   
   // Modal state for selecting sellers to compare
   const [showCompareChooser, setShowCompareChooser] = useState(false);
+  const [showReverseAuctionModal, setShowReverseAuctionModal] = useState(false);
 
   const [awardModal, setAwardModal] = useState<{
     show: boolean;
@@ -802,6 +804,16 @@ export default function BidResultsPage() {
               >
                 <Download className="h-4 w-4" /> Export result
               </button>
+
+              {ranking.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowReverseAuctionModal(true)}
+                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 px-4 text-xs font-black text-white transition-all shadow-xs cursor-pointer"
+                >
+                  <Gavel className="h-4 w-4" /> Start Reverse Auction
+                </button>
+              )}
             </div>
           </div>
           {ranking.length ? (
@@ -1278,6 +1290,32 @@ export default function BidResultsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showReverseAuctionModal && (
+        <StartReverseAuctionModal
+          isOpen={showReverseAuctionModal}
+          onClose={() => setShowReverseAuctionModal(false)}
+          procurementId={bidId}
+          procurementTitle={bid?.title || `Procurement #${bidId}`}
+          initialLowestQuote={
+            ranking.length
+              ? Math.min(...ranking.map(r => Number(r.totalPrice || 0)).filter(q => q > 0))
+              : undefined
+          }
+          submittedVendors={ranking.map((r, idx) => ({
+            sellerOrgId: (r as any).sellerOrgId || (r as any).sellerOrganizationId,
+            sellerUserId: (r as any).sellerUserId || (r as any).sellerId,
+            sellerId: (r as any).sellerId,
+            vendorName: r.sellerName || `Vendor ${idx + 1}`,
+            quotedAmount: Number(r.totalPrice || 0),
+            offeredQty: String((r as any).offeredQuantity || (r as any).quantity || 1),
+            deliveryTimeline: (r as any).deliveryTimeline || r.details?.deliveryTimeline
+          }))}
+          onAuctionStarted={(newAuction) => {
+            router.push(`/seller/procurement/reverse-auction/${newAuction.id}/live`);
+          }}
+        />
       )}
     </PageShell>
   );

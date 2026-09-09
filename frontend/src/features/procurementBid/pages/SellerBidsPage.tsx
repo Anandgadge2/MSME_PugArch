@@ -676,7 +676,9 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     if (isDraft(item)) {
       router.push(`/bids/${bidId}/participate`);
     } else {
-      if (isRfp) {
+      if (typeStr.includes('reverse') || typeStr.includes('auction')) {
+        router.push(`/seller/procurement/reverse-auction/${bidId}/live`);
+      } else if (isRfp) {
         router.push(sellerRoutes.detail('RFP', bidId));
       } else if (isRfq) {
         router.push(sellerRoutes.detail('RFQ', bidId));
@@ -1425,9 +1427,21 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                                   Invoice
                                 </Button>
                               )}
-                              <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3">
-                                {isDraft(item) ? 'Resume' : 'View'}
-                              </Button>
+                              {(pType === 'Reverse Auction' || String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE')) ? (
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/seller/procurement/reverse-auction/${item.bid?.id || item.bidId}/live`);
+                                  }}
+                                  className="h-8 bg-gradient-to-r from-red-600 to-rose-600 text-[10px] font-black uppercase text-white hover:from-red-500 hover:to-rose-500 rounded-lg px-3 flex items-center gap-1 shadow-xs"
+                                >
+                                  <Gavel className="h-3 w-3" /> Live Auction
+                                </Button>
+                              ) : (
+                                <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3">
+                                  {isDraft(item) ? 'Resume' : 'View'}
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>

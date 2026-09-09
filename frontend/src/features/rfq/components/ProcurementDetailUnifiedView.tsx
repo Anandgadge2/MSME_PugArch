@@ -42,6 +42,7 @@ import {
   AlertCircle,
   HelpCircle,
   Paperclip,
+  Gavel,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -56,6 +57,10 @@ import { KpiCard } from '../../shared/KpiCard';
 import ClarificationPanel from './ClarificationPanel';
 import { EmdCard, EmdInfo, isEmdApplicable } from './EmdCard';
 import { EmdPaymentModal } from './EmdPaymentModal';
+import StartReverseAuctionModal, { SubmittedVendorItem } from '../../reverseAuctions/components/StartReverseAuctionModal';
+import LiveAuctionLeaderboard from '../../reverseAuctions/components/LiveAuctionLeaderboard';
+import SellerLiveAuctionBanner from '../../reverseAuctions/components/SellerLiveAuctionBanner';
+import { reverseAuctionApi } from '../../reverseAuctions/api';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
 type Tone = 'slate' | 'emerald' | 'rose' | 'amber' | 'sky' | 'indigo' | 'violet';
@@ -2083,6 +2088,21 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const isBuyerOrAdmin = userRoleStr === 'buyer' || userRoleStr === 'admin' || userRoleStr === 'master_admin' || (!!currentUser?.id && String(currentUser?.id) === String(props.buyer?.id));
   const isBuyerSide = userRoleStr === 'buyer' || pathname.startsWith('/buyer') || (isBuyerOrAdmin && !pathname.startsWith('/seller') && !pathname.startsWith('/shg'));
 
+  const [isStartAuctionModalOpen, setIsStartAuctionModalOpen] = useState(false);
+
+  const linkedAuctionQuery = useQuery({
+    queryKey: ['linked-reverse-auction', targetId],
+    queryFn: () => reverseAuctionApi.getByProcurement(targetId),
+    staleTime: 5000,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const status = String(data?.statusEnum || data?.status || '').toUpperCase();
+      return status === 'LIVE' ? 3000 : 15000;
+    },
+    enabled: Boolean(targetId)
+  });
+  const linkedAuction = linkedAuctionQuery.data;
+
   const { data: fetchedParticipants } = useQuery({
     queryKey: ['buyer-unified-participations', props.procurementType, targetId],
     queryFn: async () => {
@@ -3181,6 +3201,16 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           </div>
         )}
 
+        {/* Live Reverse Auction Banner for Sellers */}
+        {!isBuyerSide && linkedAuction && ['LIVE', 'SCHEDULED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
+          <SellerLiveAuctionBanner
+            auctionId={linkedAuction.id}
+            procurementTitle={resolvedSubject}
+            procurementReference={displayIdStr}
+            onBidSubmitted={() => linkedAuctionQuery.refetch()}
+          />
+        )}
+
         {/* Header */}
         <header className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -3648,6 +3678,15 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         {/* Tab 5: Clarifications & Proposals */}
         {activeTab === 'clarifications' && (
           <div className="space-y-4">
+            {/* Live Reverse Auction Leaderboard for Buyer */}
+            {isBuyerOrAdmin && linkedAuction && ['LIVE', 'PAUSED', 'CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
+              <LiveAuctionLeaderboard
+                auctionId={linkedAuction.id}
+                onAuctionClosed={() => linkedAuctionQuery.refetch()}
+                onPoGenerated={() => linkedAuctionQuery.refetch()}
+              />
+            )}
+
             {isBuyerOrAdmin && (
               <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
@@ -3665,20 +3704,20 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     </p>
                   </div>
 
-                  {/* Compare Bids button commented out as requested
-                  {submittedParticipations.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsCompareChooserOpen(true)}
-                      className="h-8 gap-1.5 text-xs font-bold text-slate-800 border border-slate-250 bg-white hover:bg-slate-50 shadow-2xs"
-                    >
-                      <Layers className="h-3.5 w-3.5 text-blue-600" />
-                      <span>Compare Bids</span>
-                    </Button>
-                  )}
-                  */}
+                  {/* Start Reverse Auction Button */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(!linkedAuction || ['DRAFT', 'CANCELLED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase())) && submittedParticipations.length > 0 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsStartAuctionModalOpen(true)}
+                        className="h-8 gap-1.5 text-xs font-black text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-2xs rounded-lg"
+                      >
+                        <Gavel className="h-3.5 w-3.5" />
+                        <span>Start Reverse Auction</span>
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {submittedParticipations.length === 0 ? (
@@ -3810,6 +3849,42 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 targetId={targetId}
                 router={router}
                 onSelectQuotationReview={(p) => setSelectedQuotationForReview(p)}
+              />
+            )}
+
+            {/* Start Reverse Auction Modal */}
+            {isStartAuctionModalOpen && (
+              <StartReverseAuctionModal
+                isOpen={isStartAuctionModalOpen}
+                onClose={() => setIsStartAuctionModalOpen(false)}
+                procurementId={targetId}
+                procurementTitle={resolvedSubject}
+                initialLowestQuote={
+                  submittedParticipations.length
+                    ? Math.min(
+                        ...submittedParticipations
+                          .map((p: any) => Number(p.totalAmount || p.quotedAmount || p.offeredPrice || Infinity))
+                          .filter((q: number) => q > 0 && q < Infinity)
+                      )
+                    : undefined
+                }
+                submittedVendors={submittedParticipations.map((p: any, idx: number) => ({
+                  sellerOrgId: p.sellerOrgId || p.sellerOrganization?.id || p.seller?.organizationId,
+                  sellerUserId: p.sellerUserId || p.sellerId || p.seller?.id,
+                  sellerId: p.sellerId || p.sellerUserId,
+                  vendorName:
+                    p.sellerOrgName ||
+                    p.sellerOrganization?.organizationName ||
+                    p.seller?.sellerProfile?.organizationName ||
+                    p.seller?.name ||
+                    `Supplier ${idx + 1}`,
+                  quotedAmount: Number(p.totalAmount || p.quotedAmount || p.offeredPrice || 0),
+                  offeredQty: p.offeredQuantity || p.quantity,
+                  deliveryTimeline: p.deliveryTimeline,
+                }))}
+                onAuctionStarted={() => {
+                  linkedAuctionQuery.refetch();
+                }}
               />
             )}
 
