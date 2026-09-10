@@ -6,7 +6,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'Source verified steel, TMT bars, industrial castings, and metal components from local manufacturers across the district.',
     ctaText: 'Browse Steel & Metal',
     ctaLink: '#products',
-    imageUrl: 'https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?w=1920&q=90&auto=format&fit=crop',
+    imageUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1920&q=90&auto=format&fit=crop',
     displayOrder: 1,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -28,7 +28,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'Sambalpuri textiles, Dhokra brass, terracotta, tribal jewelry — discover authentic Odisha craftsmanship from self-help groups.',
     ctaText: 'Explore SHG Products',
     ctaLink: '#categories',
-    imageUrl: 'https://images.unsplash.com/photo-1606744824163-985d376605aa?w=1920&q=90&auto=format&fit=crop',
+    imageUrl: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=1920&q=90&auto=format&fit=crop',
     displayOrder: 3,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
@@ -39,7 +39,7 @@ export const DEFAULT_MARKETPLACE_BANNERS = [
     subtitle: 'Thermal power, aluminum smelting, coal logistics — connecting the industrial backbone of Jharsuguda with verified digital procurement.',
     ctaText: 'Explore Ecosystem',
     ctaLink: '#categories',
-    imageUrl: 'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=1920&q=90&auto=format&fit=crop',
+    imageUrl: 'https://images.unsplash.com/photo-1565043666747-69f6646db940?w=1920&q=90&auto=format&fit=crop',
     displayOrder: 4,
     displayLocation: 'HOME_HERO',
     status: 'DEFAULT'
