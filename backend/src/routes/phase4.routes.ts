@@ -10318,10 +10318,11 @@ async function ensureUserOrganizationId(req: any): Promise<number> {
             orgType = 'LLP';
           } else if (typeStr.includes('STARTUP')) {
             orgType = 'STARTUP';
-          } else if (typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
-            orgType = 'PRIVATE_LIMITED';
           } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
             orgType = 'PUBLIC_LIMITED';
+          } else if (typeStr.includes('COMPANY') || typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
+            const isPublic = typeStr.includes('PUBLIC') || (!typeStr.includes('PVT') && !typeStr.includes('PRIVATE') && String(orgName).toUpperCase().includes('LIMITED') && !String(orgName).toUpperCase().includes('PVT') && !String(orgName).toUpperCase().includes('PRIVATE'));
+            orgType = isPublic ? 'PUBLIC_LIMITED' : 'PRIVATE_LIMITED';
           } else if (typeStr.includes('SHG')) {
             orgType = 'SHG';
           } else if (typeStr.includes('NGO')) {

@@ -379,7 +379,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       ...cachedProfile,
       panVerified: cachedProfile.panVerified || orgVerified,
       detailsUpdated: cachedProfile.detailsUpdated || orgVerified,
-      organizationType: cachedProfile.organizationType || cachedOrg.organizationType || cachedRegDetails.businessType || 'Proprietorship',
+      organizationType: cachedRegDetails.businessType || (cachedProfile.organizationType && cachedProfile.organizationType !== 'MSME' ? cachedProfile.organizationType : null) || cachedProfile.organizationType || cachedOrg.organizationType || 'Proprietorship',
       businessName: cachedProfile.businessName || cachedOrg.organizationName || cachedRegDetails.businessName || cachedMe?.user?.name || '',
       nameAsInPan: cachedProfile.nameAsInPan || cachedOrg.organizationName || cachedRegDetails.businessName || cachedMe?.user?.name || '',
       dateAsInPan: toDateInputValue(cachedProfile.dateAsInPan),
@@ -646,7 +646,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
         ...profile,
         panVerified: profile.panVerified || orgVerified,
         detailsUpdated: profile.detailsUpdated || orgVerified,
-        organizationType: profile.organizationType || org.organizationType || regDetails.businessType || prev.organizationType,
+        organizationType: regDetails.businessType || (profile.organizationType && profile.organizationType !== 'MSME' ? profile.organizationType : null) || profile.organizationType || org.organizationType || prev.organizationType || 'Proprietorship',
         businessName: profile.businessName || org.organizationName || regDetails.businessName || data.user?.name || prev.businessName,
         nameAsInPan: profile.nameAsInPan || org.organizationName || regDetails.businessName || data.user?.name || prev.nameAsInPan || '',
         dateAsInPan: toDateInputValue(profile.dateAsInPan),
@@ -1367,7 +1367,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   const canCaptureMissingBankAfterApproval = isProfileLocked && currentSection === 'bank' && bankAccountsCount === 0;
   const shouldDisableProfileFields = isProfileLocked && !isAccountSettings && !canCaptureMissingBankAfterApproval;
 
-  if (isFetching) return <div className="flex h-screen items-center justify-center font-black  text-[#12335f] animate-pulse">Initializing Profile...</div>;
+  if (isFetching) return <div className="flex h-screen items-center justify-center font-black  text-[#12335f] animate-pulse">Loading profile...</div>;
 
   return (
     <div className="flex flex-col md:flex-row bg-gray-50 min-h-screen">

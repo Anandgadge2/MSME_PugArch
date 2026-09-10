@@ -2888,7 +2888,7 @@ export default function AdminOnboarding() {
                         <div className="grid md:grid-cols-2 gap-8">
                           <InfoItem
                             label="Organisation Type"
-                            value={selectedItem.profile?.organizationType || "N/A"}
+                            value={selectedItem.registrationDetails?.businessType || (selectedItem.profile?.organizationType && selectedItem.profile?.organizationType !== 'MSME' ? selectedItem.profile?.organizationType : null) || selectedItem.profile?.organizationType || "N/A"}
                             highlight
                           />
                           <InfoItem

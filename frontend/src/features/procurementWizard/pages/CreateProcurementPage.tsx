@@ -1616,7 +1616,6 @@ export default function CreateProcurementPage() {
         const end = new Date(auction.endDateTime).getTime();
         if (!auction.auctionTitle.trim()) return false;
         if (!auction.auctionCategory.trim() || auction.auctionCategory === 'Other') return false;
-        if (!auction.auctionSubCategory.trim() || auction.auctionSubCategory === 'Other') return false;
         if (!auction.currency.trim() || auction.currency === 'Other') return false;
         if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
         if (auction.durationMinutes <= 0) return false;
@@ -1884,10 +1883,6 @@ export default function CreateProcurementPage() {
         }
         if (!auction.auctionCategory.trim() || auction.auctionCategory === 'Other') {
           toast.error('Auction category is required.');
-          return false;
-        }
-        if (!auction.auctionSubCategory.trim() || auction.auctionSubCategory === 'Other') {
-          toast.error('Auction subcategory is required.');
           return false;
         }
         if (!auction.currency.trim() || auction.currency === 'Other') {
@@ -5498,7 +5493,7 @@ function ScheduleStepForm({
   const isOtherAuctionSubCategory = draft.auctionConfig.auctionSubCategory === 'Other' || Boolean(draft.auctionConfig.auctionSubCategory && !auctionSubCategoryOptions.includes(draft.auctionConfig.auctionSubCategory));
   const isOtherCurrency = draft.auctionConfig.currency === 'Other' || Boolean(draft.auctionConfig.currency && !currencyOptions.includes(draft.auctionConfig.currency));
   const auctionCategoryMissing = !draft.auctionConfig.auctionCategory.trim() || draft.auctionConfig.auctionCategory === 'Other';
-  const auctionSubCategoryMissing = !draft.auctionConfig.auctionSubCategory.trim() || draft.auctionConfig.auctionSubCategory === 'Other';
+  const auctionSubCategoryMissing = false;
   const currencyMissing = !draft.auctionConfig.currency.trim() || draft.auctionConfig.currency === 'Other';
   const missing = (value: unknown) => showErrors && !String(value ?? '').trim();
   const fieldError = (condition: boolean, message: string) => condition ? message : undefined;
@@ -5678,21 +5673,21 @@ function ScheduleStepForm({
                 />
               )}
             </Field>
-            <Field label="Auction Subcategory" required error={fieldError(showErrors && auctionSubCategoryMissing, 'Auction subcategory is required.')}>
+            <Field label="Auction Subcategory (Optional)">
               <select
                 value={isOtherAuctionSubCategory ? 'Other' : draft.auctionConfig.auctionSubCategory}
                 onChange={e => updateAuction('auctionSubCategory', e.target.value)}
-                className={controlClass(fieldError(showErrors && auctionSubCategoryMissing, 'Auction subcategory is required.'))}
+                className={inputClass}
               >
-                <option value="">Select subcategory</option>
+                <option value="">Select subcategory (Optional)</option>
                 {auctionSubCategoryOptions.map(option => <option key={option} value={option}>{option}</option>)}
               </select>
               {isOtherAuctionSubCategory && (
                 <input
                   value={draft.auctionConfig.auctionSubCategory === 'Other' ? '' : draft.auctionConfig.auctionSubCategory}
                   onChange={e => updateAuction('auctionSubCategory', e.target.value)}
-                  className={controlClass(fieldError(showErrors && auctionSubCategoryMissing, 'Auction subcategory is required.'))}
-                  placeholder="Enter auction subcategory"
+                  className={cn(inputClass, 'mt-2')}
+                  placeholder="Enter auction subcategory (Optional)"
                 />
               )}
             </Field>
@@ -5957,8 +5952,8 @@ function ScheduleStepForm({
             <Field label="Contract Category">
               <input value={draft.rateContractConfig.contractCategory} onChange={e => updateRateContract('contractCategory', e.target.value)} className={inputClass} />
             </Field>
-            <Field label="Contract Subcategory">
-              <input value={draft.rateContractConfig.contractSubCategory} onChange={e => updateRateContract('contractSubCategory', e.target.value)} className={inputClass} />
+            <Field label="Contract Subcategory (Optional)">
+              <input value={draft.rateContractConfig.contractSubCategory} onChange={e => updateRateContract('contractSubCategory', e.target.value)} className={inputClass} placeholder="Enter contract subcategory (Optional)" />
             </Field>
             <Field label="Contract Start Date" required>
               <input type="date" value={draft.rateContractConfig.periodStartDate} onChange={e => updateRateContract('periodStartDate', e.target.value)} className={inputClass} />
