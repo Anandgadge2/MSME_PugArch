@@ -3724,27 +3724,42 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
       ]
       : ['pan_copy', 'bank_passbook', 'address_proof'];
 
+    const addRequiredDoc = (docType: string) => {
+      if (!requiredDocs.includes(docType)) requiredDocs.push(docType);
+    };
+
+    if (!isHerShg && Array.isArray(regDetails.selectedDocuments)) {
+      for (const docType of regDetails.selectedDocuments) {
+        if (typeof docType === 'string' && docType.trim()) addRequiredDoc(docType.trim());
+      }
+    }
+
     if (!isHerShg) {
-      requiredDocs.push('udyam_certificate');
+      addRequiredDoc('udyam_certificate');
     }
 
     if (!isHerShg && (profile.isStartup || String(profile.organizationType || regDetails.businessType).toLowerCase() === 'startup')) {
-      requiredDocs.push('dipp_certificate');
+      addRequiredDoc('dipp_certificate');
     }
 
     const hasGstin = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('GST_REGISTERED');
     if (!isHerShg && hasGstin) {
-      requiredDocs.push('gst_certificate');
+      addRequiredDoc('gst_certificate');
+    }
+
+    const hasNsic = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('NSIC_REGISTERED');
+    if (!isHerShg && hasNsic) {
+      addRequiredDoc('nsic_certificate');
     }
 
     if (!isHerShg && (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber)) {
-      requiredDocs.push('aadhaar_card');
+      addRequiredDoc('aadhaar_card');
     }
 
     const corporateTypes = ['Company', 'LLP', 'Partnership', 'Cooperative', 'Society', 'Trust'];
     const isCorporate = corporateTypes.some(t => String(profile.organizationType || regDetails.businessType).toLowerCase().includes(t.toLowerCase()));
     if (!isHerShg && isCorporate && (regDetails.cinNumber || regDetails.registrationNumber || regDetails.cin)) {
-      requiredDocs.push('business_registration_proof');
+      addRequiredDoc('business_registration_proof');
     }
 
     const uploadedDocs = profile.sellerDocuments?.map((d: any) => d.documentType) || [];
@@ -3820,6 +3835,8 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
         pan_copy: 'PAN Card Copy',
         bank_passbook: 'Bank Passbook / Cancelled Cheque',
         udyam_certificate: 'Udyam Certificate',
+        nsic_certificate: 'NSIC Registration Certificate',
+        itr_3_years: 'Income Tax Returns of Last 3 Years',
         aadhaar_card: 'Aadhaar of Authorized Person',
         business_registration_proof: 'Business Registration Proof (CIN/Shop Act)',
         dipp_certificate: 'DIPP Certificate'
