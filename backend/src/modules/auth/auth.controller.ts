@@ -180,10 +180,6 @@ const sendOtpByChannel = async (
   subject: string,
   purpose: string
 ) => {
-  if (env.NODE_ENV !== 'production') {
-    logger.info({ channel, identity, otp, purpose }, `[DEV OTP BYPASS] Channel: ${channel} | Identity: ${identity} | OTP: ${otp} | Purpose: ${purpose}`);
-    console.log(`\n\x1b[33m--- [DEV OTP BYPASS] Channel: ${channel} | Identity: ${identity} | OTP: ${otp} | Purpose: ${purpose} ---\x1b[0m\n`);
-  }
   if (channel === 'sms') {
     return smsService.sendOtpSms(identity, otp, smsPurposeForOtp(purpose));
   }
@@ -266,10 +262,6 @@ export const authController = {
       const otp = generateOtp();
 
       const otpState = await storeEmailOtp(email, otp);
-      if (env.NODE_ENV !== 'production') {
-        logger.info({ email, otp }, `[DEV OTP BYPASS] Email: ${email} | OTP: ${otp}`);
-        console.log(`\n\x1b[33m--- [DEV OTP BYPASS] Email: ${email} | OTP: ${otp} ---\x1b[0m\n`);
-      }
 
       const deliveryConfigured = await sendOtpEmail(email, otp, '[SECURE AUTH] Email verification code');
       await auditLog({
@@ -348,10 +340,6 @@ export const authController = {
 
       const otp = generateOtp();
       const otpState = await storeMobileOtp(mobile, otp);
-      if (env.NODE_ENV !== 'production') {
-        logger.info({ mobile, otp }, `[DEV OTP BYPASS] Mobile: ${mobile} | OTP: ${otp}`);
-        console.log(`\n\x1b[33m--- [DEV OTP BYPASS] Mobile: ${mobile} | OTP: ${otp} ---\x1b[0m\n`);
-      }
       const sms = await smsService.sendOtpSms(mobile, otp, 'registration_otp');
       await auditLog({
         action: 'auth.mobile_otp.sent',
@@ -1729,10 +1717,6 @@ export const authController = {
 
       const otp = generateOtp();
       const otpState = await storeOtp('sub_user_mobile_verify', mobile, otp);
-      if (env.NODE_ENV !== 'production') {
-        logger.info({ mobile, otp }, `[SUB-USER MOBILE OTP] Mobile: ${mobile} | OTP: ${otp}`);
-        console.log(`\n\x1b[33m--- [SUB-USER MOBILE OTP] Mobile: ${mobile} | OTP: ${otp} ---\x1b[0m\n`);
-      }
 
       await smsService.sendOtpSms(mobile, otp, 'registration_otp');
       await auditLog({

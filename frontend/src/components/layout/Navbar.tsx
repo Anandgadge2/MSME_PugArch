@@ -436,8 +436,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         '/seller/opportunities/invitations': invitationsCount,
         '/seller/opportunities/auctions': auctionsCount,
         '/seller/opportunities/rate-contracts': rateContractsCount,
-        '/seller/bids': Number(data.bidsCount || 0),
-        '/shg/bids': Number(data.bidsCount || 0),
         '/shg/opportunities': allCount,
         '/shg/opportunities/rfqs': rfqsCount,
         '/shg/opportunities/rfps': rfpsCount,

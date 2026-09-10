@@ -390,26 +390,22 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       pan: cachedProfile.pan || cachedOrg.panNumber || cachedRegDetails.pan || '',
       offices: normalizeList(cachedProfile.offices),
       bankAccounts: normalizeList(cachedProfile.bankAccounts),
-      isStartup: cachedProfile.isStartup ?? (
+      isStartup: (
         (Array.isArray(cachedRegDetails.selectedDocuments) && cachedRegDetails.selectedDocuments.includes('dipp_certificate'))
           || String(cachedRegDetails.businessType || '').toLowerCase().includes('startup')
-          ? true
-          : null
-      ),
+      ) ? true : (cachedProfile.isStartup ?? null),
       isUdyamCertified: true,
       participateInBid: cachedProfile.participateInBid ?? null,
       msmeType: cachedProfile.msmeType || '',
       vendorType: cachedProfile.vendorType || '',
-      registrationTypes: Array.isArray(cachedProfile.registrationTypes) && cachedProfile.registrationTypes.length > 0
-        ? cachedProfile.registrationTypes
-        : (() => {
-            const types = new Set<string>();
-            const docs = Array.isArray(cachedRegDetails.selectedDocuments) ? cachedRegDetails.selectedDocuments : [];
-            if (cachedRegDetails.gstin || docs.includes('gst_certificate')) types.add('GST_REGISTERED');
-            if (docs.includes('nsic_certificate')) types.add('NSIC_REGISTERED');
-            if (cachedRegDetails.pan || cachedOrg.panNumber) types.add('PAN_AVAILABLE');
-            return Array.from(types);
-          })(),
+      registrationTypes: (() => {
+        const types = new Set<string>(Array.isArray(cachedProfile.registrationTypes) ? cachedProfile.registrationTypes : []);
+        const docs = Array.isArray(cachedRegDetails.selectedDocuments) ? cachedRegDetails.selectedDocuments : [];
+        if (cachedRegDetails.gstin || docs.includes('gst_certificate')) types.add('GST_REGISTERED');
+        if (docs.includes('nsic_certificate')) types.add('NSIC_REGISTERED');
+        if (cachedRegDetails.pan || cachedOrg.panNumber) types.add('PAN_AVAILABLE');
+        return Array.from(types);
+      })(),
       productCategories: Array.isArray(cachedProfile.productCategories) ? cachedProfile.productCategories : []
     };
   });
@@ -462,7 +458,11 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     };
 
     // GST Certificate
-    const isGstRequired = Boolean(formData.registrationTypes?.includes('GST_REGISTERED'));
+    const isGstRequired = Boolean(
+      selectedDocs.includes('gst_certificate') ||
+      Boolean(regDetails.gstin) ||
+      formData.registrationTypes?.includes('GST_REGISTERED')
+    );
     docs.push({
       id: 'gst_certificate',
       label: 'GST Certificate',
@@ -480,7 +480,11 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     });
 
     // DIPP Certificate
-    const isDippRequired = Boolean(formData.isStartup === true);
+    const isDippRequired = Boolean(
+      selectedDocs.includes('dipp_certificate') ||
+      String(regDetails.businessType || '').toLowerCase().includes('startup') ||
+      formData.isStartup === true
+    );
     docs.push({
       id: 'dipp_certificate',
       label: 'DIPP Certificate',
@@ -489,7 +493,10 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     });
 
     // NSIC Certificate
-    const isNsicRequired = Boolean(formData.registrationTypes?.includes('NSIC_REGISTERED'));
+    const isNsicRequired = Boolean(
+      selectedDocs.includes('nsic_certificate') ||
+      formData.registrationTypes?.includes('NSIC_REGISTERED')
+    );
     docs.push({
       id: 'nsic_certificate',
       label: 'NSIC Registration Certificate',
@@ -498,7 +505,11 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     });
 
     // Aadhaar Card
-    const isAadhaarRequired = Boolean(selectedDocs.includes('aadhaar_card'));
+    const isAadhaarRequired = Boolean(
+      selectedDocs.includes('aadhaar_card') ||
+      regDetails.verificationMethod === 'Aadhaar' ||
+      Boolean(regDetails.aadhaarNumber)
+    );
     docs.push({
       id: 'aadhaar_card',
       label: 'Aadhaar of Authorized Person',
@@ -507,7 +518,12 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     });
 
     // Business Registration Proof
-    const isCorpRequired = Boolean(selectedDocs.includes('business_registration_proof'));
+    const corporateTypes = ['Company', 'LLP', 'Partnership', 'Cooperative', 'Society', 'Trust'];
+    const isCorporate = corporateTypes.some(t => String(formData.organizationType || regDetails.businessType || '').toLowerCase().includes(t.toLowerCase()));
+    const isCorpRequired = Boolean(
+      selectedDocs.includes('business_registration_proof') ||
+      (isCorporate && Boolean(regDetails.cinNumber || regDetails.registrationNumber || regDetails.cin || formData.cin))
+    );
     docs.push({
       id: 'business_registration_proof',
       label: 'Business Registration Proof (CIN/Shop Act)',
@@ -515,9 +531,13 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       category: isCorpRequired ? 'mandatory' : 'optional'
     });
 
-    // Add any remaining selected documents from the backend or custom documents
+    // Add any remaining selected documents from the backend or upgrade existing docs to mandatory
     selectedDocs.forEach((id: string) => {
-      if (!docs.some(doc => doc.id === id)) {
+      const existingDoc = docs.find(doc => doc.id === id);
+      if (existingDoc) {
+        existingDoc.required = true;
+        existingDoc.category = 'mandatory';
+      } else {
         docs.push({
           id,
           label: selectedDocLabels[id] || id,
@@ -637,26 +657,23 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
         pan: profile.pan || org.panNumber || regDetails.pan || prev.pan,
         offices: normalizeList(profile.offices),
         bankAccounts: normalizeList(profile.bankAccounts).length > 0 ? normalizeList(profile.bankAccounts) : normalizeList(prev.bankAccounts),
-        isStartup: profile.isStartup ?? (
+        isStartup: (
           (Array.isArray(regDetails.selectedDocuments) && regDetails.selectedDocuments.includes('dipp_certificate'))
             || String(regDetails.businessType || '').toLowerCase().includes('startup')
-            ? true
-            : prev.isStartup ?? null
-        ),
+        ) ? true : (profile.isStartup ?? prev.isStartup ?? null),
         isUdyamCertified: true,
         participateInBid: profile.participateInBid ?? prev.participateInBid ?? null,
-        registrationTypes: Array.isArray(profile.registrationTypes) && profile.registrationTypes.length > 0
-          ? profile.registrationTypes
-          : (Array.isArray(prev.registrationTypes) && prev.registrationTypes.length > 0)
-            ? prev.registrationTypes
-            : (() => {
-                const types = new Set<string>();
-                const docs = Array.isArray(regDetails.selectedDocuments) ? regDetails.selectedDocuments : [];
-                if (regDetails.gstin || docs.includes('gst_certificate')) types.add('GST_REGISTERED');
-                if (docs.includes('nsic_certificate')) types.add('NSIC_REGISTERED');
-                if (regDetails.pan || org.panNumber) types.add('PAN_AVAILABLE');
-                return Array.from(types);
-              })(),
+        registrationTypes: (() => {
+          const types = new Set<string>([
+            ...(Array.isArray(profile.registrationTypes) ? profile.registrationTypes : []),
+            ...(Array.isArray(prev.registrationTypes) ? prev.registrationTypes : [])
+          ]);
+          const docs = Array.isArray(regDetails.selectedDocuments) ? regDetails.selectedDocuments : [];
+          if (regDetails.gstin || docs.includes('gst_certificate')) types.add('GST_REGISTERED');
+          if (docs.includes('nsic_certificate')) types.add('NSIC_REGISTERED');
+          if (regDetails.pan || org.panNumber) types.add('PAN_AVAILABLE');
+          return Array.from(types);
+        })(),
         productCategories: Array.isArray(profile.productCategories) ? profile.productCategories : (prev.productCategories || [])
       }));
     } catch (err) {

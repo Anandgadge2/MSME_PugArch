@@ -145,10 +145,12 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
 
         isSeller ? Promise.all([
           db.procurementBidParticipation.count({
-            where: { sellerId: (user.organizationId || user.id) as number }
+            where: { sellerId: user.id }
           }).catch(() => 0),
           db.requirementResponse.count({
-            where: { sellerUserId: user.id }
+            where: user.organizationId
+              ? { OR: [{ sellerUserId: user.id }, { sellerOrganizationId: user.organizationId }] }
+              : { sellerUserId: user.id }
           }).catch(() => 0)
         ]).then(([b, r]) => b + r).catch(() => 0) : Promise.resolve(0)
       ]);
