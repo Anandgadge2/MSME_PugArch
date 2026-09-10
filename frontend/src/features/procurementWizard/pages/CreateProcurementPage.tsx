@@ -69,7 +69,6 @@ import {
 import { api, BASE_URL, readJsonResponse, unwrapApiData } from '../../../lib/api';
 import { authHeaders, unwrap } from '../../shared/apiClient';
 import { downloadBlob, downloadCsv } from '../../shared/exportUtils';
-import { formatRefId } from '../../../utils/refIdUtils';
 import { fetchDeliveryAddresses, createDeliveryAddress, type DeliveryAddressDto } from '../../directPurchase/api';
 import { useActiveCart } from '../../cart/hooks';
 import type { CartItemDto } from '../../cart/api';
@@ -1421,7 +1420,6 @@ export default function CreateProcurementPage() {
       if (d.auctionConfig.reservePrice !== null && d.auctionConfig.startingBidPrice > 0) {
         list.push({ label: 'Reserve price cannot exceed starting price', ok: d.auctionConfig.reservePrice <= d.auctionConfig.startingBidPrice, severity: 'error', stepIdx: 8 });
       }
-    }
     }
 
     // Step 6 Commercial Terms - Errors

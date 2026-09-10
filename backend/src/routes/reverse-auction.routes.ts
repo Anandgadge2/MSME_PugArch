@@ -397,6 +397,39 @@ const recalculateRanks = async (tx: any, auctionId: number) => {
   }
 };
 
+router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const rawId = req.params.procurementId;
+    const numId = Number(rawId);
+
+    const auction = await db.auction.findFirst({
+      where: {
+        OR: [
+          ...(Number.isFinite(numId) && numId > 0 ? [{ linkedBidId: numId }, { linkedRequirementId: numId }] : []),
+          { referenceNo: String(rawId) }
+        ]
+      },
+      include: {
+        winnerSeller: { select: { id: true, name: true, email: true } },
+        bids: {
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        }
+      },
+      orderBy: { id: 'desc' }
+    });
+
+    if (!auction) {
+      return apiResponse.success(res, null, 200, 'No auction linked to this procurement');
+    }
+
+    const effective = await withEffectiveStatus(auction);
+    return apiResponse.success(res, maskSensitive(effective));
+  } catch (error: any) {
+    return apiResponse.error(res, 500, error.message || 'Error looking up auction', 'AUCTION_LOOKUP_ERROR');
+  }
+});
+
 router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
     const id = await resolveAuctionId(req.params.id);
@@ -578,6 +611,177 @@ router.post('/reverse-auctions', requirePermission('reverse_auction.create', org
     return apiResponse.created(res, maskSensitive(auction), 'Reverse auction created');
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to create reverse auction', error.code || 'REVERSE_AUCTION_CREATE_ERROR');
+  }
+});
+
+router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auction.create', orgScope), async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      procurementId: z.union([z.string(), z.number()]),
+      title: z.string().trim().optional(),
+      startPrice: z.coerce.number().positive().optional(),
+      minDecrementAmount: z.coerce.number().positive().default(1000),
+      autoExtensionWindowMinutes: z.coerce.number().int().min(1).max(120).default(5),
+      autoExtensionByMinutes: z.coerce.number().int().min(1).max(120).default(5),
+      maxAutoExtensions: z.coerce.number().int().min(0).max(100).default(10),
+      startTime: z.coerce.date().optional(),
+      endTime: z.coerce.date().optional(),
+      durationMinutes: z.coerce.number().int().positive().optional(),
+      selectedSellers: z.array(z.object({
+        sellerOrgId: z.coerce.number().int().positive().optional(),
+        sellerUserId: z.coerce.number().int().positive().optional(),
+        sellerId: z.coerce.number().int().positive().optional(),
+        quotedAmount: z.coerce.number().positive().optional(),
+        vendorName: z.string().optional()
+      })).min(1, 'At least 1 qualified vendor required to start reverse auction')
+    });
+
+    const payload = schema.parse(req.body);
+    const rawId = payload.procurementId;
+    const numId = Number(rawId);
+
+    // Resolve linked procurement
+    let linkedBid: any = null;
+    let linkedReq: any = null;
+
+    if (Number.isFinite(numId) && numId > 0) {
+      linkedBid = await db.procurementBid.findUnique({ where: { id: numId } }).catch(() => null);
+      if (!linkedBid) {
+        linkedReq = await db.buyerRequirement.findUnique({ where: { id: numId } }).catch(() => null);
+      }
+    }
+
+    if (!linkedBid && !linkedReq && typeof rawId === 'string') {
+      linkedBid = await db.procurementBid.findFirst({ where: { bidNumber: rawId } }).catch(() => null);
+      if (!linkedReq) {
+        linkedReq = await db.buyerRequirement.findFirst({ where: { requirementNumber: rawId } }).catch(() => null);
+      }
+    }
+
+    const procurementTitle = payload.title
+      || (linkedBid?.title ? `Reverse Auction - ${linkedBid.title}` : null)
+      || (linkedReq?.title ? `Reverse Auction - ${linkedReq.title}` : 'Reverse Auction Sourcing');
+
+    // Calculate baseline quote
+    const validQuotes = payload.selectedSellers
+      .map(s => Number(s.quotedAmount))
+      .filter(q => Number.isFinite(q) && q > 0);
+
+    const lowestQuote = validQuotes.length ? Math.min(...validQuotes) : 0;
+    const startPrice = payload.startPrice || lowestQuote || Number(linkedBid?.estimatedValue || linkedReq?.budgetMax || 100000);
+    const currentLowestAmount = lowestQuote > 0 && lowestQuote <= startPrice ? lowestQuote : startPrice;
+
+    const startAt = payload.startTime ? new Date(payload.startTime) : new Date();
+    const duration = payload.durationMinutes || 60;
+    const endAt = payload.endTime ? new Date(payload.endTime) : new Date(startAt.getTime() + duration * 60000);
+    const isLiveImmediately = startAt <= new Date();
+
+    const auction = await db.auction.create({
+      data: {
+        auctionCode: nextAuctionCode(),
+        referenceNo: linkedBid ? `PBID-${linkedBid.id}` : linkedReq ? `REQ-${linkedReq.id}` : `PROC-${rawId}`,
+        linkedBidId: linkedBid?.id || (Number.isFinite(numId) ? numId : null),
+        linkedRequirementId: linkedReq?.id || null,
+        title: procurementTitle,
+        description: linkedBid?.description || linkedReq?.description || 'Dynamic Reverse Auction event initiated from evaluated quotations.',
+        procurementMethod: 'REVERSE_AUCTION',
+        category: linkedBid?.category || linkedReq?.category || 'General Procurement',
+        startPrice,
+        basePrice: startPrice,
+        currentBid: currentLowestAmount,
+        currentLowestBid: currentLowestAmount,
+        currentLowestAmount,
+        minDecrement: payload.minDecrementAmount,
+        minDecrementAmount: payload.minDecrementAmount,
+        autoExtensionEnabled: true,
+        autoExtensionWindowMinutes: payload.autoExtensionWindowMinutes,
+        autoExtensionByMinutes: payload.autoExtensionByMinutes,
+        maxAutoExtensions: payload.maxAutoExtensions,
+        currency: 'INR',
+        rankVisibility: 'SHOW_LOWEST_PRICE',
+        minimumQualifiedBidders: payload.selectedSellers.length,
+        buyerOrgId: req.user?.organizationId || linkedBid?.buyerOrganizationId || null,
+        createdByUserId: req.user?.id,
+        startTime: startAt,
+        endTime: endAt,
+        actualStartedAt: isLiveImmediately ? new Date() : null,
+        status: isLiveImmediately ? 'LIVE' : 'SCHEDULED',
+        statusEnum: isLiveImmediately ? 'LIVE' : 'SCHEDULED',
+        auctionConfig: {
+          startedFromBids: true,
+          initialLowestQuote: lowestQuote,
+          enrolledCount: payload.selectedSellers.length
+        }
+      }
+    });
+
+    // Enroll participants with their quotes and assign initial ranks
+    const sortedVendors = [...payload.selectedSellers].sort((a, b) => (Number(a.quotedAmount) || Infinity) - (Number(b.quotedAmount) || Infinity));
+
+    const participantRecords: any[] = [];
+    for (let i = 0; i < sortedVendors.length; i++) {
+      const vendor = sortedVendors[i];
+      const rank = i + 1;
+      const amount = Number(vendor.quotedAmount) || startPrice;
+      const sellerUserId = vendor.sellerUserId || vendor.sellerId || null;
+      let sellerOrgId = vendor.sellerOrgId || null;
+
+      if (!sellerOrgId && sellerUserId) {
+        const u = await db.user.findUnique({ where: { id: sellerUserId }, select: { organizationId: true } }).catch(() => null);
+        if (u?.organizationId) sellerOrgId = u.organizationId;
+      }
+
+      if (!sellerOrgId) {
+        sellerOrgId = sellerUserId || 1;
+      }
+
+      const part = await db.auctionParticipant.create({
+        data: {
+          auctionId: auction.id,
+          sellerOrgId,
+          sellerUserId,
+          status: 'ACCEPTED',
+          currentRank: rank,
+          lastBidAmount: amount
+        }
+      });
+      participantRecords.push(part);
+
+      // Record baseline bid
+      await db.auctionBid.create({
+        data: {
+          auctionId: auction.id,
+          sellerId: sellerUserId || 0,
+          sellerOrgId,
+          participantId: part.id,
+          amount,
+          bidAmount: amount,
+          rankAtSubmission: rank,
+          isValid: true
+        }
+      }).catch(() => null);
+    }
+
+    // Update winner pointer to L1
+    if (participantRecords.length > 0) {
+      await db.auction.update({
+        where: { id: auction.id },
+        data: {
+          currentWinnerId: participantRecords[0].sellerUserId || null
+        }
+      });
+    }
+
+    // Write audit event
+    await writeAuctionEvent(req, auction.id, 'started_from_bids', 'Reverse auction initiated from submitted quotations', {
+      auctionCode: auction.auctionCode,
+      vendorsCount: participantRecords.length,
+      openingL1: currentLowestAmount
+    });
+
+    return apiResponse.created(res, maskSensitive(auction), 'Reverse auction started from submitted quotes');
+  } catch (error: any) {
+    return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to start reverse auction from bids', error.code || 'REVERSE_AUCTION_START_ERROR');
   }
 });
 
@@ -1367,6 +1571,134 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
     return apiResponse.success(res, { auction: maskSensitive(updated), winner: maskSensitive(winner) }, 200, 'Award recommendation generated');
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to recommend award', error.code || 'REVERSE_AUCTION_AWARD_ERROR');
+  }
+});
+
+router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('reverse_auction.award', orgScope), async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const schema = z.object({
+      participantId: z.coerce.number().int().positive().optional(),
+      remarks: z.string().trim().max(1000).optional()
+    });
+    const payload = schema.parse(req.body);
+
+    const auction = await db.auction.findUnique({ where: { id } });
+    if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+    assertAuctionManager(req, auction);
+
+    // Determine winner: either specified participant or current rank 1
+    const winner = payload.participantId
+      ? await db.auctionParticipant.findFirst({ where: { id: payload.participantId, auctionId: id } })
+      : await db.auctionParticipant.findFirst({ where: { auctionId: id, currentRank: 1 } });
+
+    if (!winner) {
+      throw new ApiError(400, 'No qualifying L1 winner found for this auction', 'NO_WINNER_FOUND');
+    }
+
+    const winningAmount = winner.lastBidAmount || auction.currentLowestAmount || auction.startPrice;
+
+    // Resolve seller user ID
+    let sellerUserId = winner.sellerUserId;
+    if (!sellerUserId && winner.sellerOrgId) {
+      const sellerUser = await db.user.findFirst({
+        where: { organizationId: winner.sellerOrgId }
+      });
+      if (sellerUser) sellerUserId = sellerUser.id;
+    }
+    if (!sellerUserId) {
+      sellerUserId = winner.sellerOrgId || 1;
+    }
+
+    const buyerId = req.user?.id || auction.createdByUserId;
+    if (!buyerId) throw new ApiError(400, 'Buyer identity not found', 'BUYER_NOT_FOUND');
+
+    const poNumber = `PO-RA-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    // Create PurchaseOrder record
+    const po = await db.purchaseOrder.create({
+      data: {
+        poNumber,
+        buyerId,
+        sellerId: sellerUserId,
+        title: `Purchase Order - Reverse Auction ${auction.auctionCode || auction.id} (${auction.title || 'Official Award'})`,
+        amount: winningAmount,
+        totalValue: Number(winningAmount),
+        currency: auction.currency || 'INR',
+        status: 'generated',
+        sourceType: 'auction',
+        sourceId: auction.id,
+        metadata: {
+          auctionId: auction.id,
+          auctionCode: auction.auctionCode,
+          winningBid: Number(winningAmount),
+          winnerParticipantId: winner.id,
+          winnerSellerOrgId: winner.sellerOrgId,
+          remarks: payload.remarks || 'Accepted L1 quote from Reverse Auction and generated Purchase Order.'
+        },
+        items: {
+          create: [
+            {
+              itemName: auction.title || 'Reverse Auction Sourced Items',
+              description: auction.description || 'Awarded items per Reverse Auction specification',
+              quantity: 1,
+              unitOfMeasure: 'LOT',
+              unitPrice: Number(winningAmount),
+              totalAmount: Number(winningAmount)
+            }
+          ]
+        }
+      }
+    });
+
+    // Create delivery workflow tracking
+    await db.deliveryWorkflow.create({
+      data: {
+        purchaseOrderId: po.id,
+        status: 'created'
+      }
+    }).catch(() => null);
+
+    // Finalize auction status
+    const updatedAuction = await db.auction.update({
+      where: { id },
+      data: {
+        status: 'COMPLETED',
+        statusEnum: 'AWARD_RECOMMENDED',
+        finalizedAt: new Date(),
+        actualClosedAt: auction.actualClosedAt || new Date(),
+        winnerSellerId: sellerUserId,
+        remarks: payload.remarks || `Purchase Order ${po.poNumber} generated.`
+      }
+    });
+
+    // If linked to a procurementBid, mark it as awarded
+    if (auction.linkedBidId) {
+      await db.procurementBid.update({
+        where: { id: auction.linkedBidId },
+        data: {
+          status: 'AWARDED',
+          lifecycleStage: 'AWARDED'
+        }
+      }).catch(() => null);
+    }
+
+    // Write audit event
+    await writeAuctionEvent(req, id, 'po_generated', `Purchase Order ${poNumber} generated for winning seller`, {
+      poNumber: po.poNumber,
+      poId: po.id,
+      winningAmount: Number(winningAmount),
+      winnerSellerId: sellerUserId
+    });
+
+    return apiResponse.created(res, {
+      success: true,
+      purchaseOrder: po,
+      auction: maskSensitive(updatedAuction),
+      winner: maskSensitive(winner)
+    }, `Purchase Order ${po.poNumber} generated successfully`);
+  } catch (error: any) {
+    return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to generate Purchase Order from auction', error.code || 'REVERSE_AUCTION_PO_ERROR');
   }
 });
 

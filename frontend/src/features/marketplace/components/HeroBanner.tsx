@@ -105,7 +105,7 @@ export function HeroBanner({ banners }: Props) {
 
     return (
         <section
-            className="group/hero relative overflow-hidden bg-slate-950 w-full aspect-[16/10] xs:aspect-[16/9] sm:aspect-[2/1] md:aspect-[2.2/1] lg:aspect-[2.4/1] xl:aspect-[2.6/1] 2xl:aspect-[2.8/1] min-h-[300px] xs:min-h-[330px] sm:min-h-[380px] md:min-h-[440px] lg:min-h-[480px] xl:min-h-[520px] max-h-[640px] flex items-center"
+            className="group/hero relative overflow-hidden bg-slate-950 w-full aspect-[16/10] xs:aspect-[16/9] sm:aspect-[2/1] md:aspect-[2.2/1] lg:aspect-[2.4/1] xl:aspect-[2.6/1] 2xl:aspect-[2.8/1] min-h-[300px] xs:min-h-[330px] sm:min-h-[380px] md:min-h-[440px] lg:min-h-[480px] xl:min-h-[520px] max-h-[640px]"
             aria-label="Hero Banner"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -124,18 +124,13 @@ export function HeroBanner({ banners }: Props) {
                         onError={() => {
                             setCurrentImg(DEFAULT_IMAGES[current % DEFAULT_IMAGES.length]);
                         }}
-                        className={`w-full h-full object-cover object-center transition-all duration-700 ease-out brightness-[1.02] contrast-[1.04] ${fading ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}
+                        className={`w-full h-full object-cover object-center transition-all duration-700 ease-out brightness-[1.03] contrast-[1.02] ${fading ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}
                     />
                 ) : null}
 
-                {/* Multi-layered responsive contrast overlay */}
-                <div className="absolute inset-0 bg-slate-950/40 sm:bg-slate-950/20" />
-                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/75 via-45% to-transparent sm:w-[75%] lg:w-[58%]" />
-                <div className="absolute inset-x-0 bottom-0 h-16 sm:h-24 bg-gradient-to-t from-slate-950/70 to-transparent" />
-                
-                {/* Ambient glowing light pulses */}
-                <div className="absolute top-1/4 left-10 w-96 h-96 rounded-full bg-blue-500/10 blur-3xl animate-pulse pointer-events-none" style={{ animationDuration: '6s' }} />
-                <div className="absolute bottom-10 left-1/3 w-80 h-80 rounded-full bg-[#c8a45c]/10 blur-3xl animate-pulse pointer-events-none" style={{ animationDuration: '8s' }} />
+                {/* Soft, localized text readability gradient on the left side only - right side remains 100% bright and clearly visible */}
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/45 via-40% to-transparent w-full sm:w-[70%] lg:w-[50%] pointer-events-none" />
+                <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-slate-950/30 to-transparent pointer-events-none" />
             </div>
 
             {/* Side Navigation Arrow - Left */}
@@ -158,27 +153,36 @@ export function HeroBanner({ banners }: Props) {
                 <ChevronRight className="h-4 w-4 lg:h-5 lg:w-5 transition-transform duration-200 group-hover/arrow:translate-x-0.5" />
             </button>
 
-            {/* Hero Main Content Container */}
-            <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-6 sm:py-10 md:py-12 pb-10 sm:pb-14 lg:pb-16">
-                
-                {/* FLOATING CTA OVERLAY (Top Right) */}
-                <div className="absolute top-2 right-2 sm:top-5 sm:right-6 lg:top-6 lg:right-8 z-30 flex flex-row items-center gap-2 sm:gap-2.5 pointer-events-auto">
-                    <button 
-                        onClick={handlePostRequirement} 
-                        className="group inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full border border-white/40 bg-black/50 backdrop-blur-md text-white text-[11px] sm:text-xs lg:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/70 active:scale-95 transition-all shadow-lg"
-                    >
-                        <span>Post Requirement</span>
-                    </button>
-                    <button 
-                        onClick={handleStartSelling} 
-                        className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] sm:text-xs lg:text-sm font-black active:scale-95 transition-all shadow-xl shadow-black/30 hover:shadow-[0_0_20px_rgba(200,164,92,0.4)]"
-                    >
-                        {/* Shimmer light sweep */}
-                        <span className="absolute inset-0 -translate-x-full hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/30 to-transparent pointer-events-none" />
-                        <span>Start Selling</span>
-                    </button>
-                </div>
+            {/* Top Bar CTA Overlay (Anchored to top right of hero section) */}
+            <div 
+                className="absolute z-30 flex flex-row items-center gap-2 sm:gap-2.5 pointer-events-auto"
+                style={{
+                    position: 'absolute',
+                    top: '16px',
+                    right: 'clamp(16px, 3.5vw, 48px)',
+                    zIndex: 35
+                }}
+            >
+                <button 
+                    type="button"
+                    onClick={handlePostRequirement} 
+                    className="group inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3.5 sm:px-4 lg:px-5 rounded-full border border-white/50 bg-black/60 backdrop-blur-md text-white text-[11px] sm:text-xs lg:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/70 active:scale-95 transition-all shadow-lg"
+                >
+                    <span>Post Requirement</span>
+                </button>
+                <button 
+                    type="button"
+                    onClick={handleStartSelling} 
+                    className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3.5 sm:px-4 lg:px-5 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] sm:text-xs lg:text-sm font-black active:scale-95 transition-all shadow-xl shadow-black/30 hover:shadow-[0_0_20px_rgba(200,164,92,0.4)]"
+                >
+                    {/* Shimmer light sweep */}
+                    <span className="absolute inset-0 -translate-x-full hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/30 to-transparent pointer-events-none" />
+                    <span>Start Selling</span>
+                </button>
+            </div>
 
+            {/* Hero Main Content Container */}
+            <div className="relative z-10 mx-auto w-full h-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 flex items-center py-6 sm:py-10 md:py-12 pb-10 sm:pb-14 lg:pb-16">
                 <div className="w-full max-w-xl lg:max-w-2xl">
                     <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
                         

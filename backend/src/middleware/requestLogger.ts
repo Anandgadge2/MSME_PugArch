@@ -20,14 +20,17 @@ export const requestLogger = pinoHttp({
     return 'info';
   },
   customProps: req => ({
+    context: 'HTTP',
     actorId: (req as any).user?.id,
     actorRole: (req as any).user?.role
   }),
   customSuccessMessage: (req: any, res: any, responseTime: number) => {
-    return `${req.method} ${req.url} ${res.statusCode} - ${responseTime}ms`;
+    const statusText = res.statusMessage ? ` ${res.statusMessage}` : '';
+    return `${req.method} ${req.originalUrl || req.url} -> ${res.statusCode}${statusText} (${Math.round(responseTime)}ms)`;
   },
   customErrorMessage: (req: any, res: any, err: Error) => {
-    return `${req.method} ${req.url} ${res.statusCode} - Error: ${err.message}`;
+    const statusText = res.statusMessage ? ` ${res.statusMessage}` : '';
+    return `${req.method} ${req.originalUrl || req.url} -> ${res.statusCode}${statusText} - ${err.message}`;
   },
   serializers: {
     req(req) {

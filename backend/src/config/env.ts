@@ -35,7 +35,8 @@ dotenv.config({
     path.resolve(currentDir, '../../.env'),
     path.resolve(currentDir, '../../../.env')
   ],
-  override: false
+  override: false,
+  quiet: true
 });
 
 const isEnvValueEmpty = (val: unknown): boolean => {

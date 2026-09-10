@@ -28,10 +28,17 @@ const loggerOptions: pino.LoggerOptions = {
       'req.body.pan',
       'req.body.aadhaar',
       'req.body.accountNumber',
+      'req.body.gstin',
+      'req.body.ifsc',
       '*.password',
       '*.token',
       '*.secret',
-      '*.apiKey'
+      '*.apiKey',
+      '*.pan',
+      '*.aadhaar',
+      '*.gstin',
+      '*.accountNumber',
+      '*.ifsc'
     ],
     censor: '[REDACTED]'
   }
@@ -42,12 +49,21 @@ if (canUsePinoPretty) {
     target: 'pino-pretty',
     options: {
       colorize: true,
-      translateTime: 'SYS:standard',
-      ignore: 'pid,hostname,service'
+      translateTime: 'SYS:yyyy-mm-dd HH:MM:ss',
+      ignore: 'pid,hostname,service,context',
+      singleLine: true,
+      messageFormat: '{if context}[{context}] {end}{msg}'
     }
   };
 }
 
 export const logger = pino(loggerOptions);
+
+/**
+ * Creates a scoped child logger with an attached context namespace
+ * e.g. createChildLogger('Database') -> logs will display [Database] prefix
+ */
+export const createChildLogger = (context: string) => logger.child({ context });
+
 
 

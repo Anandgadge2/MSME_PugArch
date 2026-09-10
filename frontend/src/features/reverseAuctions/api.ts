@@ -157,6 +157,29 @@ export const reverseAuctionApi = {
     api.get(`/api/reverse-auctions/${encodeURIComponent(String(id))}/result`, { headers: headers(), skipCache: true }).then(res => json<any>(res)),
   recommendAward: (id: number | string, participantId?: number) =>
     api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/award-recommendation`, { participantId }, { headers: headers() }).then(res => json<any>(res)),
+  startFromBids: (data: {
+    procurementId: number | string;
+    title?: string;
+    startPrice?: number;
+    minDecrementAmount?: number;
+    autoExtensionWindowMinutes?: number;
+    autoExtensionByMinutes?: number;
+    maxAutoExtensions?: number;
+    startTime?: string | Date;
+    endTime?: string | Date;
+    durationMinutes?: number;
+    selectedSellers: Array<{
+      sellerOrgId?: number;
+      sellerUserId?: number;
+      sellerId?: number;
+      quotedAmount?: number;
+      vendorName?: string;
+    }>;
+  }) => api.post('/api/reverse-auctions/start-from-bids', data, { headers: headers() }).then(res => json<ReverseAuction>(res)),
+  acceptAndGeneratePo: (id: number | string, data?: { participantId?: number; remarks?: string }) =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/accept-and-generate-po`, data || {}, { headers: headers() }).then(res => json<{ success: boolean; purchaseOrder: any; auction: ReverseAuction; winner: any }>(res)),
+  getByProcurement: (procurementId: number | string) =>
+    api.get(`/api/reverse-auctions/by-procurement/${encodeURIComponent(String(procurementId))}`, { headers: headers(), skipCache: true }).then(res => json<ReverseAuction | null>(res)),
   clarifications: (id: number | string) =>
     api.get(`/api/reverse-auctions/${encodeURIComponent(String(id))}/clarifications`, { headers: headers(), skipCache: true }).then(res => json<AuctionClarification[]>(res)),
   askClarification: (id: number | string, question: string, visibility: 'PUBLIC' | 'PRIVATE' = 'PUBLIC') =>
