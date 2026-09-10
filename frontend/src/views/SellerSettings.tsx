@@ -135,6 +135,7 @@ export default function SellerSettings() {
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('entityType', 'organization_logo');
     const loadingToast = toast.loading('Uploading logo...');
     setIsLogoLoading(true);
     try {
@@ -217,6 +218,7 @@ export default function SellerSettings() {
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('entityType', 'organization_banner');
     const loadingToast = toast.loading('Uploading banner...');
     setIsBannerLoading(true);
     try {
@@ -758,10 +760,10 @@ export default function SellerSettings() {
                           </Button>
                         ) : (
                           <>
-                            <p className="text-[10px] text-slate-500 font-medium text-center">PNG, JPG (Max 2MB)</p>
+                            <p className="text-[10px] text-slate-500 font-medium text-center">PNG, JPG, WEBP (Max 2MB)</p>
                             <label className="cursor-pointer inline-flex items-center justify-center bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-[10px] tracking-wider h-10 px-6 rounded-xl shadow-md w-full transition-all">
                               <span>Upload Logo</span>
-                              <input type="file" onChange={handleLogoUpload} className="hidden" accept="image/png, image/jpeg, image/jpg" />
+                              <input type="file" onChange={handleLogoUpload} className="hidden" accept="image/png, image/jpeg, image/jpg, image/webp" />
                             </label>
                           </>
                         )}
@@ -782,8 +784,6 @@ export default function SellerSettings() {
                           <img
                             src={resolveMediaUrl(bannerUrl) || ''}
                             alt="Storefront Cover Banner"
-                            referrerPolicy="no-referrer"
-                            crossOrigin="anonymous"
                             className="h-full w-full object-cover"
                             onError={(e) => {
                               console.warn('Failed to load banner image:', bannerUrl);
@@ -811,7 +811,7 @@ export default function SellerSettings() {
                             <p className="text-[10px] text-slate-500 font-medium text-center">Recommended aspect ratio: 4:1 (Max 5MB)</p>
                             <label className="cursor-pointer inline-flex items-center justify-center bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-[10px] tracking-wider h-10 px-6 rounded-xl shadow-md w-full transition-all">
                               <span>Upload Banner</span>
-                              <input type="file" onChange={handleBannerUpload} className="hidden" accept="image/png, image/jpeg, image/jpg" />
+                              <input type="file" onChange={handleBannerUpload} className="hidden" accept="image/png, image/jpeg, image/jpg, image/webp" />
                             </label>
                           </>
                         )}

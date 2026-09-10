@@ -2705,11 +2705,47 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
   }).catch(() => null);
   if (procurementDoc?.bid?.buyerId) return { id: Number(procurementDoc.bid.buyerId), role: 'buyer' };
 
+  // Check if file is an organization profile branding asset (logo or banner)
+  const orgProfile = await db.organizationProfile.findFirst({
+    where: {
+      OR: [
+        { logoUrl: { contains: `/files/${fileId}/` } },
+        { bannerUrl: { contains: `/files/${fileId}/` } },
+        { logoUrl: { endsWith: `/files/${fileId}/view` } },
+        { bannerUrl: { endsWith: `/files/${fileId}/view` } }
+      ]
+    },
+    select: { organizationId: true }
+  }).catch(() => null);
+  if (orgProfile) {
+    const asset = await db.fileAsset.findUnique({
+      where: { id: fileId },
+      select: { ownerId: true, ownerRole: true }
+    });
+    if (asset) return { id: Number(asset.ownerId), role: String(asset.ownerRole || 'seller') };
+  }
+
+  // Check if file is referenced as organization logo
+  const org = await db.organization.findFirst({
+    where: { organizationLogoFileId: fileId },
+    select: { id: true }
+  }).catch(() => null);
+  if (org) {
+    const asset = await db.fileAsset.findUnique({
+      where: { id: fileId },
+      select: { ownerId: true, ownerRole: true }
+    });
+    if (asset) return { id: Number(asset.ownerId), role: String(asset.ownerRole || 'seller') };
+  }
+
   const directCatalogueAsset = await db.fileAsset.findFirst({
     where: {
       id: fileId,
       status: 'active',
-      entityType: { in: ['catalogue', 'catalogue_product', 'catalogue_service'] }
+      OR: [
+        { entityType: { in: ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public'] } },
+        { entityType: 'general', mimeType: { startsWith: 'image/' } }
+      ]
     },
     select: { ownerId: true, ownerRole: true }
   });

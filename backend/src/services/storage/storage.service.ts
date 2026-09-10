@@ -213,7 +213,11 @@ const canSellerViewBid = (sellerId: number, bid: any) => {
 };
 
 export const canAccessFileAsset = async (asset: any, user: { id: number; role: string }) => {
-  if (['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'public', 'logo'].includes(asset.entityType) || await isPublicCatalogueAsset(asset.id)) return true;
+  if (
+    ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public'].includes(asset.entityType) ||
+    (asset.entityType === 'general' && typeof asset.mimeType === 'string' && asset.mimeType.startsWith('image/')) ||
+    await isPublicCatalogueAsset(asset.id)
+  ) return true;
   if (!user || !user.id) return false;
   if (user.role === 'admin' || user.role === 'master_admin') return true;
   if (asset.ownerId === user.id) return true;
