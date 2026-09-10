@@ -1065,10 +1065,11 @@ export const authController = {
           : { scopeType: 'PLATFORM' as const, scopeId: null };
       const permissions = isMasterAdmin(updatedUser) ? ['*'] : await getActivePermissionCodes(updatedUser.id, loginScope as any);
       const loginEnabledFeatures = await resolveEnabledFeatures(districtAssignment?.scopeId ?? null);
+      const safeUser = await buildSafeAuthPayload(updatedUser.id);
       res.json({
         ...tokens,
         user: toSafeUser({
-          ...updatedUser,
+          ...(safeUser || updatedUser),
           permissions,
           enabledFeatures: loginEnabledFeatures
         })
@@ -1135,10 +1136,11 @@ export const authController = {
           })
         : null;
       const twoFaEnabledFeatures = await resolveEnabledFeatures(twoFaDistrictAssignment?.scopeId ?? null);
+      const safeUser = await buildSafeAuthPayload(updatedUser.id);
       res.json({
         ...tokens,
         user: toSafeUser({
-          ...updatedUser,
+          ...(safeUser || updatedUser),
           permissions: twoFaPermissions,
           enabledFeatures: twoFaEnabledFeatures
         })

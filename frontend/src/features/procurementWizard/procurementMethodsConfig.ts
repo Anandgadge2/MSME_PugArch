@@ -58,7 +58,7 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     estimatedTime: '5-7 Days',
     buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation', 'requiredByDate'],
-    allowedEvaluations: ['L1 total value', 'Item-wise L1', 'Two-stage bid with Reverse Auction (e-RA)', 'Reverse auction final rank']
+    allowedEvaluations: ['L1 total value']
   },
   {
     id: 'RFP',
@@ -90,7 +90,7 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     estimatedTime: '21-45 Days',
     buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation', 'submissionDate'],
-    allowedEvaluations: ['L1 total value', 'Technical qualification then L1', 'Two-stage bid with Reverse Auction (e-RA)', 'Reverse auction final rank']
+    allowedEvaluations: ['L1 total value', 'QCBS / weighted technical-commercial score']
   },
   {
     id: 'LIMITED_TENDER',
@@ -106,7 +106,7 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     estimatedTime: '10-15 Days',
     buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation', 'submissionDate'],
-    allowedEvaluations: ['L1 total value', 'Technical qualification then L1', 'Two-stage bid with Reverse Auction (e-RA)', 'Reverse auction final rank']
+    allowedEvaluations: ['L1 total value']
   },
   {
     id: 'RATE_CONTRACT',
@@ -122,7 +122,7 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     estimatedTime: '10-20 Days',
     buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
-    allowedEvaluations: ['L1 total value', 'Item-wise L1', 'Two-stage bid with Reverse Auction (e-RA)', 'Reverse auction final rank']
+    allowedEvaluations: ['L1 total value']
   },
   {
     id: 'REPEAT_ORDER',

@@ -361,32 +361,8 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
 });
 
 import { useOrgRole, usePermissions, type OrgStatus } from '../../hooks/useOrgRole';
-
-export function getResolvedOrgName(user: any, orgStatus?: OrgStatus | null): string {
-  if (!user) return '';
-  const reg = (user.registrationDetails || {}) as Record<string, any>;
-  return (
-    orgStatus?.organization?.organizationName ||
-    user.organization?.organizationName ||
-    user.sellerProfile?.businessName ||
-    user.sellerProfile?.companyName ||
-    user.sellerProfile?.nameAsInPan ||
-    user.buyerProfile?.departmentName ||
-    user.buyerProfile?.organizationName ||
-    user.buyerProfile?.entityName ||
-    user.buyerProfile?.companyName ||
-    user.shgProfile?.groupName ||
-    user.shgProfile?.shgName ||
-    reg.businessName ||
-    reg.companyName ||
-    reg.organizationName ||
-    reg.organisation ||
-    reg.enterpriseName ||
-    reg.legalName ||
-    reg.tradeName ||
-    ''
-  );
-}
+import { getResolvedOrgName } from '../../utils/organizationUtils';
+export { getResolvedOrgName };
 
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onHoverChange }: SidebarProps) {
   const { user, logout } = useAuth();

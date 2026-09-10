@@ -51,6 +51,8 @@ import {
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
+import { useOrgRole } from '../../../hooks/useOrgRole';
+import { getResolvedOrgName } from '../../../utils/organizationUtils';
 import { marketplaceApi } from '../../marketplace/api';
 import { DELIVERY_TYPES, PAYMENT_TERMS, QUANTITY_UNITS } from '../../../constants/dropdowns';
 import { formatRefId } from '../../../utils/refIdUtils';
@@ -1033,7 +1035,7 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     rebidsAllowed: true,
   },
   terms: {
-    paymentTerms: '100% after delivery and acceptance',
+    paymentTerms: 'ON_DELIVERY',
     deliveryTerms: 'Door delivery to site',
     freightIncluded: true,
     gstIncluded: false,
@@ -1073,6 +1075,8 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
 export default function CreateProcurementPage() {
   const router = useRouter();
   const { user, token } = useAuth();
+  const { orgStatus } = useOrgRole();
+  const resolvedOrgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
   const { data: activeCart, isLoading: isCartLoading } = useActiveCart({ enabled: true });
   const searchParams = useSearchParams();
   const draftIdParam = searchParams?.get('id') || searchParams?.get('draftId');
@@ -1090,19 +1094,20 @@ export default function CreateProcurementPage() {
 
   // Determine initial buyer type from profile (Government Buyer option removed, defaulting to PRIVATE_BUYER)
   const initialBuyerType = useMemo<BuyerType>(() => {
-    // const u = user as any;
-    // const orgType = u?.buyerProfile?.organizationType || u?.organization?.organizationType || u?.organizationType || '';
-    // const isGov = String(orgType).toUpperCase().includes('GOVT') ||
-    //   String(orgType).toUpperCase().includes('GOVERNMENT') ||
-    //   String(orgType).toUpperCase().includes('MINISTRY') ||
-    //   String(orgType).toUpperCase().includes('DEPT') ||
-    //   String(orgType).toUpperCase().includes('PSU');
-    // return isGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER';
     return 'PRIVATE_BUYER';
   }, []);
 
   const [draft, setDraft] = useState<Draft>(() => {
+    let cachedOrg = '';
     if (typeof window !== 'undefined') {
+      try {
+        const rawUser = localStorage.getItem('msme_user_cache');
+        if (rawUser) {
+          cachedOrg = getResolvedOrgName(JSON.parse(rawUser));
+        }
+      } catch {
+        // ignore
+      }
       try {
         const raw = localStorage.getItem('msme:guided-procurement-create:v2');
         if (raw) {
@@ -1111,6 +1116,9 @@ export default function CreateProcurementPage() {
             if (Array.isArray(saved.items)) {
               saved.items = saved.items.map((it: any, idx: number) => normalizeDraftItem(it, idx));
             }
+            if (saved.internal && !saved.internal.orgName && cachedOrg) {
+              saved.internal.orgName = cachedOrg;
+            }
             return saved;
           }
         }
@@ -1118,7 +1126,11 @@ export default function CreateProcurementPage() {
         console.error('Failed to load local draft from localStorage', e);
       }
     }
-    return defaultDraft(initialMethod, initialBuyerType);
+    const def = defaultDraft(initialMethod, initialBuyerType);
+    if (cachedOrg) {
+      def.internal.orgName = cachedOrg;
+    }
+    return def;
   });
   const draftIdRef = React.useRef<number | undefined>(draft?.id);
   useEffect(() => {
@@ -1230,32 +1242,55 @@ export default function CreateProcurementPage() {
     };
   }, [showItemDrawer]);
 
-  // Auto-fill buyer details and organization on load for new drafts
+  // Auto-fill and reactively keep buyer details & organization in sync from authenticated profile
   useEffect(() => {
-    if (user && !draftIdParam && !hasAutofilled) {
-      const u = user as any;
-      const orgName = u.organization?.organizationName || u.buyerProfile?.organizationName || '';
-      const department = u.buyerProfile?.department || '';
-      const contactPerson = u.buyerProfile?.representativeName || u.name || '';
-      const email = u.buyerProfile?.email || u.email || '';
-      const mobile = u.buyerProfile?.mobile || u.mobile || '';
+    if (!user && !orgStatus) return;
+    const u = user as any;
+    const org = resolvedOrgName || u?.organization?.organizationName || u?.buyerProfile?.organizationName || '';
+    const department = u?.buyerProfile?.department || '';
+    const contactPerson = u?.buyerProfile?.representativeName || u?.name || '';
+    const email = u?.buyerProfile?.email || u?.email || '';
+    const mobile = u?.buyerProfile?.mobile || u?.mobile || '';
 
-      queueMicrotask(() => {
-        setDraft(current => ({
-          ...current,
-          internal: {
-            ...current.internal,
-            orgName: current.internal.orgName || orgName,
-            department: current.internal.department || department,
-            contactPerson: current.internal.contactPerson || contactPerson,
-            email: current.internal.email || email,
-            mobile: current.internal.mobile || mobile,
-          }
-        }));
-        setHasAutofilled(true);
-      });
-    }
-  }, [user, draftIdParam, hasAutofilled]);
+    setDraft(current => {
+      let changed = false;
+      const nextInternal = { ...current.internal };
+
+      if (!nextInternal.orgName?.trim() && org) {
+        nextInternal.orgName = org;
+        changed = true;
+      }
+      if (!nextInternal.department?.trim() && department) {
+        nextInternal.department = department;
+        changed = true;
+      }
+      if (!nextInternal.contactPerson?.trim() && contactPerson) {
+        nextInternal.contactPerson = contactPerson;
+        changed = true;
+      }
+      if (!nextInternal.email?.trim() && email) {
+        nextInternal.email = email;
+        changed = true;
+      }
+      if (!nextInternal.mobile?.trim() && mobile) {
+        nextInternal.mobile = mobile;
+        changed = true;
+      }
+
+      if (!changed) return current;
+
+      const nextDraft = { ...current, internal: nextInternal };
+      if (!draftIdParam && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(nextDraft));
+        } catch {
+          // ignore
+        }
+      }
+      return nextDraft;
+    });
+    setHasAutofilled(true);
+  }, [user, orgStatus, resolvedOrgName, draftIdParam]);
 
   // Auto-fill buyer type on load
   useEffect(() => {
@@ -1298,7 +1333,7 @@ export default function CreateProcurementPage() {
         const base = defaultDraft(payload.type || 'RFQ', payload.basics?.buyerType || initialBuyerType);
 
         const u = userRef.current as any;
-        const orgName = u?.organization?.organizationName || u?.buyerProfile?.organizationName || '';
+        const orgName = resolvedOrgName || u?.organization?.organizationName || u?.buyerProfile?.organizationName || '';
         const department = u?.buyerProfile?.department || '';
         const contactPerson = u?.buyerProfile?.representativeName || u?.name || '';
         const email = u?.buyerProfile?.email || u?.email || '';
@@ -1320,7 +1355,7 @@ export default function CreateProcurementPage() {
           internal: {
             ...base.internal,
             ...internalPayload,
-            orgName: internalPayload.orgName || orgName,
+            orgName: (internalPayload.orgName || '').trim() || orgName,
             department: internalPayload.department || department,
             contactPerson: internalPayload.contactPerson || contactPerson,
             email: internalPayload.email || email,
@@ -2242,6 +2277,7 @@ export default function CreateProcurementPage() {
                 <InternalDetailsForm
                   draft={draft}
                   updateDraft={updateDraft}
+                  resolvedOrgName={resolvedOrgName}
                 />
               </SectionCard>
             )}
@@ -3119,26 +3155,56 @@ function BasicsStepForm({
 // ─────────────────────────────────────────────────────────────────────────────
 function InternalDetailsForm({
   draft,
-  updateDraft
+  updateDraft,
+  resolvedOrgName
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
+  resolvedOrgName?: string;
 }) {
   // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   const updateInternal = (key: keyof Draft['internal'], val: string | boolean) => {
     updateDraft(c => ({ ...c, internal: { ...c.internal, [key]: val } }));
   };
 
+  useEffect(() => {
+    if (!draft.internal.orgName?.trim() && resolvedOrgName) {
+      updateInternal('orgName', resolvedOrgName);
+    }
+  }, [draft.internal.orgName, resolvedOrgName]);
+
+  const isAutoFetched = Boolean(resolvedOrgName && draft.internal.orgName?.trim().toLowerCase() === resolvedOrgName.trim().toLowerCase());
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Organization name" required>
-          <input
-            value={draft.internal.orgName}
-            onChange={e => updateInternal('orgName', e.target.value)}
-            className={inputClass}
-            placeholder="Enter organization title"
-          />
+          <div className="space-y-1.5">
+            <div className="relative flex items-center">
+              <input
+                value={draft.internal.orgName}
+                onChange={e => updateInternal('orgName', e.target.value)}
+                className={inputClass}
+                placeholder="Enter organization title"
+              />
+              {resolvedOrgName && !isAutoFetched && (
+                <button
+                  type="button"
+                  onClick={() => updateInternal('orgName', resolvedOrgName)}
+                  className="absolute right-2 text-[11px] font-bold text-[#12335f] hover:text-[#0d2342] bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition"
+                  title={`Use verified organization: ${resolvedOrgName}`}
+                >
+                  Auto-fill from profile
+                </button>
+              )}
+            </div>
+            {isAutoFetched && (
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>Auto-fetched from verified organization profile</span>
+              </p>
+            )}
+          </div>
         </Field>
 
         {/* Buying Department field commented out as requested */}
@@ -5969,7 +6035,6 @@ function ScheduleStepForm({
                 <option value="SINGLE_SUPPLIER">Single Supplier</option>
                 <option value="MULTI_SUPPLIER">Multiple Suppliers</option>
                 <option value="PANEL_RATE_CONTRACT">Panel Rate Contract</option>
-                <option value="ITEM_WISE_L1">Item-wise L1</option>
               </select>
             </Field>
             <Field label="Selected Supplier(s)" required>
@@ -6221,8 +6286,18 @@ function CommercialTermsForm({
 
           <Field label="Payment terms" required error={fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.')}>
             <select
-              value={draft.terms.paymentTerms}
-              onChange={e => updateTerms('paymentTerms', e.target.value)}
+              value={draft.terms.paymentTerms === 'ADVANCE_PAYMENT' ? 'ADVANCE_PAYMENT' : 'ON_DELIVERY'}
+              onChange={e => {
+                const val = e.target.value;
+                updateDraft(c => ({
+                  ...c,
+                  terms: {
+                    ...c.terms,
+                    paymentTerms: val,
+                    advanceAllowed: val === 'ADVANCE_PAYMENT',
+                  }
+                }));
+              }}
               className={controlClass(fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.'))}
             >
               {PAYMENT_TERMS.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -6427,46 +6502,15 @@ function EvaluationBasisForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Evaluation Method basis" required>
           <select
-            value={draft.evaluation.method}
-            onChange={e => {
-              const val = e.target.value;
-              updateEval('method', val);
-              if (val === 'Two-stage bid with Reverse Auction (e-RA)' || val === 'Reverse auction final rank') {
-                updateDraft(c => ({
-                  ...c,
-                  basics: { ...c.basics, isReverseAuctionNeeded: true },
-                  auctionConfig: {
-                    ...c.auctionConfig,
-                    procurementMethod: 'BID_WITH_REVERSE_AUCTION',
-                    auctionTitle: c.auctionConfig.auctionTitle || c.basics.title || 'Live Reverse Auction',
-                    auctionCategory: c.auctionConfig.auctionCategory || c.basics.category,
-                    auctionSubCategory: c.auctionConfig.auctionSubCategory || c.basics.subCategory,
-                    startingBidPrice: c.auctionConfig.startingBidPrice || c.basics.estimatedValue || 0,
-                    minimumBidDecrement: c.auctionConfig.minimumBidDecrement > 0 ? c.auctionConfig.minimumBidDecrement : Math.max(500, Math.round((c.basics.estimatedValue || 100000) * 0.01)),
-                    autoExtensionEnabled: true,
-                    extensionTriggerMinutes: 5,
-                    extensionDurationMinutes: 5,
-                    maximumExtensions: 3,
-                    rankVisibility: 'SHOW_RANK_ONLY',
-                  }
-                }));
-              }
-            }}
+            value={draft.evaluation.method === 'QCBS / weighted technical-commercial score' ? 'QCBS / weighted technical-commercial score' : 'L1 total value'}
+            onChange={e => updateEval('method', e.target.value)}
             className={inputClass}
           >
-            <>
-              <option value="L1 total value">L1 Total Value basis</option>
-              <option value="Item-wise L1">Item-wise L1 rates basis</option>
-              <option value="Package-wise L1">Package-wise L1 rates basis</option>
-              <option value="Technical qualification then L1">Technical Qualification then L1 Sourcing</option>
-              <option value="Two-stage bid with Reverse Auction (e-RA)">Two-Stage Bid with Live Reverse Auction (e-RA)</option>
-              <option value="QCBS / weighted technical-commercial score">Quality and Cost Based Selection (QCBS)</option>
-              <option value="Reverse auction final rank">Reverse Auction Final Bid Rank</option>
-              <option value="Lowest landed cost">Lowest Landed Cost</option>
-            </>
+            <option value="L1 total value">L1 Total Value Basis (Lowest Landed Cost)</option>
+            <option value="QCBS / weighted technical-commercial score">Quality and Cost Based Selection (QCBS)</option>
           </select>
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            Choose how vendor proposals are evaluated. Enable Reverse Auction below to conduct real-time price compression among qualified bidders.
+            Choose how vendor proposals are evaluated. Use the Live Reverse Auction card below if dynamic downward price bidding is required.
           </p>
         </Field>
 
