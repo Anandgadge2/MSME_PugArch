@@ -6662,13 +6662,13 @@ app.post('/api/notifications/:id/read', authenticate, async (req: AuthRequest, r
 
 const startListening = (port: number) => {
   const server = app.listen(port, () => {
-    logger.info({ port }, 'Server running');
+    logger.info({ context: 'Server', port }, `MSME Core API listening on http://localhost:${port} [env: ${env.NODE_ENV}]`);
     try {
       const portFilePath = path.resolve(process.cwd(), '../.backend-port');
       fs.writeFileSync(portFilePath, String(port), 'utf8');
-      logger.info(`Wrote backend port ${port} to ${portFilePath}`);
+      logger.debug({ context: 'Server' }, `Wrote backend port ${port} to ${portFilePath}`);
     } catch (err) {
-      logger.warn({ err }, 'Failed to write backend port file');
+      logger.warn({ context: 'Server', err }, 'Failed to write backend port file');
     }
   });
 
@@ -6683,11 +6683,11 @@ const startListening = (port: number) => {
   server.on('error', (err: any) => {
     if (err?.code === 'EADDRINUSE') {
       const nextPort = port + 1;
-      console.warn(`Port ${port} is in use. Retrying on port ${nextPort}...`);
+      logger.warn({ context: 'Server', port, nextPort }, `Port ${port} is in use. Retrying on port ${nextPort}...`);
       startListening(nextPort);
       return;
     }
-    console.error('Server failed to start:', err);
+    logger.error({ context: 'Server', err }, 'Server failed to start');
   });
 };
 
@@ -6699,20 +6699,22 @@ const checkStartupDatabaseConnection = async () => {
     try {
       await prisma.$queryRawUnsafe('SELECT 1');
       if (attempt > 1) {
-        logger.info(`Database connected on startup (attempt ${attempt}/${maxRetries})`);
+        logger.info({ context: 'Database' }, `Database connected on startup (attempt ${attempt}/${maxRetries})`);
+      } else {
+        logger.info({ context: 'Database' }, 'Database connection established');
       }
       return true;
     } catch (error) {
       if (attempt < maxRetries) {
         const delayMs = 2000 * Math.pow(2, attempt - 1); // 2s, 4s, 8s
         logger.warn(
-          { err: summarizeBackgroundError(error), attempt, maxRetries, retryInMs: delayMs },
+          { context: 'Database', err: summarizeBackgroundError(error), attempt, maxRetries, retryInMs: delayMs },
           `Database unreachable on startup attempt ${attempt}/${maxRetries}; retrying in ${delayMs / 1000}s...`
         );
         await new Promise(resolve => setTimeout(resolve, delayMs));
       } else {
         logger.warn(
-          { err: summarizeBackgroundError(error) },
+          { context: 'Database', err: summarizeBackgroundError(error) },
           'Database is unreachable on startup; skipping database background jobs. User login requires DATABASE_URL to reach the live database.'
         );
         return false;
@@ -6724,17 +6726,17 @@ const checkStartupDatabaseConnection = async () => {
 
 export async function startServer() {
   await connectRedis().catch(error => {
-    console.error('[Redis] continuing without Redis connection', error instanceof Error ? error.message : error);
+    logger.warn({ context: 'Redis', err: error instanceof Error ? error.message : error }, 'Continuing without Redis connection');
   });
 
   if (redis && isRedisReady()) {
     try {
       const subClient = redis.duplicate();
       subClient.on('error', (err) => {
-        logger.warn({ err }, 'Redis subscription client error');
+        logger.warn({ context: 'Redis', err }, 'Redis subscription client error');
       });
       await subClient.connect().catch((err) => {
-        logger.warn({ err }, 'Redis subscription client connect failed');
+        logger.warn({ context: 'Redis', err }, 'Redis subscription client connect failed');
       });
       if (subClient.status === 'ready') {
         const pattern = `*notifications:user:*`;
@@ -6750,14 +6752,14 @@ export async function startServer() {
               }
             }
           } catch (err) {
-            logger.warn({ err, message }, 'Failed to parse pattern notification message');
+            logger.warn({ context: 'Redis', err, message }, 'Failed to parse pattern notification message');
           }
         });
         await subClient.psubscribe(pattern);
-        logger.info({ pattern }, 'Subscribed to Redis notifications channel pattern');
+        logger.info({ context: 'Redis', pattern }, 'Subscribed to Redis notifications channel pattern');
       }
     } catch (err) {
-      logger.warn({ err }, 'Failed to initialize Redis subscription');
+      logger.warn({ context: 'Redis', err }, 'Failed to initialize Redis subscription');
     }
   }
 
@@ -6788,7 +6790,7 @@ export async function startServer() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   startServer().catch(err => {
-    console.error("Critical error:", err);
+    logger.fatal({ context: 'Server', err }, 'Critical server startup failure');
     process.exit(1);
   });
 }

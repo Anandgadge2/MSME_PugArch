@@ -858,8 +858,12 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
   const isPrimaryApproved = useMemo(() => {
     if (!user) return false;
-    const status = user.onboardingStatus || user.registrationStatus;
-    if (status === 'approved' || status === 'approved_for_procurement') return true;
+    // Admins and Master Admins are verified platform administrators when active
+    if (user.role === 'admin' || user.role === 'master_admin') {
+      return user.accountStatus === 'ACTIVE';
+    }
+    const status = String(user.onboardingStatus || user.registrationStatus || '');
+    if (status === 'approved' || status === 'approved_for_procurement' || status === 'completed') return true;
     if (user.role === 'seller') {
       return user.sellerProfile?.verificationStatusEnum === 'VERIFIED';
     } else if (user.role === 'buyer') {
@@ -1299,7 +1303,17 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-[#12335f] text-white shadow-2xs">
                       {displayRole}
                     </span>
-                    {isPrimaryApproved ? (
+                    {user?.role === 'admin' || user?.role === 'master_admin' ? (
+                      user.accountStatus === 'ACTIVE' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" /> Verified Admin
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-amber-50 text-amber-700 border border-amber-200">
+                          <Clock className="h-2.5 w-2.5 text-amber-600" /> Pending Activation
+                        </span>
+                      )
+                    ) : isPrimaryApproved ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200">
                         <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" /> Verified Entity
                       </span>

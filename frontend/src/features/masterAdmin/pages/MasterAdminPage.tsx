@@ -1320,7 +1320,7 @@ export default function MasterAdminPage() {
           cascadeDelete: () => masterAdminApi.cascadeDeleteOrganization(id, reason, confirmPhrase || '')
         };
         await actions[action]?.();
-        await loadOrganizations();
+        void loadOrganizations();
       }
       if (entity === 'company' && id) {
         if (action === 'cascadeDelete') {
@@ -1336,7 +1336,7 @@ export default function MasterAdminPage() {
           const body = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(body?.message || 'Request failed');
         }
-        await loadCompanies();
+        void loadCompanies();
       }
       if (entity === 'user' && id) {
         const actions: Record<string, () => Promise<any>> = {
@@ -1355,7 +1355,14 @@ export default function MasterAdminPage() {
         if (action === 'resetPassword' && result?.temporaryPassword) {
           toast.success(`Temporary password generated: ${result.temporaryPassword}`);
         }
-        await loadUsers();
+        const updatedUser = result?.user || result?.data || result;
+        if (updatedUser?.id) {
+          setUsers(prev => ({
+            ...prev,
+            items: prev.items.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u)
+          }));
+        }
+        void loadUsers();
       }
       if (entity === 'feature' && selectedCompanyId && featureKey) {
         const res = await api.fetch(`/api/master-admin/companies/${selectedCompanyId}/features/${featureKey}/${action}`, {
@@ -1366,42 +1373,42 @@ export default function MasterAdminPage() {
         });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(body?.message || 'Request failed');
-        await loadFeatures();
+        void loadFeatures();
       }
       if (entity === 'email' && action === 'test') {
         await masterAdminApi.sendTestEmail({ to: reason, reason: 'Master admin SMTP test' });
       }
       if (entity === 'emailTemplate' && actionDialog.templateId && action === 'deactivate') {
         await masterAdminApi.deleteEmailTemplate(actionDialog.templateId, reason);
-        if (emailTemplateCompanyId) await loadEmailTemplates(emailTemplateCompanyId);
+        if (emailTemplateCompanyId) void loadEmailTemplates(emailTemplateCompanyId);
       }
       if (entity === 'marketplaceProduct' && id && status) {
         await masterAdminApi.updateMarketplaceProductStatus(id, status, reason);
-        await loadMarketplaceProducts();
+        void loadMarketplaceProducts();
       }
       if (entity === 'marketplaceService' && id && status) {
         await masterAdminApi.updateMarketplaceServiceStatus(id, status, reason);
-        await loadMarketplaceServices();
+        void loadMarketplaceServices();
       }
       if (entity === 'order' && id && status) {
         await masterAdminApi.updateOrderStatus(id, status, reason);
-        await loadOrders();
+        void loadOrders();
       }
       if (entity === 'invoice' && id && status) {
         await masterAdminApi.updateInvoiceStatus(id, status, reason);
-        await loadInvoices();
+        void loadInvoices();
       }
       if (entity === 'payment' && id && status) {
         await masterAdminApi.updatePaymentStatus(id, status, reason);
-        await loadPayments();
+        void loadPayments();
       }
       if (entity === 'escrow' && id && status) {
         await masterAdminApi.updateEscrowStatus(id, status, reason);
-        await loadEscrows();
+        void loadEscrows();
       }
       toast.success(successMessage || `${labelize(action)} completed`);
       setActionDialog(null);
-      await loadOverview();
+      void loadOverview();
     } catch (err: any) {
       toast.error(err.message || 'Action failed');
     } finally {
@@ -1416,24 +1423,21 @@ export default function MasterAdminPage() {
       if (editor.type === 'organization') {
         if (editor.mode === 'create') await masterAdminApi.createOrganization(values);
         else await masterAdminApi.updateOrganization(Number(editor.record.id), values);
-        await loadOrganizations();
-        await loadCompanies();
+        void Promise.allSettled([loadOrganizations(), loadCompanies()]);
       }
       if (editor.type === 'company') {
         if (editor.mode === 'create') await masterAdminApi.createCompany(values);
         else await masterAdminApi.updateCompany(Number(editor.record.id), values);
-        await loadCompanies();
-        await loadFeatures();
-        await loadSettings();
+        void Promise.allSettled([loadCompanies(), loadFeatures(), loadSettings()]);
       }
       if (editor.type === 'user') {
         if (editor.mode === 'create') await masterAdminApi.createUser(values);
         else await masterAdminApi.updateUser(Number(editor.record.id), values);
-        await loadUsers();
+        void loadUsers();
       }
       if (editor.type === 'email') {
         await masterAdminApi.updateEmailSettings(values);
-        await loadEmail();
+        void loadEmail();
       }
       if (editor.type === 'emailTemplate' && emailTemplateCompanyId) {
         if (editor.mode === 'create') {
@@ -1441,11 +1445,11 @@ export default function MasterAdminPage() {
         } else {
           await masterAdminApi.updateEmailTemplate(editor.record.id, values);
         }
-        await loadEmailTemplates(emailTemplateCompanyId);
+        void loadEmailTemplates(emailTemplateCompanyId);
       }
       toast.success(`${labelize(editor.type)} saved`);
       setEditor(null);
-      await loadOverview();
+      void loadOverview();
     } catch (err: any) {
       toast.error(err.message || 'Save failed');
     } finally {
@@ -4165,6 +4169,10 @@ function EntityEditor({
         if (mobErr) nextErrors.mobile = mobErr;
         else nextValues.mobile = mobClean;
       }
+
+      if (values.role === 'admin' || values.role === 'master_admin') {
+        nextValues.organizationId = '';
+      }
     }
 
     if (editor.type === 'company') {
@@ -4230,9 +4238,21 @@ function EntityEditor({
             <FormField label="Name" value={values.name} onChange={value => set('name', sanitizePersonNameInput(value))} error={errors.name} maxLength={100} required />
             <FormField label="Email" value={values.email} onChange={value => set('email', value)} error={errors.email} inputMode="email" required />
             <FormField label="Mobile" value={values.mobile} onChange={value => set('mobile', sanitizeIndianMobileInput(value))} error={errors.mobile} inputMode="numeric" maxLength={10} />
-            <SelectField label="Role" value={values.role} onChange={value => set('role', value)} options={['buyer', 'seller', 'shg', 'admin', 'master_admin']} />
+            <SelectField
+              label="Role"
+              value={values.role}
+              onChange={value => {
+                set('role', value);
+                if (value === 'admin' || value === 'master_admin') {
+                  set('organizationId', '');
+                }
+              }}
+              options={['buyer', 'seller', 'shg', 'admin', 'master_admin']}
+            />
             <SelectField label="Status" value={values.accountStatus} onChange={value => set('accountStatus', value)} options={['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']} />
-            <OrganizationSelectField organizations={organizations} value={values.organizationId} onChange={value => set('organizationId', value)} />
+            {values.role !== 'admin' && values.role !== 'master_admin' && (
+              <OrganizationSelectField organizations={organizations} value={values.organizationId} onChange={value => set('organizationId', value)} />
+            )}
             {editor.mode === 'create' && <FormField label="Temporary password" value={values.password} onChange={value => set('password', value)} placeholder="Auto-generated if blank" />}
           </>
         )}
