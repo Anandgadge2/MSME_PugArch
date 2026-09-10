@@ -1527,11 +1527,18 @@ function LineItemsTable({
                   sp.specification,
                   sp.technicalSpecification,
                   sp.details,
+                  sp.scopeOfWork,
+                  sp.scope,
+                  sp.remarks,
                   item.description,
                   item.desc,
                   item.details,
+                  item.scopeOfWork,
                   item.scope,
-                  item.requirements
+                  item.remarks,
+                  item.requirements,
+                  item.particulars,
+                  sp.particulars
                 );
 
                 const itemBrand = firstPresent(

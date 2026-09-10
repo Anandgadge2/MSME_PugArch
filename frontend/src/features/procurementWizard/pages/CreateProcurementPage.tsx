@@ -63,6 +63,7 @@ import {
 import { api, BASE_URL, readJsonResponse, unwrapApiData } from '../../../lib/api';
 import { authHeaders, unwrap } from '../../shared/apiClient';
 import { downloadCsv } from '../../shared/exportUtils';
+import ExcelJS from 'exceljs';
 import { fetchDeliveryAddresses, createDeliveryAddress, type DeliveryAddressDto } from '../../directPurchase/api';
 import { useActiveCart } from '../../cart/hooks';
 import type { CartItemDto } from '../../cart/api';
@@ -377,7 +378,7 @@ const isRateContractMethod = (method: ProcurementMethodId) => method === 'RATE_C
 const itemTemplateHeaders = [
   'Item Type',
   'Item Name',
-  'Description',
+  'Description / Scope of Work',
   'Quantity',
   'Unit',
   'Unit Price',
@@ -432,39 +433,208 @@ const parseCsvText = (text: string): string[][] => {
   return rows;
 };
 
+const readSpreadsheetRows = async (file: File): Promise<string[][]> => {
+  const lowerName = file.name.toLowerCase();
+  const isExcel = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
+
+  if (isExcel) {
+    const workbook = new ExcelJS.Workbook();
+    const arrayBuffer = await file.arrayBuffer();
+    await workbook.xlsx.load(arrayBuffer);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) return [];
+
+    const rows: string[][] = [];
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      const rowValues: string[] = [];
+      const values = row.values;
+      if (Array.isArray(values)) {
+        for (let i = 1; i < values.length; i++) {
+          const val = values[i];
+          if (val === null || val === undefined) {
+            rowValues.push('');
+          } else if (typeof val === 'object' && 'result' in val) {
+            rowValues.push(String((val as any).result ?? '').trim());
+          } else if (typeof val === 'object' && 'text' in val) {
+            rowValues.push(String((val as any).text ?? '').trim());
+          } else {
+            rowValues.push(String(val).trim());
+          }
+        }
+      }
+      if (rowValues.some(c => c.length > 0)) {
+        rows.push(rowValues);
+      }
+    });
+    return rows;
+  }
+
+  return parseCsvText(await file.text());
+};
+
 const normalizeImportHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+const DESCRIPTION_SCOPE_ALIASES = [
+  'descriptionscopeofwork',
+  'descriptionscope',
+  'scopeofwork',
+  'scopeofworkdeliverables',
+  'scopeofworkanddeliverables',
+  'scopeofworkdeliverablesdetails',
+  'scopeofworkdetails',
+  'scopedeliverables',
+  'specificationsscope',
+  'specificationsscopeofwork',
+  'specificationscope',
+  'specificationscopeofwork',
+  'scopespecifications',
+  'scopespecification',
+  'technicalspecification',
+  'technicalspecifications',
+  'technicalspecs',
+  'detailedtechnicalspecifications',
+  'detailedtechnicalspecification',
+  'technicaldetails',
+  'itemdescription',
+  'productdescription',
+  'servicedescription',
+  'workdescription',
+  'detailedscopeofwork',
+  'detailedscope',
+  'description',
+  'specification',
+  'specifications',
+  'scope',
+  'sow',
+  'details',
+  'desc',
+  'remarks',
+  'technicalnote',
+  'technicalnotes',
+  'requirements',
+  'requirement',
+  'specificationname',
+  'specificationvalue'
+];
+
+const ITEM_NAME_ALIASES = [
+  'itemname',
+  'name',
+  'itemservicename',
+  'productservicename',
+  'productname',
+  'servicename',
+  'itemservice',
+  'item',
+  'product',
+  'service',
+  'title',
+  'itemtitle',
+  'particulars',
+  'itemparticulars',
+  'materialname',
+  'equipmentname',
+  'productservice'
+];
+
 const importedCsvRowToItem = (headers: string[], row: string[], index: number): ItemRow | null => {
-  const get = (...names: string[]) => {
-    const headerIndex = headers.findIndex(header => names.includes(normalizeImportHeader(header)));
-    return headerIndex >= 0 ? String(row[headerIndex] || '').trim() : '';
+  const normHeaders = headers.map(normalizeImportHeader);
+
+  const getByAliases = (...aliases: string[]) => {
+    const idx = normHeaders.findIndex(h => aliases.includes(h));
+    return idx >= 0 ? String(row[idx] || '').trim() : '';
   };
 
-  const name = get('itemname', 'name', 'productservice');
+  let name = getByAliases(...ITEM_NAME_ALIASES);
+  let nameColIdx = normHeaders.findIndex(h => ITEM_NAME_ALIASES.includes(h));
+
+  // 1. Direct alias match for Description / Scope of Work
+  let specification = '';
+  for (const alias of DESCRIPTION_SCOPE_ALIASES) {
+    const idx = normHeaders.indexOf(alias);
+    if (idx >= 0 && idx !== nameColIdx && String(row[idx] || '').trim()) {
+      specification = String(row[idx] || '').trim();
+      break;
+    }
+  }
+
+  // 2. Fallback: match any column containing scope, spec, desc, sow, detail (excluding name col)
+  if (!specification) {
+    const candidateIdx = normHeaders.findIndex((h, i) => {
+      if (i === nameColIdx) return false;
+      return (
+        (h.includes('scope') || h.includes('spec') || h.includes('desc') || h.includes('sow') || h.includes('detail')) &&
+        !h.includes('file') && !h.includes('doc') && !h.includes('attach')
+      );
+    });
+    if (candidateIdx >= 0 && String(row[candidateIdx] || '').trim()) {
+      specification = String(row[candidateIdx] || '').trim();
+    }
+  }
+
+  // If name wasn't found, check if a descriptive column exists to use as name
+  if (!name) {
+    const descColIdx = normHeaders.findIndex(h => h.includes('itemdescription') || h === 'particulars' || h === 'description');
+    if (descColIdx >= 0 && String(row[descColIdx] || '').trim()) {
+      name = String(row[descColIdx] || '').trim();
+      nameColIdx = descColIdx;
+      const remColIdx = normHeaders.findIndex(h => h.includes('remark') || h.includes('spec') || h.includes('scope'));
+      if (remColIdx >= 0 && remColIdx !== descColIdx && String(row[remColIdx] || '').trim()) {
+        specification = String(row[remColIdx] || '').trim();
+      } else {
+        specification = name;
+      }
+    }
+  }
+
   if (!name) return null;
 
-  const rawType = get('itemtype', 'type').toLowerCase();
+  const rawType = getByAliases('itemtype', 'type', 'category', 'kind', 'itemkind', 'productservice', 'classification').toLowerCase();
   const itemType: 'Product' | 'Service' = rawType.includes('service') ? 'Service' : 'Product';
-  const quantity = Math.max(1, Math.round(Number(get('quantity', 'qty')) || 1));
+  const quantity = Math.max(1, Math.round(Number(getByAliases('quantity', 'qty', 'count', 'units', 'numberofunits', 'targetqty', 'requiredqty', 'monthlyrequirement', 'estimatedmonthlyrequirement', 'estimatedquantity')) || 1));
+
+  const uom = getByAliases('unit', 'uom', 'unitofmeasure', 'measuringunit', 'unittype', 'measurementunit') || (itemType === 'Service' ? 'Set' : 'Nos');
+  const unitPrice = Number(getByAliases('unitprice', 'rate', 'estimatedunitprice', 'estimatedrate', 'price', 'baseprice', 'cost', 'unitrate', 'estimatedrateinr', 'targetprice')) || 0;
+  const gst = Number(getByAliases('gst', 'gstpercent', 'gstpercentage', 'gstrate', 'tax', 'taxpercent', 'taxpercentage')) || 18;
+  const deliveryDate = getByAliases('deliverydate', 'requireddate', 'expecteddate', 'deliverytimeline', 'date') || nextFortnight;
+  const hsn_sac_code = getByAliases('hsnsac', 'hsn', 'sac', 'hsncode', 'saccode', 'hsnsaccode');
+  const brand_preference = getByAliases('preferredbrand', 'brandpreference', 'brand', 'make', 'brandname', 'manufacturer', 'makemodel');
+  const brand_flexible = getByAliases('brandflexible', 'alternatebrandsallowed', 'brandflexibility') || 'Yes';
 
   return {
     id: `import:${Date.now()}:${index}:${makeId()}`,
     itemType,
     name,
-    specification: get('description', 'specification', 'specifications', 'details'),
+    specification,
     quantity,
-    unit: get('unit', 'uom', 'unitofmeasure') || (itemType === 'Service' ? 'Set' : 'Nos'),
-    unitPrice: Number(get('unitprice', 'rate', 'estimatedunitprice')) || 0,
-    gst: Number(get('gst', 'gstpercent', 'gstpercentage')) || 18,
-    deliveryDate: get('deliverydate', 'requireddate') || nextFortnight,
+    unit: uom,
+    unitPrice,
+    gst,
+    deliveryDate,
     brandPolicy: 'Equivalent allowed',
-    technicalSpecification: get('description', 'specification', 'specifications', 'details'),
+    technicalSpecification: specification,
     specificationFileName: '',
-    hsn_sac_code: get('hsnsac', 'hsn', 'sac', 'hsncode', 'saccode'),
-    brand_preference: get('preferredbrand', 'brandpreference', 'brand'),
-    brand_flexible: get('brandflexible', 'alternatebrandsallowed') || 'Yes',
+    hsn_sac_code,
+    brand_preference,
+    brand_flexible,
     fileAssetId: null,
     attachments: [],
+  };
+};
+
+const normalizeDraftItem = (it: any, idx: number): ItemRow => {
+  const sp = (typeof it.specifications === 'object' && it.specifications) ? it.specifications : {};
+  const specText = it.specification || it.technicalSpecification || sp.specification || sp.technicalSpecification || sp.scopeOfWork || sp.description || it.description || it.scopeOfWork || '';
+  return {
+    ...it,
+    id: it.id || `item:${Date.now()}:${idx}:${makeId()}`,
+    itemType: (it.itemType || sp.itemType || 'Product').toLowerCase().includes('service') ? 'Service' : 'Product',
+    name: it.name || it.itemName || sp.name || sp.itemName || `Item #${idx + 1}`,
+    specification: specText,
+    technicalSpecification: it.technicalSpecification || specText,
+    unit: it.unit || it.unitOfMeasure || sp.unit || 'Nos',
+    unitPrice: Number(it.unitPrice || it.estimatedUnitPrice || 0),
+    gst: Number(it.gst || sp.gst || 18),
   };
 };
 
@@ -620,7 +790,7 @@ const getTotalProcurementQty = (draft: Draft): number => {
 const cartItemToProcurementItem = (item: CartItemDto): ItemRow => {
   const product = item.product;
   const service = item.service;
-  const description = product?.description || service?.description || item.technicalNote || item.itemName;
+  const description = product?.description || service?.description || (service as any)?.scopeOfWork || item.technicalNote || item.itemName;
   const unitPrice = Number(item.unitPrice || product?.price || service?.basePrice || 0);
 
   return {
@@ -938,6 +1108,9 @@ export default function CreateProcurementPage() {
         if (raw) {
           const saved = JSON.parse(raw);
           if (saved && typeof saved === 'object') {
+            if (Array.isArray(saved.items)) {
+              saved.items = saved.items.map((it: any, idx: number) => normalizeDraftItem(it, idx));
+            }
             return saved;
           }
         }
@@ -1184,7 +1357,7 @@ export default function CreateProcurementPage() {
             ...base.rateContractConfig,
             ...(payload.rateContractConfig || payload.rateContract || {}),
           },
-          items: Array.isArray(payload.items) ? payload.items : base.items,
+          items: Array.isArray(payload.items) ? payload.items.map((it: any, idx: number) => normalizeDraftItem(it, idx)) : base.items,
           boqTable: Array.isArray(payload.boqTable) ? payload.boqTable : base.boqTable,
           requiredDocs: Array.isArray(payload.requiredDocs) ? payload.requiredDocs : base.requiredDocs,
         });
@@ -4126,12 +4299,59 @@ function ItemsDetailsForm({
     });
   };
 
-  const handleDownloadItemTemplate = () => {
-    downloadCsv('procurement-items-services-template.csv', [
-      itemTemplateHeaders,
-      ['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness', 1000, 'Nos', 45, 18, '6810', '', 'Yes', nextFortnight],
-      ['Service', 'Annual Maintenance Contract', 'Preventive maintenance with quarterly visits and call support', 1, 'Set', 25000, 18, '9987', '', 'Yes', nextFortnight],
-    ]);
+  const handleDownloadItemTemplate = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'MSME Procurement Portal';
+      workbook.created = new Date();
+      const sheet = workbook.addWorksheet('Schedule Items', { views: [{ showGridLines: true }] });
+
+      sheet.addRow(itemTemplateHeaders);
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF12335F' }
+      };
+      headerRow.height = 24;
+
+      sheet.addRow(['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness, heavy duty traffic rated', 1000, 'Nos', 45, 18, '6810', 'UltraTech / Equivalent', 'Yes', nextFortnight]);
+      sheet.addRow(['Service', 'Annual Maintenance Contract', 'Comprehensive preventive maintenance with quarterly visits, emergency breakdown support, and calibration', 1, 'Set', 25000, 18, '9987', '', 'Yes', nextFortnight]);
+
+      sheet.columns = [
+        { width: 14 },
+        { width: 30 },
+        { width: 50 },
+        { width: 12 },
+        { width: 10 },
+        { width: 16 },
+        { width: 10 },
+        { width: 14 },
+        { width: 24 },
+        { width: 16 },
+        { width: 16 },
+      ];
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'procurement_items_services_template.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success('Downloaded Excel template (.xlsx)');
+    } catch {
+      downloadCsv('procurement-items-services-template.csv', [
+        itemTemplateHeaders,
+        ['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness, heavy duty traffic rated', 1000, 'Nos', 45, 18, '6810', 'UltraTech / Equivalent', 'Yes', nextFortnight],
+        ['Service', 'Annual Maintenance Contract', 'Comprehensive preventive maintenance with quarterly visits, emergency breakdown support, and calibration', 1, 'Set', 25000, 18, '9987', '', 'Yes', nextFortnight],
+      ]);
+      toast.success('Downloaded CSV template');
+    }
   };
 
   const handleImportItemTemplate = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4139,13 +4359,17 @@ function ItemsDetailsForm({
     e.target.value = '';
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt')) {
-      toast.error('Use the CSV template format for item import.');
+    const lowerName = file.name.toLowerCase();
+    const isCsv = lowerName.endsWith('.csv') || lowerName.endsWith('.txt');
+    const isExcel = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
+
+    if (!isCsv && !isExcel) {
+      toast.error('Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.');
       return;
     }
 
     try {
-      const rows = parseCsvText(await file.text());
+      const rows = await readSpreadsheetRows(file);
       if (rows.length < 2) {
         toast.error('Template has no item rows to import.');
         return;
@@ -4235,12 +4459,66 @@ function ItemsDetailsForm({
       const asset = resData.file || resData;
       const fileId = Number(resData.fileId || asset.id || 0);
 
-      updateDraft(c => ({
-        ...c,
-        boqFileAssetId: fileId,
-        boqFileName: asset.originalName || file.name
-      }));
-      toast.success('BOQ file uploaded successfully');
+      // Parse spreadsheet rows if it's an Excel or CSV file
+      let parsedBoqRows: BOQRow[] = [];
+      try {
+        const lowerName = file.name.toLowerCase();
+        if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.csv') || lowerName.endsWith('.txt')) {
+          const rows = await readSpreadsheetRows(file);
+          if (rows.length >= 2) {
+            const [headers, ...dataRows] = rows;
+            const normH = headers.map(normalizeImportHeader);
+            const findCol = (...aliases: string[]) => normH.findIndex(h => aliases.includes(h));
+            const descIdx = findCol('itemdescription', 'description', 'descriptionscopeofwork', 'descriptionscope', 'scopeofwork', 'itemname', 'name', 'particulars', 'details');
+            const catIdx = findCol('category', 'itemcategory');
+            const qtyIdx = findCol('quantity', 'qty', 'units');
+            const uomIdx = findCol('uom', 'unit', 'unitofmeasure');
+            const rateIdx = findCol('estimatedrateinr', 'estimatedrate', 'rate', 'estimatedunitprice', 'unitprice', 'price');
+            const taxIdx = findCol('tax', 'taxpercent', 'taxpercentage', 'gst', 'gstpercent');
+            const remIdx = findCol('remarks', 'remark', 'specification', 'specifications', 'scopeofwork', 'scope', 'notes');
+
+            dataRows.forEach((r, idx) => {
+              const desc = descIdx >= 0 ? String(r[descIdx] || '').trim() : '';
+              if (desc) {
+                const qty = Math.max(1, Number(qtyIdx >= 0 ? r[qtyIdx] : 1) || 1);
+                const rate = Math.max(0, Number(rateIdx >= 0 ? r[rateIdx] : 0) || 0);
+                const tax = Number(taxIdx >= 0 ? r[taxIdx] : 18) || 18;
+                parsedBoqRows.push({
+                  srNo: idx + 1,
+                  description: desc,
+                  category: catIdx >= 0 && r[catIdx] ? String(r[catIdx]).trim() : 'General',
+                  quantity: qty,
+                  uom: uomIdx >= 0 && r[uomIdx] ? String(r[uomIdx]).trim() : 'Nos',
+                  estimatedRate: rate,
+                  taxPercent: tax,
+                  total: qty * rate,
+                  remarks: remIdx >= 0 && r[remIdx] ? String(r[remIdx]).trim() : '',
+                });
+              }
+            });
+          }
+        }
+      } catch (parseErr) {
+        console.warn('Could not parse BOQ spreadsheet rows:', parseErr);
+      }
+
+      updateDraft(c => {
+        const nextTable = parsedBoqRows.length > 0 ? parsedBoqRows : c.boqTable;
+        const totalSum = nextTable.reduce((acc, row) => acc + (Number(row.total) || (Number(row.quantity || 0) * Number(row.estimatedRate || 0))), 0);
+        return {
+          ...c,
+          boqFileAssetId: fileId,
+          boqFileName: asset.originalName || file.name,
+          boqTable: nextTable,
+          basics: {
+            ...c.basics,
+            estimatedValue: parsedBoqRows.length > 0 ? totalSum : c.basics.estimatedValue
+          }
+        };
+      });
+      toast.success(parsedBoqRows.length > 0
+        ? `BOQ file uploaded & ${parsedBoqRows.length} item row${parsedBoqRows.length === 1 ? '' : 's'} imported`
+        : 'BOQ file uploaded successfully');
     } catch (err: any) {
       toast.error(err.message || 'Failed to upload BOQ');
     } finally {
@@ -4508,7 +4786,7 @@ function ItemsDetailsForm({
             variant="outline"
             onClick={handleDownloadItemTemplate}
             className="h-8.5 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            title="Download CSV template for bulk items"
+            title="Download Excel template (.xlsx) for bulk items"
           >
             <Download className="h-3.5 w-3.5 mr-1 text-slate-500" /> Template
           </Button>
@@ -4517,16 +4795,16 @@ function ItemsDetailsForm({
             <input
               type="file"
               id="item-template-import"
-              accept=".csv,.txt"
+              accept=".xlsx,.xls,.csv,.txt"
               onChange={handleImportItemTemplate}
               className="hidden"
             />
             <label
               htmlFor="item-template-import"
               className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50"
-              title="Import items from CSV spreadsheet"
+              title="Import items from Excel (.xlsx) or CSV spreadsheet"
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Import CSV
+              <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Import Excel / CSV
             </label>
           </div>
 
@@ -4608,7 +4886,7 @@ function ItemsDetailsForm({
                       <div>
                         <p className="text-sm font-extrabold text-slate-700">No items or services added yet</p>
                         <p className="text-[11px] text-slate-500 font-medium mt-1">
-                          Add line items individually, upload a CSV schedule, or import from your marketplace cart.
+                          Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart.
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
@@ -4672,9 +4950,14 @@ function ItemsDetailsForm({
 
                       {/* Description */}
                       <td className="px-3.5 py-3.5 text-slate-600 font-medium max-w-[240px]">
-                        <span className="line-clamp-2" title={item.specification}>
-                          {item.specification || <span className="text-slate-400 italic">No description</span>}
-                        </span>
+                        {(() => {
+                          const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
+                          return (
+                            <span className="line-clamp-2" title={descText || undefined}>
+                              {descText ? descText : <span className="text-slate-400 italic">No description</span>}
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* Quantity & Unit */}
@@ -6651,29 +6934,44 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   const mappedItems = draft.basics.whatAreYouBuying === 'BOQ'
     ? draft.boqTable.map(item => ({
         itemName: item.description,
-        description: item.remarks || '',
+        description: item.remarks || item.description || '',
         quantity: item.quantity,
         unitOfMeasure: item.uom,
         estimatedUnitPrice: item.estimatedRate,
-      }))
-    : draft.items.map(item => ({
-        itemType: item.itemType || 'Product',
-        itemName: item.name,
-        description: item.specification || '',
-        quantity: item.quantity,
-        unitOfMeasure: item.unit,
-        estimatedUnitPrice: Number(item.unitPrice || 0),
         specifications: {
-          itemType: item.itemType || 'Product',
-          hsn_sac_code: item.hsn_sac_code || '',
-          brand_preference: item.brand_preference || '',
-          brand_flexible: item.brand_flexible || 'Yes',
-          gst: Number(item.gst || 0),
-          fileAssetId: item.fileAssetId || null,
-          specificationFileName: item.specificationFileName || '',
-          attachments: item.attachments || [],
+          itemType: 'Product',
+          description: item.remarks || item.description || '',
+          specification: item.remarks || item.description || '',
+          scopeOfWork: item.remarks || item.description || '',
+          category: item.category || 'General',
+          taxPercent: item.taxPercent || 18,
         }
-      }));
+      }))
+    : draft.items.map(item => {
+        const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || '';
+        return {
+          itemType: item.itemType || 'Product',
+          itemName: item.name,
+          description: descText,
+          quantity: item.quantity,
+          unitOfMeasure: item.unit,
+          estimatedUnitPrice: Number(item.unitPrice || 0),
+          specifications: {
+            itemType: item.itemType || 'Product',
+            specification: descText,
+            scopeOfWork: descText,
+            technicalSpecification: item.technicalSpecification || descText,
+            description: descText,
+            hsn_sac_code: item.hsn_sac_code || '',
+            brand_preference: item.brand_preference || '',
+            brand_flexible: item.brand_flexible || 'Yes',
+            gst: Number(item.gst || 0),
+            fileAssetId: item.fileAssetId || null,
+            specificationFileName: item.specificationFileName || '',
+            attachments: item.attachments || [],
+          }
+        };
+      });
 
   // Build default consignee matching total quantity.
   // IMPORTANT: derive the total from `mappedItems` (the exact lines sent to the backend as

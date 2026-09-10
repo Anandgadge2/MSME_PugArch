@@ -4244,8 +4244,55 @@ router.post('/categories/custom', authenticate, asyncRoute(async (req, res) => {
 }));
 
 router.get('/admin/categories/pending-review', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
-  const pending = await db.category.findMany({
+  // 1. Find all notifications created when users added custom categories
+  const notifs = await db.notification.findMany({
     where: {
+      type: 'category_custom_added'
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100
+  });
+
+  // Extract category IDs from redirectUrl: /admin/categories?edit=<id>
+  const categoryIdToNotif = new Map<number, any>();
+  for (const n of notifs) {
+    if (n.redirectUrl) {
+      const match = n.redirectUrl.match(/edit=(\d+)/);
+      if (match) {
+        const catId = Number(match[1]);
+        if (!categoryIdToNotif.has(catId)) {
+          categoryIdToNotif.set(catId, n);
+        }
+      }
+    }
+  }
+
+  // Also include any categories that have organizationId != null and are missing images
+  const customCategoriesFromOrg = await db.category.findMany({
+    where: {
+      isActive: true,
+      organizationId: { not: null },
+      OR: [{ imageUrl: null }, { imageUrl: '' }]
+    },
+    include: {
+      organization: { select: { id: true, organizationName: true } }
+    },
+    take: 50
+  });
+
+  const allCustomCatIds = Array.from(new Set([
+    ...Array.from(categoryIdToNotif.keys()),
+    ...customCategoriesFromOrg.map((c: any) => c.id)
+  ]));
+
+  if (allCustomCatIds.length === 0) {
+    return ok(res, []);
+  }
+
+  // Query categories that STILL DO NOT HAVE an image (imageUrl is null or empty)
+  const pendingCategories = await db.category.findMany({
+    where: {
+      id: { in: allCustomCatIds },
       isActive: true,
       OR: [
         { imageUrl: null },
@@ -4255,10 +4302,35 @@ router.get('/admin/categories/pending-review', authenticate, authorizeAdmin, asy
     include: {
       organization: { select: { id: true, organizationName: true } }
     },
-    orderBy: { createdAt: 'desc' },
-    take: 20
+    orderBy: { createdAt: 'desc' }
   });
-  ok(res, pending);
+
+  // Format the response with user & organization details
+  const results = pendingCategories.map((cat: any) => {
+    const notif = categoryIdToNotif.get(cat.id);
+    let userName = '';
+    let orgName = cat.organization?.organizationName || '';
+
+    if (notif?.message) {
+      const authorMatch = notif.message.match(/Added by ([^(]+)\(([^)]+)\)/i);
+      if (authorMatch) {
+        if (!userName) userName = authorMatch[1].trim();
+        if (!orgName) orgName = authorMatch[2].trim();
+      }
+    }
+
+    return {
+      id: cat.id,
+      notificationId: notif?.id || null,
+      name: cat.name,
+      userName: userName || 'Registered User',
+      orgName: orgName || 'Registered Enterprise',
+      message: notif?.message || `Custom category "${cat.name}" does not have an image uploaded yet.`,
+      redirectUrl: `/admin/categories?edit=${cat.id}`
+    };
+  });
+
+  ok(res, results);
 }));
 
 router.get('/admin/categories', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {

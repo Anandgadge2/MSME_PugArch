@@ -660,7 +660,8 @@ export const catalogueImportService = {
       'unit of measure', 'hsn code', 'sku', 'brand', 'model number', 'item condition', 'msme made',
       'original price', 'discount price', 'discount percent', 'offer label', 'offer start date', 'offer end date',
       'bulk deal available', 'bulk minimum quantity', 'image urls', 'document urls',
-      'pricing model', 'base price', 'service area', 'scope of work', 'deliverables', 'inclusions', 'exclusions', 'sla response time', 'duration'
+      'pricing model', 'base price', 'service area', 'scope of work', 'deliverables', 'inclusions', 'exclusions', 'sla response time', 'duration',
+      'description / scope of work', 'description/scope of work', 'specifications / scope', 'specifications/scope', 'technical specification', 'technical specifications'
     ]);
     const unknownHeaders = headers.filter(h => {
       const norm = normalizeHeader(h);
@@ -674,8 +675,9 @@ export const catalogueImportService = {
       const name = sanitizeText(col(row, 'Product Name', 'Service Name'), 200);
       const categoryName = sanitizeText(col(row, 'Category'), 120);
       const statusRaw = clean(col(row, 'Status')).toUpperCase() || 'DRAFT';
-      const rawDescription = sanitizeText(col(row, 'Description'));
-      const description = rawDescription || name;
+      const rawDescription = sanitizeText(col(row, 'Description', 'Description / Scope of Work', 'Description/Scope of Work', 'Scope Of Work', 'Scope of Work', 'Specifications / Scope', 'Specification', 'Specifications'));
+      const scopeOfWork = sanitizeText(col(row, 'Scope Of Work', 'Scope of Work', 'Description / Scope of Work', 'Description/Scope of Work', 'Specifications / Scope'));
+      const description = rawDescription || scopeOfWork || name;
       const price = parseNumber(col(row, 'Price', 'Base Price'));
       const gst = parseNumber(col(row, 'GST Rate'));
       const currency = clean(col(row, 'Currency')).toUpperCase() || 'INR';
@@ -830,7 +832,7 @@ export const catalogueImportService = {
             pricingModel: clean(col(row, 'Pricing Model')).toUpperCase() || 'FIXED',
             basePrice: parseNumber(col(row, 'Base Price')),
             serviceArea: sanitizeText(col(row, 'Service Area'), 300),
-            scopeOfWork: sanitizeText(col(row, 'Scope Of Work')),
+            scopeOfWork: scopeOfWork || sanitizeText(col(row, 'Scope Of Work')),
             deliverables: sanitizeText(col(row, 'Deliverables')),
             inclusions: sanitizeText(col(row, 'Inclusions')),
             exclusions: sanitizeText(col(row, 'Exclusions')),
