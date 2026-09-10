@@ -100,6 +100,40 @@ const firstValue = (...values: unknown[]) => {
 
 const roleHome = (role: 'buyer' | 'seller') => role === 'buyer' ? '/buyer/marketplace' : '/seller/marketplace';
 
+/**
+ * Resolves the enabled platform feature codes for a user at login time.
+ * For admins (who have a districtScopeId), reads from PlatformFeature and always
+ * includes 'admin-bid-approval' unless it is explicitly disabled.
+ * For all other users, returns all feature codes from the Feature table.
+ */
+const resolveEnabledFeatures = async (districtScopeId?: string | null): Promise<string[]> => {
+  try {
+    const enabledCodes: string[] = [];
+    if (districtScopeId) {
+      const platformFeatures = await prisma.platformFeature.findMany({
+        where: {},
+        include: { feature: true },
+      });
+      const activeCodes = platformFeatures
+        .filter((row: any) => row.enabled === true)
+        .map((row: any) => row.feature.code as string);
+      enabledCodes.push(...activeCodes);
+      const explicitlyDisabled = platformFeatures.some(
+        (row: any) => row.feature.code === 'admin-bid-approval' && row.enabled === false
+      );
+      if (!explicitlyDisabled) {
+        enabledCodes.push('admin-bid-approval');
+      }
+    } else {
+      const allFeatures = await prisma.feature.findMany({ select: { code: true } });
+      enabledCodes.push(...allFeatures.map((f: any) => f.code as string));
+    }
+    return Array.from(new Set(enabledCodes));
+  } catch {
+    return [];
+  }
+};
+
 const onboardingPath = (role: 'buyer' | 'seller') => role === 'buyer' ? '/buyer/onboarding' : '/seller/onboarding';
 
 type OtpChannel = 'email' | 'sms';
@@ -1022,12 +1056,13 @@ export const authController = {
           ? { scopeType: 'DISTRICT' as const, scopeId: districtAssignment.scopeId }
           : { scopeType: 'PLATFORM' as const, scopeId: null };
       const permissions = isMasterAdmin(updatedUser) ? ['*'] : await getActivePermissionCodes(updatedUser.id, loginScope as any);
+      const loginEnabledFeatures = await resolveEnabledFeatures(districtAssignment?.scopeId ?? null);
       res.json({
         ...tokens,
         user: toSafeUser({
           ...updatedUser,
           permissions,
-          enabledFeatures: []
+          enabledFeatures: loginEnabledFeatures
         })
       });
     } catch (err: any) {
@@ -1084,12 +1119,20 @@ export const authController = {
         ? { scopeType: 'ORGANIZATION' as const, scopeId: String(updatedUser.organizationId) }
         : { scopeType: 'PLATFORM' as const, scopeId: null };
       const twoFaPermissions = isMasterAdmin(updatedUser) ? ['*'] : await getActivePermissionCodes(updatedUser.id, twoFaScope as any);
+      const twoFaDistrictAssignment = updatedUser.role === 'admin'
+        ? await prisma.userRole.findFirst({
+            where: { userId: updatedUser.id, isActive: true, scopeType: 'DISTRICT', scopeId: { not: null } },
+            select: { scopeId: true },
+            orderBy: { assignedAt: 'desc' },
+          })
+        : null;
+      const twoFaEnabledFeatures = await resolveEnabledFeatures(twoFaDistrictAssignment?.scopeId ?? null);
       res.json({
         ...tokens,
         user: toSafeUser({
           ...updatedUser,
           permissions: twoFaPermissions,
-          enabledFeatures: []
+          enabledFeatures: twoFaEnabledFeatures
         })
       });
     } catch (err: any) {
@@ -1806,6 +1849,14 @@ export const authController = {
         : { scopeType: 'PLATFORM' as const, scopeId: null };
       const permissions = isMasterAdmin(updatedUser) ? ['*'] : await getActivePermissionCodes(updatedUser.id, switchScope as any);
 
+      const switchDistrictAssignment = updatedUser.role === 'admin'
+        ? await prisma.userRole.findFirst({
+            where: { userId: updatedUser.id, isActive: true, scopeType: 'DISTRICT', scopeId: { not: null } },
+            select: { scopeId: true },
+            orderBy: { assignedAt: 'desc' },
+          })
+        : null;
+      const switchEnabledFeatures = await resolveEnabledFeatures(switchDistrictAssignment?.scopeId ?? null);
       res.json({
         success: true,
         ...tokens,
@@ -1813,7 +1864,7 @@ export const authController = {
         user: toSafeUser({
           ...(safeUser || updatedUser),
           permissions,
-          enabledFeatures: []
+          enabledFeatures: switchEnabledFeatures
         })
       });
     } catch (err: any) {

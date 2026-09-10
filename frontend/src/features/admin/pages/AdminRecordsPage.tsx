@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Eye, Filter, RefreshCw, Search, ShieldCheck, Users, X, Grid, List, Save, Edit3, Trash2, Building2, Store, Laptop, Clock, Phone, Mail, User, CheckCircle2, BadgeCheck, FileText, Info } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Eye, Filter, RefreshCw, Search, ShieldCheck, Users, X, Grid, List, Save, Edit3, Trash2, Building2, Store, Laptop, Clock, Phone, Mail, User, CheckCircle2, BadgeCheck, FileText, Info, EllipsisVertical } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
@@ -533,15 +533,14 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
                     </td>
                     <td className="p-3 text-xs font-bold text-slate-500">{formatDateTime(record.createdAt || record.updatedAt)}</td>
                     <td className="p-3">
-                      <div className="flex items-center gap-1.5">
-                        <Button variant="outline" onClick={() => setSelected(record)} className="h-9 rounded-lg text-xs font-black"><Eye className="mr-2 h-4 w-4" />View</Button>
-                        {kind === 'users' && (
-                          <>
-                            <Button variant="outline" onClick={() => setEditingUser(record)} className="h-9 rounded-lg text-xs font-black text-blue-600 hover:text-blue-700 border-blue-100 hover:bg-blue-50/50"><Edit3 className="mr-2 h-4 w-4" />Edit</Button>
-                            <Button variant="outline" onClick={() => handleDeleteUser(record)} className="h-9 rounded-lg text-xs font-black text-rose-600 hover:text-rose-700 border-rose-100 hover:bg-rose-50/50" disabled={Number(record.id) === Number(currentUserId)}><Trash2 className="mr-2 h-4 w-4" />Delete</Button>
-                          </>
-                        )}
-                      </div>
+                      <ActionMenu
+                        kind={kind}
+                        record={record}
+                        currentUserId={currentUserId ?? null}
+                        onView={() => setSelected(record)}
+                        onEdit={() => setEditingUser(record)}
+                        onDelete={() => handleDeleteUser(record)}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -573,9 +572,9 @@ function signalText(kind: AdminKind, record: RecordMap) {
 }
 
 function formatDateTime(dateVal: any) {
-  if (!dateVal) return '—';
+  if (!dateVal) return 'ΓÇö';
   const d = new Date(dateVal);
-  if (isNaN(d.getTime())) return '—';
+  if (isNaN(d.getTime())) return 'ΓÇö';
 
   const dateStr = d.toLocaleDateString('en-IN', {
     day: '2-digit',
@@ -687,7 +686,7 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
               </div>
               <div>
                 <div className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200 backdrop-blur-sm">
-                  <User className="h-3 w-3" /> User Detail • {rowIdLabel('users', record)}
+                  <User className="h-3 w-3" /> User Detail ΓÇó {rowIdLabel('users', record)}
                 </div>
                 <h2 className="mt-1.5 text-2xl font-extrabold tracking-tight text-white">{record.name || record.shgProfile?.shgName || 'Unnamed User'}</h2>
                 <p className="mt-0.5 text-xs font-medium text-blue-100/90">{record.email || 'No email registered'}</p>
@@ -807,10 +806,10 @@ function DetailPanel({ kind, record, onClose }: { kind: AdminKind; record: Recor
                     <div className="space-y-1">
                       <p className="font-bold text-blue-950">Onboarding Submission vs Admin Approval Status</p>
                       <p className="text-[11px] leading-relaxed text-blue-800">
-                        <strong className="font-semibold text-blue-950">User Form Submission: COMPLETED</strong> — All mandatory onboarding form checkpoints ({Object.keys(record.sectionStatus || {}).join(', ')}) were filled & submitted by the user.
+                        <strong className="font-semibold text-blue-950">User Form Submission: COMPLETED</strong> ΓÇö All mandatory onboarding form checkpoints ({Object.keys(record.sectionStatus || {}).join(', ')}) were filled & submitted by the user.
                       </p>
                       <p className="text-[11px] leading-relaxed text-blue-800">
-                        <strong className="font-semibold text-blue-950">Admin Review: {label(record.organization?.verificationStatus || record.accountStatus || 'PENDING')}</strong> — Organization compliance verification by platform admin is currently {record.organization?.verificationStatus || 'PENDING'}.
+                        <strong className="font-semibold text-blue-950">Admin Review: {label(record.organization?.verificationStatus || record.accountStatus || 'PENDING')}</strong> ΓÇö Organization compliance verification by platform admin is currently {record.organization?.verificationStatus || 'PENDING'}.
                       </p>
                     </div>
                   </div>
@@ -972,7 +971,7 @@ const DetailField = memo(function DetailField({ label, value }: { label: string;
       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
       <div className={cn(
         "text-xs font-bold break-all rounded-xl p-2.5 border transition-colors",
-        display === '—' ? "bg-slate-50/50 border-slate-100 text-slate-400 font-normal" : "bg-slate-50/80 border-slate-200/70 text-slate-800"
+        display === 'ΓÇö' ? "bg-slate-50/50 border-slate-100 text-slate-400 font-normal" : "bg-slate-50/80 border-slate-200/70 text-slate-800"
       )}>
         {display}
       </div>
@@ -1107,7 +1106,7 @@ const AdminUserCard = memo(function AdminUserCard({
           <div className="space-y-2 text-xs text-slate-600 font-medium">
             <div className="flex items-center gap-2.5 truncate">
               <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-              <span className="truncate">{record.email || '—'}</span>
+              <span className="truncate">{record.email || 'ΓÇö'}</span>
             </div>
             {(record.mobile || record.phone) && (
               <div className="flex items-center gap-2.5 truncate">
@@ -1120,26 +1119,25 @@ const AdminUserCard = memo(function AdminUserCard({
           <div className="space-y-2 pt-4 border-t border-slate-100 mt-auto">
             <div className="flex items-start justify-between gap-2">
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Registration</span>
-              <span className="text-right text-[10px] font-bold text-slate-700">{label(record.registrationStatus || '—')}</span>
+              <span className="text-right text-[10px] font-bold text-slate-700">{label(record.registrationStatus || 'ΓÇö')}</span>
             </div>
             <div className="flex items-start justify-between gap-2">
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Onboarding</span>
-              <span className="text-right text-[10px] font-bold text-slate-700">{label(record.onboardingStatus || '—')}</span>
+              <span className="text-right text-[10px] font-bold text-slate-700">{label(record.onboardingStatus || 'ΓÇö')}</span>
             </div>
           </div>
         </div>
 
         <div className="border-t border-slate-100 bg-slate-50/30 px-4 py-3 flex items-center justify-between gap-2">
           <span className="text-[9px] font-bold text-slate-400">{formatDateTime(record.createdAt || record.updatedAt)}</span>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Button variant="outline" onClick={onView} className="h-7 rounded-lg px-2 text-[10px] font-black"><Eye className="h-3.5 w-3.5 mr-1" />View</Button>
-            {onEdit && onDelete && (
-              <>
-                <Button variant="outline" onClick={() => onEdit(record)} className="h-7 w-7 rounded-lg p-0 text-blue-600 hover:text-blue-700 border-blue-100 hover:bg-blue-50/50"><Edit3 className="h-3.5 w-3.5" /></Button>
-                <Button variant="outline" onClick={() => onDelete(record)} className="h-7 w-7 rounded-lg p-0 text-rose-600 hover:text-rose-700 border-rose-100 hover:bg-rose-50/50" disabled={Number(record.id) === Number(currentUserId)}><Trash2 className="h-3.5 w-3.5" /></Button>
-              </>
-            )}
-          </div>
+          <ActionMenu
+            kind="users"
+            record={record}
+            currentUserId={currentUserId ?? null}
+            onView={onView}
+            onEdit={() => onEdit?.(record)}
+            onDelete={() => onDelete?.(record)}
+          />
         </div>
       </CardContent>
     </Card>
@@ -1262,3 +1260,146 @@ function UserEditModal({
   );
 }
 
+
+
+function ActionMenu({
+  kind,
+  record,
+  currentUserId,
+  onView,
+  onEdit,
+  onDelete
+}: {
+  kind: AdminKind;
+  record: RecordMap;
+  currentUserId: number | null;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current || !menuRef.current) return;
+    const triggerRect = triggerRef.current.getBoundingClientRect();
+    const menuRect = menuRef.current.getBoundingClientRect();
+    
+    const spaceBelow = window.innerHeight - triggerRect.bottom;
+    const spaceAbove = triggerRect.top;
+    
+    let upward = false;
+    if (spaceBelow < menuRect.height && spaceAbove > menuRect.height) {
+      upward = true;
+    }
+
+    let leftPos = triggerRect.right - menuRect.width;
+    if (leftPos < 0) leftPos = triggerRect.left;
+
+    const el = menuRef.current;
+    el.style.position = 'fixed';
+    el.style.left = `${leftPos}px`;
+    el.style.top = `${upward ? triggerRect.top - menuRect.height - 4 : triggerRect.bottom + 4}px`;
+    el.style.zIndex = '999999';
+    el.style.visibility = 'visible';
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (isOpen) {
+      updatePosition();
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+    } else if (menuRef.current) {
+      menuRef.current.style.visibility = 'hidden';
+    }
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen, updatePosition]);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        triggerRef.current && !triggerRef.current.contains(e.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      document.addEventListener('keydown', handleEsc);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [isOpen]);
+
+  const closeAndCall = (fn: () => void) => {
+    setIsOpen(false);
+    fn();
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        ref={triggerRef}
+        className={cn(
+          "flex items-center justify-center h-8 w-8 p-0 rounded-lg border transition-colors outline-none",
+          isOpen ? "bg-slate-100 text-slate-900 border-slate-300 shadow-inner" : "border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-50 bg-white shadow-sm hover:shadow"
+        )}
+        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
+        aria-label="Actions"
+        title="Actions"
+      >
+        <EllipsisVertical className="h-5 w-5 text-slate-600 shrink-0" strokeWidth={2} />
+      </button>
+
+      {isOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menuRef}
+          className="flex flex-col min-w-[160px] bg-white border border-slate-200/80 rounded-xl shadow-lg py-1.5 animate-in fade-in zoom-in-95 duration-100 invisible"
+
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => closeAndCall(onView)}
+            className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            <Eye className="h-4 w-4 text-slate-400" /> View
+          </button>
+          
+          {kind === 'users' && (
+            <>
+              <button
+                onClick={() => closeAndCall(onEdit)}
+                className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <Edit3 className="h-4 w-4 text-blue-500" /> Edit
+              </button>
+              
+              <div className="h-px bg-slate-100 my-1 mx-2" />
+              
+              <button
+                disabled={Number(record.id) === Number(currentUserId)}
+                onClick={() => closeAndCall(onDelete)}
+                className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Trash2 className="h-4 w-4 text-rose-500" /> Delete
+              </button>
+            </>
+          )}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}

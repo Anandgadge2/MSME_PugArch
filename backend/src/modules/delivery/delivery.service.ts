@@ -175,6 +175,38 @@ const loadDeliveryByPO = async (purchaseOrderId: number) => {
   return delivery;
 };
 
+const loadDeliveryForStatusUpdate = async (id: number) => {
+  const delivery = await db.deliveryTracking.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      currentLocation: true,
+      expectedDelivery: true,
+      trackingNumber: true,
+      carrierName: true,
+      logisticsPartnerId: true,
+      logisticsPartnerName: true,
+      purchaseOrderId: true,
+      purchaseOrder: {
+        select: {
+          id: true,
+          poNumber: true,
+          sellerId: true,
+          buyerId: true,
+          expectedDelivery: true
+        }
+      },
+      participants: {
+        where: { isActive: true },
+        select: { userId: true, participantRole: true, isActive: true }
+      }
+    }
+  });
+  if (!delivery) throw new ApiError(404, 'Delivery not found', 'DELIVERY_NOT_FOUND');
+  return delivery;
+};
+
 const isParticipant = (delivery: any, userId: number, role?: DeliveryParticipantRole) =>
   Array.isArray(delivery.participants) &&
   delivery.participants.some(
@@ -620,12 +652,22 @@ export const deliveryService = {
   },
 
   async getTimeline(actor: DeliveryActor, id: number) {
-    const delivery = await loadDelivery(id);
+    const delivery = await loadDeliveryForStatusUpdate(id);
     ensureAccess(delivery, actor);
+    const [events, statusLogs] = await Promise.all([
+      db.deliveryTrackingEvent.findMany({
+        where: { deliveryTrackingId: id },
+        orderBy: { occurredAt: 'desc' }
+      }),
+      db.deliveryStatusLog.findMany({
+        where: { deliveryTrackingId: id },
+        orderBy: { createdAt: 'desc' }
+      })
+    ]);
     return {
       delivery,
-      events: delivery.events,
-      statusLogs: delivery.statusLogs
+      events,
+      statusLogs
     };
   },
 
@@ -676,7 +718,7 @@ export const deliveryService = {
   /* ===== Seller actions ===== */
 
   async sellerAccept(actor: DeliveryActor, id: number, body: { remarks?: string; expectedDelivery?: any }) {
-    const delivery = await loadDelivery(id);
+    const delivery = await loadDeliveryForStatusUpdate(id);
     ensureRole(delivery, actor, ['seller', 'admin']);
     ensureNotTerminal(delivery);
     let parsedExpDate: Date | undefined = undefined;
@@ -700,7 +742,7 @@ export const deliveryService = {
   },
 
   async sellerReject(actor: DeliveryActor, id: number, body: { reason: string }) {
-    const delivery = await loadDelivery(id);
+    const delivery = await loadDeliveryForStatusUpdate(id);
     ensureRole(delivery, actor, ['seller', 'admin']);
     ensureNotTerminal(delivery);
     const updated = await db.$transaction(tx =>
@@ -716,7 +758,7 @@ export const deliveryService = {
   },
 
   async setPacked(actor: DeliveryActor, id: number, body: any) {
-    const delivery = await loadDelivery(id);
+    const delivery = await loadDeliveryForStatusUpdate(id);
     ensureRole(delivery, actor, ['seller', 'admin']);
     ensureNotTerminal(delivery);
     const updated = await db.$transaction(tx =>
@@ -779,7 +821,7 @@ export const deliveryService = {
   },
 
   async markReadyForPickup(actor: DeliveryActor, id: number, body: any) {
-    const delivery = await loadDelivery(id);
+    const delivery = await loadDeliveryForStatusUpdate(id);
     ensureRole(delivery, actor, ['seller', 'admin']);
     ensureNotTerminal(delivery);
     const updated = await db.$transaction(tx =>
@@ -791,7 +833,7 @@ export const deliveryService = {
   },
 
   async markDispatched(actor: DeliveryActor, id: number, body: any) {
-    const delivery = await loadDelivery(id);
+    const delivery = await loadDeliveryForStatusUpdate(id);
     ensureRole(delivery, actor, ['seller', 'logistics', 'admin']);
     ensureNotTerminal(delivery);
     const updated = await db.$transaction(tx =>
@@ -809,7 +851,7 @@ export const deliveryService = {
   /* ===== Manual tracking actions ===== */
 
   async manualStatusUpdate(actor: DeliveryActor, id: number, body: any) {
-    const delivery = await loadDelivery(id);
+    const delivery = await loadDeliveryForStatusUpdate(id);
     ensureRole(delivery, actor, ['seller', 'admin']);
     ensureNotTerminal(delivery);
 
@@ -858,7 +900,7 @@ export const deliveryService = {
   /* ===== Logistics actions ===== */
 
   async logisticsStatusUpdate(actor: DeliveryActor, id: number, body: any) {
-    const delivery = await loadDelivery(id);
+    const delivery = await loadDeliveryForStatusUpdate(id);
     ensureRole(delivery, actor, ['logistics', 'seller', 'admin']);
     ensureNotTerminal(delivery);
     const next = body.status as DeliveryStatus;

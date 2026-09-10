@@ -171,9 +171,6 @@ export function LiveOpportunityRadar() {
               }`}
             >
               <span>{label}</span>
-              <span className={`text-[9px] px-1 rounded-sm ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-700'}`}>
-                {countByTab[tab]}
-              </span>
             </button>
           );
         })}

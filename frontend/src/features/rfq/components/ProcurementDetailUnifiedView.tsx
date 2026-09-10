@@ -16,6 +16,7 @@ import {
   Download,
   ExternalLink,
   Eye,
+  Paperclip,
   FileSpreadsheet,
   FileText,
   IndianRupee,
@@ -41,7 +42,6 @@ import {
   Tag,
   AlertCircle,
   HelpCircle,
-  Paperclip,
   Gavel,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -1226,7 +1226,7 @@ function MilestonesTable({ milestones }: { milestones: any }) {
   );
 }
 
-function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
+function ServiceDetailsSection({ serviceDetails, isRfqType }: { serviceDetails: any; isRfqType?: boolean }) {
   const ctx = React.useContext(BuyerSideContext);
   const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
   const isOpenTender = typeof ctx === 'boolean' ? false : ctx.isOpenTender;
@@ -1235,14 +1235,19 @@ function ServiceDetailsSection({ serviceDetails }: { serviceDetails: any }) {
   // Strictly hide Service Details & Parameters on buyer side for limited tender, open tender, etc.
   if ((isBuyer && (isLimitedTender || isOpenTender)) || !serviceDetails || !isPlainObject(serviceDetails)) return null;
 
-  const { duration, penaltyClause, slaResponseTime, manpowerRequired, experienceRequired, milestones, ...rest } = serviceDetails;
+  const { duration, penaltyClause, slaResponseTime, manpowerRequired, experienceRequired, milestones, warranty, warrantyTerms, warrantyPeriod, ...rest } = serviceDetails;
 
   const mainFields = compactObject({
     duration,
-    penaltyClause,
-    slaResponseTime,
-    manpowerRequired,
-    experienceRequired,
+    ...(isRfqType ? {} : {
+      penaltyClause,
+      slaResponseTime,
+      manpowerRequired,
+      experienceRequired,
+      warranty,
+      warrantyTerms,
+      warrantyPeriod
+    }),
     ...rest,
   });
 
@@ -1654,7 +1659,9 @@ function LineItemsTable({
                       {fileCount > 0 ? (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
                             if (allFiles.length === 1) {
                               const f = allFiles[0];
                               const fname = f.fileName || f.name || f.originalName || `${name} Attachment`;
@@ -1909,12 +1916,12 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
   );
 }
 
-function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq, isBuyerSide }: { data: any; deliveryLocation?: any; deliveryTerms?: any; isBuyerRfq?: boolean; isBuyerSide?: boolean }) {
+function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq, isBuyerSide, isRfqType }: { data: any; deliveryLocation?: any; deliveryTerms?: any; isBuyerRfq?: boolean; isBuyerSide?: boolean; isRfqType?: boolean }) {
   const ctx = React.useContext(BuyerSideContext);
   const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
   const isHiddenOnBuyer = Boolean(isBuyer || isBuyerSide || isBuyerRfq);
   const items = asArray(data).filter(hasDetailData);
-  const showDeliveryMeta = !isHiddenOnBuyer && (hasDetailData(deliveryLocation) || hasDetailData(deliveryTerms));
+  const showDeliveryMeta = !isHiddenOnBuyer && !isRfqType && (hasDetailData(deliveryLocation) || hasDetailData(deliveryTerms));
 
   if (!showDeliveryMeta && items.length === 0) {
     return null;
@@ -2393,7 +2400,10 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.procurementType === 'RFQ' ||
     String(props.procurementType || '').toUpperCase().includes('RFQ') ||
     String(props.procurementLabel || '').toUpperCase().includes('QUOTATION') ||
-    String(props.procurementLabel || '').toUpperCase().includes('RFQ');
+    String(props.procurementLabel || '').toUpperCase().includes('RFQ') ||
+    String(props.procurementMethod || '').toUpperCase().includes('QUOTATION') ||
+    String(props.procurementMethod || '').toUpperCase().includes('RFQ') ||
+    pathname.includes('/rfq');
   const isBuyerRfq = isBuyerSide && (isRfqType || pathname.includes('/rfq'));
 
   const isOpenTenderType =
@@ -2506,7 +2516,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     basics.subCategoryName,
     payload.subCategory,
     payload.subcategory
-  ) || 'General Sub-category';
+  );
 
   const publishedDateValue = firstPresent(
     schedule.publishDate,
@@ -3181,8 +3191,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             >
               {props.backRouteLabel || `${procurementTypeLabel} Opportunities`}
             </button>
-            <span className="text-slate-300">/</span>
-            <span className="text-slate-900">{displayIdStr}</span>
           </nav>
         </div>
 
@@ -3375,18 +3383,17 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             <div className="grid gap-5 lg:grid-cols-2">
               <DataCard title={`Buyer ${procurementTypeLabel} Information`} icon={ClipboardList}>
                 <PropertyGrid columns={2}>
-                  <PropertyItem label={`${procurementTypeLabel} Number`} value={procurementNumber} mono highlight />
                   <PropertyItem label="Procurement Method" value={procurementMethod} />
                   <PropertyItem label="Buying Type" value={buyingType} />
                   <PropertyItem label="Category" value={category} />
-                  {/* Sub Category - hidden on buyer side */}
-                  {!isBuyerSide && (
+                  {/* Sub Category - displayed if exists */}
+                  {subCategory && (
                     <PropertyItem label="Sub Category" value={subCategory} />
                   )}
                   <PropertyItem label="Published Date" value={publishedDateFormatted} />
                   <PropertyItem label="Submission Deadline" value={closingDateFormatted} />
-                  {/* Delivery Location - hidden on buyer side */}
-                  {!isBuyerSide && (
+                  {/* Delivery Location - hidden on buyer side and RFQ globally */}
+                  {!isBuyerSide && !isRfqType && (
                     <PropertyItem label="Delivery Location" value={deliveryLocation} />
                   )}
                   {/* Project Duration - commented out / hidden on buyer side */}
@@ -3397,8 +3404,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   {!isBuyerSide && (
                     <PropertyItem label="Payment Terms" value={paymentTerms} />
                   )}
-                  {/* Procurement Brief - hidden on buyer side */}
-                  {!isBuyerSide && (
+                  {/* Procurement Brief - hidden on buyer side and RFQ globally */}
+                  {!isBuyerSide && !isRfqType && (
                     <PropertyItem label="Procurement Brief" value={props.description && props.description.length < 160 && !props.description.includes('\n') ? props.description : (basics.description && basics.description.length < 160 ? basics.description : `${resolvedSubject} (${category})`)} fullWidth />
                   )}
                 </PropertyGrid>
@@ -3425,8 +3432,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               ]}
             />
 
-            {/* Clarification Threads & Status grid - commented out strictly in RFQ, Open Tender, and Limited Tender on buyer side */}
-            {!isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
+            {/* Clarification Threads & Status grid - hidden in RFQ globally, and Open/Limited Tender on buyer side */}
+            {!isRfqType && !isBuyerOpenTender && !isBuyerLimitedTender && (
               <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
                 <PropertyGrid columns={4}>
                   <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
@@ -3453,15 +3460,15 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
               {/* Service Details & Parameters - commented out strictly in Open Tender, Limited Tender, and RFQ on buyer side */}
               {hasDetailData(serviceDetails) && !isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
-                <ServiceDetailsSection serviceDetails={serviceDetails} />
+                <ServiceDetailsSection serviceDetails={serviceDetails} isRfqType={isRfqType} />
               )}
 
               {hasDetailData(lineItems) && (
                 <LineItemsTable items={lineItems} defaultSubject={resolvedSubject} isBuyer={isBuyerSide} />
               )}
 
-              {/* BOQ Table - hidden on buyer side */}
-              {hasDetailData(boqTable) && !isBuyerSide && (
+              {/* BOQ Table - hidden on buyer side and RFQ */}
+              {hasDetailData(boqTable) && !isBuyerSide && !isRfqType && (
                 <BoqTableList data={boqTable} defaultSubject={resolvedSubject} defaultCategory={category} defaultEstimatedValue={props.estimatedValue} />
               )}
             </DataCard>
@@ -3470,58 +3477,58 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               const validDownloadableDocs = documents.filter(doc => doc && (doc.fileAssetId || doc.url));
 
               return (
-                <DataCard title={`${procurementTypeLabel} Attached Documents`} icon={FileSpreadsheet}>
+                <div className="space-y-5">
                   {validDownloadableDocs.length > 0 && (
-                    <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-                      {validDownloadableDocs.map((doc, index) => {
-                        const isGenericName = !doc.name || doc.name.toLowerCase().startsWith('attached_doc');
-                        const docDisplayName = isGenericName
-                          ? (doc.meta || `${procurementTypeLabel} Document ${index + 1}`)
-                          : doc.name;
+                    <DataCard title={`${procurementTypeLabel} Attached Documents`} icon={FileSpreadsheet}>
+                      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                        {validDownloadableDocs.map((doc, index) => {
+                          const isGenericName = !doc.name || doc.name.toLowerCase().startsWith('attached_doc');
+                          const docDisplayName = isGenericName
+                            ? (doc.meta || `${procurementTypeLabel} Document ${index + 1}`)
+                            : doc.name;
 
-                        return (
-                          <article key={doc.id ? `doc-${doc.id}-${index}` : `doc-idx-${index}`} className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 shadow-xs flex flex-col justify-between hover:bg-slate-50 transition-colors">
-                            <div className="flex items-start gap-3">
-                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                <FileText className="h-5 w-5" />
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="break-words text-xs font-bold text-slate-900 leading-snug">{docDisplayName}</p>
-                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                  <span className={cn(
-                                    'rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
-                                    doc.required ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-600'
-                                  )}>
-                                    {doc.required ? 'Required' : doc.meta || 'Document'}
-                                  </span>
+                          return (
+                            <article key={doc.id ? `doc-${doc.id}-${index}` : `doc-idx-${index}`} className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 shadow-xs flex flex-col justify-between hover:bg-slate-50 transition-colors">
+                              <div className="flex items-start gap-3">
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                  <FileText className="h-5 w-5" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="break-words text-xs font-bold text-slate-900 leading-snug">{docDisplayName}</p>
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                    <span className={cn(
+                                      'rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
+                                      doc.required ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-600'
+                                    )}>
+                                      {doc.required ? 'Required' : doc.meta || 'Document'}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                if (doc.fileAssetId || doc.url) {
-                                  openFileAsset({ fileAssetId: doc.fileAssetId, url: doc.url, originalName: docDisplayName }, docDisplayName);
-                                }
-                              }}
-                              disabled={!doc.fileAssetId && !doc.url}
-                              className="mt-3.5 w-full text-xs h-8.5 rounded-lg border-slate-250 bg-white hover:bg-slate-100 font-bold"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                              Open Document
-                            </Button>
-                          </article>
-                        );
-                      })}
-                    </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (doc.fileAssetId || doc.url) {
+                                    openFileAsset({ fileAssetId: doc.fileAssetId, url: doc.url, originalName: docDisplayName }, docDisplayName);
+                                  }
+                                }}
+                                disabled={!doc.fileAssetId && !doc.url}
+                                className="mt-3.5 w-full text-xs h-8.5 rounded-lg border-slate-250 bg-white hover:bg-slate-100 font-bold"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                                Open Document
+                              </Button>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </DataCard>
                   )}
 
-                  <div className="pt-2">
-                    <RequiredDocumentsList data={requiredDocuments} />
-                  </div>
-                </DataCard>
+                  <RequiredDocumentsList data={requiredDocuments} />
+                </div>
               );
             })()}
           </div>
@@ -3592,8 +3599,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 {/* Payment Terms and Delivery Terms commented out as they already appear in Terms & Conditions */}
                 {/* <PropertyItem label="Payment Terms" value={paymentTerms} /> */}
                 {/* <PropertyItem label="Delivery Terms" value={deliveryTerms} /> */}
-                {/* Contract Period commented out / hidden on buyer side */}
-                {!isBuyerSide && (
+                {/* Contract Period commented out / hidden on buyer side and RFQ globally */}
+                {!isBuyerSide && !isRfqType && (
                   <PropertyItem label="Contract Period" value={firstPresent(terms.contractPeriod, terms.projectDuration, projectDuration)} />
                 )}
                 {/* Retention Amount & Security Deposit commented out / hidden on buyer side */}
@@ -3609,6 +3616,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               deliveryTerms={deliveryTerms}
               isBuyerSide={isBuyerSide}
               isBuyerRfq={isBuyerRfq}
+              isRfqType={isRfqType}
             />
           </div>
         )}

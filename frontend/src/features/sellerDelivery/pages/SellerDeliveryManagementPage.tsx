@@ -13,11 +13,12 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
-    AlertCircle, ArrowRight, Calendar, Check, CheckCircle2, ChevronDown, ChevronUp,
+    AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, CheckCircle2, ChevronDown, ChevronUp,
     Clock, Copy, Download, ExternalLink, Eye, FileText, Grid3x3, History, Info,
     List, MapPin, MoreVertical, Package, Paperclip, Printer, RefreshCw, Search,
     Send, ShieldCheck, Sparkles, Stamp, Truck, Upload, UploadCloud, X, XCircle
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
@@ -38,8 +39,9 @@ import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { formatCurrency, formatDate, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
+import { queryKeys } from '../../shared/queryKeys';
 import {
-    useAddDeliveryDocument, useDeliveries, useDelivery, useDeliveryTimeline,
+    invalidateDeliveryCache, useAddDeliveryDocument, useDeliveries, useDelivery, useDeliveryTimeline,
     useManualStatusUpdate, useMarkPacked, useMarkReadyForPickup, useSellerAccept,
     useSellerReject, useUpdateDispatchDetails
 } from '../hooks';
@@ -166,7 +168,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
     const amount = delivery.purchaseOrder?.amount;
 
     return (
-        <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
+        <div className="relative inline-flex items-center justify-end" onClick={e => { e.preventDefault(); e.stopPropagation(); }}>
             <button
                 ref={buttonRef}
                 type="button"
@@ -174,11 +176,12 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                 aria-haspopup="menu"
                 aria-expanded={open}
                 onClick={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     setOpen(!open);
                 }}
                 className={cn(
-                    "h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#12335f]/20",
+                    "h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer",
                     open && "bg-slate-100 border-slate-300 text-slate-900"
                 )}
                 title="Actions"
@@ -196,7 +199,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                         left: `${coords.left}px`,
                         zIndex: 99999,
                     }}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                     className="w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
                     role="menu"
                     aria-label="Delivery actions"
@@ -204,11 +207,13 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                     <button
                         type="button"
                         role="menuitem"
-                        onClick={() => {
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
                             setOpen(false);
                             router.push(`/delivery/${delivery.id}`);
                         }}
-                        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
                     >
                         <Eye className="h-3.5 w-3.5 text-slate-500" />
                         <span>View Details</span>
@@ -219,8 +224,13 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             <button
                                 type="button"
                                 role="menuitem"
-                                onClick={() => { setOpen(false); onAction('accept'); }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setOpen(false);
+                                    onAction('accept');
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
                             >
                                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                                 <span>Accept Order</span>
@@ -228,8 +238,13 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             <button
                                 type="button"
                                 role="menuitem"
-                                onClick={() => { setOpen(false); onAction('reject'); }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setOpen(false);
+                                    onAction('reject');
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left cursor-pointer"
                             >
                                 <XCircle className="h-3.5 w-3.5 text-rose-600" />
                                 <span>Reject Order</span>
@@ -241,8 +256,13 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                         <button
                             type="button"
                             role="menuitem"
-                            onClick={() => { setOpen(false); onAction('packed'); }}
-                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpen(false);
+                                onAction('packed');
+                            }}
+                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left cursor-pointer"
                         >
                             <Package className="h-3.5 w-3.5 text-[#12335f]" />
                             <span>Mark Packed</span>
@@ -253,8 +273,13 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                         <button
                             type="button"
                             role="menuitem"
-                            onClick={() => { setOpen(false); onAction('ready'); }}
-                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpen(false);
+                                onAction('ready');
+                            }}
+                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left cursor-pointer"
                         >
                             <Truck className="h-3.5 w-3.5 text-purple-600" />
                             <span>Ready for Pickup</span>
@@ -263,22 +288,30 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
 
                     {['READY_FOR_PICKUP', 'PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status) && (
                         <>
-                            {status === 'READY_FOR_PICKUP' && (
-                                <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => { setOpen(false); onAction('dispatch-details'); }}
-                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                                >
-                                    <Send className="h-3.5 w-3.5 text-[#12335f]" />
-                                    <span>Dispatch Order</span>
-                                </button>
-                            )}
                             <button
                                 type="button"
                                 role="menuitem"
-                                onClick={() => { setOpen(false); onAction('track-info'); }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setOpen(false);
+                                    onAction('dispatch-details');
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+                            >
+                                <Send className="h-3.5 w-3.5 text-[#12335f]" />
+                                <span>{status === 'READY_FOR_PICKUP' ? 'Dispatch Order' : 'Dispatch Order / Fulfillment'}</span>
+                            </button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setOpen(false);
+                                    onAction('track-info');
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left cursor-pointer"
                             >
                                 <Truck className="h-3.5 w-3.5 text-[#12335f]" />
                                 <span>Update Status</span>
@@ -292,11 +325,13 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                                 <button
                                     type="button"
                                     role="menuitem"
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
                                         setOpen(false);
                                         router.push(`/seller/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`);
                                     }}
-                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
                                 >
                                     <FileText className="h-3.5 w-3.5 text-slate-500" />
                                     <span>Create Invoice</span>
@@ -305,11 +340,30 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             <button
                                 type="button"
                                 role="menuitem"
-                                onClick={() => { setOpen(false); onAction('upload-pod'); }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setOpen(false);
+                                    onAction('upload-pod');
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
                             >
                                 <Upload className="h-3.5 w-3.5 text-emerald-600" />
                                 <span>Upload POD</span>
+                            </button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setOpen(false);
+                                    onAction('dispatch-details');
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+                            >
+                                <Send className="h-3.5 w-3.5 text-[#12335f]" />
+                                <span>Fulfillment & Invoice</span>
                             </button>
                         </>
                     )}
@@ -323,6 +377,26 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
 export default function SellerDeliveryManagementPage() {
     const { data, isLoading, error, refetch, isFetching } = useDeliveries({ role: 'seller' });
     const [actionTarget, setActionTarget] = useState<{ kind: string; delivery: DeliveryDto } | null>(null);
+
+    const openAction = useCallback((kind: string, delivery: DeliveryDto) => {
+        setActionTarget({ kind, delivery });
+        if (typeof window !== 'undefined' && kind === 'dispatch-details') {
+            const url = new URL(window.location.href);
+            url.searchParams.set('dispatch', String(delivery.id));
+            window.history.pushState({ dispatchId: delivery.id }, '', url.toString());
+        }
+    }, []);
+
+    const closeAction = useCallback(() => {
+        setActionTarget(null);
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            if (url.searchParams.has('dispatch')) {
+                url.searchParams.delete('dispatch');
+                window.history.replaceState({}, '', url.toString());
+            }
+        }
+    }, []);
 
     const [viewMode, setViewMode] = useResponsiveViewMode('seller-delivery-management:view-mode');
     const [searchQuery, setSearchQuery] = useState(() => {
@@ -344,6 +418,42 @@ export default function SellerDeliveryManagementPage() {
     const [sortBy, setSortBy] = useState('newest');
 
     const items = (data?.records || data?.items || []) as DeliveryDto[];
+
+    // Deep-link & browser back restoration for dispatch order fulfillment
+    useEffect(() => {
+        if (typeof window !== 'undefined' && items.length > 0 && !actionTarget) {
+            const params = new URLSearchParams(window.location.search);
+            const dispatchId = params.get('dispatch') || params.get('deliveryId');
+            if (dispatchId) {
+                const found = items.find(d => String(d.id) === dispatchId);
+                if (found) {
+                    setActionTarget({ kind: 'dispatch-details', delivery: found });
+                }
+            }
+        }
+    }, [items, actionTarget]);
+
+    useEffect(() => {
+        const handlePopState = () => {
+            if (typeof window !== 'undefined') {
+                const params = new URLSearchParams(window.location.search);
+                const dispatchId = params.get('dispatch') || params.get('deliveryId');
+                if (dispatchId && items.length > 0) {
+                    const found = items.find(d => String(d.id) === dispatchId);
+                    if (found) {
+                        setActionTarget({ kind: 'dispatch-details', delivery: found });
+                        return;
+                    }
+                }
+                if (!dispatchId && actionTarget) {
+                    setActionTarget(null);
+                }
+            }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [items, actionTarget]);
+
     const pendingCount = items.filter(item => item.status === 'CREATED' || item.status === 'PENDING_ACCEPTANCE').length;
     const inTransitCount = items.filter(item => ['PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(String(item.status))).length;
     const completedCount = items.filter(item => ['DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(item.status))).length;
@@ -588,7 +698,7 @@ export default function SellerDeliveryManagementPage() {
                             {viewMode === 'grid' ? (
                                 <div className="grid gap-3 lg:grid-cols-2">
                                     {pagedDeliveries.map(delivery => (
-                                        <DeliveryCard key={delivery.id} delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
+                                        <DeliveryCard key={delivery.id} delivery={delivery} onAction={(kind) => openAction(kind, delivery)} />
                                     ))}
                                 </div>
                             ) : (
@@ -676,7 +786,7 @@ export default function SellerDeliveryManagementPage() {
                                                                 )}
                                                             </TableCell>
                                                             <TableCell className="text-right p-3">
-                                                                <ActionButtons delivery={delivery} onAction={(kind) => setActionTarget({ kind, delivery })} />
+                                                                <ActionButtons delivery={delivery} onAction={(kind) => openAction(kind, delivery)} />
                                                             </TableCell>
                                                         </TableRow>
                                                     );
@@ -706,7 +816,7 @@ export default function SellerDeliveryManagementPage() {
                 <ActionDialog
                     kind={actionTarget.kind}
                     delivery={actionTarget.delivery}
-                    onClose={() => setActionTarget(null)}
+                    onClose={closeAction}
                 />
             )}
         </div>
@@ -796,20 +906,32 @@ function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: Del
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-3 sm:p-6 overflow-y-auto">
                 <div className="w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
                     <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] via-[#12335f] to-[#1e40af] px-6 py-4 text-white shrink-0">
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-white">
-                                    DISPATCH ORDER FULFILLMENT
-                                </span>
-                                <span className="rounded bg-blue-500/30 px-2 py-0.5 text-[10px] font-mono font-bold text-blue-200">
-                                    DLV-{delivery.id}
-                                </span>
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-bold text-white transition focus:outline-none focus:ring-2 focus:ring-white/40 cursor-pointer"
+                                aria-label="Back to Deliveries"
+                                title="Back to Deliveries"
+                            >
+                                <ArrowLeft className="h-4 w-4" />
+                                <span>Back to Deliveries</span>
+                            </button>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-white">
+                                        DISPATCH ORDER FULFILLMENT
+                                    </span>
+                                    <span className="rounded bg-blue-500/30 px-2 py-0.5 text-[10px] font-mono font-bold text-blue-200">
+                                        DLV-{delivery.id}
+                                    </span>
+                                </div>
+                                <h2 className="mt-1 text-lg font-black tracking-tight text-white">
+                                    {delivery.purchaseOrder?.title || 'Order Dispatch Fulfillment'}
+                                </h2>
                             </div>
-                            <h2 className="mt-1 text-lg font-black tracking-tight text-white">
-                                {delivery.purchaseOrder?.title || 'Order Dispatch Fulfillment'}
-                            </h2>
                         </div>
-                        <button onClick={onClose} className="rounded-lg p-2 text-white/80 hover:bg-white/15 hover:text-white transition" aria-label="Close dialog">
+                        <button type="button" onClick={onClose} className="rounded-lg p-2 text-white/80 hover:bg-white/15 hover:text-white transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40" aria-label="Close dialog" title="Close dialog">
                             <X className="h-5 w-5" />
                         </button>
                     </div>
@@ -900,6 +1022,7 @@ function kindToLabel(kind: string): string {
 }
 
 function AcceptForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
+    const qc = useQueryClient();
     const [remarks, setRemarks] = useState('');
     const [eta, setEta] = useState('');
     const mut = useSellerAccept();
@@ -912,10 +1035,13 @@ function AcceptForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () =>
                 <textarea value={remarks} onChange={e => setRemarks(e.target.value)} rows={2} className="w-full rounded border border-slate-200 px-3 py-2 text-xs font-semibold" />
             </Field>
             <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={onDone}>Cancel</Button>
+                <Button variant="outline" onClick={onDone} className="cursor-pointer">Cancel</Button>
                 <Button
                     onClick={async () => {
-                        await runWithToast(() => mut.mutateAsync({ id: delivery.id, data: { remarks: remarks.trim() || undefined, expectedDelivery: eta || undefined } }), {
+                        await runWithToast(async () => {
+                            await mut.mutateAsync({ id: delivery.id, data: { remarks: remarks.trim() || undefined, expectedDelivery: eta || undefined } });
+                            await invalidateDeliveryCache(qc, delivery.id);
+                        }, {
                             loading: 'Accepting order...',
                             success: 'Order accepted successfully',
                             error: (err: any) => err?.message || 'Unable to accept delivery order'
@@ -923,7 +1049,7 @@ function AcceptForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () =>
                         onDone();
                     }}
                     disabled={mut.isPending}
-                    className="bg-emerald-600 text-white"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
                 >
                     {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                     Accept Order
@@ -934,6 +1060,7 @@ function AcceptForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () =>
 }
 
 function RejectForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
+    const qc = useQueryClient();
     const [reason, setReason] = useState('');
     const mut = useSellerReject();
     return (
@@ -943,17 +1070,20 @@ function RejectForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () =>
                 <p className="text-[10px] text-slate-400">Buyer will be notified.</p>
             </Field>
             <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={onDone}>Cancel</Button>
+                <Button variant="outline" onClick={onDone} className="cursor-pointer">Cancel</Button>
                 <Button
                     onClick={async () => {
                         if (reason.trim().length < 3) { toast.error('Provide a reason'); return; }
-                        await runWithToast(() => mut.mutateAsync({ id: delivery.id, reason: reason.trim() }), {
+                        await runWithToast(async () => {
+                            await mut.mutateAsync({ id: delivery.id, reason: reason.trim() });
+                            await invalidateDeliveryCache(qc, delivery.id);
+                        }, {
                             loading: 'Rejecting...', success: 'Order rejected', error: 'Reject failed'
                         });
                         onDone();
                     }}
                     disabled={mut.isPending}
-                    className="bg-red-600 text-white"
+                    className="bg-red-600 hover:bg-red-700 text-white cursor-pointer"
                 >
                     {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
                     Confirm Rejection
@@ -964,6 +1094,7 @@ function RejectForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () =>
 }
 
 function PackedForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
+    const qc = useQueryClient();
     const parsedDims = useMemo(() => {
         if (!delivery.packageDimensions) return ['', '', ''];
         const matches = delivery.packageDimensions.match(/\d+(\.\d+)?/g);
@@ -1017,15 +1148,18 @@ function PackedForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () =>
 
         const formattedDimensions = `${lengthNum} × ${widthNum} × ${heightNum} cm`;
 
-        await runWithToast(() => mut.mutateAsync({
-            id: delivery.id,
-            data: {
-                packageWeightKg: weightNum,
-                packageDimensions: formattedDimensions,
-                packageCount: Math.round(countNum),
-                remarks: remarks.trim() || undefined
-            }
-        }), {
+        await runWithToast(async () => {
+            await mut.mutateAsync({
+                id: delivery.id,
+                data: {
+                    packageWeightKg: weightNum,
+                    packageDimensions: formattedDimensions,
+                    packageCount: Math.round(countNum),
+                    remarks: remarks.trim() || undefined
+                }
+            });
+            await invalidateDeliveryCache(qc, delivery.id);
+        }, {
             loading: 'Saving changes...',
             success: 'Order packing details saved successfully',
             error: (err: any) => err?.message || 'Failed to save order packing details'
@@ -1212,6 +1346,7 @@ const generateTaxInvoiceForDelivery = async (delivery: DeliveryDto) => {
 
 function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
     const router = useRouter();
+    const qc = useQueryClient();
     const [trackingNumber, setTrackingNumber] = useState(delivery.trackingNumber || '');
     const [carrierName, setCarrierName] = useState(delivery.carrierName || '');
     const [eta, setEta] = useState((delivery.expectedDelivery || '').slice(0, 10));
@@ -1224,6 +1359,46 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
     const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
     const [isViewInvoiceModalOpen, setIsViewInvoiceModalOpen] = useState(false);
     const [fetchedInvoice, setFetchedInvoice] = useState<any | null>(null);
+
+    const openInvoiceModal = useCallback(() => {
+        setIsViewInvoiceModalOpen(true);
+        if (typeof window !== 'undefined') {
+            window.history.pushState({ modal: 'tax-invoice' }, '', '#tax-invoice');
+        }
+    }, []);
+
+    const closeInvoiceModal = useCallback(() => {
+        setIsViewInvoiceModalOpen(false);
+        if (typeof window !== 'undefined' && window.location.hash === '#tax-invoice') {
+            window.history.back();
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!isViewInvoiceModalOpen) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                closeInvoiceModal();
+            }
+        };
+
+        const handlePopState = () => {
+            if (window.location.hash !== '#tax-invoice') {
+                setIsViewInvoiceModalOpen(false);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown, { capture: true });
+        window.addEventListener('popstate', handlePopState);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown, { capture: true });
+            window.removeEventListener('popstate', handlePopState);
+        };
+    }, [isViewInvoiceModalOpen, closeInvoiceModal]);
 
     // Branding / Stamp & Sign State
     const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
@@ -1510,6 +1685,8 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                     }
                 });
             }
+
+            await invalidateDeliveryCache(qc, delivery.id);
         }, {
             loading: 'Saving dispatch details...',
             success: 'Dispatch order details and documents saved successfully',
@@ -1710,10 +1887,7 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
                 <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 space-y-3">
                     <div 
-                        onClick={() => {
-                            const invNo = invData.invoiceNumber || fetchedInvoice?.invoiceNumber || (delivery.purchaseOrder?.poNumber ? `INV-${delivery.purchaseOrder.poNumber}` : `INV-${delivery.purchaseOrderId || delivery.id}`);
-                            router.push(`/payments/invoices?search=${encodeURIComponent(invNo)}&viewInvoiceNo=${encodeURIComponent(invNo)}`);
-                        }}
+                        onClick={openInvoiceModal}
                         className="flex items-start justify-between gap-3 cursor-pointer hover:bg-blue-100/50 p-1.5 rounded-lg transition-colors"
                         title="Click to view full Tax Invoice"
                     >
@@ -1739,10 +1913,7 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                     <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-blue-200/60">
                         <Button
                             type="button"
-                            onClick={() => {
-                                const invNo = invData.invoiceNumber || fetchedInvoice?.invoiceNumber || (delivery.purchaseOrder?.poNumber ? `INV-${delivery.purchaseOrder.poNumber}` : `INV-${delivery.purchaseOrderId || delivery.id}`);
-                                router.push(`/payments/invoices?search=${encodeURIComponent(invNo)}&viewInvoiceNo=${encodeURIComponent(invNo)}`);
-                            }}
+                            onClick={openInvoiceModal}
                             className="h-9 px-4 bg-[#12335f] hover:bg-[#0b1f3a] text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1.5 cursor-pointer"
                         >
                             <Eye className="h-3.5 w-3.5" /> View Tax Invoice
@@ -1774,32 +1945,55 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
             {/* FULL TAX INVOICE VIEWER MODAL OVERLAY */}
             {isViewInvoiceModalOpen && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-3 sm:p-5">
-                    <div className="relative flex flex-col w-full max-w-5xl max-h-[94vh] bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden p-5 sm:p-6 animate-in fade-in zoom-in-95 duration-150">
+                <div 
+                    className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-3 sm:p-5"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) {
+                            closeInvoiceModal();
+                        }
+                    }}
+                >
+                    <div 
+                        className="relative flex flex-col w-full max-w-5xl max-h-[94vh] bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden p-5 sm:p-6 animate-in fade-in zoom-in-95 duration-150"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         {/* Modal Header */}
                         <div className="flex items-start justify-between border-b border-slate-200 pb-3 mb-3 shrink-0">
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">TAX INVOICE REGISTRY</p>
-                                <h2 className="text-xl font-black text-slate-950">{invData.invoiceNumber}</h2>
-                                <p className="text-xs text-slate-500">Created on {invData.dateStr}</p>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={closeInvoiceModal}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 transition focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer"
+                                    aria-label="Back to Dispatch Order Fulfillment"
+                                    title="Back to Dispatch Order Fulfillment"
+                                >
+                                    <ArrowLeft className="h-4 w-4" />
+                                    <span>Back</span>
+                                </button>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">TAX INVOICE REGISTRY</p>
+                                    <h2 className="text-xl font-black text-slate-950">{invData.invoiceNumber}</h2>
+                                    <p className="text-xs text-slate-500">Created on {invData.dateStr}</p>
+                                </div>
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        setIsViewInvoiceModalOpen(false);
                                         const invNo = invData.invoiceNumber;
-                                        router.push(`/payments/invoices?search=${encodeURIComponent(invNo)}&viewInvoiceNo=${encodeURIComponent(invNo)}`);
+                                        window.open(`/payments/invoices?search=${encodeURIComponent(invNo)}&viewInvoiceNo=${encodeURIComponent(invNo)}`, '_blank');
                                     }}
-                                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#12335f] hover:bg-slate-100 transition flex items-center gap-1"
+                                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#12335f] hover:bg-slate-100 transition flex items-center gap-1 cursor-pointer"
+                                    title="Open full page view in new tab"
                                 >
                                     <ExternalLink className="h-3.5 w-3.5" /> Full Page View
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setIsViewInvoiceModalOpen(false)}
-                                    className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 transition"
+                                    onClick={closeInvoiceModal}
+                                    className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 transition cursor-pointer"
                                     aria-label="Close invoice viewer"
+                                    title="Close Tax Invoice"
                                 >
                                     <X className="h-4 w-4" />
                                 </button>
@@ -1952,8 +2146,9 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
             {/* Bottom Action Footer */}
             <div className="flex items-center justify-between pt-4 border-t border-slate-200 bg-white">
-                <Button variant="outline" onClick={onDone} disabled={isSubmitting} className="h-10 px-5 text-xs font-bold">
-                    Cancel
+                <Button variant="outline" onClick={onDone} disabled={isSubmitting} className="h-10 px-5 text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Deliveries
                 </Button>
                 <Button
                     onClick={handleSave}
@@ -2028,6 +2223,7 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 }
 
 function ReadyForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
+    const qc = useQueryClient();
     const mut = useMarkReadyForPickup();
     return (
         <div className="space-y-3">
@@ -2036,10 +2232,13 @@ function ReadyForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => 
                 Confirm that DLV-{delivery.id} is packed and ready for pickup. Once confirmed, status changes to <strong>READY FOR PICKUP</strong>.
             </div>
             <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={onDone}>Cancel</Button>
+                <Button variant="outline" onClick={onDone} className="cursor-pointer">Cancel</Button>
                 <Button
                     onClick={async () => {
-                        await runWithToast(() => mut.mutateAsync(delivery.id), {
+                        await runWithToast(async () => {
+                            await mut.mutateAsync(delivery.id);
+                            await invalidateDeliveryCache(qc, delivery.id);
+                        }, {
                             loading: 'Marking ready...',
                             success: 'Status updated: READY FOR PICKUP',
                             error: (err: any) => err?.message || 'Failed'
@@ -2047,7 +2246,7 @@ function ReadyForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => 
                         onDone();
                     }}
                     disabled={mut.isPending}
-                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                    className="bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
                 >
                     {mut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Truck className="mr-2 h-4 w-4" />}
                     Confirm Ready for Pickup
@@ -2106,44 +2305,70 @@ function getNextStatusDescription(status: string): string {
 }
 
 function TrackInfoForm({ delivery: initialDelivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
-    const { data: freshDelivery } = useDelivery(initialDelivery.id);
+    const qc = useQueryClient();
+    const { data: freshDelivery, refetch: refetchDelivery } = useDelivery(initialDelivery.id);
     const delivery = freshDelivery || initialDelivery;
     const nextStatus = nextManualStatusFor(String(delivery.status));
     const mut = useManualStatusUpdate();
-    const { data: timelineData } = useDeliveryTimeline(delivery.id);
+    const { data: timelineData, refetch: refetchTimeline } = useDeliveryTimeline(delivery.id);
 
     const [copied, setCopied] = useState(false);
     const [remarks, setRemarks] = useState('');
     const [isAdvancing, setIsAdvancing] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    const [lastUpdatedStatus, setLastUpdatedStatus] = useState<string | null>(null);
 
-    // Timeline normalization
+    // Timeline normalization with duplicate prevention
     const timelineEvents = useMemo(() => {
         if (!timelineData) return [];
         if (Array.isArray(timelineData)) return timelineData;
         const events = Array.isArray((timelineData as any)?.events) ? (timelineData as any).events : [];
         const logs = Array.isArray((timelineData as any)?.statusLogs) ? (timelineData as any).statusLogs : [];
 
-        const items = [
-            ...events.map((e: any) => ({
+        const items: Array<{
+            id: string;
+            status: string;
+            location?: string;
+            remarks?: string;
+            time: string;
+            type: string;
+        }> = [];
+
+        const norm = (s: any) => String(s || '').toUpperCase().trim();
+
+        for (const e of events) {
+            items.push({
                 id: `event-${e.id}`,
-                status: e.status,
+                status: norm(e.status),
                 location: e.location,
                 remarks: e.remarks,
                 time: e.occurredAt || e.createdAt,
                 type: 'event'
-            })),
-            ...logs
-                .filter((l: any) => !l.previousStatus || l.previousStatus !== l.newStatus)
-                .map((l: any) => ({
+            });
+        }
+
+        for (const l of logs) {
+            if (l.previousStatus && l.previousStatus === l.newStatus) continue;
+            const logStatus = norm(l.newStatus);
+            const logTime = new Date(l.createdAt || 0).getTime();
+
+            const hasDuplicateEvent = items.some(e => {
+                if (e.status !== logStatus) return false;
+                const eTime = new Date(e.time || 0).getTime();
+                return Math.abs(eTime - logTime) <= 30000;
+            });
+
+            if (!hasDuplicateEvent) {
+                items.push({
                     id: `log-${l.id}`,
-                    status: l.newStatus,
+                    status: logStatus,
                     location: undefined,
                     remarks: l.remarks,
                     time: l.createdAt,
                     type: 'log'
-                }))
-        ];
+                });
+            }
+        }
 
         return items.sort((a, b) => new Date(b.time || 0).getTime() - new Date(a.time || 0).getTime());
     }, [timelineData]);
@@ -2167,25 +2392,65 @@ function TrackInfoForm({ delivery: initialDelivery, onDone }: { delivery: Delive
     const handleAdvanceStatus = async () => {
         if (!nextStatus) return;
         setIsAdvancing(true);
+        const targetStatus = nextStatus;
         await runWithToast(
-            () =>
-                mut.mutateAsync({
+            async () => {
+                await mut.mutateAsync({
                     id: delivery.id,
                     data: {
-                        status: nextStatus,
+                        status: targetStatus,
                         remarks: remarks.trim() || undefined,
                         occurredAt: new Date().toISOString()
                     }
-                }),
+                });
+
+                // Immediately update local React Query caches in memory for instant feedback
+                const nowIso = new Date().toISOString();
+                qc.setQueriesData({ queryKey: ['delivery', 'detail', delivery.id] }, (old: any) =>
+                    old ? { ...old, status: targetStatus, updatedAt: nowIso } : old
+                );
+                qc.setQueriesData({ queryKey: queryKeys.deliveries.detail(delivery.id) }, (old: any) =>
+                    old ? { ...old, status: targetStatus, updatedAt: nowIso } : old
+                );
+                qc.setQueriesData({ queryKey: ['delivery', 'list'] }, (old: any) => {
+                    if (Array.isArray(old)) {
+                        return old.map((d: any) => d.id === delivery.id ? { ...d, status: targetStatus, updatedAt: nowIso } : d);
+                    }
+                    if (old?.records) {
+                        return {
+                            ...old,
+                            records: old.records.map((d: any) => d.id === delivery.id ? { ...d, status: targetStatus, updatedAt: nowIso } : d)
+                        };
+                    }
+                    return old;
+                });
+                qc.setQueriesData({ queryKey: queryKeys.deliveries.all }, (old: any) => {
+                    if (Array.isArray(old)) {
+                        return old.map((d: any) => d.id === delivery.id ? { ...d, status: targetStatus, updatedAt: nowIso } : d);
+                    }
+                    if (old?.records) {
+                        return {
+                            ...old,
+                            records: old.records.map((d: any) => d.id === delivery.id ? { ...d, status: targetStatus, updatedAt: nowIso } : d)
+                        };
+                    }
+                    return old;
+                });
+
+                setLastUpdatedStatus(targetStatus);
+                // Trigger background refetches non-blockingly so the toast resolves immediately (<1.5s)
+                void invalidateDeliveryCache(qc, delivery.id);
+                void Promise.all([refetchDelivery(), refetchTimeline()]);
+            },
             {
-                loading: `Advancing status to ${readableStatus(nextStatus)}...`,
-                success: `Status updated: ${readableStatus(nextStatus)}`,
+                loading: `Advancing status to ${readableStatus(targetStatus)}...`,
+                success: `Status updated: ${readableStatus(targetStatus)}! You can continue updating milestones below or close when done.`,
                 error: (err: any) => err?.message || 'Status update failed'
             }
         );
         setIsAdvancing(false);
         setRemarks('');
-        onDone();
+        // Modal remains open so user can advance further or close when finished.
     };
 
     const trackingNum = delivery.trackingNumber || `DLV-${delivery.id}`;
@@ -2504,34 +2769,47 @@ function TrackInfoForm({ delivery: initialDelivery, onDone }: { delivery: Delive
             </div>
 
             {/* Bottom Actions */}
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-200/80">
-                <Button
-                    variant="outline"
-                    onClick={onDone}
-                    className="px-4 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
-                >
-                    Close
-                </Button>
-                {nextStatus && (
+            <div className="flex items-center justify-between pt-3 border-t border-slate-200/80">
+                <div>
+                    {lastUpdatedStatus && (
+                        <span className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/80 font-bold text-[11px] animate-in fade-in duration-200">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                            Updated to {readableStatus(lastUpdatedStatus)}
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-2.5">
                     <Button
-                        onClick={handleAdvanceStatus}
-                        disabled={mut.isPending || isAdvancing}
-                        className="bg-gradient-to-r from-[#0b1f3a] to-[#12335f] hover:from-[#08172c] hover:to-[#0d274c] text-white px-5 text-xs font-black shadow-md transition-all duration-200 hover:shadow-lg cursor-pointer"
+                        type="button"
+                        variant="outline"
+                        onClick={onDone}
+                        className="px-4 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
                     >
-                        {mut.isPending || isAdvancing ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                            <Truck className="mr-2 h-4 w-4" />
-                        )}
-                        Update Status to {readableStatus(nextStatus)}
+                        {lastUpdatedStatus ? 'Done' : 'Close'}
                     </Button>
-                )}
+                    {nextStatus && (
+                        <Button
+                            type="button"
+                            onClick={handleAdvanceStatus}
+                            disabled={mut.isPending || isAdvancing}
+                            className="bg-gradient-to-r from-[#0b1f3a] to-[#12335f] hover:from-[#08172c] hover:to-[#0d274c] text-white px-5 text-xs font-black shadow-md transition-all duration-200 hover:shadow-lg cursor-pointer"
+                        >
+                            {mut.isPending || isAdvancing ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <Truck className="mr-2 h-4 w-4" />
+                            )}
+                            Update Status to {readableStatus(nextStatus)}
+                        </Button>
+                    )}
+                </div>
             </div>
         </div>
     );
 }
 
 function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
+    const qc = useQueryClient();
     const [docType, setDocType] = useState('PROOF_OF_DELIVERY');
     const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [receivedBy, setReceivedBy] = useState('');
@@ -2660,14 +2938,17 @@ function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: ()
 
         const compositeDescription = parts.join(' | ').slice(0, 500);
 
-        await runWithToast(() => mut.mutateAsync({
-            id: delivery.id,
-            data: {
-                documentType: docType,
-                fileAssetId: Number(fileAssetId),
-                description: compositeDescription
-            }
-        }), {
+        await runWithToast(async () => {
+            await mut.mutateAsync({
+                id: delivery.id,
+                data: {
+                    documentType: docType,
+                    fileAssetId: Number(fileAssetId),
+                    description: compositeDescription
+                }
+            });
+            await invalidateDeliveryCache(qc, delivery.id);
+        }, {
             loading: 'Submitting Proof of Delivery (POD)...',
             success: 'POD document submitted successfully',
             error: (err: any) => err?.message || 'Failed to submit POD'
