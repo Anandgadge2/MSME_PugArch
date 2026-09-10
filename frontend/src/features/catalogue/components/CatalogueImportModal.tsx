@@ -285,8 +285,13 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
               </div>
 
               {preview.warnings?.length > 0 && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-800">
-                  {preview.warnings.map((w, i) => <p key={i}>{w}</p>)}
+                <div role="status" aria-live="polite" className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 text-xs text-amber-900 space-y-1">
+                  <p className="font-semibold flex items-center gap-1.5 text-amber-800">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" /> Import Warnings ({preview.warnings.length})
+                  </p>
+                  <div className="max-h-24 overflow-y-auto space-y-0.5 text-[11px] text-amber-800">
+                    {preview.warnings.map((w, i) => <p key={i}>• {w}</p>)}
+                  </div>
                 </div>
               )}
 
@@ -347,16 +352,37 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
                         </tr>
                       </thead>
                       <tbody>
-                        {preview.preview.map((row: any, i) => (
-                          <tr key={i} className="border-t border-slate-100">
-                            <td className="py-1 font-semibold text-slate-900">{row.name}</td>
-                            <td className="py-1">
-                              <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold">{row.status}</span>
-                            </td>
-                            <td className="py-1 text-slate-500">{row.specifications?.length || 0} attributes</td>
-                            <td className="py-1 text-slate-500">{row.imageIds?.length || 0} media</td>
-                          </tr>
-                        ))}
+                        {preview.preview.map((row: any, i) => {
+                          const imageCount = Array.isArray(row.imageIds) ? row.imageIds.length : 0;
+                          const expectedImages = typeof row.expectedImageCount === 'number' ? row.expectedImageCount : 0;
+
+                          return (
+                            <tr key={i} className="border-t border-slate-100">
+                              <td className="py-1 font-semibold text-slate-900">{row.name}</td>
+                              <td className="py-1">
+                                <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold">{row.status}</span>
+                              </td>
+                              <td className="py-1 text-slate-500">{row.specifications?.length || 0} attributes</td>
+                              <td className="py-1">
+                                {expectedImages === 0 ? (
+                                  <span className="text-slate-500 font-medium">0 media</span>
+                                ) : imageCount === expectedImages ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                                    <CheckCircle2 className="h-3 w-3 text-emerald-600" aria-hidden="true" /> {imageCount} media
+                                  </span>
+                                ) : imageCount > 0 ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded" title={`${expectedImages - imageCount} image(s) failed`}>
+                                    <AlertTriangle className="h-3 w-3 text-amber-600" aria-hidden="true" /> {imageCount}/{expectedImages} media
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-red-100 text-red-800 px-1.5 py-0.5 rounded" title={`Failed to download/process ${expectedImages} image(s)`}>
+                                    <AlertTriangle className="h-3 w-3 text-red-600" aria-hidden="true" /> 0/{expectedImages} media
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

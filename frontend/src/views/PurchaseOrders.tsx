@@ -808,7 +808,7 @@ export default function PurchaseOrders() {
     (expectedDateFilter !== 'All Dates' ? 1 : 0) + 
     ((updatedDateFilter.start || updatedDateFilter.end) ? 1 : 0);
 
-  if (loading && (!allOrders || allOrders.length === 0)) {
+  if ((loading || refreshing) && (!allOrders || allOrders.length === 0)) {
     return <PageTableSkeleton kpiCount={4} />;
   }
 
@@ -937,7 +937,7 @@ export default function PurchaseOrders() {
         />
       </div>
 
-      {loading && (!allOrders || allOrders.length === 0) ? (
+      {(loading || refreshing) && (!allOrders || allOrders.length === 0) ? (
         <PageTableSkeleton kpiCount={4} />
       ) : error ? (
         <div className="p-8 text-center text-red-500">

@@ -95,9 +95,17 @@ export const useLogisticsPartners = () =>
         queryFn: () => listLogisticsPartners()
     });
 
-const invalidateDelivery = (qc: ReturnType<typeof useQueryClient>, id?: number) => {
-    qc.invalidateQueries({ queryKey: queryKeys.deliveries.all });
-    if (id) qc.invalidateQueries({ queryKey: queryKeys.deliveries.detail(id) });
+export const invalidateDelivery = async (qc: ReturnType<typeof useQueryClient>, id?: number) => {
+    // Invalidate queries to mark them stale and trigger silent background refetches.
+    // Never call qc.refetchQueries here as that forces synchronous network waterfalls.
+    await Promise.all([
+        qc.invalidateQueries({ queryKey: queryKeys.deliveries.all }),
+        qc.invalidateQueries({ queryKey: ['delivery'] }),
+        id ? qc.invalidateQueries({ queryKey: queryKeys.deliveries.detail(id) }) : Promise.resolve(),
+        id ? qc.invalidateQueries({ queryKey: queryKeys.deliveries.timeline(id) }) : Promise.resolve(),
+        id ? qc.invalidateQueries({ queryKey: ['delivery', 'detail', id] }) : Promise.resolve(),
+        id ? qc.invalidateQueries({ queryKey: ['delivery', 'timeline', id] }) : Promise.resolve(),
+    ]);
 };
 
 /**

@@ -15,10 +15,27 @@ const envBoolean = (defaultValue = false) =>
     return value;
   }, z.boolean());
 
+const stripQuotes = (val: string): string => {
+  let cleaned = val.trim();
+  while (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  if (cleaned.startsWith('"') || cleaned.startsWith("'")) {
+    cleaned = cleaned.slice(1).trim();
+  }
+  if (cleaned.endsWith('"') || cleaned.endsWith("'")) {
+    cleaned = cleaned.slice(0, -1).trim();
+  }
+  return cleaned;
+};
+
 const optionalString = () =>
   z.preprocess(value => {
     if (value === undefined || value === null) return undefined;
-    const trimmed = String(value).trim();
+    const trimmed = stripQuotes(String(value));
     return trimmed ? trimmed : undefined;
   }, z.string().optional());
 
@@ -109,10 +126,10 @@ const envSchema = z.object({
   BANDHAN_SECRET_KEY: z.string().optional(),
   BANDHAN_WEBHOOK_SECRET: z.string().optional(),
   BANK_TRANSFER_VIRTUAL_ACCOUNT: z.string().optional(),
-  SMTP_HOST: z.string().default('smtp.gmail.com'),
+  SMTP_HOST: z.preprocess(val => (val ? stripQuotes(String(val)) : 'smtp.gmail.com'), z.string().default('smtp.gmail.com')),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASS: z.string().optional(),
+  SMTP_USER: optionalString(),
+  SMTP_PASS: optionalString(),
   SMS_ENABLED: envBoolean(false),
   SMS_PROVIDER: z.enum(['msg91']).default('msg91'),
   MSG91_AUTH_KEY: optionalString(),

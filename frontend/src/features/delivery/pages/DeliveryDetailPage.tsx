@@ -9,6 +9,8 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../../shared/queryKeys';
 import {
   AlertTriangle,
   ArrowRight,
@@ -478,7 +480,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
         {/* ─── Right Action Rail ─── */}
         <aside className="space-y-5 xl:sticky xl:top-4 xl:self-start">
           {accessRole === 'seller' && (
-            <ManualTrackingActions delivery={delivery} latestManual={latestManual} />
+            <ManualTrackingActions delivery={delivery} latestManual={latestManual} onRefresh={() => detailQuery.refetch()} />
           )}
           {accessRole === 'seller' && (
             <DpExtensionSection delivery={delivery} accessRole={accessRole} />
@@ -655,19 +657,34 @@ function RatingCTACard({
 
 function ManualTrackingActions({
   delivery,
-  latestManual
+  latestManual,
+  onRefresh
 }: {
   delivery: DeliveryDetailDto;
   latestManual?: ReturnType<typeof latestManualUpdateFor>;
+  onRefresh?: () => void | Promise<any>;
 }) {
   const nextStatus = nextManualStatusFor(delivery.status);
   const latest = latestManual;
   const updateMut = useManualDeliveryStatusUpdate(delivery.id);
+  const qc = useQueryClient();
 
-  const updateStatus = () => {
+  const updateStatus = async () => {
     if (!nextStatus) return;
-    runWithToast(
-      () => updateMut.mutateAsync({ status: nextStatus }),
+    await runWithToast(
+      async () => {
+        await updateMut.mutateAsync({ status: nextStatus });
+        const nowIso = new Date().toISOString();
+        qc.setQueriesData({ queryKey: queryKeys.deliveries.detail(delivery.id) }, (old: any) =>
+          old ? { ...old, status: nextStatus, updatedAt: nowIso } : old
+        );
+        qc.setQueriesData({ queryKey: ['delivery', 'detail', delivery.id] }, (old: any) =>
+          old ? { ...old, status: nextStatus, updatedAt: nowIso } : old
+        );
+        if (onRefresh) {
+          void onRefresh();
+        }
+      },
       {
         loading: `Advancing status to ${DELIVERY_STATUS_LABELS[nextStatus]}...`,
         success: `Status advanced to ${DELIVERY_STATUS_LABELS[nextStatus]}!`,

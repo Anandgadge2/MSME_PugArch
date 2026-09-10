@@ -34,6 +34,7 @@ import {
 import { Button } from '../../../components/ui/button';
 import { Input, Select } from '../../../components/ui/input';
 import { useAuth } from '../../../hooks/useAuth';
+import { usePermissions } from '../../../hooks/useOrgRole';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
 import { TableSkeleton, ListSkeleton } from '../../../components/ui/skeleton';
 import { Pagination } from '../../shared/Pagination';
@@ -60,6 +61,7 @@ interface Props {
 
 export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
   const { user } = useAuth();
+  const { hasPermission } = usePermissions();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Statuses');
   const [orderFilter, setOrderFilter] = useState('All Orders');
@@ -114,7 +116,7 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
     return Array.from(set).sort();
   }, [rawRecords]);
 
-  const processedOrders = useMemo(() => {
+  const baseFilteredOrders = useMemo(() => {
     let result = [...rawRecords];
 
     if (activeKpiFilter !== 'all') {
@@ -137,10 +139,6 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
         String(o.purchaseOrder?.buyer?.name || '').toLowerCase().includes(lower) ||
         String(o.carrierName || o.logisticsPartnerName || '').toLowerCase().includes(lower)
       );
-    }
-
-    if (statusFilter !== 'All Statuses') {
-      result = result.filter(o => o.status === statusFilter);
     }
 
     if (orderFilter !== 'All Orders') {
@@ -264,31 +262,30 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
         }
       }
     });
-  }, [rawRecords, searchTerm, statusFilter, orderFilter, carrierFilter, amountFilter, expectedDateFilter, customDate, sortKey, sortDir, activeKpiFilter]);
+  }, [rawRecords, searchTerm, orderFilter, carrierFilter, amountFilter, expectedDateFilter, customDate, sortKey, sortDir, activeKpiFilter]);
+
+  const processedOrders = useMemo(() => {
+    if (statusFilter !== 'All Statuses') {
+      return baseFilteredOrders.filter(o => o.status === statusFilter);
+    }
+    return baseFilteredOrders;
+  }, [baseFilteredOrders, statusFilter]);
 
   const { page, pageSize, total, pageItems: visibleRecords, setPage, setPageSize } = usePagination(processedOrders, 10);
 
-  // Use server-side report data for KPIs when available, fall back to client-side counters
+  // Calculate KPIs strictly from the same filtered dataset visible in the table.
   const counters = useMemo(() => {
-    if (reportQuery.data) {
-      return {
-        inMovement: reportQuery.data.inMovement || 0,
-        completed: reportQuery.data.completed || 0,
-        risk: reportQuery.data.risk || 0
-      };
-    }
-    // Fallback: lightweight client-side counters from current page
-    const inMovement = processedOrders.filter(r =>
+    const inMovement = baseFilteredOrders.filter(r =>
       ['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'AT_HUB', 'PICKED_UP'].includes(r.status)
     ).length;
-    const completed = processedOrders.filter(r =>
+    const completed = baseFilteredOrders.filter(r =>
       ['DELIVERED', 'ACCEPTED', 'CLOSED', 'PAYMENT_RELEASED'].includes(r.status)
     ).length;
-    const risk = processedOrders.filter(r =>
+    const risk = baseFilteredOrders.filter(r =>
       ['DELAYED', 'DELIVERY_FAILED', 'DISPUTE_RAISED', 'RETURNED', 'CANCELLED'].includes(r.status)
     ).length;
     return { inMovement, completed, risk };
-  }, [processedOrders, reportQuery.data]);
+  }, [baseFilteredOrders]);
 
   const startIndex = (page - 1) * pageSize;
   const isInitialLoading = listQuery.isLoading && !listQuery.data;
@@ -334,18 +331,20 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
         >
           <Truck className="h-4 w-4" /> Live Shipment Tracking
         </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('confirmation')}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all border-b-2',
-            activeTab === 'confirmation'
-              ? 'border-[#12335f] text-[#12335f] bg-slate-100/70 font-black'
-              : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 font-bold'
-          )}
-        >
-          <ClipboardCheck className="h-4 w-4" /> Delivery Confirmation & GRNs
-        </button>
+        {hasPermission('grn.view') && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('confirmation')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all border-b-2',
+              activeTab === 'confirmation'
+                ? 'border-[#12335f] text-[#12335f] bg-slate-100/70 font-black'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 font-bold'
+            )}
+          >
+            <ClipboardCheck className="h-4 w-4" /> Delivery Confirmation & GRNs
+          </button>
+        )}
       </div>
 
       {activeTab === 'confirmation' ? (
@@ -386,13 +385,13 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
             />
             <KpiCard
               label="Total"
-              value={total}
+              value={baseFilteredOrders.length}
               subtext="All visible records"
               icon={Filter}
               loading={isInitialLoading}
               color="indigo"
-              active={!statusFilter}
-              onClick={() => setStatusFilter('')}
+              active={statusFilter === 'All Statuses'}
+              onClick={() => setStatusFilter('All Statuses')}
             />
           </div>
 
