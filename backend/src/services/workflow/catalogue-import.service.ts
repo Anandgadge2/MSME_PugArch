@@ -686,12 +686,20 @@ export const catalogueImportService = {
       if (!categoryName) errors.push({ rowNumber, field: 'category', message: 'Category is required', rawData: row });
       else if (!categories.has(categoryName.toLowerCase())) errors.push({ rowNumber, field: 'category', message: `Category "${categoryName}" not found`, rawData: row });
       if (!PRODUCT_STATUSES.has(statusRaw)) errors.push({ rowNumber, field: 'status', message: 'Status must be DRAFT, ACTIVE, or INACTIVE', rawData: row });
+      let pricingModel: string | null = null;
       if (type === 'PRODUCT') {
         const uom = sanitizeText(col(row, 'Unit Of Measure'), 40);
         if (!uom) errors.push({ rowNumber, field: 'unitOfMeasure', message: 'Unit Of Measure is required', rawData: row });
         if (price === null || price < 0) errors.push({ rowNumber, field: 'price', message: 'Price must be a number >= 0', rawData: row });
       } else {
-        const pricingModel = clean(col(row, 'Pricing Model')).toUpperCase() || 'FIXED';
+        const rawModel = clean(col(row, 'Pricing Model')).toUpperCase() || 'FIXED';
+        pricingModel = rawModel === 'PROJECT' ? 'PER_PROJECT'
+          : rawModel === 'RETAINER' ? 'MONTHLY'
+          : rawModel === 'PER_UNIT' || rawModel === 'UNIT' ? 'FIXED'
+          : rawModel === 'PER_HOUR' ? 'HOURLY'
+          : rawModel === 'PER_DAY' ? 'DAILY'
+          : rawModel === 'PER_MONTH' ? 'MONTHLY'
+          : rawModel;
         if (!PRICING_MODELS.has(pricingModel)) errors.push({ rowNumber, field: 'pricingModel', message: 'Invalid pricing model', rawData: row });
         const serviceArea = sanitizeText(col(row, 'Service Area'), 300);
         if (!serviceArea) errors.push({ rowNumber, field: 'serviceArea', message: 'Service Area is required', rawData: row });
@@ -829,7 +837,7 @@ export const catalogueImportService = {
             isMsmeMade: parseBool(col(row, 'MSME Made')) ?? false
           }
           : {
-            pricingModel: clean(col(row, 'Pricing Model')).toUpperCase() || 'FIXED',
+            pricingModel: pricingModel || 'FIXED',
             basePrice: parseNumber(col(row, 'Base Price')),
             serviceArea: sanitizeText(col(row, 'Service Area'), 300),
             scopeOfWork: scopeOfWork || sanitizeText(col(row, 'Scope Of Work')),
