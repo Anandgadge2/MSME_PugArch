@@ -321,9 +321,6 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     if (candidate.isStartup !== true && candidate.isStartup !== false) {
       errors.isStartup = 'Are you registered with DPIIT as Startup? (Please select Yes or No)';
     }
-    if (candidate.isUdyamCertified !== true && candidate.isUdyamCertified !== false) {
-      errors.isUdyamCertified = 'Do you have Udyam Registration certified by MSME? (Please select Yes or No)';
-    }
     if (candidate.participateInBid !== true && candidate.participateInBid !== false) {
       errors.participateInBid = 'Do you want to participate in Bid? (Please select Yes or No)';
     }
@@ -351,7 +348,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     detailsUpdated: false,
 
     isStartup: null,
-    isUdyamCertified: null,
+    isUdyamCertified: true,
     participateInBid: null,
 
     turnoverMax3Yrs: '',
@@ -399,11 +396,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
           ? true
           : null
       ),
-      isUdyamCertified: cachedProfile.isUdyamCertified ?? (
-        Boolean(cachedRegDetails.udyamNumber) || (Array.isArray(cachedRegDetails.selectedDocuments) && cachedRegDetails.selectedDocuments.includes('udyam_certificate'))
-          ? true
-          : null
-      ),
+      isUdyamCertified: true,
       participateInBid: cachedProfile.participateInBid ?? null,
       msmeType: cachedProfile.msmeType || '',
       vendorType: cachedProfile.vendorType || '',
@@ -650,11 +643,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
             ? true
             : prev.isStartup ?? null
         ),
-        isUdyamCertified: profile.isUdyamCertified ?? (
-          Boolean(regDetails.udyamNumber) || (Array.isArray(regDetails.selectedDocuments) && regDetails.selectedDocuments.includes('udyam_certificate'))
-            ? true
-            : prev.isUdyamCertified ?? null
-        ),
+        isUdyamCertified: true,
         participateInBid: profile.participateInBid ?? prev.participateInBid ?? null,
         registrationTypes: Array.isArray(profile.registrationTypes) && profile.registrationTypes.length > 0
           ? profile.registrationTypes
@@ -1550,7 +1539,6 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
 
                       {[
                         { label: 'Are you registered with DPIIT as Startup?', name: 'isStartup' },
-                        { label: 'Do you have Udyam Registration certified by MSME?', name: 'isUdyamCertified' },
                         { label: 'Do you want to participate in Bid?', name: 'participateInBid' },
                       ].map(item => (
                         <div key={item.name} className="space-y-2">
