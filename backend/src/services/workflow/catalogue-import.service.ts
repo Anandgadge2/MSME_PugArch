@@ -185,7 +185,7 @@ async function downloadAndUploadUrl(
       return { success: false, url, reason: `HTTP ${res.status}${res.statusText ? ' ' + res.statusText : ''}` };
     }
     const arrayBuffer = await res.arrayBuffer();
-    let buffer = Buffer.from(arrayBuffer);
+    let buffer: Buffer = Buffer.from(arrayBuffer);
     if (buffer.length === 0) {
       console.warn(`[Catalogue Import] Empty file downloaded from URL: ${url}`);
       return { success: false, url, reason: 'Downloaded file is empty (0 bytes)' };
@@ -223,7 +223,7 @@ async function downloadAndUploadUrl(
             finalExt = '.jpg';
           } else {
             // Normalize any other image formats (AVIF, TIFF, GIF, HEIF, SVG) to standard WebP for storage compatibility
-            buffer = await sharp(buffer).webp({ quality: 90 }).toBuffer();
+            buffer = Buffer.from(await sharp(buffer).webp({ quality: 90 }).toBuffer());
             finalMime = 'image/webp';
             finalExt = '.webp';
           }
