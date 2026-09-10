@@ -128,6 +128,7 @@ export default function AdminBidManagementPage() {
   const { user } = useAuth();
   const [bids, setBids] = useState<ProcurementBid[]>([]);
   const [intakeRecords, setIntakeRecords] = useState<ProcurementIntakeRecord[]>([]);
+  const [intakeTotal, setIntakeTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filters, setFilters] = useState<FilterState>(initialFilters);
@@ -149,15 +150,20 @@ export default function AdminBidManagementPage() {
     setError('');
     Promise.all([
       procurementBidApi.getAdminBids(),
-      procurementBidApi.getAdminProcurementIntake().catch(() => []),
+      procurementBidApi.getAdminProcurementIntake().catch(() => ({ records: [], total: 0 })),
     ])
-      .then(([rows, intake]) => {
+      .then(([rows, intakeResult]) => {
         setBids(rows);
-        setIntakeRecords(intake);
+        // intakeResult is now { records, total } — use total for KPI accuracy
+        const records = Array.isArray(intakeResult) ? intakeResult : (intakeResult?.records ?? []);
+        const total = typeof intakeResult?.total === 'number' ? intakeResult.total : records.length;
+        setIntakeRecords(records);
+        setIntakeTotal(total);
       })
       .catch((err: any) => {
         setBids([]);
         setIntakeRecords([]);
+        setIntakeTotal(0);
         setError(err?.message || 'Unable to load admin bids right now.');
       })
       .finally(() => setLoading(false));
@@ -414,9 +420,9 @@ export default function AdminBidManagementPage() {
       { label: 'Award Recommended', value: bids.filter(bid => (bid.awards || []).some(award => award.status === 'RECOMMENDED')).length, icon: Trophy, tone: 'indigo' as const, subtext: 'L1 selection proposed' },
       { label: 'Awarded Bids', value: bids.filter(bid => bid.status === 'Awarded').length, icon: Gavel, tone: 'emerald' as const, subtext: 'Contract finalized' },
       { label: 'Participating Sellers', value: totalParticipants, icon: Users, tone: 'teal' as const, subtext: 'Total supplier submissions' },
-      { label: 'Procurement Intake', value: intakeRecords.length, icon: ClipboardCheck, tone: 'rose' as const, subtext: 'Submitted wizard drafts' },
+      { label: 'Procurement Intake', value: intakeTotal, icon: ClipboardCheck, tone: 'rose' as const, subtext: 'Submitted wizard drafts' },
     ];
-  }, [bids, intakeRecords.length]);
+  }, [bids, intakeTotal]);
 
   const selectedRanking = sortedRanking(participants);
   const selectedAwards = participants.flatMap(participant =>
@@ -469,7 +475,7 @@ export default function AdminBidManagementPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="inline-flex h-6 items-center rounded-full bg-slate-100 px-2.5 text-[10px] font-black tracking-wide text-slate-600">
-                        {intakeRecords.length} intake record(s)
+                        {intakeTotal} intake record(s)
                       </span>
                       <ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />
                     </div>

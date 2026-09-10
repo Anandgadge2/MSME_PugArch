@@ -43,6 +43,7 @@ export const routeForNotification = (
   }
   if (type.includes('grievance')) return role === 'admin' ? '/admin/disputes?tab=grievances' : '/dashboard';
   if (type.includes('organization')) return role === 'admin' ? '/admin/organizations' : '/dashboard';
+  if (type.includes('category')) return '/admin/categories';
 
   return '/notifications';
 };

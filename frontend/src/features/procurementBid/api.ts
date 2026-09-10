@@ -584,10 +584,18 @@ export const procurementBidApi = {
     return list.map(normalizeBid);
   },
   async getAdminProcurementIntake(params: Record<string, string | number> = {}) {
-    const qs = buildQueryString(params);
+    // Pass take=1000 to retrieve all intake records for the admin view.
+    // The backend defaults to take=20 (first page), which caused the KPI card
+    // to show only 20 instead of the actual total.
+    const mergedParams = { take: 1000, ...params };
+    const qs = buildQueryString(mergedParams);
     const res = await api.fetch(`/api/admin/procurement/intake${qs ? `?${qs}` : ''}`, { method: 'GET', headers: authHeaders(), skipCache: true });
     const data = await readApiBody(res);
-    return data?.records || data?.items || data || [];
+    const records: any[] = data?.records || data?.items || (Array.isArray(data) ? data : []);
+    // Return both the full records array and the server-authoritative total
+    // (server total may differ from records.length if take is still limiting)
+    const serverTotal: number = typeof data?.total === 'number' ? data.total : records.length;
+    return { records, total: serverTotal };
   },
   async updateProcurementIntakeStatus(id: number | string, status: string) {
     const res = await api.patch(`/api/procurement/${encodeURIComponent(String(id))}/status`, { status }, { headers: authHeaders() });

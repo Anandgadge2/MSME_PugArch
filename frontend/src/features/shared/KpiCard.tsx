@@ -192,12 +192,11 @@ function KpiCardBase({
   const displaySubtext = subtext || hint || helper || change || description || `${label} status`;
 
   const formattedValue = React.useMemo(() => {
-    if (loading) return '...';
     if (typeof value === 'number') {
       return value.toLocaleString('en-IN');
     }
     return value ?? '0';
-  }, [value, loading]);
+  }, [value]);
 
   const Element: any = interactive ? 'button' : 'div';
 
@@ -244,14 +243,13 @@ function KpiCardBase({
 
           {/* Value */}
           <div className="mt-0.5">
-            <div
-              className={cn(
-                'truncate text-xs sm:text-sm lg:text-base font-extrabold tracking-tight leading-snug',
-                loading ? 'text-slate-300 animate-pulse' : 'text-slate-900'
-              )}
-            >
-              {formattedValue}
-            </div>
+            {loading ? (
+              <div className="h-4 sm:h-5 w-12 sm:w-16 bg-slate-200/80 rounded animate-pulse my-0.5" />
+            ) : (
+              <div className="truncate text-xs sm:text-sm lg:text-base font-extrabold tracking-tight leading-snug text-slate-900">
+                {formattedValue}
+              </div>
+            )}
           </div>
         </div>
 

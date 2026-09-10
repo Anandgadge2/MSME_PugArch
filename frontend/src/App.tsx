@@ -132,6 +132,7 @@ const LimitedTenderDetailPage = lazy(() => import('./features/rfq/pages/LimitedT
 const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotationPage'));
 const RfqComparisonPage = lazy(() => import('./features/rfq/pages/RfqComparisonPage'));
 const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLoginPopup'));
+const AdminCategoryAlertPopup = lazy(() => import('./features/notifications/AdminCategoryAlertPopup'));
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
 
 import Sidebar, { Header } from './components/layout/Navbar';
@@ -1064,6 +1065,9 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
         {showDashboardLayout && (
           <Suspense fallback={null}>
             <InviteLoginPopup />
+            {user && (user.role === 'admin' || user.role === 'master_admin') && (
+              <AdminCategoryAlertPopup />
+            )}
           </Suspense>
         )}
         <SubUserActivationGate />

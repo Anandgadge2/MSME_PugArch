@@ -120,7 +120,7 @@ export const notificationService = {
   async notifyAdmins(opts: NotifyOpts) {
     try {
       const admins = await db.user.findMany({
-        where: { role: 'admin' },
+        where: { role: { in: ['admin', 'master_admin'] as any } },
         select: { id: true }
       });
       await Promise.allSettled(

@@ -2178,6 +2178,46 @@ router.put('/seller/onboarding', authenticate, authorize('seller'), asyncRoute(a
       ...data
     }
   });
+
+  if (Array.isArray(data.productCategories) && data.productCategories.length > 0) {
+    const rawCategories: string[] = data.productCategories.filter((c: any) => typeof c === 'string' && c.trim().length > 1);
+    for (const catName of rawCategories) {
+      const slug = slugFor(catName.trim());
+      const existing = await db.category.findFirst({
+        where: { OR: [{ slug }, { name: { equals: catName.trim(), mode: 'insensitive' } }] }
+      });
+      if (!existing) {
+        try {
+          const newCat = await db.category.create({
+            data: {
+              name: catName.trim(),
+              slug,
+              type: 'BOTH',
+              organizationId: profile.organizationId || null,
+              isActive: true
+            }
+          });
+          await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
+          const u = await db.user.findUnique({
+            where: { id: userId(req) },
+            include: { organization: true, sellerProfile: true }
+          });
+          const sellerName = u?.name || 'A seller';
+          const businessName = u?.organization?.organizationName || u?.sellerProfile?.businessName || 'Onboarding MSME';
+          await notificationService.notifyAdmins({
+            title: `New Custom Category: "${newCat.name}"`,
+            message: `Added by ${sellerName} (${businessName}) during seller onboarding. Please review and upload a category photo.`,
+            type: 'category_custom_added',
+            priority: 'high',
+            redirectUrl: `/admin/categories?edit=${newCat.id}`
+          }).catch(() => undefined);
+        } catch {
+          // ignore duplicate race condition
+        }
+      }
+    }
+  }
+
   await auditWrite(req, 'onboarding.seller.updated', 'sellerProfile', profile.id);
   ok(res, profile);
 }));
@@ -2480,6 +2520,11 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     const hasGstin = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('GST_REGISTERED');
     if (!isShg && hasGstin) {
       addRequiredDoc('gst_certificate');
+    }
+
+    const hasNsic = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('NSIC_REGISTERED');
+    if (!isShg && hasNsic) {
+      addRequiredDoc('nsic_certificate');
     }
 
     if (!isShg && (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber)) {
@@ -4217,6 +4262,14 @@ router.post('/categories/custom', authenticate, asyncRoute(async (req, res) => {
     type: z.enum(['PRODUCT', 'SERVICE', 'BOTH']).default('BOTH')
   }), req.body);
 
+  const uid = userId(req);
+  const user = await db.user.findUnique({
+    where: { id: uid },
+    include: { organization: true, sellerProfile: true, buyerProfile: true }
+  });
+  const userName = user?.name || 'A registered user';
+  const orgName = user?.organization?.organizationName || user?.sellerProfile?.businessName || user?.buyerProfile?.organizationName || 'Registered Enterprise';
+
   const slug = slugFor(body.name);
   const existing = await db.category.findFirst({
     where: { OR: [{ slug }, { name: { equals: body.name, mode: 'insensitive' } }] }
@@ -4234,12 +4287,43 @@ router.post('/categories/custom', authenticate, asyncRoute(async (req, res) => {
       name: body.name,
       slug,
       type: body.type as any,
+      organizationId: user?.organizationId || null,
       isActive: true
     }
   });
   await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
   await auditWrite(req, 'category.custom_created', 'category', category.id);
+
+  // Notify all administrators to upload photo and configure category
+  await notificationService.notifyAdmins({
+    title: `New Custom Category: "${category.name}"`,
+    message: `Added by ${userName} (${orgName}). Please review and upload a category photo to ensure proper display across the marketplace.`,
+    type: 'category_custom_added',
+    priority: 'high',
+    redirectUrl: `/admin/categories?edit=${category.id}`
+  }).catch((err) => {
+    logger.warn({ err }, 'Failed to notify admins about custom category creation');
+  });
+
   ok(res, category, 201);
+}));
+
+router.get('/admin/categories/pending-review', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
+  const pending = await db.category.findMany({
+    where: {
+      isActive: true,
+      OR: [
+        { imageUrl: null },
+        { imageUrl: '' }
+      ]
+    },
+    include: {
+      organization: { select: { id: true, organizationName: true } }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 20
+  });
+  ok(res, pending);
 }));
 
 router.get('/admin/categories', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {

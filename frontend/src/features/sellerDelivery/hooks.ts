@@ -17,12 +17,24 @@ import {
     sellerReject,
     updateDispatchDetails
 } from './api';
+import { queryKeys } from '../shared/queryKeys';
 
 const KEY = ['delivery'] as const;
 
-const invalidate = (qc: ReturnType<typeof useQueryClient>) => {
-    qc.invalidateQueries({ queryKey: KEY });
+export const invalidateDeliveryCache = async (qc: ReturnType<typeof useQueryClient>, id?: number) => {
+    // Invalidate queries to mark them stale and trigger silent background refetches.
+    // Never call qc.refetchQueries here as that forces synchronous network waterfalls.
+    await Promise.all([
+        qc.invalidateQueries({ queryKey: KEY }),
+        qc.invalidateQueries({ queryKey: queryKeys.deliveries.all }),
+        id ? qc.invalidateQueries({ queryKey: [...KEY, 'detail', id] }) : Promise.resolve(),
+        id ? qc.invalidateQueries({ queryKey: [...KEY, 'timeline', id] }) : Promise.resolve(),
+        id ? qc.invalidateQueries({ queryKey: queryKeys.deliveries.detail(id) }) : Promise.resolve(),
+        id ? qc.invalidateQueries({ queryKey: queryKeys.deliveries.timeline(id) }) : Promise.resolve(),
+    ]);
 };
+
+const invalidate = (qc: ReturnType<typeof useQueryClient>, id?: number) => invalidateDeliveryCache(qc, id);
 
 export const useDeliveries = (params?: { status?: string; q?: string; role?: string }) =>
     useQuery({
@@ -62,7 +74,7 @@ export const useSellerAccept = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof sellerAccept>[1] }) => sellerAccept(id, data),
-        onSuccess: () => { void invalidate(qc); }
+        onSuccess: (_data, vars) => { void invalidate(qc, vars.id); }
     });
 };
 
@@ -70,7 +82,7 @@ export const useSellerReject = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, reason }: { id: number; reason: string }) => sellerReject(id, reason),
-        onSuccess: () => { void invalidate(qc); }
+        onSuccess: (_data, vars) => { void invalidate(qc, vars.id); }
     });
 };
 
@@ -78,7 +90,7 @@ export const useMarkPacked = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof markPacked>[1] }) => markPacked(id, data),
-        onSuccess: () => { void invalidate(qc); }
+        onSuccess: (_data, vars) => { void invalidate(qc, vars.id); }
     });
 };
 
@@ -86,7 +98,7 @@ export const useUpdateDispatchDetails = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateDispatchDetails>[1] }) => updateDispatchDetails(id, data),
-        onSuccess: () => { void invalidate(qc); }
+        onSuccess: (_data, vars) => { void invalidate(qc, vars.id); }
     });
 };
 
@@ -94,7 +106,7 @@ export const useMarkReadyForPickup = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id: number) => markReadyForPickup(id),
-        onSuccess: () => { void invalidate(qc); }
+        onSuccess: (_data, id) => { void invalidate(qc, id); }
     });
 };
 
@@ -102,7 +114,7 @@ export const useMarkDispatched = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id: number) => markDispatched(id),
-        onSuccess: () => { void invalidate(qc); }
+        onSuccess: (_data, id) => { void invalidate(qc, id); }
     });
 };
 
@@ -110,7 +122,7 @@ export const useManualStatusUpdate = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof manualStatusUpdate>[1] }) => manualStatusUpdate(id, data),
-        onSuccess: () => { void invalidate(qc); }
+        onSuccess: (_data, vars) => { void invalidate(qc, vars.id); }
     });
 };
 
@@ -118,6 +130,6 @@ export const useAddDeliveryDocument = () => {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: number; data: Parameters<typeof addDeliveryDocument>[1] }) => addDeliveryDocument(id, data),
-        onSuccess: () => { void invalidate(qc); }
+        onSuccess: (_data, vars) => { void invalidate(qc, vars.id); }
     });
 };

@@ -170,6 +170,22 @@ export default function AdminCategoriesPage() {
     setIsAddModalOpen(true);
   };
 
+  const hasHandledUrlEdit = useRef(false);
+  useEffect(() => {
+    if (hasHandledUrlEdit.current || categories.length === 0) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const editId = params.get('edit') || params.get('highlight');
+    if (editId) {
+      const match = categories.find(c => String(c.id) === String(editId));
+      if (match) {
+        hasHandledUrlEdit.current = true;
+        openEditModal(match);
+        toast.info(`Opening category "${match.name}" to configure photo.`);
+      }
+    }
+  }, [categories]);
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;

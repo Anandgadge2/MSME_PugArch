@@ -34,9 +34,9 @@ export default function AdminCmsHubPage() {
 
   return (
     <div className="mx-auto max-w-[1560px] space-y-6 px-4 pb-12">
-      {/* CMS Hub Header */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-slate-200 pb-4">
-        <div>
+      {/* CMS Hub Header & Tabs */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between border-b border-slate-200">
+        <div className="pb-2 lg:pb-4 shrink-0">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-black tracking-tight text-slate-950">CMS & Content Management</h1>
             <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-black uppercase text-[#12335f] border border-blue-200">
@@ -48,11 +48,9 @@ export default function AdminCmsHubPage() {
             Centrally manage public portal banners, announcements, discovery sequences, and marketplace featured sections.
           </p>
         </div>
-      </div>
 
-      {/* Accessible Interactive Tab Navigation (WCAG 2.1 AA) */}
-      <div className="border-b border-slate-200">
-        <nav className="flex space-x-4 overflow-x-auto pb-1" role="tablist" aria-label="CMS Hub Sections">
+        {/* Accessible Interactive Tab Navigation (WCAG 2.1 AA) */}
+        <nav className="flex space-x-2 sm:space-x-4 overflow-x-auto -mb-px w-full lg:w-auto hide-scrollbar" role="tablist" aria-label="CMS Hub Sections">
           {[
             {
               id: 'banners' as const,
@@ -78,7 +76,7 @@ export default function AdminCmsHubPage() {
                 aria-controls={`cms-panel-${tab.id}`}
                 tabIndex={isSelected ? 0 : -1}
                 onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-2.5 whitespace-nowrap border-b-2 px-4 py-3 text-xs sm:text-sm font-bold uppercase tracking-wider transition outline-none focus-visible:ring-2 focus-visible:ring-[#12335f] ${
+                className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-2 pb-3 lg:px-4 lg:pb-4 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition outline-none focus-visible:ring-2 focus-visible:ring-[#12335f] shrink-0 ${
                   isSelected
                     ? 'border-[#12335f] text-[#12335f] font-black'
                     : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'
