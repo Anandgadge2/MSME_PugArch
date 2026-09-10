@@ -484,9 +484,14 @@ function DetailValue({ value, valueKey }: { value: any; valueKey?: string }) {
           <div key={index} className="rounded-xl bg-slate-50/70 p-3 border border-slate-150">
             {typeof item === 'object' ? (
               <PropertyGrid columns={3}>
-                {detailEntries(item).map(([k, v]) => (
-                  <PropertyItem key={k} label={humanizeKey(k)} value={v} />
-                ))}
+                {detailEntries(item)
+                  .filter(([k]) => {
+                    const lk = k.toLowerCase().replace(/[^a-z]/g, '');
+                    return !lk.includes('advance') && !lk.includes('retention') && !lk.includes('securitydeposit') && !lk.includes('warranty');
+                  })
+                  .map(([k, v]) => (
+                    <PropertyItem key={k} label={humanizeKey(k)} value={v} />
+                  ))}
               </PropertyGrid>
             ) : (
               <span className="text-xs font-bold text-slate-900">{formatPrimitiveValue(item, valueKey)}</span>
@@ -498,7 +503,10 @@ function DetailValue({ value, valueKey }: { value: any; valueKey?: string }) {
   }
 
   if (typeof value === 'object') {
-    const entries = detailEntries(value);
+    const entries = detailEntries(value).filter(([k]) => {
+      const lk = k.toLowerCase().replace(/[^a-z]/g, '');
+      return !lk.includes('advance') && !lk.includes('retention') && !lk.includes('securitydeposit') && !lk.includes('warranty');
+    });
     if (!entries.length) return <span className="text-slate-400 font-normal">N/A</span>;
 
     return (
@@ -573,16 +581,18 @@ function PropertyItem({
   const isLimitedTender = typeof ctx === 'boolean' ? false : (ctx.isLimitedTender || false);
   if (!hasDetailData(value)) return null;
 
-  if (isBuyer && label) {
+  if (label) {
     const lower = label.toLowerCase().replace(/[^a-z]/g, '');
     if (
-      // Warranty Terms strictly commented out / hidden on buyer side in open and limited tender
-      ((isOpenTender || isLimitedTender) && (
-        lower === 'warrantyterms' ||
-        lower === 'warranty' ||
-        lower === 'warrantyperiod' ||
-        lower.includes('warranty')
-      )) ||
+      lower.includes('advance') ||
+      lower === 'advanceallowed' ||
+      lower === 'advance' ||
+      lower === 'advancepayment' ||
+      // Warranty Terms strictly hidden from both seller and buyer side
+      lower === 'warrantyterms' ||
+      lower === 'warranty' ||
+      lower === 'warrantyperiod' ||
+      lower.includes('warranty') ||
       lower === 'retentionamount' ||
       lower === 'securitydeposit' ||
       lower === 'retention' ||
@@ -1219,21 +1229,19 @@ function ServiceDetailsSection({ serviceDetails, isRfqType }: { serviceDetails: 
   const isOpenTender = typeof ctx === 'boolean' ? false : ctx.isOpenTender;
   const isLimitedTender = typeof ctx === 'boolean' ? false : (ctx.isLimitedTender || false);
 
-  // Strictly hide Service Details & Parameters on buyer side for limited tender, open tender, etc.
-  if ((isBuyer && (isLimitedTender || isOpenTender)) || !serviceDetails || !isPlainObject(serviceDetails)) return null;
+  // Strictly hide Service Details & Parameters on RFQ globally, or on buyer side for limited tender, open tender, etc.
+  if (isRfqType || (isBuyer && (isLimitedTender || isOpenTender)) || !serviceDetails || !isPlainObject(serviceDetails)) return null;
 
-  const { duration, penaltyClause, slaResponseTime, manpowerRequired, experienceRequired, milestones, warranty, warrantyTerms, warrantyPeriod, ...rest } = serviceDetails;
+  const { duration, projectDuration, penaltyClause, slaResponseTime, manpowerRequired, experienceRequired, milestones, warranty, warrantyTerms, warrantyPeriod, paymentTerms, ...rest } = serviceDetails;
 
   const mainFields = compactObject({
-    duration,
     ...(isRfqType ? {} : {
+      duration,
+      projectDuration,
       penaltyClause,
       slaResponseTime,
       manpowerRequired,
-      experienceRequired,
-      warranty,
-      warrantyTerms,
-      warrantyPeriod
+      experienceRequired
     }),
     ...rest,
   });
@@ -1903,12 +1911,12 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
   );
 }
 
-function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq, isBuyerSide, isRfqType }: { data: any; deliveryLocation?: any; deliveryTerms?: any; isBuyerRfq?: boolean; isBuyerSide?: boolean; isRfqType?: boolean }) {
+function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq, isBuyerSide, isRfqType, isRfpType }: { data: any; deliveryLocation?: any; deliveryTerms?: any; isBuyerRfq?: boolean; isBuyerSide?: boolean; isRfqType?: boolean; isRfpType?: boolean }) {
   const ctx = React.useContext(BuyerSideContext);
   const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
   const isHiddenOnBuyer = Boolean(isBuyer || isBuyerSide || isBuyerRfq);
   const items = asArray(data).filter(hasDetailData);
-  const showDeliveryMeta = !isHiddenOnBuyer && !isRfqType && (hasDetailData(deliveryLocation) || hasDetailData(deliveryTerms));
+  const showDeliveryMeta = !isHiddenOnBuyer && !isRfqType && !isRfpType && (hasDetailData(deliveryLocation) || hasDetailData(deliveryTerms));
 
   if (!showDeliveryMeta && items.length === 0) {
     return null;
@@ -1988,6 +1996,7 @@ export interface ProcurementDetailUnifiedViewProps {
   displayId?: string;
   requirementNumber?: string;
   subject: string;
+  title?: string;
   status: string;
   buyerName?: string;
   orgName?: string;
@@ -2340,6 +2349,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       s === 'request for quotation' ||
       s === 'request for proposal' ||
       s === 'rate contract' ||
+      s === 'rate contract opportunity' ||
+      s === 'rfq opportunity' ||
+      s === 'rfp opportunity' ||
+      s === 'tender opportunity' ||
+      s.includes('no description') ||
+      s.includes('no scope') ||
       s === 'n/a' ||
       s === '—'
     );
@@ -2347,20 +2362,31 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
   const candidateTitles = [
     props.subject,
+    (props as any).title,
+    props.buyer?.requirement?.title,
+    props.buyer?.title,
+    (props as any).requirement?.title,
+    (props as any).data?.requirement?.title,
+    (props as any).data?.title,
     payload.title,
     basics.title,
     basics.contractTitle,
     basics.procurementTitle,
+    basics.serviceTitle,
     payload.rateContractConfig?.contractTitle,
+    payload.tender?.tenderTitle,
+    payload.tender?.title,
     serviceDetails.title,
+    serviceDetails.serviceTitle,
+    payload.wizardData?.basics?.title,
+    payload.wizardData?.serviceDetails?.title,
+    payload.wizardData?.serviceDetails?.serviceTitle,
     lineItems[0]?.name,
     lineItems[0]?.itemName,
     lineItems[0]?.title,
     lineItems[0]?.specification,
     boqTable[0]?.name,
     boqTable[0]?.category,
-    props.description && props.description.length < 80 ? props.description : null,
-    basics.description && basics.description.length < 80 ? basics.description : null,
   ];
 
   const firstValidTitle = candidateTitles.find(t => t && !isGenericTitle(t));
@@ -2393,6 +2419,16 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     pathname.includes('/rfq');
   const isBuyerRfq = isBuyerSide && (isRfqType || pathname.includes('/rfq'));
 
+  const isRfpType =
+    props.procurementType === 'RFP' ||
+    String(props.procurementType || '').toUpperCase().includes('RFP') ||
+    String(props.procurementLabel || '').toUpperCase().includes('PROPOSAL') ||
+    String(props.procurementLabel || '').toUpperCase().includes('RFP') ||
+    String(props.procurementMethod || '').toUpperCase().includes('PROPOSAL') ||
+    String(props.procurementMethod || '').toUpperCase().includes('RFP') ||
+    pathname.includes('/rfp');
+  const isBuyerRfp = isBuyerSide && (isRfpType || pathname.includes('/rfp'));
+
   const isOpenTenderType =
     props.procurementType === 'OPEN_TENDER' ||
     String(props.procurementType || '').toUpperCase().includes('OPEN_TENDER') ||
@@ -2414,9 +2450,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const isBuyerLimitedTender = isBuyerSide && isLimitedTenderType;
 
   const cleanBuyerTerms = (val: any): any => {
-    if (!isBuyerSide || !val) return val;
+    if (!val) return val;
     if (typeof val === 'string') {
-      if ((isBuyerOpenTender || isBuyerLimitedTender) && val.toLowerCase().includes('warranty')) {
+      if (val.toLowerCase().includes('warranty')) {
         return null;
       }
       return val;
@@ -2427,7 +2463,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         .map(cleanBuyerTerms)
         .filter(item => {
           if (item === null || item === undefined || item === '') return false;
-          if (typeof item === 'string' && (isBuyerOpenTender || isBuyerLimitedTender) && item.toLowerCase().includes('warranty')) return false;
+          if (typeof item === 'string' && item.toLowerCase().includes('warranty')) return false;
           return true;
         });
     }
@@ -2435,12 +2471,22 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     for (const [k, v] of Object.entries(val)) {
       const lower = k.toLowerCase().replace(/[^a-z]/g, '');
       if (
-        // Warranty terms strictly commented out / hidden on buyer side in open and limited tender
-        ((isBuyerOpenTender || isBuyerLimitedTender) && (
-          lower === 'warrantyterms' ||
-          lower === 'warranty' ||
-          lower === 'warrantyperiod' ||
-          lower.includes('warranty')
+        // Warranty terms strictly hidden from both seller and buyer side
+        lower === 'warrantyterms' ||
+        lower === 'warranty' ||
+        lower === 'warrantyperiod' ||
+        lower.includes('warranty') ||
+        // RFQ / RFP specific exclusions: Payment Terms, Project Duration, Service Details, Service Title
+        ((isRfqType || isRfpType) && (
+          lower === 'paymentterms' ||
+          lower === 'paymentterm' ||
+          lower === 'paymentmode' ||
+          lower.includes('paymentterm') ||
+          lower === 'projectduration' ||
+          lower === 'duration' ||
+          lower === 'contractperiod' ||
+          lower === 'servicedetails' ||
+          lower === 'servicetitle'
         )) ||
         lower === 'retentionamount' ||
         lower === 'securitydeposit' ||
@@ -3372,20 +3418,20 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   )}
                   <PropertyItem label="Published Date" value={publishedDateFormatted} />
                   <PropertyItem label="Submission Deadline" value={closingDateFormatted} />
-                  {/* Delivery Location - hidden on buyer side and RFQ globally */}
-                  {!isBuyerSide && !isRfqType && (
+                  {/* Delivery Location - hidden on buyer side, RFQ, and RFP globally */}
+                  {!isBuyerSide && !isRfqType && !isRfpType && (
                     <PropertyItem label="Delivery Location" value={deliveryLocation} />
                   )}
-                  {/* Project Duration - commented out / hidden on buyer side */}
-                  {!isBuyerSide && (
+                  {/* Project Duration - hidden on buyer side, RFQ, and RFP globally */}
+                  {!isBuyerSide && !isRfqType && !isRfpType && (
                     <PropertyItem label="Project Duration" value={projectDuration} />
                   )}
-                  {/* Payment Terms - hidden on buyer side */}
-                  {!isBuyerSide && (
+                  {/* Payment Terms - hidden on buyer side, RFQ, and RFP globally */}
+                  {!isBuyerSide && !isRfqType && !isRfpType && (
                     <PropertyItem label="Payment Terms" value={paymentTerms} />
                   )}
-                  {/* Procurement Brief - hidden on buyer side and RFQ globally */}
-                  {!isBuyerSide && !isRfqType && (
+                  {/* Procurement Brief - hidden on buyer side, RFQ, and RFP globally */}
+                  {!isBuyerSide && !isRfqType && !isRfpType && (
                     <PropertyItem label="Procurement Brief" value={props.description && props.description.length < 160 && !props.description.includes('\n') ? props.description : (basics.description && basics.description.length < 160 ? basics.description : `${resolvedSubject} (${category})`)} fullWidth />
                   )}
                 </PropertyGrid>
@@ -3412,8 +3458,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               ]}
             />
 
-            {/* Clarification Threads & Status grid - hidden in RFQ globally, and Open/Limited Tender on buyer side */}
-            {!isRfqType && !isBuyerOpenTender && !isBuyerLimitedTender && (
+            {/* Clarification Threads & Status grid - hidden in RFQ and RFP globally, and Open/Limited Tender on buyer side */}
+            {!isRfqType && !isRfpType && !isBuyerOpenTender && !isBuyerLimitedTender && (
               <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
                 <PropertyGrid columns={4}>
                   <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
@@ -3438,8 +3484,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 procurementMethod={procurementMethod}
               />
 
-              {/* Service Details & Parameters - commented out strictly in Open Tender, Limited Tender, and RFQ on buyer side */}
-              {hasDetailData(serviceDetails) && !isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
+              {/* Service Details & Parameters - hidden globally on RFQ, and on buyer side for Open & Limited Tender */}
+              {hasDetailData(serviceDetails) && !isRfqType && !isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
                 <ServiceDetailsSection serviceDetails={serviceDetails} isRfqType={isRfqType} />
               )}
 
@@ -3579,8 +3625,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 {/* Payment Terms and Delivery Terms commented out as they already appear in Terms & Conditions */}
                 {/* <PropertyItem label="Payment Terms" value={paymentTerms} /> */}
                 {/* <PropertyItem label="Delivery Terms" value={deliveryTerms} /> */}
-                {/* Contract Period commented out / hidden on buyer side and RFQ globally */}
-                {!isBuyerSide && !isRfqType && (
+                {/* Contract Period commented out / hidden on buyer side and RFQ/RFP globally */}
+                {!isBuyerSide && !isRfqType && !isRfpType && (
                   <PropertyItem label="Contract Period" value={firstPresent(terms.contractPeriod, terms.projectDuration, projectDuration)} />
                 )}
                 {/* Retention Amount & Security Deposit commented out / hidden on buyer side */}
@@ -3597,6 +3643,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               isBuyerSide={isBuyerSide}
               isBuyerRfq={isBuyerRfq}
               isRfqType={isRfqType}
+              isRfpType={isRfpType}
             />
           </div>
         )}

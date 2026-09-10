@@ -2553,8 +2553,15 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                 }
             }
             if (!requirement) {
+                const searchTokens = Array.from(new Set([
+                    idToken,
+                    idToken.replace(/^[A-Z]{2,5}-/, 'REQ-'),
+                    idToken.replace(/^[A-Z]{2,5}-/, 'TND-'),
+                    idToken.replace(/^[A-Z]{2,5}-/, 'RFQ-'),
+                    idToken.replace(/^[A-Z]{2,5}-/, 'RFP-'),
+                ]));
                 const legacyReq = await db.requirement.findFirst({
-                    where: hasNumericId ? { id } : { requirementNumber: idToken },
+                    where: hasNumericId ? { id } : { requirementNumber: { in: searchTokens } },
                     select: publicLegacyRequirementDetailSelect
                 });
                 if (legacyReq) {

@@ -77,23 +77,25 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     queryFn: async () => {
       try {
         const res2 = await getApi<any>(`/api/marketplace/requirements/${targetReqId}`);
-        if (res2) return res2.data || res2;
+        const unwrapped = res2?.requirement || res2?.data?.requirement || res2?.data || res2;
+        if (unwrapped && (unwrapped.id || unwrapped.title || unwrapped.requirementNumber)) return unwrapped;
       } catch {}
       try {
         const res = await getApi<any>(`/api/requirements/${targetReqId}`);
-        if (res) return res.data || res;
+        const unwrapped = res?.requirement || res?.data?.requirement || res?.data || res;
+        if (unwrapped && (unwrapped.id || unwrapped.title || unwrapped.requirementNumber)) return unwrapped;
       } catch {}
       return null;
     },
-    enabled: !!targetReqId && (!bidData || !(bidData as any).items?.length),
-    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
+    enabled: !!targetReqId,
+    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? (initialData.requirement || initialData) : undefined,
     staleTime: 60_000,
   });
 
   const isLoading = !initialData && !bidData && !reqData && (isBidLoading || isReqLoading);
   const bid: any = bidData || {};
-  const reqObj: any = reqData || {};
-  const payload = bid.technicalPacket || bid.payload || reqObj.payload || {};
+  const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
+  const payload = bid.technicalPacket || bid.payload || reqObj.technicalPacket || reqObj.payload || {};
   const basics = payload.basics || {};
   const schedule = payload.schedule || {};
   const terms = payload.terms || {};
@@ -121,7 +123,26 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     );
   }
 
-  const title = bid.title || bid.subject || reqObj.title || basics.title || 'Open Tender Procurement';
+  const candidateTitles = [
+    bid.title,
+    reqObj.title,
+    basics.title,
+    basics.contractTitle,
+    basics.procurementTitle,
+    payload.tender?.tenderTitle,
+    payload.tender?.title,
+    payload.serviceDetails?.title,
+    payload.serviceDetails?.serviceTitle,
+    bid.subject,
+    reqObj.subject,
+    bid.itemName,
+    reqObj.itemName,
+    (Array.isArray(bid.items) && (bid.items[0]?.itemName || bid.items[0]?.name || bid.items[0]?.title)),
+    (Array.isArray(reqObj.items) && (reqObj.items[0]?.itemName || reqObj.items[0]?.name || reqObj.items[0]?.title)),
+  ];
+  const isGeneric = (s?: any) => !s || typeof s !== 'string' || ['open tender', 'tender opportunity', 'procurement requirement', 'n/a', '—'].includes(s.trim().toLowerCase()) || s.toLowerCase().includes('no description');
+  const validTitle = candidateTitles.find(t => t && !isGeneric(String(t)));
+  const title = validTitle ? String(validTitle).trim() : (bid.title || reqObj.title || 'Open Tender Procurement');
   const rawTndRef = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber;
   const openTenderNumber = formatRefId('TND', bid.id || reqObj.id || requestId, rawTndRef, 'TENDER');
 

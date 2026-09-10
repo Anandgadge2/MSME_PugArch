@@ -455,28 +455,48 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
 
   const rawTitleCandidates = preferReq ? [
     reqObj?.title,
+    reqObj?.subject,
+    reqObj?.name,
     reqObj?.payload?.basics?.title,
     reqObj?.payload?.basics?.contractTitle,
     rawBid?.title,
+    rawBid?.subject,
+    rawBid?.itemName,
+    rawBid?.name,
     rawBid?.technicalPacket?.basics?.title,
     rawBid?.technicalPacket?.basics?.contractTitle,
-    reqObj?.description && reqObj.description.length < 80 ? reqObj.description : null,
-    rawBid?.description && rawBid.description.length < 80 ? rawBid.description : null,
+    (Array.isArray(reqObj?.items) && reqObj.items[0]?.itemName) || null,
+    (Array.isArray(rawBid?.items) && rawBid.items[0]?.itemName) || null,
   ] : [
     rawBid?.title,
+    rawBid?.subject,
+    rawBid?.itemName,
+    rawBid?.name,
     reqObj?.title,
+    reqObj?.subject,
+    reqObj?.name,
     rawBid?.technicalPacket?.basics?.title,
     reqObj?.payload?.basics?.title,
     rawBid?.technicalPacket?.basics?.contractTitle,
     reqObj?.payload?.basics?.contractTitle,
-    rawBid?.description && rawBid.description.length < 80 ? rawBid.description : null,
-    reqObj?.description && reqObj.description.length < 80 ? reqObj.description : null,
+    (Array.isArray(rawBid?.items) && rawBid.items[0]?.itemName) || null,
+    (Array.isArray(reqObj?.items) && reqObj.items[0]?.itemName) || null,
   ];
 
   const validTitle = rawTitleCandidates.find(t => {
     if (!t) return false;
     const s = String(t).trim().toLowerCase();
-    return !(s === 'procurement bid' || s.startsWith('procurement bid #') || s.startsWith('procurement #') || s === 'untitled procurement bid' || s === 'procurement requirement' || s === 'n/a' || s === '—');
+    return !(
+      s === 'procurement bid' ||
+      s.startsWith('procurement bid #') ||
+      s.startsWith('procurement #') ||
+      s === 'untitled procurement bid' ||
+      s === 'procurement requirement' ||
+      s.includes('no description') ||
+      s.includes('no scope') ||
+      s === 'n/a' ||
+      s === '—'
+    );
   });
   const title      = validTitle ? String(validTitle).trim() : (ref !== '—' ? `Procurement #${ref}` : 'Procurement Opportunity');
   const desc       = stripAutoDesc(preferReq ? (reqObj?.description || reqObj?.payload?.basics?.description || rawBid?.description || rawBid?.technicalPacket?.basics?.description) : (rawBid?.description || rawBid?.technicalPacket?.basics?.description || reqObj?.description || reqObj?.payload?.basics?.description));
