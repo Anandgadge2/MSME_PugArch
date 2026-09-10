@@ -688,8 +688,42 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
   };
 
   const handleAction = (item: any) => {
-    const rfqId = getActualRfqId(item);
-    router.push(`/${rolePrefix}/procurement/rfq/${encodeURIComponent(rfqId)}/respond`);
+    const actualId = getActualRfqId(item);
+    const rawBidId = item.bid?.id || item.bidId || item.id;
+    const pType = getParticipationType(item);
+    const typeStr = String(item.bid?.procurementType || item.bid?.bidType || item.bid?.category || pType || '').toLowerCase();
+    const isRfp = pType === 'RFP' || typeStr.includes('rfp') || typeStr.includes('proposal');
+    const isRfq = pType === 'RFQ' || typeStr.includes('rfq') || typeStr.includes('quotation');
+
+    // Any not-yet-submitted participation (draft or partially uploaded) resumes the
+    // participate flow; finalised/awarded ones open the read-only details view.
+    if (isDraft(item)) {
+      if (item.isMarketplaceResponse || isRfq) {
+        router.push(`/${rolePrefix}/procurement/rfq/${encodeURIComponent(actualId)}/respond`);
+      } else if (isRfp) {
+        router.push(`/${rolePrefix}/procurement/rfp/${encodeURIComponent(actualId || rawBidId)}/respond`);
+      } else if (typeStr.includes('reverse') || typeStr.includes('auction')) {
+        router.push(`/${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(rawBidId)}/live`);
+      } else {
+        router.push(`/bids/${rawBidId}/participate`);
+      }
+    } else {
+      if (typeStr.includes('reverse') || typeStr.includes('auction')) {
+        router.push(`/${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(rawBidId)}/live`);
+      } else if (isRfp) {
+        router.push(sellerRoutes.detail('RFP', actualId || rawBidId, rolePrefix));
+      } else if (isRfq || item.isMarketplaceResponse) {
+        router.push(sellerRoutes.detail('RFQ', actualId || rawBidId, rolePrefix));
+      } else if (pType === 'Open Tender' || typeStr.includes('open')) {
+        router.push(sellerRoutes.detail('OPEN_TENDER', rawBidId, rolePrefix));
+      } else if (pType === 'Limited Tender' || typeStr.includes('limited')) {
+        router.push(sellerRoutes.detail('LIMITED_TENDER', rawBidId, rolePrefix));
+      } else if (pType === 'Rate Contract' || typeStr.includes('rate')) {
+        router.push(sellerRoutes.detail('RATE_CONTRACT', actualId || rawBidId, rolePrefix));
+      } else {
+        router.push(`/bids/${rawBidId}`);
+      }
+    }
   };
 
   const handleConvertToInvoice = async (e: React.MouseEvent, item: any) => {
@@ -1431,9 +1465,21 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                                   Invoice
                                 </Button>
                               )}
-                              <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3">
-                                {isDraft(item) ? 'Resume' : 'View'}
-                              </Button>
+                              {(pType === 'Reverse Auction' || String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE')) ? (
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/seller/procurement/reverse-auction/${item.bid?.id || item.bidId}/live`);
+                                  }}
+                                  className="h-8 bg-gradient-to-r from-red-600 to-rose-600 text-[10px] font-black uppercase text-white hover:from-red-500 hover:to-rose-500 rounded-lg px-3 flex items-center gap-1 shadow-xs"
+                                >
+                                  <Gavel className="h-3 w-3" /> Live Auction
+                                </Button>
+                              ) : (
+                                <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3">
+                                  {isDraft(item) ? 'Resume' : 'View'}
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>

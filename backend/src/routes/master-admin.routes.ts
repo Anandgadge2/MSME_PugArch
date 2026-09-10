@@ -695,15 +695,20 @@ const userPayload = async (body: Record<string, unknown>, partial = false) => {
   if (status && !allowedUserStatuses.has(status)) throw new Error('INVALID_STATUS');
   const password = textOrNull(body.password);
   const rawPassword = password || `JsgSmile@${randomToken(8)}Aa1!`;
+  const isPlatformAdmin = role === 'admin' || role === 'master_admin';
   const data: any = {
     name: textOrNull(body.name),
     email: textOrNull(body.email)?.toLowerCase(),
     mobile: textOrNull(body.mobile),
     role: role || undefined,
-    
-    organizationId: numberOrNullOrUndefined(body.organizationId),
+    organizationId: isPlatformAdmin ? null : numberOrNullOrUndefined(body.organizationId),
     accountStatus: status || undefined
   };
+  if (isPlatformAdmin) {
+    data.onboardingStatus = 'approved_for_procurement';
+    data.registrationStatus = 'completed';
+    data.emailVerified = true;
+  }
   if (password || !partial) data.password = await hashPassword(rawPassword);
   Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
   if (!partial) {
@@ -2877,19 +2882,21 @@ router.put('/master-admin/users/:id', ...masterOnly, requirePermission(PERMISSIO
 const userStatusAction = (action: 'activate' | 'inactivate' | 'suspend' | 'reactivate' | 'archive') =>
   wrap(async (req, res) => {
     const id = Number(req.params.id);
-    if (!(await checkNotMasterAdmin(id, res))) return;
     const reason = ensureReason(res, req.body, action);
     if (!reason) return;
+    if (!(await checkNotMasterAdmin(id, res))) return;
     if (action === 'archive') {
       const data: any = { accountStatus: 'DELETED' as any, sessionVersion: { increment: 1 } };
       const user = await prisma.user.update({ where: { id }, data, select: userSelect });
-      await createAuditLog(req, { action: 'user.archive', entityType: 'user', entityId: id, metadata: { reason, accountStatus: 'DELETED' } });
+      void createAuditLog(req, { action: 'user.archive', entityType: 'user', entityId: id, metadata: { reason, accountStatus: 'DELETED' } })
+        .catch(err => console.error('[UserArchive] Audit log failed:', err));
       return jsonOk(res, user, 'User archived successfully. Historical operational data preserved.');
     }
     const accountStatus = action === 'activate' || action === 'reactivate' ? 'ACTIVE' : action === 'suspend' ? 'SUSPENDED' : 'BLOCKED';
     const data: any = { accountStatus: accountStatus as any, sessionVersion: { increment: 1 } };
     const user = await prisma.user.update({ where: { id }, data, select: userSelect });
-    await createAuditLog(req, { action: `user.${action}`, entityType: 'user', entityId: id, metadata: { reason, accountStatus } });
+    void createAuditLog(req, { action: `user.${action}`, entityType: 'user', entityId: id, metadata: { reason, accountStatus } })
+      .catch(err => console.error('[UserAction] Audit log failed:', err));
     jsonOk(res, user, `User ${action} successful`);
   });
 
@@ -2917,16 +2924,22 @@ router.delete('/master-admin/users/:id', ...masterOnly, requirePermission(PERMIS
 
 router.post('/master-admin/users/:id/reset-password', ...masterOnly, requirePermission(PERMISSIONS.USER_UPDATE), wrap(async (req, res) => {
   const id = Number(req.params.id);
-  if (!(await checkNotMasterAdmin(id, res))) return;
   const reason = ensureReason(res, req.body, 'reset user password');
   if (!reason) return;
   const temporaryPassword = textOrNull(req.body?.temporaryPassword) || `JsgSmile@${randomToken(8)}Aa1!`;
+  const [isAllowed, hashedPassword] = await Promise.all([
+    checkNotMasterAdmin(id, res),
+    hashPassword(temporaryPassword)
+  ]);
+  if (!isAllowed) return;
+
   const user = await prisma.user.update({
     where: { id },
-    data: { password: await hashPassword(temporaryPassword), passwordResetVersion: { increment: 1 }, sessionVersion: { increment: 1 } },
+    data: { password: hashedPassword, passwordResetVersion: { increment: 1 }, sessionVersion: { increment: 1 } },
     select: userSelect
   });
-  await createAuditLog(req, { action: 'user.password.reset', entityType: 'user', entityId: id, metadata: { reason } });
+  void createAuditLog(req, { action: 'user.password.reset', entityType: 'user', entityId: id, metadata: { reason } })
+    .catch(err => console.error('[UserPasswordReset] Audit log failed:', err));
 
   // Send Password Reset email with updated temporary password & portal link
   void sendAdminWelcomeEmail({
@@ -2951,22 +2964,38 @@ router.post('/master-admin/users/:id/unlock', ...masterOnly, requirePermission(P
     data: { failedLoginCount: 0, lockedUntil: null },
     select: userSelect
   });
-  await createAuditLog(req, { action: 'user.unlock', entityType: 'user', entityId: id, metadata: { reason } });
+  void createAuditLog(req, { action: 'user.unlock', entityType: 'user', entityId: id, metadata: { reason } })
+    .catch(err => console.error('[UserUnlock] Audit log failed:', err));
   jsonOk(res, user, 'User account unlocked successfully.');
 }));
 
 router.post('/master-admin/users/:id/invite', ...masterOnly, requirePermission(PERMISSIONS.USER_UPDATE), wrap(async (req, res) => {
   const id = Number(req.params.id);
-  if (!(await checkNotMasterAdmin(id, res))) return;
   const reason = ensureReason(res, req.body, 'invite user');
   if (!reason) return;
   const temporaryPassword = `JsgSmile@${randomToken(8)}Aa1!`;
+  const [isAllowed, hashedPassword] = await Promise.all([
+    checkNotMasterAdmin(id, res),
+    hashPassword(temporaryPassword)
+  ]);
+  if (!isAllowed) return;
+
   const user = await prisma.user.update({
     where: { id },
-    data: { password: await hashPassword(temporaryPassword), accountStatus: 'PENDING' as any },
+    data: {
+      password: hashedPassword,
+      accountStatus: 'ACTIVE' as any,
+      mustChangePassword: true,
+      failedLoginCount: 0,
+      lockedUntil: null,
+      emailVerified: true,
+      onboardingStatus: 'approved_for_procurement',
+      registrationStatus: 'completed'
+    },
     select: userSelect
   });
-  await createAuditLog(req, { action: 'user.invite.marked', entityType: 'user', entityId: id, metadata: { reason } });
+  void createAuditLog(req, { action: 'user.invite.marked', entityType: 'user', entityId: id, metadata: { reason } })
+    .catch(err => console.error('[UserInvite] Audit log failed:', err));
 
   // Send Invitation & Login Credentials Email
   void sendAdminWelcomeEmail({
@@ -2978,7 +3007,7 @@ router.post('/master-admin/users/:id/invite', ...masterOnly, requirePermission(P
     isReset: false
   }).catch((err) => console.error('[UserInvite] Failed to send invitation email:', err));
 
-  jsonOk(res, user, 'User marked as invited/pending. Login credentials email sent.');
+  jsonOk(res, user, 'User invitation and login credentials sent successfully. Account is active.');
 }));
 
 router.post('/master-admin/users/:id/change-role', ...masterOnly, requirePermission(PERMISSIONS.ROLE_ASSIGN), wrap(async (req, res) => {

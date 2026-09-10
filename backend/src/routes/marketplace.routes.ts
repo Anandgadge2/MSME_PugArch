@@ -331,7 +331,7 @@ const decorateRequirement = (requirement: any) => {
         ...requirement,
         buyerId: requirement.buyerId || requirement.createdById,
         buyerOrganizationId: requirement.buyerOrganizationId || requirement.buyerOrganization?.id,
-        requirementNumber: formatRequirementNumber(requirement.id, requirement.requirementNumber),
+        requirementNumber: formatRequirementNumber(requirement.id, requirement.requirementNumber, requirement.procurementMethod || requirement.canonicalMethod),
         bidStatus: state.code,
         computedStatus: state.code,
         statusLabel: state.label,

@@ -705,7 +705,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           actionLabel: req.responsesCount > 0 ? 'View Response' : (opportunityType === 'Rate Contract' ? 'Submit Rate' : 'Submit Quotation'),
           href: responseHref,
           detailsHref: detailHref,
-          sourceRef: formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'REQ', req.sourceId || req.id, req.requirementNumber),
+          sourceRef: formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'REQ', req.sourceId || req.id, req.requirementNumber, req.procurementMethod || req.canonicalMethod || opportunityType),
           publishedAt: req.approvedAt || req.createdAt,
           quantity: formatQuantity(req.quantity, req.unit),
           description: req.description,

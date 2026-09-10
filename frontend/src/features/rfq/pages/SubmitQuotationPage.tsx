@@ -861,7 +861,7 @@ export default function SubmitQuotationPage() {
 
   const orgName = rfqData?.buyerOrganization?.organizationName || 'Buyer';
   const subject = rfqData?.title || 'Sourcing Requirement';
-  const rfqNumber = formatRefId('REQ', requirementId || rfqData?.id, rfqData?.requirementNumber);
+  const rfqNumber = formatRefId('RFQ', requirementId || rfqData?.id, rfqData?.requirementNumber, rfqData?.procurementMethod || rfqData?.canonicalMethod || 'RFQ');
   const deadline = rfqData?.deadlineDate ? formatDate(rfqData.deadlineDate) : '—';
 
   const itemsList: Array<{

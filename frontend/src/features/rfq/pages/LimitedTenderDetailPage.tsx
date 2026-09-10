@@ -9,6 +9,7 @@ import { Button } from '../../../components/ui/button';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import { formatRefId } from '../../../utils/refIdUtils';
 import { toast } from 'sonner';
 import { isShgUser } from '../../../lib/shg';
 
@@ -129,7 +130,8 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
   }
 
   const title = bid.title || bid.subject || reqObj.title || basics.title || 'Limited Tender Procurement';
-  const limitedTenderNumber = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber || bid.id || `LTND-${requestId}`;
+  const rawLtndRef = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber;
+  const limitedTenderNumber = formatRefId('LTND', bid.id || reqObj.id || requestId, rawLtndRef, 'LIMITED_TENDER');
 
   const handleSubmitProposal = () => {
     if (!currentUser) {

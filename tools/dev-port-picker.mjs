@@ -25,7 +25,7 @@ async function findAvailablePort(startPort = 3000, maxAttempts = 30) {
 
 async function main() {
   const port = await findAvailablePort(3000);
-  console.log(`[dev-port-picker] Found available frontend port: ${port}. Starting Next.js...`);
+  console.log(`[Next.js] Assigned port :${port} -> Launching dev server...`);
 
   try {
     execSync(`npx next dev -p ${port}`, {

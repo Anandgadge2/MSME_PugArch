@@ -17,6 +17,7 @@ interface User {
   isDualRole?: boolean;
   registrationStatus?: 'incomplete' | 'completed';
   onboardingStatus: 'pending' | 'pending_validation' | 'under_compliance_review' | 'resubmission_required' | 'approved_for_procurement' | 'approved' | 'rejected';
+  accountStatus?: string;
   status?: string;
   emailVerified?: boolean;
   mobileVerified?: boolean;
