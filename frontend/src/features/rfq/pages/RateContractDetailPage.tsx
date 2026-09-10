@@ -53,7 +53,7 @@ import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
-import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 
 /* ─── Helper Utilities ─────────────────────────────────── */
 
@@ -303,13 +303,9 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const isRateQuotationSubmitted = Boolean(ownResponse && ownResponse.status !== 'DRAFT');
 
   if (isLoading) {
-    return (
-      <div className="flex h-[80vh] flex-col items-center justify-center gap-3">
-        <Loader2 className="h-10 w-10 animate-spin text-[#12335f]" />
-        <p className="text-sm font-bold text-slate-500">Loading Rate Contract details...</p>
-      </div>
-    );
+    return <ProcurementDetailSkeleton procurementTypeLabel="Rate Contract" />;
   }
+
 
   if (error || !rcData) {
     return (

@@ -831,8 +831,8 @@ export default function PurchaseOrders() {
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Open POs" value={openCount} subtext="Active purchase orders" icon={FileText} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} tone="blue" />
         <KpiCard label="Delivered" value={deliveredCount} subtext="Completed deliveries" icon={CheckCircle2} onClick={() => setActiveTab('Delivered')} active={activeTab === 'Delivered'} tone="green" />
-        <KpiCard label="Total Value" value={formatCurrency(totalSpend)} subtext="Cumulative purchase spend" icon={ShieldCheck} onClick={() => setActiveTab('All')} active={activeTab === 'All'} tone="indigo" />
-        <KpiCard label="Open Value" value={formatCurrency(poHealth.openValue)} subtext="Pending fulfillment value" icon={ShieldCheck} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} tone="amber" />
+        {/* <KpiCard label="Total Value" value={formatCurrency(totalSpend)} subtext="Cumulative purchase spend" icon={ShieldCheck} onClick={() => setActiveTab('All')} active={activeTab === 'All'} tone="indigo" />
+        <KpiCard label="Open Value" value={formatCurrency(poHealth.openValue)} subtext="Pending fulfillment value" icon={ShieldCheck} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} tone="amber" /> */}
       </div>
 
       {error && <InlineError message={error} onRetry={reload} />}

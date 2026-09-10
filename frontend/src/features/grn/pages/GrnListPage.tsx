@@ -297,7 +297,7 @@ export default function GrnListPage() {
                     onClick={() => setFilter('DRAFT')}
                     color="slate"
                 />
-                <KpiCard
+                {/* <KpiCard
                     label="Submitted"
                     value={counts.SUBMITTED}
                     subtext="Submitted GRNs"
@@ -305,7 +305,7 @@ export default function GrnListPage() {
                     active={filter === 'SUBMITTED'}
                     onClick={() => setFilter('SUBMITTED')}
                     color="amber"
-                />
+                /> */}
                 <KpiCard
                     label="Approved"
                     value={counts.APPROVED + counts.PARTIAL}
@@ -315,7 +315,7 @@ export default function GrnListPage() {
                     onClick={() => setFilter('APPROVED')}
                     color="green"
                 />
-                <KpiCard
+                {/* <KpiCard
                     label="Rejected"
                     value={counts.REJECTED}
                     subtext="Rejected GRNs"
@@ -323,7 +323,7 @@ export default function GrnListPage() {
                     active={filter === 'REJECTED'}
                     onClick={() => setFilter('REJECTED')}
                     color="red"
-                />
+                /> */}
             </div>
 
             {error && <InlineError message={(error as Error).message} onRetry={() => refetch()} />}

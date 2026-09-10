@@ -402,16 +402,16 @@ function DeadlineCountdown({ targetDate }: { targetDate: Date | string }) {
 
   if (timeLeft.isPassed) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-rose-700">
-        <Clock className="h-3.5 w-3.5 text-rose-600" />
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700">
+        <Clock className="h-3 w-3 text-rose-600" />
         Submission Closed
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-amber-800 shadow-2xs">
-      <Clock className="h-3.5 w-3.5 text-amber-600 animate-pulse" />
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-2xs">
+      <Clock className="h-3 w-3 text-amber-600 animate-pulse" />
       <span className="font-mono">
         {timeLeft.days > 0 ? `${timeLeft.days}d ` : ''}
         {String(timeLeft.hours).padStart(2, '0')}h {String(timeLeft.minutes).padStart(2, '0')}m {String(timeLeft.seconds).padStart(2, '0')}s left
@@ -426,7 +426,7 @@ function StatusBadge({ status }: { status?: string }) {
 
   return (
     <span className={cn(
-      'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider',
+      'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
       isClosed ? 'border-slate-300 bg-slate-100 text-slate-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
     )}>
       <span className={cn('h-1.5 w-1.5 rounded-full', isClosed ? 'bg-slate-500' : 'bg-emerald-500 animate-pulse')} />
@@ -437,12 +437,12 @@ function StatusBadge({ status }: { status?: string }) {
 
 function SectionHeader({ title, icon: Icon, badge, action }: { title: string; icon: IconComponent; badge?: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100/80 shadow-2xs">
-          <Icon className="h-4 w-4" />
+    <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2.5">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100/80 shadow-2xs">
+          <Icon className="h-3.5 w-3.5" />
         </span>
-        <h2 className="text-xs sm:text-sm font-black uppercase tracking-wide text-slate-950 truncate">{title}</h2>
+        <h2 className="text-xs sm:text-[13px] font-bold uppercase tracking-wide text-slate-900 truncate">{title}</h2>
       </div>
       {(badge || action) && (
         <div className="flex items-center gap-2 shrink-0">
@@ -462,7 +462,7 @@ function DetailValue({ value, valueKey }: { value: any; valueKey?: string }) {
   if (typeof value === 'boolean') {
     return (
       <span className={cn(
-        'inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider border',
+        'inline-flex items-center rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider border',
         value ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-600'
       )}>
         {value ? 'Yes' : 'No'}
@@ -481,7 +481,7 @@ function DetailValue({ value, valueKey }: { value: any; valueKey?: string }) {
     return (
       <div className="space-y-2 mt-1">
         {list.map((item, index) => (
-          <div key={index} className="rounded-xl bg-slate-50/70 p-3.5 border border-slate-150">
+          <div key={index} className="rounded-xl bg-slate-50/70 p-3 border border-slate-150">
             {typeof item === 'object' ? (
               <PropertyGrid columns={3}>
                 {detailEntries(item).map(([k, v]) => (
@@ -532,7 +532,7 @@ function PropertyGrid({
   }[columns];
 
   return (
-    <dl className={cn('grid gap-x-6 gap-y-4 sm:gap-y-4.5', colClass, className)}>
+    <dl className={cn('grid gap-x-6 gap-y-3.5 sm:gap-y-4', colClass, className)}>
       {children}
     </dl>
   );
@@ -605,15 +605,15 @@ function PropertyItem({
         className
       )}
     >
-      <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-        {Icon && <Icon className="h-3.5 w-3.5 text-slate-400 shrink-0" />}
+      <dt className="flex items-center gap-1 text-[10px] sm:text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
+        {Icon && <Icon className="h-3 w-3 text-slate-400 shrink-0" />}
         <span className="truncate">{label}</span>
       </dt>
       <dd
         className={cn(
-          'mt-1 text-xs sm:text-sm font-semibold text-slate-900 break-words leading-relaxed',
-          highlight && 'text-blue-700 font-extrabold',
-          mono && 'font-mono text-xs'
+          'mt-0.5 text-xs font-medium text-slate-900 break-words leading-snug',
+          highlight && 'text-blue-700 font-bold',
+          mono && 'font-mono text-[11px]'
         )}
       >
         <DetailValue value={value} valueKey={label} />
@@ -638,7 +638,7 @@ function DataCard({
   className?: string;
 }) {
   return (
-    <section className={cn('rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4', className)}>
+    <section className={cn('rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5', className)}>
       <SectionHeader title={title} icon={Icon} badge={badge} action={action} />
       {children}
     </section>
@@ -664,46 +664,46 @@ function BuyerProfileSection({
     <DataCard title="Buyer Information" icon={Building2}>
       <div className="space-y-4">
         {/* Org Banner Card */}
-        <div className="flex items-start gap-3.5 rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0b2447] to-[#123668] text-white shadow-xs font-black text-base">
-            <Building2 className="h-5 w-5" />
+        <div className="flex items-start gap-3 rounded-xl bg-slate-50/80 p-3 border border-slate-150">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#0b2447] to-[#123668] text-white shadow-xs font-bold text-sm">
+            <Building2 className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-black text-slate-900 leading-tight">
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight">
                 {orgName || 'Buyer Organization'}
               </h3>
               {department && (
-                <span className="rounded-full bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                <span className="rounded-full bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 text-[9.5px] font-bold text-indigo-700">
                   {department}
                 </span>
               )}
             </div>
-            <p className="mt-0.5 text-xs font-semibold text-slate-500">
+            <p className="mt-0.5 text-[11px] font-medium text-slate-500">
               Authorized Procurement Authority
             </p>
           </div>
         </div>
 
         {/* Contact & Location Details in Clean Key-Values */}
-        <div className="grid gap-x-6 gap-y-3.5 sm:grid-cols-2 pt-1">
+        <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 pt-0.5">
           {contactPerson && (
             <div className="space-y-0.5">
-              <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                <User className="h-3.5 w-3.5 text-slate-400" />
+              <dt className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <User className="h-3 w-3 text-slate-400" />
                 <span>Contact Person</span>
               </dt>
-              <dd className="text-xs sm:text-sm font-bold text-slate-900">{contactPerson}</dd>
+              <dd className="text-xs font-semibold text-slate-900">{contactPerson}</dd>
             </div>
           )}
 
           {email && (
             <div className="space-y-0.5">
-              <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                <Mail className="h-3.5 w-3.5 text-slate-400" />
+              <dt className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <Mail className="h-3 w-3 text-slate-400" />
                 <span>Email Address</span>
               </dt>
-              <dd className="text-xs sm:text-sm font-semibold">
+              <dd className="text-xs font-semibold">
                 <a href={`mailto:${email}`} className="text-blue-600 hover:text-blue-800 hover:underline transition-colors break-all">
                   {email}
                 </a>
@@ -713,11 +713,11 @@ function BuyerProfileSection({
 
           {phone && (
             <div className="space-y-0.5">
-              <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                <PhoneCall className="h-3.5 w-3.5 text-slate-400" />
+              <dt className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <PhoneCall className="h-3 w-3 text-slate-400" />
                 <span>Contact Number</span>
               </dt>
-              <dd className="text-xs sm:text-sm font-semibold">
+              <dd className="text-xs font-semibold">
                 <a href={`tel:${phone}`} className="text-slate-800 hover:text-blue-600 transition-colors font-mono">
                   {phone}
                 </a>
@@ -727,11 +727,11 @@ function BuyerProfileSection({
 
           {address && (
             <div className="space-y-0.5">
-              <dt className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                <MapPin className="h-3.5 w-3.5 text-slate-400" />
+              <dt className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <MapPin className="h-3 w-3 text-slate-400" />
                 <span>Registered Location</span>
               </dt>
-              <dd className="text-xs sm:text-sm font-semibold text-slate-700 leading-relaxed">{address}</dd>
+              <dd className="text-xs font-medium text-slate-700 leading-snug">{address}</dd>
             </div>
           )}
         </div>
@@ -754,29 +754,29 @@ function TimelineRibbon({
   if (!validDates.length) return null;
 
   return (
-    <section className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
-      <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100/80 shadow-2xs">
-          <CalendarDays className="h-4 w-4" />
+    <section className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">
+      <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100/80 shadow-2xs">
+          <CalendarDays className="h-3.5 w-3.5" />
         </span>
-        <h2 className="text-xs sm:text-sm font-black uppercase tracking-wide text-slate-950">
+        <h2 className="text-xs sm:text-[13px] font-bold uppercase tracking-wide text-slate-900">
           Key Dates &amp; Milestone Schedule
         </h2>
       </div>
 
-      <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
-        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="rounded-xl bg-slate-50/70 p-3.5 border border-slate-150">
+        <div className="grid gap-3.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
           {validDates.map((date, idx) => {
             const styles = toneStyles[date.tone] || toneStyles.slate;
             return (
-              <div key={idx} className="flex flex-col justify-between space-y-1.5 min-w-0">
+              <div key={idx} className="flex flex-col justify-between space-y-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className={cn('h-2 w-2 rounded-full shrink-0', styles.icon.replace('text-', 'bg-').split(' ')[0])} />
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                  <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', styles.icon.replace('text-', 'bg-').split(' ')[0])} />
+                  <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500 truncate">
                     {date.label}
                   </span>
                 </div>
-                <p className="text-xs font-black text-slate-900 leading-tight break-words">
+                <p className="text-[11.5px] font-bold text-slate-900 leading-tight break-words">
                   {date.value}
                 </p>
               </div>
@@ -794,7 +794,7 @@ function PolicyRulesMatrix({
   rules: Array<{ label: string; value: any; icon?: IconComponent }>;
 }) {
   return (
-    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       {rules.map((rule, idx) => {
         const valStr = String(rule.value || '').trim();
         const isYes = ['yes', 'true', '1', 'enabled'].includes(valStr.toLowerCase());
@@ -805,7 +805,7 @@ function PolicyRulesMatrix({
           <div
             key={idx}
             className={cn(
-              'flex items-center justify-between gap-2 p-3 rounded-xl border transition-colors',
+              'flex items-center justify-between gap-2 p-2.5 rounded-lg border transition-colors',
               isYes
                 ? 'bg-emerald-50/50 border-emerald-200/80 text-emerald-950'
                 : isNo
@@ -816,15 +816,15 @@ function PolicyRulesMatrix({
             <div className="flex items-center gap-2 min-w-0">
               <Icon
                 className={cn(
-                  'h-4 w-4 shrink-0',
+                  'h-3.5 w-3.5 shrink-0',
                   isYes ? 'text-emerald-600' : isNo ? 'text-slate-400' : 'text-indigo-600'
                 )}
               />
-              <span className="text-xs font-bold truncate text-slate-800">{rule.label}</span>
+              <span className="text-[11px] font-semibold truncate text-slate-800">{rule.label}</span>
             </div>
             <span
               className={cn(
-                'px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0',
+                'px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0',
                 isYes
                   ? 'bg-emerald-100 text-emerald-800'
                   : isNo
@@ -875,21 +875,21 @@ function CompactSectionGrid({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between p-4 sm:p-5 text-left transition hover:bg-slate-50/80"
+        className="flex w-full items-center justify-between p-3.5 sm:p-4 text-left transition hover:bg-slate-50/80"
       >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100/80 shadow-2xs">
-            <Icon className="h-4 w-4" />
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100/80 shadow-2xs">
+            <Icon className="h-3.5 w-3.5" />
           </span>
-          <h2 className="text-xs sm:text-sm font-black uppercase tracking-wide text-slate-950 truncate">{title}</h2>
+          <h2 className="text-xs sm:text-[13px] font-bold uppercase tracking-wide text-slate-900 truncate">{title}</h2>
         </div>
-        <span className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shrink-0">
-          {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        <span className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shrink-0">
+          {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </span>
       </button>
 
       {isOpen && (
-        <div className="border-t border-slate-100 p-5 pt-4">
+        <div className="border-t border-slate-100 p-4 pt-3">
           <PropertyGrid columns={3}>
             {entries.map(([key, value]) => (
               <PropertyItem key={key} label={humanizeKey(key)} value={value} />
@@ -907,7 +907,6 @@ function MetricCard({
   icon: Icon,
   tone,
   subtext,
-  isBuyer,
 }: {
   label: string;
   value: React.ReactNode;
@@ -920,38 +919,31 @@ function MetricCard({
   return (
     <article
       className={cn(
-        'flex flex-col rounded-xl border shadow-2xs transition-all hover:shadow-sm',
-        isBuyer ? 'p-3 gap-1 min-h-0' : 'p-4 justify-between h-full min-h-[110px]',
+        'flex flex-col rounded-xl border p-2.5 sm:p-3 justify-between min-h-[82px] shadow-2xs transition-all hover:shadow-xs',
         styles.card
       )}
     >
       <div className="flex items-center justify-between gap-1.5">
-        <p className={cn('font-black uppercase tracking-wider text-slate-500 line-clamp-1 flex-1', isBuyer ? 'text-[10px]' : 'text-[11px]')}>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 line-clamp-1 flex-1">
           {label}
         </p>
         <span
           className={cn(
-            'flex shrink-0 items-center justify-center shadow-2xs',
-            isBuyer ? 'h-6 w-6 rounded-md' : 'h-8 w-8 rounded-lg',
+            'flex h-6 w-6 shrink-0 items-center justify-center rounded-md shadow-2xs',
             styles.icon
           )}
         >
-          <Icon className={isBuyer ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+          <Icon className="h-3.5 w-3.5" />
         </span>
       </div>
-      <div className={cn('min-w-0', isBuyer ? 'mt-0.5' : 'mt-1')}>
+      <div className="min-w-0 mt-0.5">
         <div
-          className={cn(
-            'leading-tight truncate',
-            isBuyer
-              ? 'text-sm sm:text-base font-bold text-slate-900'
-              : 'text-lg lg:text-xl font-black text-slate-950'
-          )}
+          className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate"
           title={typeof value === 'string' ? value : undefined}
         >
           {value}
         </div>
-        <p className={cn('flex items-center gap-1 font-semibold text-slate-500 truncate', isBuyer ? 'mt-0.5 text-[10px]' : 'mt-1 text-[11px]')}>
+        <p className="mt-0.5 flex items-center gap-1 text-[10px] font-medium text-slate-500 truncate">
           <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" />
           {subtext || 'Procurement details'}
         </p>
@@ -1017,30 +1009,30 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
   if (!processedItems.length) return null;
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-        <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
-          <FileText className="h-4 w-4 text-indigo-600" />
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+        <h3 className="text-xs sm:text-[13px] font-bold uppercase tracking-wide text-slate-900 flex items-center gap-2">
+          <FileText className="h-3.5 w-3.5 text-indigo-600" />
           {title}
         </h3>
-        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-extrabold text-slate-600">
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold text-slate-600">
           {processedItems.length} {processedItems.length === 1 ? 'Document' : 'Documents'}
         </span>
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-4 py-3">#</th>
-                <th className="px-4 py-3">DOCUMENT NAME</th>
-                <th className="px-4 py-3">INSTRUCTIONS</th>
-                <th className="px-4 py-3">ALLOWED FILE TYPES</th>
-                <th className="px-4 py-3">MAX SIZE</th>
-                <th className="px-4 py-3 text-center">STATUS</th>
+                <th className="px-3.5 py-2">#</th>
+                <th className="px-3.5 py-2">DOCUMENT NAME</th>
+                <th className="px-3.5 py-2">INSTRUCTIONS</th>
+                <th className="px-3.5 py-2">ALLOWED FILE TYPES</th>
+                <th className="px-3.5 py-2">MAX SIZE</th>
+                <th className="px-3.5 py-2 text-center">STATUS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+            <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
               {processedItems.map((item: any, idx: number) => {
                 const docName = firstPresent(item.name, item.documentName, item.title, item.label, `Document ${idx + 1}`);
                 const instructions = firstPresent(item.instructions, item.description, item.guidelines, item.note, '-');
@@ -1051,20 +1043,20 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
 
                 return (
                   <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
-                    <td className="px-4 py-3 font-black text-slate-900">{formatPrimitiveValue(docName)}</td>
-                    <td className="px-4 py-3 font-medium text-slate-600 max-w-xs">{formatPrimitiveValue(instructions)}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-700 uppercase">
+                    <td className="px-3.5 py-2 font-bold text-slate-400">{idx + 1}</td>
+                    <td className="px-3.5 py-2 font-bold text-slate-900">{formatPrimitiveValue(docName)}</td>
+                    <td className="px-3.5 py-2 font-normal text-slate-600 max-w-xs">{formatPrimitiveValue(instructions)}</td>
+                    <td className="px-3.5 py-2">
+                      <span className="inline-block rounded px-1.5 py-0.5 font-mono text-[9.5px] font-bold text-slate-700 uppercase bg-slate-100">
                         {formatPrimitiveValue(fileType)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-semibold text-slate-700">
+                    <td className="px-3.5 py-2 font-medium text-slate-700">
                       {maxSize !== '-' ? `${maxSize} MB` : '-'}
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-3.5 py-2 text-center">
                       <span className={cn(
-                        'inline-block rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider border',
+                        'inline-block rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-wider border',
                         isRequired
                           ? 'border-rose-200 bg-rose-50 text-rose-700'
                           : 'border-slate-200 bg-slate-50 text-slate-600'
@@ -1140,39 +1132,34 @@ function ScopeSummaryCard({
   const isUrgent = String(effectiveUrgency).toLowerCase().includes('urgent');
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Top Scope Highlights Ribbon */}
-      <div className="flex flex-wrap items-center gap-3 rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
-        {/* Sourcing Method - commented out */}
-        {/* <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Sourcing Method:</span>
-          <span className="text-xs font-black text-slate-900">{procurementMethod || procurementTypeLabel}</span>
-        </div> */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Estimated Value:</span>
-          <span className="text-xs font-black text-emerald-700">{formatCurrency(estimatedValue)}</span>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50/80 p-3 border border-slate-150">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs">
+          <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">Estimated Value:</span>
+          <span className="text-xs font-bold text-emerald-700">{formatCurrency(estimatedValue)}</span>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Urgency:</span>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs">
+          <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">Urgency:</span>
           <span className={cn(
-            'text-[10px] font-black uppercase px-2 py-0.5 rounded-md border',
+            'text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border',
             isUrgent ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-100 text-slate-700 border-slate-200'
           )}>
             {effectiveUrgency}
           </span>
         </div>
         {parsedKeyValues.map((kv, idx) => (
-          <div key={idx} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{kv.label}:</span>
-            <span className="text-xs font-bold text-slate-800">{kv.val}</span>
+          <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs">
+            <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">{kv.label}:</span>
+            <span className="text-xs font-semibold text-slate-800">{kv.val}</span>
           </div>
         ))}
       </div>
 
       {/* Scope Statement */}
       {freeText && freeText !== 'No scope summary provided.' && (
-        <div className="rounded-xl border-l-4 border-indigo-600 bg-slate-50/70 p-4 border border-slate-150">
-          <p className="text-xs font-semibold text-slate-700 leading-relaxed whitespace-pre-line">
+        <div className="rounded-xl border-l-4 border-indigo-600 bg-slate-50/70 p-3.5 border border-slate-150">
+          <p className="text-xs font-normal text-slate-700 leading-relaxed whitespace-pre-line">
             {freeText}
           </p>
         </div>
@@ -1187,35 +1174,35 @@ function MilestonesTable({ milestones }: { milestones: any }) {
 
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3">
-      <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
-        <ClipboardCheck className="h-4 w-4 text-emerald-600" /> Payment &amp; Deliverable Milestones
+      <h4 className="text-xs font-bold uppercase tracking-wide text-slate-900 flex items-center gap-2">
+        <ClipboardCheck className="h-3.5 w-3.5 text-emerald-600" /> Payment &amp; Deliverable Milestones
       </h4>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+          <thead className="bg-slate-50/80 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-3.5 py-2.5">#</th>
-              <th className="px-3.5 py-2.5">Milestone Label</th>
-              <th className="px-3.5 py-2.5">Percentage</th>
-              <th className="px-3.5 py-2.5">Trigger / Condition</th>
+              <th className="px-3 py-2">#</th>
+              <th className="px-3 py-2">Milestone Label</th>
+              <th className="px-3 py-2">Percentage</th>
+              <th className="px-3 py-2">Trigger / Condition</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+          <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
             {list.map((m: any, idx: number) => {
               const label = firstPresent(m.label, m.name, m.title, `Milestone ${idx + 1}`);
               const pct = firstPresent(m.percentage, m.percent, m.share, '-');
               const trigger = firstPresent(m.trigger, m.condition, m.description, '-');
 
               return (
-                <tr key={idx} className="hover:bg-slate-50/60 font-semibold text-slate-800">
-                  <td className="px-3.5 py-2.5 font-bold text-slate-400">{idx + 1}</td>
-                  <td className="px-3.5 py-2.5 font-bold text-slate-900">{formatPrimitiveValue(label)}</td>
-                  <td className="px-3.5 py-2.5">
-                    <span className="inline-block rounded-md bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700 text-[10px]">
+                <tr key={idx} className="hover:bg-slate-50/60 font-medium text-slate-800">
+                  <td className="px-3 py-2 font-bold text-slate-400">{idx + 1}</td>
+                  <td className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(label)}</td>
+                  <td className="px-3 py-2">
+                    <span className="inline-block rounded bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-700 text-[9.5px]">
                       {pct !== '-' ? `${pct}%` : '-'}
                     </span>
                   </td>
-                  <td className="px-3.5 py-2.5 text-slate-600 max-w-xs">{formatPrimitiveValue(trigger)}</td>
+                  <td className="px-3 py-2 text-slate-600 max-w-xs">{formatPrimitiveValue(trigger)}</td>
                 </tr>
               );
             })}
@@ -1255,14 +1242,14 @@ function ServiceDetailsSection({ serviceDetails, isRfqType }: { serviceDetails: 
   if (!entries.length) return null;
 
   return (
-    <div className="space-y-3 pt-2">
+    <div className="space-y-2.5 pt-1.5">
       <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-        <Building2 className="h-4 w-4 text-indigo-600" />
-        <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+        <Building2 className="h-3.5 w-3.5 text-indigo-600" />
+        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900">
           Service Details &amp; Parameters
         </h3>
       </div>
-      <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+      <div className="rounded-xl bg-slate-50/70 p-3.5 border border-slate-150">
         <PropertyGrid columns={5}>
           {entries.map(([key, val]) => (
             <PropertyItem key={key} label={humanizeKey(key)} value={val} />
@@ -1399,30 +1386,30 @@ function LineItemsTable({
   if (!list.length) return null;
 
   return (
-    <div className="space-y-3 pt-2">
+    <div className="space-y-2.5 pt-1.5">
       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-        <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
-          <Layers className="h-4 w-4 text-indigo-600" />
+        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900 flex items-center gap-2">
+          <Layers className="h-3.5 w-3.5 text-indigo-600" />
           Line Items ({list.length})
         </h3>
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-3xs">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1000px] border-collapse text-left text-xs">
-            <thead className="bg-slate-50/90 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200 tracking-wider">
+            <thead className="bg-slate-50/90 text-[9.5px] font-bold uppercase text-slate-500 border-b border-slate-200 tracking-wider">
               <tr>
-                <th className="px-3.5 py-3 w-12 text-center">#</th>
-                <th className="px-3.5 py-3 w-24">Type</th>
-                <th className="px-3.5 py-3 min-w-[160px]">Item / Service Name</th>
-                <th className="px-3.5 py-3 min-w-[200px]">Specifications / Scope</th>
-                <th className="px-3.5 py-3 w-28 text-center">Qty &amp; UOM</th>
-                <th className="px-3.5 py-3 w-28 text-right">Est. Unit Rate</th>
-                <th className="px-3.5 py-3 w-24 text-center">HSN / SAC</th>
-                <th className="px-3.5 py-3 w-32">Brand &amp; Policy</th>
-                <th className="px-3.5 py-3 w-36">Documents &amp; Specs</th>
+                <th className="px-3 py-2 w-12 text-center">#</th>
+                <th className="px-3 py-2 w-24">Type</th>
+                <th className="px-3 py-2 min-w-[160px]">Item / Service Name</th>
+                <th className="px-3 py-2 min-w-[200px]">Specifications / Scope</th>
+                <th className="px-3 py-2 w-28 text-center">Qty &amp; UOM</th>
+                <th className="px-3 py-2 w-28 text-right">Est. Unit Rate</th>
+                <th className="px-3 py-2 w-24 text-center">HSN / SAC</th>
+                <th className="px-3 py-2 w-32">Brand &amp; Policy</th>
+                <th className="px-3 py-2 w-36">Documents &amp; Specs</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {list.map((item: any, idx: number) => {
                 const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
 
@@ -1586,14 +1573,14 @@ function LineItemsTable({
                 return (
                   <tr key={idx} className="align-middle hover:bg-slate-50/70 transition-colors">
                     {/* # Index */}
-                    <td className="px-3.5 py-3.5 text-center font-bold text-slate-400">
+                    <td className="px-3 py-2 text-center font-bold text-slate-400">
                       {idx + 1}
                     </td>
 
                     {/* Type */}
-                    <td className="px-3.5 py-3.5">
+                    <td className="px-3 py-2">
                       <span className={cn(
-                        "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-wider",
                         isService
                           ? "border border-purple-200 bg-purple-50 text-purple-700"
                           : "border border-blue-200 bg-blue-50 text-blue-700"
@@ -1603,27 +1590,27 @@ function LineItemsTable({
                     </td>
 
                     {/* Name */}
-                    <td className="px-3.5 py-3.5">
-                      <div className="font-black text-slate-900 text-xs">
+                    <td className="px-3 py-2">
+                      <div className="font-bold text-slate-900 text-xs">
                         {formatPrimitiveValue(name)}
                       </div>
                     </td>
 
                     {/* Specification / Scope */}
-                    <td className="px-3.5 py-3.5 text-slate-600 font-medium max-w-[240px]">
-                      <span className="line-clamp-2" title={rawSpec ? String(rawSpec) : undefined}>
+                    <td className="px-3 py-2 text-slate-600 font-normal max-w-[240px]">
+                      <span className="line-clamp-2 text-[11px]" title={rawSpec ? String(rawSpec) : undefined}>
                         {rawSpec ? formatPrimitiveValue(rawSpec) : <span className="text-slate-400 italic">No description</span>}
                       </span>
                     </td>
 
                     {/* Qty & UOM */}
-                    <td className="px-3.5 py-3.5 text-center whitespace-nowrap">
-                      <span className="font-extrabold text-slate-900">{qtyDisplay}</span>{' '}
-                      <span className="text-[10px] font-bold text-slate-500 uppercase">{unit}</span>
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                      <span className="font-bold text-slate-900">{qtyDisplay}</span>{' '}
+                      <span className="text-[9.5px] font-bold text-slate-500 uppercase">{unit}</span>
                     </td>
 
                     {/* Est. Unit Rate */}
-                    <td className="px-3.5 py-3.5 text-right font-extrabold text-slate-900 whitespace-nowrap">
+                    <td className="px-3 py-2 text-right font-bold text-slate-900 whitespace-nowrap">
                       {rateNumber !== null ? (
                         <span>₹{rateNumber.toLocaleString('en-IN')}</span>
                       ) : (
@@ -1632,22 +1619,22 @@ function LineItemsTable({
                     </td>
 
                     {/* HSN / SAC */}
-                    <td className="px-3.5 py-3.5 text-center font-mono text-[11px] font-semibold text-slate-600">
+                    <td className="px-3 py-2 text-center font-mono text-[10.5px] font-medium text-slate-600">
                       {rawHsn ? String(rawHsn) : <span className="text-slate-400">-</span>}
                     </td>
 
                     {/* Brand & Policy */}
-                    <td className="px-3.5 py-3.5">
-                      <div className="text-slate-800 text-[11px] font-bold truncate max-w-[130px]" title={brandDisplayName}>
+                    <td className="px-3 py-2">
+                      <div className="text-slate-800 text-[11px] font-semibold truncate max-w-[130px]" title={brandDisplayName}>
                         {brandDisplayName}
                       </div>
                       <div className="mt-0.5">
                         {isLocked ? (
-                          <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
+                          <span className="inline-flex items-center text-[8.5px] font-bold uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
                             Lock
                           </span>
                         ) : (
-                          <span className="inline-flex items-center text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                          <span className="inline-flex items-center text-[8.5px] font-bold uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
                             Flexible
                           </span>
                         )}
@@ -1655,7 +1642,7 @@ function LineItemsTable({
                     </td>
 
                     {/* Documents & Specs */}
-                    <td className="px-3.5 py-3.5">
+                    <td className="px-3 py-2">
                       {fileCount > 0 ? (
                         <button
                           type="button"
@@ -1767,28 +1754,28 @@ function BoqTableList({
   if (!list.length) return null;
 
   return (
-    <div className="space-y-3 pt-2">
+    <div className="space-y-2.5 pt-1.5">
       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-        <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
-          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900 flex items-center gap-2">
+          <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
           BOQ Table ({list.length})
         </h3>
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-4 py-3">Sr #</th>
-                <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3">Quantity</th>
-                <th className="px-4 py-3">UOM</th>
-                <th className="px-4 py-3">Est. Rate</th>
-                <th className="px-4 py-3">Tax %</th>
-                <th className="px-4 py-3">Total</th>
+                <th className="px-3 py-2">Sr #</th>
+                <th className="px-3 py-2">Category</th>
+                <th className="px-3 py-2">Quantity</th>
+                <th className="px-3 py-2">UOM</th>
+                <th className="px-3 py-2">Est. Rate</th>
+                <th className="px-3 py-2">Tax %</th>
+                <th className="px-3 py-2">Total</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+            <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
               {list.map((item: any, idx: number) => {
                 const sr = firstPresent(item.srNo, item.sr, item.sr_no, item.id, idx + 1);
                 const rawCat = firstPresent(item.category, item.itemCategory, item.name, item.itemName, item.title);
@@ -1814,13 +1801,13 @@ function BoqTableList({
 
                 return (
                   <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="px-4 py-3 font-bold text-slate-400">{sr}</td>
-                    <td className="px-4 py-3 font-black text-slate-900">{formatPrimitiveValue(category)}</td>
-                    <td className="px-4 py-3 font-bold text-slate-800">{qty} {uom}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatPrimitiveValue(uom || '-')}</td>
-                    <td className="px-4 py-3 text-slate-700">{rate !== '-' ? (typeof rate === 'number' ? formatCurrency(rate) : formatPrimitiveValue(rate)) : '-'}</td>
-                    <td className="px-4 py-3 text-slate-700">{tax !== '-' ? `${String(tax).replace('%', '')}%` : '-'}</td>
-                    <td className="px-4 py-3 font-black text-slate-900">{total !== '-' ? (typeof total === 'number' ? formatCurrency(total) : formatPrimitiveValue(total)) : '-'}</td>
+                    <td className="px-3 py-2 font-bold text-slate-400">{sr}</td>
+                    <td className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(category)}</td>
+                    <td className="px-3 py-2 font-medium text-slate-800">{qty} {uom}</td>
+                    <td className="px-3 py-2 text-slate-600">{formatPrimitiveValue(uom || '-')}</td>
+                    <td className="px-3 py-2 text-slate-700">{rate !== '-' ? (typeof rate === 'number' ? formatCurrency(rate) : formatPrimitiveValue(rate)) : '-'}</td>
+                    <td className="px-3 py-2 text-slate-700">{tax !== '-' ? `${String(tax).replace('%', '')}%` : '-'}</td>
+                    <td className="px-3 py-2 font-bold text-slate-900">{total !== '-' ? (typeof total === 'number' ? formatCurrency(total) : formatPrimitiveValue(total)) : '-'}</td>
                   </tr>
                 );
               })}
@@ -1846,28 +1833,28 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
   if (!list.length) return null;
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-        <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
-          <ClipboardCheck className="h-4 w-4 text-indigo-600" />
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+        <h3 className="text-xs sm:text-[13px] font-bold uppercase tracking-wide text-slate-900 flex items-center gap-2">
+          <ClipboardCheck className="h-3.5 w-3.5 text-indigo-600" />
           Technical Evaluation Criteria ({list.length})
         </h3>
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-4 py-3">#</th>
-                <th className="px-4 py-3">Criteria Name</th>
-                <th className="px-4 py-3">Description</th>
-                <th className="px-4 py-3 text-center">Mandatory</th>
-                <th className="px-4 py-3 text-center">Min Marks</th>
-                <th className="px-4 py-3 text-center">Max Score</th>
-                <th className="px-4 py-3 text-center">Weightage</th>
+                <th className="px-3 py-2">#</th>
+                <th className="px-3 py-2">Criteria Name</th>
+                <th className="px-3 py-2">Description</th>
+                <th className="px-3 py-2 text-center">Mandatory</th>
+                <th className="px-3 py-2 text-center">Min Marks</th>
+                <th className="px-3 py-2 text-center">Max Score</th>
+                <th className="px-3 py-2 text-center">Weightage</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+            <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
               {list.map((item: any, idx: number) => {
                 if (isPlainObject(item)) {
                   const name = firstPresent(item.name, item.title, item.label, `Criteria ${idx + 1}`);
@@ -1879,12 +1866,12 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
 
                   return (
                     <tr key={item.id || idx} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
-                      <td className="px-4 py-3 font-black text-slate-900">{formatPrimitiveValue(name)}</td>
-                      <td className="px-4 py-3 font-medium text-slate-600 max-w-xs">{formatPrimitiveValue(desc)}</td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-2 font-bold text-slate-400">{idx + 1}</td>
+                      <td className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(name)}</td>
+                      <td className="px-3 py-2 font-normal text-slate-600 max-w-xs">{formatPrimitiveValue(desc)}</td>
+                      <td className="px-3 py-2 text-center">
                         <span className={cn(
-                          'inline-block rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider border',
+                          'inline-block rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-wider border',
                           mandatory
                             ? 'border-rose-200 bg-rose-50 text-rose-700'
                             : 'border-slate-200 bg-slate-50 text-slate-600'
@@ -1892,9 +1879,9 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
                           {mandatory ? 'Yes' : 'No'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center font-bold text-amber-700">{formatPrimitiveValue(minMarks)}</td>
-                      <td className="px-4 py-3 text-center font-black text-slate-900">{formatPrimitiveValue(maxScore)}</td>
-                      <td className="px-4 py-3 text-center font-extrabold text-indigo-700">
+                      <td className="px-3 py-2 text-center font-semibold text-amber-700">{formatPrimitiveValue(minMarks)}</td>
+                      <td className="px-3 py-2 text-center font-bold text-slate-900">{formatPrimitiveValue(maxScore)}</td>
+                      <td className="px-3 py-2 text-center font-bold text-indigo-700">
                         {weightage !== '-' ? `${weightage}%` : '-'}
                       </td>
                     </tr>
@@ -1903,8 +1890,8 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
 
                 return (
                   <tr key={idx} className="hover:bg-slate-50/60">
-                    <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
-                    <td colSpan={6} className="px-4 py-3 font-bold text-slate-900">{formatPrimitiveValue(item)}</td>
+                    <td className="px-3 py-2 font-bold text-slate-400">{idx + 1}</td>
+                    <td colSpan={6} className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(item)}</td>
                   </tr>
                 );
               })}
@@ -1928,12 +1915,12 @@ function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq,
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">
       <SectionHeader title="Consignee & Delivery Information" icon={MapPin} />
 
       {/* General Delivery Location & Delivery Terms - commented out / hidden on buyer side */}
       {showDeliveryMeta && (
-        <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+        <div className="rounded-xl bg-slate-50/70 p-3.5 border border-slate-150">
           <PropertyGrid columns={2}>
             {hasDetailData(deliveryLocation) && (
               <PropertyItem label="General Delivery Location" value={deliveryLocation} />
@@ -1949,15 +1936,15 @@ function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq,
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+              <thead className="bg-slate-50/80 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Consignee Name</th>
-                  <th className="px-4 py-3">Quantity</th>
-                  <th className="px-4 py-3">Delivery Location / Address</th>
+                  <th className="px-3 py-2">#</th>
+                  <th className="px-3 py-2">Consignee Name</th>
+                  <th className="px-3 py-2">Quantity</th>
+                  <th className="px-3 py-2">Delivery Location / Address</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
                 {items.map((item: any, idx: number) => {
                   if (isPlainObject(item)) {
                     const name = firstPresent(item.name, item.consigneeName, item.contactPerson, `Consignee ${idx + 1}`);
@@ -1966,22 +1953,22 @@ function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq,
 
                     return (
                       <tr key={item.id || idx} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
-                        <td className="px-4 py-3 font-black text-slate-900">{formatPrimitiveValue(name)}</td>
-                        <td className="px-4 py-3">
-                          <span className="inline-block rounded-md bg-indigo-50 border border-indigo-200/60 px-2.5 py-0.5 font-bold text-indigo-700">
+                        <td className="px-3 py-2 font-bold text-slate-400">{idx + 1}</td>
+                        <td className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(name)}</td>
+                        <td className="px-3 py-2">
+                          <span className="inline-block rounded-md bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 font-semibold text-indigo-700 text-[10px]">
                             {formatPrimitiveValue(qty)}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-700">{formatPrimitiveValue(loc)}</td>
+                        <td className="px-3 py-2 text-slate-700">{formatPrimitiveValue(loc)}</td>
                       </tr>
                     );
                   }
 
                   return (
                     <tr key={idx} className="hover:bg-slate-50/60">
-                      <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
-                      <td colSpan={3} className="px-4 py-3 font-bold text-slate-900">{formatPrimitiveValue(item)}</td>
+                      <td className="px-3 py-2 font-bold text-slate-400">{idx + 1}</td>
+                      <td colSpan={3} className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(item)}</td>
                     </tr>
                   );
                 })}
@@ -3226,34 +3213,27 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={statusLabel} />
                 {!isBuyerSide && buyerOrgName !== 'N/A' && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-indigo-700">
-                    <Building2 className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                    <Building2 className="h-3 w-3" />
                     {formatPrimitiveValue(buyerOrgName, 'organization')}
                   </span>
                 )}
                 {props.deadlineDate && <DeadlineCountdown targetDate={props.deadlineDate} />}
                 {props.hasSubmittedProposal && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-700">
-                    <ShieldCheck className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                    <ShieldCheck className="h-3 w-3" />
                     {props.procurementType === 'RFQ' ? 'Quotation Submitted' : 'Proposal Submitted'}
                   </span>
                 )}
               </div>
-              <h1
-                className={cn(
-                  'leading-tight tracking-tight text-slate-900 font-black break-words',
-                  isBuyerSide
-                    ? 'text-lg sm:text-xl md:text-2xl'
-                    : 'text-xl sm:text-2xl lg:text-3xl'
-                )}
-              >
+              <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-slate-900 break-words leading-snug">
                 {resolvedSubject}
               </h1>
-              <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-slate-500 tracking-normal">
                 {/* Requisition ID badge - hidden on buyer side */}
                 {!isBuyerSide && (
                   <>
-                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-700 text-[11px] font-bold">{displayIdStr}</span>
+                    <span className="rounded px-1.5 py-0.5 font-mono text-slate-700 text-[10.5px] font-bold bg-slate-100 border border-slate-200/60">{displayIdStr}</span>
                     <span>•</span>
                   </>
                 )}
@@ -3267,7 +3247,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2.5 lg:self-center">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 lg:self-center">
               <Button
                 type="button"
                 variant="outline"
@@ -3279,9 +3259,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     handleDefaultPdfDownload();
                   }
                 }}
-                className="h-9 px-3.5 text-xs font-bold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
+                className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
               >
-                <Download className="h-4 w-4 text-slate-600" />
+                <Download className="h-3.5 w-3.5 text-slate-600" />
                 Download
               </Button>
               {props.invoiceStatus && props.onConvertToInvoiceClick && (
@@ -3289,9 +3269,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   <Button
                     type="button"
                     onClick={() => router.push(`/seller/invoices/${props.invoiceStatus!.invoiceId}`)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 h-9 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 h-8 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                   >
-                    <Eye className="h-4 w-4 mr-0.5" />
+                    <Eye className="h-3.5 w-3.5 mr-0.5" />
                     View Invoice
                   </Button>
                 ) : (
@@ -3299,9 +3279,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     type="button"
                     disabled={props.isConvertingInvoice || props.invoiceStatus.loading}
                     onClick={props.onConvertToInvoiceClick}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 h-9 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 h-8 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                   >
-                    {props.isConvertingInvoice ? <Loader2 className="h-4 w-4 mr-0.5 animate-spin" /> : <FileText className="h-4 w-4 mr-0.5" />}
+                    {props.isConvertingInvoice ? <Loader2 className="h-3.5 w-3.5 mr-0.5 animate-spin" /> : <FileText className="h-3.5 w-3.5 mr-0.5" />}
                     {props.isConvertingInvoice ? 'Converting...' : 'Convert to Invoice'}
                   </Button>
                 )
@@ -3312,9 +3292,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   variant="outline"
                   size="sm"
                   onClick={props.onDiscardClick}
-                  className="h-9 px-3.5 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
+                  className="h-8 px-3 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-semibold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
                 >
-                  <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                  <Trash2 className="h-3 w-3 text-rose-600" />
                   Discard Draft
                 </Button>
               )}
@@ -3324,12 +3304,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   size="sm"
                   onClick={handleActionSubmit}
                   className={cn(
-                    'h-9 px-4 text-white text-xs font-extrabold rounded-lg bg-[#0b2447] hover:bg-[#12335f] cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5',
+                    'h-8 px-3.5 text-white text-xs font-bold rounded-lg bg-[#0b2447] hover:bg-[#12335f] cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5',
                     isEmdGated ? 'bg-amber-600 hover:bg-amber-700' : ''
                   )}
                 >
                   <span>{isEmdGated ? 'Pay EMD to Submit' : (props.submitButtonLabel || defaultSubmitBtnLabel)}</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
+                  <ArrowRight className="h-3 w-3" />
                 </Button>
               )}
             </div>
@@ -3339,14 +3319,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         {/* EMD Section commented out */}
 
         {/* Summary Metrics */}
-        <section className={cn('grid gap-3', summaryCards.length === 6 ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5')}>
+        <section className={cn('grid gap-2.5 sm:gap-3', summaryCards.length === 6 ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5')}>
           {summaryCards.map(card => (
             <MetricCard key={card.label} {...card} isBuyer={isBuyerSide} />
           ))}
         </section>
 
         {/* Tab Navigation Bar */}
-        <nav className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xs">
+        <nav className="flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
           {tabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -3356,17 +3336,17 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 type="button"
                 onClick={() => setActiveTab(tab.id as any)}
                 className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs lg:text-sm font-bold transition-all',
+                  'flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all',
                   isActive
                     ? 'bg-slate-950 text-white shadow-2xs'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 )}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-3.5 w-3.5" />
                 <span>{tab.label}</span>
                 {tab.count !== undefined && tab.count > 0 && (
                   <span className={cn(
-                    'rounded-full px-1.5 py-0.5 text-[10px] font-black',
+                    'rounded-full px-1.5 py-0.2 text-[9px] font-bold',
                     isActive ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'
                   )}>
                     {tab.count}
@@ -3696,16 +3676,16 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             )}
 
             {isBuyerOrAdmin && (
-              <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-black text-slate-900 tracking-tight">{isRfqType ? 'Seller Submitted Quotations' : 'Seller Proposals & Submitted Quotations'}</h3>
-                      <span className="rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black text-blue-700">
+                      <h3 className="text-xs sm:text-[13px] font-bold text-slate-900 tracking-tight">{isRfqType ? 'Seller Submitted Quotations' : 'Seller Proposals & Submitted Quotations'}</h3>
+                      <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[9.5px] font-bold text-blue-700">
                         {submittedParticipations.length} {submittedParticipations.length === 1 ? (isRfqType ? 'Quotation' : 'Proposal') : (isRfqType ? 'Quotations' : 'Proposals')} Received
                       </span>
                     </div>
-                    <p className="text-xs font-medium text-slate-500 mt-0.5">
+                    <p className="text-[11px] font-normal text-slate-500 mt-0.5">
                       {isRfqType
                         ? 'Review seller quotation details, financial quotes, line item rates, and attached technical specifications.'
                         : 'Review seller proposal details, financial quotes, line item rates, and attached technical specifications.'}
@@ -3719,9 +3699,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                         type="button"
                         size="sm"
                         onClick={() => setIsStartAuctionModalOpen(true)}
-                        className="h-8 gap-1.5 text-xs font-black text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-2xs rounded-lg"
+                        className="h-7.5 gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-2xs rounded-lg px-3"
                       >
-                        <Gavel className="h-3.5 w-3.5" />
+                        <Gavel className="h-3 w-3" />
                         <span>Start Reverse Auction</span>
                       </Button>
                     )}
@@ -3729,12 +3709,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 </div>
 
                 {submittedParticipations.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-8 px-4 text-center">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-2">
-                      <Users className="h-5 w-5" />
+                  <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-7 px-4 text-center">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-2">
+                      <Users className="h-4.5 w-4.5" />
                     </div>
-                    <h4 className="text-xs font-extrabold text-slate-700">{isRfqType ? 'No seller quotations submitted yet' : 'No seller proposals submitted yet'}</h4>
-                    <p className="text-[11px] font-medium text-slate-400 max-w-sm mt-0.5">
+                    <h4 className="text-xs font-bold text-slate-700">{isRfqType ? 'No seller quotations submitted yet' : 'No seller proposals submitted yet'}</h4>
+                    <p className="text-[11px] font-normal text-slate-400 max-w-sm mt-0.5">
                       {isRfqType
                         ? 'As soon as suppliers submit their quotations for this RFQ, their responses will appear here for your review.'
                         : 'As soon as suppliers submit their technical and financial proposals for this procurement, their quotations will appear here for your review.'}
@@ -3745,16 +3725,16 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[760px] text-left text-xs">
                         <thead className="bg-slate-50/80 border-b border-slate-200">
-                          <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                            <th className="px-4 py-3">Supplier Organization</th>
-                            <th className="px-4 py-3">Quoted Amount (INR)</th>
-                            <th className="px-4 py-3">Offered Qty & Delivery</th>
-                            <th className="px-4 py-3">Submitted At</th>
-                            <th className="px-4 py-3">Status</th>
-                            <th className="px-4 py-3 text-right">Action</th>
+                          <tr className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
+                            <th className="px-3 py-2">Supplier Organization</th>
+                            <th className="px-3 py-2">Quoted Amount (INR)</th>
+                            <th className="px-3 py-2">Offered Qty & Delivery</th>
+                            <th className="px-3 py-2">Submitted At</th>
+                            <th className="px-3 py-2">Status</th>
+                            <th className="px-3 py-2 text-right">Action</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                        <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                           {submittedParticipations.map((participation: any, idx: number) => {
                             const sellerOrgName = participation.sellerOrgName
                               || participation.sellerOrganization?.organizationName
@@ -3777,35 +3757,35 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
                             return (
                               <tr key={participation.id || participation.sellerId || `quotation-row-${idx}`} className="hover:bg-slate-50/70 transition-colors">
-                                <td className="px-4 py-3">
-                                  <p className="font-extrabold text-slate-950 text-xs">{sellerOrgName}</p>
+                                <td className="px-3 py-2">
+                                  <p className="font-bold text-slate-950 text-xs">{sellerOrgName}</p>
                                   {contactName && contactName !== sellerOrgName && (
-                                    <p className="text-[10px] font-medium text-slate-400">Contact: {contactName}</p>
+                                    <p className="text-[10px] font-normal text-slate-400">Contact: {contactName}</p>
                                   )}
                                 </td>
-                                <td className="px-4 py-3">
-                                  <span className="font-black text-slate-900 text-xs">
+                                <td className="px-3 py-2">
+                                  <span className="font-bold text-slate-900 text-xs">
                                     {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : 'Sealed / Rates On File'}
                                   </span>
                                 </td>
-                                <td className="px-4 py-3 text-slate-600">
-                                  <p className="font-bold text-xs">{qty}</p>
-                                  <p className="text-[10px] font-medium text-slate-400">{delivery}</p>
+                                <td className="px-3 py-2 text-slate-600">
+                                  <p className="font-semibold text-xs">{qty}</p>
+                                  <p className="text-[10px] font-normal text-slate-400">{delivery}</p>
                                 </td>
-                                <td className="px-4 py-3 text-slate-500 font-medium">{dateStr}</td>
-                                <td className="px-4 py-3">
-                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                                <td className="px-3 py-2 text-slate-500 font-normal">{dateStr}</td>
+                                <td className="px-3 py-2">
+                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9.5px] font-bold uppercase text-emerald-800">
                                     {statusLabel}
                                   </span>
                                 </td>
-                                <td className="px-4 py-3 text-right">
+                                <td className="px-3 py-2 text-right">
                                   <Button
                                     type="button"
                                     size="sm"
                                     onClick={() => router.push(`/bids/${targetId}/results`)}
-                                    className="h-8 gap-1 text-xs font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
+                                    className="h-7.5 px-2.5 gap-1 text-[11px] font-bold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
                                   >
-                                    <Eye className="h-3.5 w-3.5" />
+                                    <Eye className="h-3 w-3" />
                                     Review Quotation
                                   </Button>
                                 </td>
@@ -3920,17 +3900,17 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       </div>
 
       {/* Sticky Bottom Action Dock for B2B Power-Users */}
-      <div className="sticky bottom-0 z-40 border-t border-slate-200/80 bg-white/95 p-3 shadow-lg backdrop-blur-md">
+      <div className="sticky bottom-0 z-40 border-t border-slate-200/80 bg-white/95 p-2.5 sm:p-3 shadow-lg backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4">
-          <div className="flex items-center gap-4 text-xs font-bold text-slate-700">
+          <div className="flex items-center gap-4 text-xs font-semibold text-slate-700">
             <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Estimated Value</span>
-              <span className="text-sm font-black text-slate-900">{formatMoney(props.estimatedValue)}</span>
+              <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Estimated Value</span>
+              <span className="text-xs sm:text-sm font-bold text-slate-900">{formatMoney(props.estimatedValue)}</span>
             </div>
             {props.deadlineDate && (
               <div className="hidden sm:block border-l border-slate-200 pl-4">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Closing Date</span>
-                <span className="text-xs font-black text-slate-800">{formatDateString(props.deadlineDate, false)}</span>
+                <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Closing Date</span>
+                <span className="text-xs font-semibold text-slate-800">{formatDateString(props.deadlineDate, false)}</span>
               </div>
             )}
           </div>
@@ -3939,29 +3919,29 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             {(props.status === 'DRAFT' || props.status === 'Draft') && props.onSubmitClick ? (
               <Button
                 type="button"
-                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
                 onClick={props.onSubmitClick}
               >
                 {props.submitButtonLabel || 'Continue Draft'}
-                <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                <ArrowRight className="h-3 w-3 ml-0.5" />
               </Button>
             ) : isBuyerOrAdmin ? (
               <Button
                 type="button"
-                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
                 onClick={() => router.push(`/bids/${displayIdStr || targetId}/results`)}
               >
                 {props.submitButtonLabel && !props.submitButtonLabel.toLowerCase().includes('submit') ? props.submitButtonLabel : 'View Evaluation & Results'}
-                <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                <ArrowRight className="h-3 w-3 ml-0.5" />
               </Button>
             ) : props.onSubmitClick ? (
               <Button
                 type="button"
-                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-extrabold px-5 h-9 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
                 onClick={props.onSubmitClick}
               >
                 {props.submitButtonLabel || 'Submit Proposal'}
-                <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                <ArrowRight className="h-3 w-3 ml-0.5" />
               </Button>
             ) : null}
           </div>
@@ -4802,3 +4782,6 @@ export function SelectQuotationsToCompareModal({
     </div>
   );
 }
+
+export { ProcurementDetailSkeleton } from '../../../components/ui/skeleton';
+

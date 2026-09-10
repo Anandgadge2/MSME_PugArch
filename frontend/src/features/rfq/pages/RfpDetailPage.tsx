@@ -3,12 +3,12 @@
 import React from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, ShieldAlert, ArrowLeft } from 'lucide-react';
+import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
-import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { formatRefId } from '../../../utils/refIdUtils';
 import RfqDetailPage from './RfqDetailPage';
 import { toast } from 'sonner';
@@ -108,13 +108,9 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const serviceDetails = payload.serviceDetails || {};
 
   if (isLoading) {
-    return (
-      <div className="flex h-[80vh] flex-col items-center justify-center gap-3">
-        <Loader2 className="h-10 w-10 animate-spin text-[#12335f]" />
-        <p className="text-sm font-bold text-slate-500">Loading RFP details...</p>
-      </div>
-    );
+    return <ProcurementDetailSkeleton procurementTypeLabel="Request for Proposal" />;
   }
+
 
   const hasFatalError = !bidData && !reqData;
   if (hasFatalError) {
