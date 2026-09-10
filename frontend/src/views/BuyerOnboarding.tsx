@@ -826,6 +826,18 @@ export default function BuyerOnboarding() {
       customProcurementCategories: updatedCustomProcurementCategories,
       otherCategoryDetails: updatedCustomProcurementCategories.join(', ')
     });
+
+    // Register with backend to create master category & trigger admin notification
+    try {
+      void api.post('/api/categories/custom', {
+        name: category,
+        type: 'BOTH'
+      }).catch(err => {
+        console.warn('[Category] Background registration deferred:', err);
+      });
+    } catch {
+      // ignore
+    }
   };
 
   const removeCustomProcurementCategory = (categoryToRemove: string) => {

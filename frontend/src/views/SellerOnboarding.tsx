@@ -276,7 +276,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   const [detailsErrors, setDetailsErrors] = useState<Record<string, string>>({});
   const [showCustomCategory, setShowCustomCategory] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
-  const addCustomCategory = () => {
+  const addCustomCategory = async () => {
     const trimmed = customCategory.trim();
     if (!trimmed) return;
     const currentCats = Array.isArray(formData.productCategories) ? formData.productCategories : [];
@@ -287,6 +287,16 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
         delete next.productCategories;
         return next;
       });
+
+      // Register with backend to create master category & trigger admin notification
+      try {
+        await api.post('/api/categories/custom', {
+          name: trimmed,
+          type: 'BOTH'
+        });
+      } catch (err) {
+        console.warn('[Category] Background registration deferred:', err);
+      }
     }
     setCustomCategory('');
     setShowCustomCategory(false);
@@ -310,9 +320,6 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     const errors: Record<string, string> = {};
     if (candidate.isStartup !== true && candidate.isStartup !== false) {
       errors.isStartup = 'Are you registered with DPIIT as Startup? (Please select Yes or No)';
-    }
-    if (candidate.isUdyamCertified !== true && candidate.isUdyamCertified !== false) {
-      errors.isUdyamCertified = 'Do you have Udyam Registration certified by MSME? (Please select Yes or No)';
     }
     if (candidate.participateInBid !== true && candidate.participateInBid !== false) {
       errors.participateInBid = 'Do you want to participate in Bid? (Please select Yes or No)';
@@ -341,7 +348,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     detailsUpdated: false,
 
     isStartup: null,
-    isUdyamCertified: null,
+    isUdyamCertified: true,
     participateInBid: null,
 
     turnoverMax3Yrs: '',
@@ -383,12 +390,26 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       pan: cachedProfile.pan || cachedOrg.panNumber || cachedRegDetails.pan || '',
       offices: normalizeList(cachedProfile.offices),
       bankAccounts: normalizeList(cachedProfile.bankAccounts),
-      isStartup: cachedProfile.isStartup ?? null,
-      isUdyamCertified: cachedProfile.isUdyamCertified ?? null,
+      isStartup: cachedProfile.isStartup ?? (
+        (Array.isArray(cachedRegDetails.selectedDocuments) && cachedRegDetails.selectedDocuments.includes('dipp_certificate'))
+          || String(cachedRegDetails.businessType || '').toLowerCase().includes('startup')
+          ? true
+          : null
+      ),
+      isUdyamCertified: true,
       participateInBid: cachedProfile.participateInBid ?? null,
       msmeType: cachedProfile.msmeType || '',
       vendorType: cachedProfile.vendorType || '',
-      registrationTypes: Array.isArray(cachedProfile.registrationTypes) ? cachedProfile.registrationTypes : [],
+      registrationTypes: Array.isArray(cachedProfile.registrationTypes) && cachedProfile.registrationTypes.length > 0
+        ? cachedProfile.registrationTypes
+        : (() => {
+            const types = new Set<string>();
+            const docs = Array.isArray(cachedRegDetails.selectedDocuments) ? cachedRegDetails.selectedDocuments : [];
+            if (cachedRegDetails.gstin || docs.includes('gst_certificate')) types.add('GST_REGISTERED');
+            if (docs.includes('nsic_certificate')) types.add('NSIC_REGISTERED');
+            if (cachedRegDetails.pan || cachedOrg.panNumber) types.add('PAN_AVAILABLE');
+            return Array.from(types);
+          })(),
       productCategories: Array.isArray(cachedProfile.productCategories) ? cachedProfile.productCategories : []
     };
   });
@@ -616,9 +637,26 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
         pan: profile.pan || org.panNumber || regDetails.pan || prev.pan,
         offices: normalizeList(profile.offices),
         bankAccounts: normalizeList(profile.bankAccounts).length > 0 ? normalizeList(profile.bankAccounts) : normalizeList(prev.bankAccounts),
-        isStartup: profile.isStartup ?? null,
-        isUdyamCertified: profile.isUdyamCertified ?? null,
-        participateInBid: profile.participateInBid ?? null,
+        isStartup: profile.isStartup ?? (
+          (Array.isArray(regDetails.selectedDocuments) && regDetails.selectedDocuments.includes('dipp_certificate'))
+            || String(regDetails.businessType || '').toLowerCase().includes('startup')
+            ? true
+            : prev.isStartup ?? null
+        ),
+        isUdyamCertified: true,
+        participateInBid: profile.participateInBid ?? prev.participateInBid ?? null,
+        registrationTypes: Array.isArray(profile.registrationTypes) && profile.registrationTypes.length > 0
+          ? profile.registrationTypes
+          : (Array.isArray(prev.registrationTypes) && prev.registrationTypes.length > 0)
+            ? prev.registrationTypes
+            : (() => {
+                const types = new Set<string>();
+                const docs = Array.isArray(regDetails.selectedDocuments) ? regDetails.selectedDocuments : [];
+                if (regDetails.gstin || docs.includes('gst_certificate')) types.add('GST_REGISTERED');
+                if (docs.includes('nsic_certificate')) types.add('NSIC_REGISTERED');
+                if (regDetails.pan || org.panNumber) types.add('PAN_AVAILABLE');
+                return Array.from(types);
+              })(),
         productCategories: Array.isArray(profile.productCategories) ? profile.productCategories : (prev.productCategories || [])
       }));
     } catch (err) {
@@ -1501,7 +1539,6 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
 
                       {[
                         { label: 'Are you registered with DPIIT as Startup?', name: 'isStartup' },
-                        { label: 'Do you have Udyam Registration certified by MSME?', name: 'isUdyamCertified' },
                         { label: 'Do you want to participate in Bid?', name: 'participateInBid' },
                       ].map(item => (
                         <div key={item.name} className="space-y-2">
