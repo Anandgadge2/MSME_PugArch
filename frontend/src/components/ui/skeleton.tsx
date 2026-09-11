@@ -593,3 +593,141 @@ export function ResultsSkeleton() {
         </div>
     );
 }
+
+export function ProcurementDetailSkeleton({ procurementTypeLabel = 'Procurement Opportunity' }: { procurementTypeLabel?: string }) {
+    return (
+        <div
+            role="status"
+            aria-busy="true"
+            aria-live="polite"
+            aria-label={`Loading ${procurementTypeLabel} details`}
+            className="min-h-screen bg-slate-50"
+        >
+            <span className="sr-only">Loading {procurementTypeLabel} details...</span>
+            <div className="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6 lg:px-8">
+                {/* Navigation Breadcrumb & Back Button Skeleton */}
+                <div className="flex flex-wrap items-center gap-3">
+                    <Skeleton className="h-8 w-20 rounded-lg" />
+                    <Skeleton className="h-4 w-36 rounded" />
+                </div>
+
+                {/* Header Skeleton */}
+                <header className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="min-w-0 flex-1 space-y-2.5">
+                            {/* Badges */}
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Skeleton className="h-5 w-20 rounded-full" />
+                                <Skeleton className="h-5 w-32 rounded-full" />
+                                <Skeleton className="h-5 w-28 rounded-full" />
+                            </div>
+                            {/* Title */}
+                            <Skeleton className="h-6 w-3/4 max-w-lg rounded-md" />
+                            {/* Subtitle / Metadata */}
+                            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                <Skeleton className="h-4 w-24 rounded" />
+                                <span className="text-slate-300">•</span>
+                                <Skeleton className="h-4 w-20 rounded" />
+                                <span className="text-slate-300">•</span>
+                                <Skeleton className="h-4 w-28 rounded" />
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex shrink-0 flex-wrap items-center gap-2 lg:self-center">
+                            <Skeleton className="h-8 w-24 rounded-lg" />
+                            <Skeleton className="h-8 w-32 rounded-lg" />
+                        </div>
+                    </div>
+                </header>
+
+                {/* 6 KPI Cards Grid */}
+                <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+                    {Array.from({ length: 6 }).map((_, idx) => (
+                        <div key={idx} className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2 shadow-2xs">
+                            <div className="flex items-center justify-between">
+                                <Skeleton className="h-2.5 w-16 rounded" />
+                                <Skeleton className="h-6 w-6 rounded-md" />
+                            </div>
+                            <Skeleton className="h-5 w-24 rounded" />
+                            <Skeleton className="h-2.5 w-20 rounded" />
+                        </div>
+                    ))}
+                </section>
+
+                {/* Tab Navigation Bar Skeleton */}
+                <nav className="flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
+                    {['Overview', 'Scope & Docs', 'Terms & Criteria', 'Bid Submission', 'Clarifications'].map((_, idx) => (
+                        <Skeleton
+                            key={idx}
+                            className={cn('h-7 rounded-lg shrink-0', idx === 0 ? 'w-28 bg-slate-900/15' : 'w-24')}
+                        />
+                    ))}
+                </nav>
+
+                {/* 2-Column Info Cards Skeleton */}
+                <div className="grid gap-5 lg:grid-cols-2">
+                    {/* Card 1: Procurement Information */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+                        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                            <Skeleton className="h-5 w-5 rounded" />
+                            <Skeleton className="h-4 w-44 rounded" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            {Array.from({ length: 6 }).map((_, idx) => (
+                                <div key={idx} className="space-y-1.5">
+                                    <Skeleton className="h-2.5 w-20 rounded" />
+                                    <Skeleton className="h-4 w-28 rounded" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Card 2: Buyer Profile */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+                        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                            <Skeleton className="h-5 w-5 rounded" />
+                            <Skeleton className="h-4 w-36 rounded" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            {Array.from({ length: 6 }).map((_, idx) => (
+                                <div key={idx} className="space-y-1.5">
+                                    <Skeleton className="h-2.5 w-20 rounded" />
+                                    <Skeleton className="h-4 w-32 rounded" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Timeline Ribbon Skeleton */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {Array.from({ length: 6 }).map((_, idx) => (
+                            <div key={idx} className="flex items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/60 p-2.5">
+                                <Skeleton className="h-8 w-8 rounded-lg shrink-0" />
+                                <div className="min-w-0 flex-1 space-y-1">
+                                    <Skeleton className="h-2.5 w-14 rounded" />
+                                    <Skeleton className="h-3.5 w-20 rounded" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Clarification Threads / Secondary Status Card */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        {Array.from({ length: 4 }).map((_, idx) => (
+                            <div key={idx} className="space-y-1.5">
+                                <Skeleton className="h-2.5 w-24 rounded" />
+                                <Skeleton className="h-4 w-28 rounded" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+

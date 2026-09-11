@@ -799,7 +799,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       </div>
 
       {/* Dynamic KPI Metrics based on tab */}
-      {subRouteType === 'submitted' && (
+      {/* {subRouteType === 'submitted' && (
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
             label="Active Quoted Pipeline"
@@ -961,7 +961,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
             onClick={() => { setKpiFilter(kpiFilter === 'dueSoon' ? 'all' : 'dueSoon'); setPage(1); }}
           />
         </div>
-      )}
+      )} */}
 
       {/* ── Bid Category Navigation Pills ── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 -mt-1 scrollbar-none" role="tablist" aria-label="Bid Categories">

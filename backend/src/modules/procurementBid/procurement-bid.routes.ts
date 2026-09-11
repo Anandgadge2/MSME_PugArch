@@ -213,11 +213,6 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
   const originalToken = req.params.bidId;
   let token = originalToken;
 
-  if (token.startsWith('TENDER-') || token.startsWith('TND-')) {
-    const data = await service.resolveTenderBidActivity(token);
-    return apiResponse.success(res, data, 200, 'Tender opportunity details fetched successfully');
-  }
-
   // FAST PATH: Check if token directly resolves in procurementBid table first!
   try {
     const directBid = await service.resolveBid(originalToken, { ...service.bidInclude, participations: { include: { seller: { include: { organization: true } }, documents: true } } });
@@ -226,7 +221,18 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       return apiResponse.success(res, service.serializeBid(directBid, { actor: (req as any).user || actor, includeParticipants: true, includeFinancial: true }), 200, 'Procurement bid details fetched successfully');
     }
   } catch {
-    // Fall back to Rate Contract / Requirement lookup below
+    // Fall back to Tender / Rate Contract / Requirement lookup below
+  }
+
+  if (token.startsWith('TENDER-') || token.startsWith('TND-')) {
+    try {
+      const data = await service.resolveTenderBidActivity(token);
+      if (data) {
+        return apiResponse.success(res, data, 200, 'Tender opportunity details fetched successfully');
+      }
+    } catch {
+      // Continue to next fallbacks
+    }
   }
 
   // Check if token refers to a Rate Contract in db.contract first
@@ -721,9 +727,9 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
     }
   } catch (err: any) {
     // Fallback: if no ProcurementBid found, check if this is a Requirement ID, Reference Number, or Rate Contract
-    if (err?.code === 'BID_NOT_FOUND' && (/^\d+$/.test(token) || token.startsWith('REQ-') || token.startsWith('RFQ-') || token.startsWith('RC-') || token.startsWith('RATE-'))) {
-      const parsedId = (token.startsWith('REQ-') || token.startsWith('RFQ-') || token.startsWith('RC-') || token.startsWith('RATE-'))
-        ? Number(token.replace(/^(REQ-|RFQ-|RC-|RATE-)/, ''))
+    if (err?.code === 'BID_NOT_FOUND' && (/^\d+$/.test(token) || token.startsWith('REQ-') || token.startsWith('RFQ-') || token.startsWith('RC-') || token.startsWith('RATE-') || token.startsWith('RFP-') || token.startsWith('TND-') || token.startsWith('LTND-'))) {
+      const parsedId = (token.startsWith('REQ-') || token.startsWith('RFQ-') || token.startsWith('RC-') || token.startsWith('RATE-') || token.startsWith('RFP-') || token.startsWith('TND-') || token.startsWith('LTND-'))
+        ? Number(token.replace(/^(REQ-|RFQ-|RC-|RATE-|RFP-|TND-|LTND-)/, ''))
         : Number(token);
       let requirement = null;
 
@@ -773,9 +779,20 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       }
 
       if (!requirement) {
-        const searchToken = token.startsWith('RFQ-') ? token.replace('RFQ-', 'REQ-') : token;
+        const searchTokens = Array.from(new Set([
+          token,
+          token.replace(/^(RFQ|RFP|RC|LTND)-/, 'REQ-'),
+          token.replace(/^(RFQ|RFP|RC|LTND)-/, 'TND-'),
+          token.replace(/^REQ-/, 'TND-'),
+          token.replace(/^TND-/, 'REQ-'),
+        ]));
         requirement = await prisma.requirement.findFirst({
-          where: /^\d+$/.test(searchToken) ? { id: Number(searchToken) } : { requirementNumber: searchToken },
+          where: {
+            OR: [
+              ...(Number.isFinite(parsedId) && parsedId > 0 && parsedId <= 2147483647 ? [{ id: parsedId }] : []),
+              { requirementNumber: { in: searchTokens } },
+            ]
+          },
           include: {
             items: true,
             organization: { select: { id: true, organizationName: true, organizationType: true, verificationStatus: true, city: true, district: true, state: true } },

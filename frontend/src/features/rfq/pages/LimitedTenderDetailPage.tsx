@@ -3,12 +3,12 @@
 import React, { useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, ShieldAlert, ArrowLeft } from 'lucide-react';
+import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
 import { getApi, postApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
-import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
 import { formatRefId } from '../../../utils/refIdUtils';
 import { formatDate, formatDateTime } from '../../shared/format';
@@ -64,35 +64,33 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
     queryFn: async () => {
       try {
         const res2 = await getApi<any>(`/api/marketplace/requirements/${targetReqId}`);
-        if (res2) return res2.data || res2;
+        const unwrapped = res2?.requirement || res2?.data?.requirement || res2?.data || res2;
+        if (unwrapped && (unwrapped.id || unwrapped.title || unwrapped.requirementNumber)) return unwrapped;
       } catch {}
       try {
         const res = await getApi<any>(`/api/requirements/${targetReqId}`);
-        if (res) return res.data || res;
+        const unwrapped = res?.requirement || res?.data?.requirement || res?.data || res;
+        if (unwrapped && (unwrapped.id || unwrapped.title || unwrapped.requirementNumber)) return unwrapped;
       } catch {}
       return null;
     },
-    enabled: !!targetReqId && (!bidData || !(bidData as any).items?.length),
-    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
+    enabled: !!targetReqId,
+    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? (initialData.requirement || initialData) : undefined,
     staleTime: 60_000,
   });
 
   const isLoading = !initialData && !bidData && !reqData && (isBidLoading || isReqLoading);
   const bid: any = bidData || {};
-  const reqObj: any = reqData || {};
-  const payload = bid.technicalPacket || bid.payload || reqObj.payload || {};
+  const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
+  const payload = bid.technicalPacket || bid.payload || reqObj.technicalPacket || reqObj.payload || {};
   const basics = payload.basics || {};
   const schedule = payload.schedule || {};
   const terms = payload.terms || {};
 
   if (isLoading) {
-    return (
-      <div className="flex h-[80vh] flex-col items-center justify-center gap-3">
-        <Loader2 className="h-10 w-10 animate-spin text-[#12335f]" />
-        <p className="text-sm font-bold text-slate-500">Loading Limited Tender details...</p>
-      </div>
-    );
+    return <ProcurementDetailSkeleton procurementTypeLabel="Limited Tender" />;
   }
+
 
   const hasFatalError = !bidData && !reqData;
   if (hasFatalError) {
@@ -112,7 +110,26 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
     );
   }
 
-  const title = bid.title || bid.subject || reqObj.title || basics.title || 'Limited Tender Procurement';
+  const candidateTitles = [
+    bid.title,
+    reqObj.title,
+    basics.title,
+    basics.contractTitle,
+    basics.procurementTitle,
+    payload.tender?.tenderTitle,
+    payload.tender?.title,
+    payload.serviceDetails?.title,
+    payload.serviceDetails?.serviceTitle,
+    bid.subject,
+    reqObj.subject,
+    bid.itemName,
+    reqObj.itemName,
+    (Array.isArray(bid.items) && (bid.items[0]?.itemName || bid.items[0]?.name || bid.items[0]?.title)),
+    (Array.isArray(reqObj.items) && (reqObj.items[0]?.itemName || reqObj.items[0]?.name || reqObj.items[0]?.title)),
+  ];
+  const isGeneric = (s?: any) => !s || typeof s !== 'string' || ['limited tender', 'tender opportunity', 'procurement requirement', 'n/a', '—'].includes(s.trim().toLowerCase()) || s.toLowerCase().includes('no description');
+  const validTitle = candidateTitles.find(t => t && !isGeneric(String(t)));
+  const title = validTitle ? String(validTitle).trim() : (bid.title || reqObj.title || 'Limited Tender Procurement');
   const rawLtndRef = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber;
   const limitedTenderNumber = formatRefId('LTND', bid.id || reqObj.id || requestId, rawLtndRef, 'LIMITED_TENDER');
 

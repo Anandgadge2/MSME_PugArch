@@ -744,7 +744,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
             <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">{title}</h1>
             <p className="mt-0.5 max-w-3xl text-xs font-semibold leading-relaxed text-blue-100/90">{subtitle}</p>
           </div>
-          
+
           <div className="flex flex-wrap gap-2.5">
             {mode === 'seller' && (
               <>
@@ -781,7 +781,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
 
       {/* KPI Cards Strip - Always Visible Immediately */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
+        {/* <KpiCard
           label="Total Items"
           value={filtered.length}
           subtext="Active listings in catalogue"
@@ -790,7 +790,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           active={kindFilter === 'all'}
           onClick={() => setKindFilter('all')}
           loading={isInitialLoading}
-        />
+        /> */}
         <KpiCard
           label="Products"
           value={products.length}
@@ -811,14 +811,14 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           onClick={() => setKindFilter('service')}
           loading={isInitialLoading}
         />
-        <KpiCard
+        {/* <KpiCard
           label="Avg. Value"
           value={formatCurrency(averageValue)}
           subtext="Mean listing unit price"
           icon={IndianRupee}
           tone="indigo"
           loading={isInitialLoading}
-        />
+        /> */}
       </div>
 
       {showForm && mode === 'seller' && (
@@ -2073,10 +2073,10 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
   // Grid Layout - Spacious, prominent product images, clean hierarchy
   return (
     <Card className="group relative flex flex-col h-full rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs hover:shadow-md hover:border-emerald-500/40 transition-all duration-300">
-      
+
       {/* Top Product Image Showcase Container (Compact, Prominent) */}
       <div className="relative w-full h-40 sm:h-48 bg-slate-50 overflow-hidden flex items-center justify-center p-4 border-b border-slate-100">
-        
+
         {/* Badges on top-left of image */}
         <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 flex-wrap">
           {srNo !== undefined && (
@@ -2116,7 +2116,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
       {/* Card Content Body */}
       <div className="p-4 sm:p-5 flex flex-col flex-1 justify-between gap-3">
         <div className="space-y-2">
-          
+
           {/* Category & Item Type Pills */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-600">
@@ -2151,7 +2151,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
 
         {/* Pricing & Footer Actions */}
         <div className="pt-3 border-t border-slate-100 space-y-3">
-          
+
           <div className="flex items-baseline justify-between gap-2">
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Unit Price</span>

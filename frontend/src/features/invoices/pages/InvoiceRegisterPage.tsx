@@ -856,13 +856,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           ariaLabel="Filter overdue invoices"
           color="red"
         />
-        <KpiCard
+        {/* <KpiCard
           label="GST/TDS"
           value={`${formatCurrency(invoiceHealth.tax)} / ${formatCurrency(invoiceHealth.tds)}`}
           subtext="Total GST/TDS"
           icon={ShieldCheck}
           color="purple"
-        />
+        /> */}
       </div>
 
       {error && <InlineError message={error} onRetry={reload} />}
