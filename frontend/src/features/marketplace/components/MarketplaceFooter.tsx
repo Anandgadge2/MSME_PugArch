@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
 import Link from 'next/link';
+import { formatDate } from '../../shared/format';
 import {
     Mail,
     Phone,
@@ -203,7 +204,7 @@ export function MarketplaceFooter() {
                         <Link href="/website-policies" className="hover:text-white transition-colors">Privacy Policy</Link>
                         <span className="text-slate-600">•</span>
                         <span className="text-slate-300">
-                            Last Updated: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            Last Updated: {formatDate(new Date())}
                         </span>
                     </div>
                 </div>

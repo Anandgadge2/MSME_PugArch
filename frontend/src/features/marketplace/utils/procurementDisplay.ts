@@ -1,3 +1,5 @@
+import { formatDate } from '../../shared/format';
+
 const dayMs = 24 * 60 * 60 * 1000;
 
 export type ProcurementStatusCode =
@@ -18,7 +20,8 @@ export function parseDisplayDate(date?: string | Date | null) {
 export function formatDateIN(date?: string | Date | null) {
     const parsed = parseDisplayDate(date);
     if (!parsed) return 'Not specified';
-    return parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const formatted = formatDate(parsed);
+    return formatted === '—' ? 'Not specified' : formatted;
 }
 
 export function getDaysRemaining(date?: string | Date | null) {

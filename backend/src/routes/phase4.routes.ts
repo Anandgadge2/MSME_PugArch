@@ -52,6 +52,7 @@ import { STRICT_VERIFICATION } from '../config/verification.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { canonicalMethodFromRecord } from '../utils/procurement-methods.js';
 import { nextBidNumber, deriveVisibility, syncBidInvitations } from '../modules/procurementBid/procurement-bid.service.js';
+import { cancelProcurementRequest } from '../modules/procurementCheckout/procurement-checkout.service.js';
 
 
 const safeCoercedDate = z.preprocess((val) => {
@@ -2705,11 +2706,47 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
   }).catch(() => null);
   if (procurementDoc?.bid?.buyerId) return { id: Number(procurementDoc.bid.buyerId), role: 'buyer' };
 
+  // Check if file is an organization profile branding asset (logo or banner)
+  const orgProfile = await db.organizationProfile.findFirst({
+    where: {
+      OR: [
+        { logoUrl: { contains: `/files/${fileId}/` } },
+        { bannerUrl: { contains: `/files/${fileId}/` } },
+        { logoUrl: { endsWith: `/files/${fileId}/view` } },
+        { bannerUrl: { endsWith: `/files/${fileId}/view` } }
+      ]
+    },
+    select: { organizationId: true }
+  }).catch(() => null);
+  if (orgProfile) {
+    const asset = await db.fileAsset.findUnique({
+      where: { id: fileId },
+      select: { ownerId: true, ownerRole: true }
+    });
+    if (asset) return { id: Number(asset.ownerId), role: String(asset.ownerRole || 'seller') };
+  }
+
+  // Check if file is referenced as organization logo
+  const org = await db.organization.findFirst({
+    where: { organizationLogoFileId: fileId },
+    select: { id: true }
+  }).catch(() => null);
+  if (org) {
+    const asset = await db.fileAsset.findUnique({
+      where: { id: fileId },
+      select: { ownerId: true, ownerRole: true }
+    });
+    if (asset) return { id: Number(asset.ownerId), role: String(asset.ownerRole || 'seller') };
+  }
+
   const directCatalogueAsset = await db.fileAsset.findFirst({
     where: {
       id: fileId,
       status: 'active',
-      entityType: { in: ['catalogue', 'catalogue_product', 'catalogue_service'] }
+      OR: [
+        { entityType: { in: ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public'] } },
+        { entityType: 'general', mimeType: { startsWith: 'image/' } }
+      ]
     },
     select: { ownerId: true, ownerRole: true }
   });
@@ -4244,8 +4281,55 @@ router.post('/categories/custom', authenticate, asyncRoute(async (req, res) => {
 }));
 
 router.get('/admin/categories/pending-review', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
-  const pending = await db.category.findMany({
+  // 1. Find all notifications created when users added custom categories
+  const notifs = await db.notification.findMany({
     where: {
+      type: 'category_custom_added'
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100
+  });
+
+  // Extract category IDs from redirectUrl: /admin/categories?edit=<id>
+  const categoryIdToNotif = new Map<number, any>();
+  for (const n of notifs) {
+    if (n.redirectUrl) {
+      const match = n.redirectUrl.match(/edit=(\d+)/);
+      if (match) {
+        const catId = Number(match[1]);
+        if (!categoryIdToNotif.has(catId)) {
+          categoryIdToNotif.set(catId, n);
+        }
+      }
+    }
+  }
+
+  // Also include any categories that have organizationId != null and are missing images
+  const customCategoriesFromOrg = await db.category.findMany({
+    where: {
+      isActive: true,
+      organizationId: { not: null },
+      OR: [{ imageUrl: null }, { imageUrl: '' }]
+    },
+    include: {
+      organization: { select: { id: true, organizationName: true } }
+    },
+    take: 50
+  });
+
+  const allCustomCatIds = Array.from(new Set([
+    ...Array.from(categoryIdToNotif.keys()),
+    ...customCategoriesFromOrg.map((c: any) => c.id)
+  ]));
+
+  if (allCustomCatIds.length === 0) {
+    return ok(res, []);
+  }
+
+  // Query categories that STILL DO NOT HAVE an image (imageUrl is null or empty)
+  const pendingCategories = await db.category.findMany({
+    where: {
+      id: { in: allCustomCatIds },
       isActive: true,
       OR: [
         { imageUrl: null },
@@ -4255,10 +4339,35 @@ router.get('/admin/categories/pending-review', authenticate, authorizeAdmin, asy
     include: {
       organization: { select: { id: true, organizationName: true } }
     },
-    orderBy: { createdAt: 'desc' },
-    take: 20
+    orderBy: { createdAt: 'desc' }
   });
-  ok(res, pending);
+
+  // Format the response with user & organization details
+  const results = pendingCategories.map((cat: any) => {
+    const notif = categoryIdToNotif.get(cat.id);
+    let userName = '';
+    let orgName = cat.organization?.organizationName || '';
+
+    if (notif?.message) {
+      const authorMatch = notif.message.match(/Added by ([^(]+)\(([^)]+)\)/i);
+      if (authorMatch) {
+        if (!userName) userName = authorMatch[1].trim();
+        if (!orgName) orgName = authorMatch[2].trim();
+      }
+    }
+
+    return {
+      id: cat.id,
+      notificationId: notif?.id || null,
+      name: cat.name,
+      userName: userName || 'Registered User',
+      orgName: orgName || 'Registered Enterprise',
+      message: notif?.message || `Custom category "${cat.name}" does not have an image uploaded yet.`,
+      redirectUrl: `/admin/categories?edit=${cat.id}`
+    };
+  });
+
+  ok(res, results);
 }));
 
 router.get('/admin/categories', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
@@ -10210,10 +10319,11 @@ async function ensureUserOrganizationId(req: any): Promise<number> {
             orgType = 'LLP';
           } else if (typeStr.includes('STARTUP')) {
             orgType = 'STARTUP';
-          } else if (typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
-            orgType = 'PRIVATE_LIMITED';
           } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
             orgType = 'PUBLIC_LIMITED';
+          } else if (typeStr.includes('COMPANY') || typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
+            const isPublic = typeStr.includes('PUBLIC') || (!typeStr.includes('PVT') && !typeStr.includes('PRIVATE') && String(orgName).toUpperCase().includes('LIMITED') && !String(orgName).toUpperCase().includes('PVT') && !String(orgName).toUpperCase().includes('PRIVATE'));
+            orgType = isPublic ? 'PUBLIC_LIMITED' : 'PRIVATE_LIMITED';
           } else if (typeStr.includes('SHG')) {
             orgType = 'SHG';
           } else if (typeStr.includes('NGO')) {
@@ -11565,6 +11675,199 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
   });
 
   ok(res, { kpis, procurements: filtered });
+}));
+
+const cancelProcurementSchema = z.object({
+  type: z.string().trim().min(1).max(80),
+  id: z.coerce.number().int().positive(),
+  reason: z.string().trim().min(5, 'Cancellation reason must be at least 5 characters').max(1000),
+  remarks: z.string().trim().max(2000).optional(),
+});
+
+router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
+  const buyerId = userId(req);
+  const buyerOrgId = req.user?.organizationId || -1;
+  const privileged = isAdmin(req) || req.user?.role === 'master_admin';
+
+  const body = parse(cancelProcurementSchema, req.body);
+  const { type, id, reason, remarks } = body;
+  const normalizedType = type.toLowerCase().trim();
+
+  if (normalizedType === 'procurement_request' || normalizedType.includes('checkout') || normalizedType === 'cart') {
+    const pr = await db.procurementRequest.findUnique({ where: { id } });
+    if (!pr) throw new ApiError(404, 'Procurement request not found', 'NOT_FOUND');
+    if (!privileged && pr.buyerId !== buyerId && pr.organizationId !== buyerOrgId) {
+      throw new ApiError(403, 'You do not have permission to cancel this procurement request', 'FORBIDDEN');
+    }
+    const updated = await cancelProcurementRequest(id, pr.organizationId, buyerId, `${reason}${remarks ? ` - ${remarks}` : ''}`);
+    return ok(res, { success: true, message: 'Procurement request cancelled successfully', procurement: updated });
+  }
+
+  if (normalizedType === 'bid_tender' || normalizedType === 'procurement_bid' || normalizedType === 'bid' || normalizedType === 'tender') {
+    const bid = await db.procurementBid.findUnique({
+      where: { id },
+      include: { participations: true }
+    });
+    if (!bid) throw new ApiError(404, 'Procurement bid not found', 'NOT_FOUND');
+    if (!privileged && bid.buyerId !== buyerId && bid.buyerOrganizationId !== buyerOrgId) {
+      throw new ApiError(403, 'You do not have permission to cancel this procurement bid', 'FORBIDDEN');
+    }
+    if (bid.status === 'CANCELLED') {
+      throw new ApiError(409, 'Bid is already cancelled', 'ALREADY_CANCELLED');
+    }
+    const nonCancellable = ['PO_GENERATED', 'AWARDED', 'DELIVERED', 'PAYMENT_COMPLETED'];
+    if (nonCancellable.includes(bid.status)) {
+      throw new ApiError(409, `Cannot cancel bid in ${bid.status} status. An order or award has already been finalized.`, 'BID_CANNOT_CANCEL');
+    }
+
+    const currentPacket = (bid.technicalPacket as Record<string, unknown>) || {};
+    const updated = await db.procurementBid.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        technicalPacket: {
+          ...currentPacket,
+          cancellation: {
+            reason,
+            remarks: remarks || '',
+            cancelledAt: new Date().toISOString(),
+            cancelledBy: buyerId,
+          }
+        }
+      }
+    });
+
+    for (const p of bid.participations) {
+      if (p.sellerUserId) {
+        notifySafe(
+          p.sellerUserId,
+          'Bid Cancelled by Buyer',
+          `The tender/bid "${bid.title}" (${bid.bidNumber}) has been cancelled by the buyer. Reason: ${reason}`,
+          'bid_cancelled',
+          `/bids/${id}`
+        );
+      }
+    }
+
+    await auditWrite(req, 'procurement_bid.cancelled', 'procurementBid', id, { reason, remarks });
+    return ok(res, { success: true, message: 'Procurement bid cancelled successfully', procurement: updated });
+  }
+
+  if (normalizedType === 'requirement' || normalizedType === 'rfq' || normalizedType === 'rfp') {
+    const requirement = await db.requirement.findUnique({
+      where: { id },
+      include: { tenders: { select: { id: true, status: true } } }
+    });
+    if (!requirement) throw new ApiError(404, 'Requirement not found', 'NOT_FOUND');
+    if (!privileged && requirement.buyerId !== buyerId && requirement.organizationId !== buyerOrgId) {
+      throw new ApiError(403, 'You do not have permission to cancel this requirement', 'FORBIDDEN');
+    }
+    if (requirement.status === 'CANCELLED') {
+      throw new ApiError(409, 'Requirement is already cancelled', 'ALREADY_CANCELLED');
+    }
+    if (requirement.status === 'FULFILLED') {
+      throw new ApiError(409, 'Cannot cancel a fulfilled requirement', 'REQUIREMENT_FULFILLED');
+    }
+
+    const currentPayload = (requirement.payload as Record<string, unknown>) || {};
+    const updated = await db.requirement.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        payload: {
+          ...currentPayload,
+          cancellation: {
+            reason,
+            remarks: remarks || '',
+            cancelledAt: new Date().toISOString(),
+            cancelledBy: buyerId,
+          }
+        }
+      }
+    });
+
+    await db.auction.updateMany({
+      where: { linkedRequirementId: id, statusEnum: { notIn: ['CANCELLED', 'CLOSED'] } },
+      data: { status: 'CANCELLED', statusEnum: 'CANCELLED' }
+    });
+
+    const responses = await db.requirementResponse.findMany({
+      where: { requirementId: id },
+      select: { sellerId: true }
+    });
+    for (const resp of responses) {
+      notifySafe(
+        resp.sellerId,
+        'Procurement Requirement Cancelled',
+        `Requirement "${requirement.title}" (${requirement.requirementNumber}) was cancelled by the buyer. Reason: ${reason}`,
+        'requirement_cancelled',
+        '/seller/opportunities'
+      );
+    }
+
+    await auditWrite(req, 'requirement.cancelled', 'requirement', id, { reason, remarks });
+    return ok(res, { success: true, message: 'Requirement cancelled successfully', procurement: updated });
+  }
+
+  if (normalizedType === 'direct_purchase') {
+    const dp = await db.directPurchase.findUnique({ where: { id } });
+    if (!dp) throw new ApiError(404, 'Direct purchase not found', 'NOT_FOUND');
+    if (!privileged && dp.buyerId !== buyerId) {
+      throw new ApiError(403, 'You do not have permission to cancel this direct purchase', 'FORBIDDEN');
+    }
+    if (dp.status === 'CANCELLED') {
+      throw new ApiError(409, 'Direct purchase is already cancelled', 'ALREADY_CANCELLED');
+    }
+    if (dp.status === 'APPROVED' && (dp as any).purchaseOrderId) {
+      throw new ApiError(409, 'Cannot cancel direct purchase after purchase order has been generated.', 'PO_EXISTS');
+    }
+
+    const updated = await db.directPurchase.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        remarks: `Cancelled by buyer: ${reason}${remarks ? ` - ${remarks}` : ''}`
+      }
+    });
+
+    notifySafe(
+      dp.sellerId,
+      'Direct Purchase Cancelled',
+      `Direct purchase request ${dp.purchaseNumber} was cancelled by the buyer. Reason: ${reason}`,
+      'direct_purchase_cancelled',
+      '/seller/orders'
+    );
+
+    await auditWrite(req, 'direct_purchase.cancelled', 'directPurchase', id, { reason, remarks });
+    return ok(res, { success: true, message: 'Direct purchase cancelled successfully', procurement: updated });
+  }
+
+  if (normalizedType === 'reverse_auction' || normalizedType === 'auction') {
+    const auc = await db.auction.findUnique({ where: { id } });
+    if (!auc) throw new ApiError(404, 'Auction not found', 'NOT_FOUND');
+    if (!privileged && auc.createdByUserId !== buyerId && auc.buyerOrgId !== buyerOrgId) {
+      throw new ApiError(403, 'You do not have permission to cancel this auction', 'FORBIDDEN');
+    }
+    if (auc.statusEnum === 'CANCELLED' || auc.status === 'CANCELLED') {
+      throw new ApiError(409, 'Auction is already cancelled', 'ALREADY_CANCELLED');
+    }
+    if (auc.statusEnum === 'CLOSED' || auc.status === 'CLOSED') {
+      throw new ApiError(409, 'Cannot cancel a closed auction', 'AUCTION_CLOSED');
+    }
+
+    const updated = await db.auction.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        statusEnum: 'CANCELLED'
+      }
+    });
+
+    await auditWrite(req, 'reverse_auction.cancelled', 'auction', id, { reason, remarks });
+    return ok(res, { success: true, message: 'Reverse auction cancelled successfully', procurement: updated });
+  }
+
+  throw new ApiError(400, `Unsupported procurement type: ${type}`, 'INVALID_TYPE');
 }));
 
 export default router;

@@ -11,9 +11,10 @@ import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { getApi, normalizeList, postApi } from '../../shared/apiClient';
-import { formatCurrency, formatDateTime } from '../../shared/format';
+import { formatCurrency, formatDate, formatDateTime } from '../../shared/format';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
@@ -988,24 +989,6 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
 
   const isInitialLoading = loading && data.length === 0;
 
-  const isFiltered = Boolean(
-    searchTerm ||
-    statusFilter ||
-    categoryFilter ||
-    priceFilter ||
-    verificationFilter ||
-    kindFilter !== 'all'
-  );
-
-  const resetFilters = () => {
-    setSearchTerm('');
-    setStatusFilter('');
-    setCategoryFilter('');
-    setPriceFilter('');
-    setVerificationFilter('');
-    setKindFilter('all');
-  };
-
   return (
     <div className="min-w-0 space-y-6">
       {/* Premium Dashboard Banner Header */}
@@ -1541,35 +1524,69 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
             <CardTitle className="text-sm font-black">Import History</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto pt-4">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="pb-2 pr-3">Batch</th><th className="pb-2 pr-3">Type</th><th className="pb-2 pr-3">File</th><th className="pb-2 pr-3">Rows</th><th className="pb-2 pr-3">Status</th><th className="pb-2 pr-3">Date</th><th className="pb-2">Report</th>
-                </tr>
-              </thead>
-              <tbody>
-                {importHistory.map(batch => (
-                  <tr key={batch.id} className="border-t border-slate-100">
-                    <td className="py-2 pr-3 font-mono">#{batch.id}</td>
-                    <td className="py-2 pr-3">{batch.type}</td>
-                    <td className="py-2 pr-3 max-w-[180px] truncate">{batch.fileName}</td>
-                    <td className="py-2 pr-3">{batch.validRows}/{batch.totalRows} ok · {batch.invalidRows} fail</td>
-                    <td className="py-2 pr-3"><Badge>{batch.status}</Badge></td>
-                    <td className="py-2 pr-3">{formatDateTime(batch.createdAt)}</td>
-                    <td className="py-2">
-                      {batch.invalidRows > 0 ? (
-                        <button type="button" className="text-[10px] font-black uppercase text-red-700 hover:underline" onClick={() => {
+            <DataTable
+              data={importHistory}
+              columns={[
+                {
+                  key: 'id',
+                  header: 'Batch',
+                  width: 'w-20',
+                  cell: (batch: any) => <span className="font-mono">#{batch.id}</span>
+                },
+                {
+                  key: 'type',
+                  header: 'Type',
+                  width: 'w-24',
+                  cell: (batch: any) => <span>{batch.type}</span>
+                },
+                {
+                  key: 'fileName',
+                  header: 'File',
+                  cell: (batch: any) => <span className="max-w-[180px] truncate block">{batch.fileName}</span>
+                },
+                {
+                  key: 'rows',
+                  header: 'Rows',
+                  width: 'w-40',
+                  cell: (batch: any) => <span>{batch.validRows}/{batch.totalRows} ok · {batch.invalidRows} fail</span>
+                },
+                {
+                  key: 'status',
+                  header: 'Status',
+                  width: 'w-28',
+                  cell: (batch: any) => <Badge>{batch.status}</Badge>
+                },
+                {
+                  key: 'createdAt',
+                  header: 'Date',
+                  width: 'w-40',
+                  cell: (batch: any) => <span>{formatDateTime(batch.createdAt)}</span>
+                },
+                {
+                  key: 'report',
+                  header: 'Report',
+                  width: 'w-24',
+                  cell: (batch: any) => (
+                    batch.invalidRows > 0 ? (
+                      <button
+                        type="button"
+                        className="text-[10px] font-black uppercase text-red-700 hover:underline cursor-pointer"
+                        onClick={() => {
                           downloadCatalogueFile(`/api/catalogue/import/${batch.id}/errors/download`, `import_errors_${batch.id}.xlsx`)
                             .catch(() => toast.error('Download failed'));
-                        }}>Errors</button>
-                      ) : (
-                        <span className="text-[10px] font-bold text-emerald-600 uppercase">✔ Success</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        }}
+                      >
+                        Errors
+                      </button>
+                    ) : (
+                      <span className="text-[10px] font-bold text-emerald-600 uppercase">✔ Success</span>
+                    )
+                  )
+                }
+              ]}
+              keyExtractor={(batch: any) => batch.id}
+              rowClassName="hover:bg-slate-50/50 text-xs"
+            />
           </CardContent>
         </Card>
       )}
@@ -2220,7 +2237,7 @@ function CatalogueCard({
                 {/* Metadata */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-400 pt-0.5">
                   {mode === 'seller' ? (
-                    <span>Created: {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</span>
+                    <span>Created: {item.createdAt ? formatDate(item.createdAt) : 'N/A'}</span>
                   ) : item.seller?.name ? (
                     <button type="button" onClick={() => onSellerClick?.(item.seller)} className="flex items-center gap-1 text-slate-600 font-semibold hover:text-[#059669]">
                       <Store className="h-3.5 w-3.5 shrink-0 text-slate-400" />
@@ -2443,7 +2460,7 @@ function CatalogueCard({
             </div>
             {mode === 'seller' ? (
               <span className="text-[10px] font-medium text-slate-400">
-                {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                {item.createdAt ? formatDate(item.createdAt) : ''}
               </span>
             ) : item.seller?.name ? (
               <button
@@ -3285,7 +3302,7 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
                 <SellerInfoBox icon={Mail} label="Email" value={seller?.email || profile?.email || 'Not available'} />
                 <SellerInfoBox icon={Building2} label="Business Name" value={profile.businessName || profile.companyName || seller?.name || 'Not available'} />
                 <SellerInfoBox icon={MapPin} label="Location" value={location} />
-                <SellerInfoBox icon={CalendarDays} label="Incorporated" value={profile.dateOfIncorporation ? new Date(profile.dateOfIncorporation).toLocaleDateString() : 'Not available'} />
+                <SellerInfoBox icon={CalendarDays} label="Incorporated" value={profile.dateOfIncorporation ? formatDate(profile.dateOfIncorporation) : 'Not available'} />
                 <SellerInfoBox icon={ShieldCheck} label="PAN" value={pan} />
                 <SellerInfoBox icon={FileText} label="GST" value={gst} />
               </div>

@@ -43,6 +43,10 @@ const getBackendUrl = (): string => {
 };
 
 const nextConfig: NextConfig = {
+  transpilePackages: ["lucide-react"],
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
+  },
   // The portal does not use next/image. Keep the server-side libvips/sharp
   // optimization endpoint disabled until the patched sharp line is supported
   // by the selected Next.js release.

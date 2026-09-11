@@ -12,7 +12,9 @@ import { MethodBadge, ProcurementStatusBadge, BuyerTypeBadge } from '../../procu
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
+import { formatDate } from '../../shared/format';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 type SellerEventView = 'all' | 'invited' | 'submitted' | 'clarifications';
 
@@ -190,6 +192,101 @@ export default function SellerEventListPage() {
     }
   }[activeView];
 
+  const tableColumns = useMemo<ColumnDef<ProcurementBid>[]>(() => [
+    {
+      key: 'id',
+      header: 'Bid / Tender ID',
+      width: 'w-28',
+      cell: (bid) => (
+        <span className="font-mono text-xs font-black text-slate-900">{bid.id}</span>
+      )
+    },
+    {
+      key: 'title',
+      header: 'Title & Org',
+      cell: (bid) => (
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold text-slate-800 leading-snug line-clamp-1">{bid.title}</p>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-semibold text-slate-500">{bid.buyerName}</span>
+            {bid.buyerType && <BuyerTypeBadge buyerType={bid.buyerType} />}
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'type',
+      header: 'Type',
+      width: 'w-28',
+      cell: (bid) => (
+        <MethodBadge method={bid.procurementType || 'Open Bid'} />
+      )
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      cell: (bid) => (
+        <span className="text-xs font-semibold text-slate-600">{bid.category}</span>
+      )
+    },
+    {
+      key: 'deadline',
+      header: 'Deadline',
+      width: 'w-32',
+      cell: (bid) => (
+        <span className="text-xs font-semibold text-slate-600">
+          {bid.endDate ? formatDate(bid.endDate) : 'NA'}
+        </span>
+      )
+    },
+    {
+      key: 'status',
+      header: 'Tender Status',
+      width: 'w-32',
+      cell: (bid) => (
+        <ProcurementStatusBadge status={bid.status} />
+      )
+    },
+    {
+      key: 'myStatus',
+      header: 'My Status',
+      width: 'w-36',
+      cell: (bid) => (
+        <div className="space-y-1">
+          <div>{getSubmissionStatusBadge(bid)}</div>
+          <div className="flex gap-1">
+            <span className="text-[8px] font-black uppercase text-slate-450">Tech: {bid.technicalStatus || 'Pending'}</span>
+            <span className="text-[8px] font-black uppercase text-slate-450">Fin: {bid.currentStage || 'Pending'}</span>
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'actions',
+      header: 'Action',
+      align: 'center',
+      width: 'w-32',
+      cellClassName: 'text-center',
+      headerClassName: 'text-center',
+      cell: (bid) => (
+        <div className="flex items-center justify-center gap-1.5">
+          <Link href={`/seller/procurement/events/${bid.id}`}>
+            <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px] font-extrabold uppercase tracking-wide">
+              <Eye className="mr-1 h-3.5 w-3.5" /> View
+            </Button>
+          </Link>
+          {bid.participated && (
+            <Link href={`/quotations?tenderId=${bid.id}`}>
+              <Button type="button" size="sm" className="h-8 rounded-lg bg-[#12335f] text-white hover:bg-[#0b2445] text-[10px] font-extrabold uppercase tracking-wide">
+                Quote
+              </Button>
+            </Link>
+          )}
+        </div>
+      )
+    }
+  ], []);
+
   const viewTabs: Array<{ label: string; href: string; view: SellerEventView }> = [
     { label: 'All', href: '/seller/procurement/events', view: 'all' },
     { label: 'Invited', href: '/seller/procurement/events?filter=invited', view: 'invited' },
@@ -310,104 +407,25 @@ export default function SellerEventListPage() {
           </div>
 
           {/* ── Table ── */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            {loading ? (
-              <div className="p-8 text-center space-y-2">
-                <RefreshCw className="h-6 w-6 animate-spin mx-auto text-[#12335f]" />
-                <p className="text-xs text-slate-500 font-bold">Loading bids & tenders...</p>
-              </div>
-            ) : error ? (
-              <div className="p-8 text-center text-rose-600 font-bold text-xs">{error}</div>
-            ) : pageItems.length === 0 ? (
-              <div className="p-12 text-center space-y-3">
-                <ClipboardList className="h-10 w-10 mx-auto text-slate-350" />
-                <p className="text-sm font-bold text-slate-800">{viewMeta.empty}</p>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto font-semibold">
-                  {activeView === 'all'
-                    ? 'Adjust filters or search query, or verify with buyer organization invitations.'
-                    : 'This section is intentionally filtered. Use All Bids & Tenders to see the full list.'}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                      <th className="px-4 py-3">Sr.</th>
-                      <th className="px-4 py-3">Bid / Tender ID</th>
-                      <th className="px-4 py-3">Title & Org</th>
-                      <th className="px-4 py-3">Type</th>
-                      <th className="px-4 py-3">Category</th>
-                      <th className="px-4 py-3">Deadline</th>
-                      <th className="px-4 py-3">Tender Status</th>
-                      <th className="px-4 py-3">My Status</th>
-                      <th className="px-4 py-3 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {pageItems.map((bid, index) => (
-                      <tr key={bid.id} className="transition hover:bg-slate-50/60">
-                        <td className="px-4 py-3.5 text-xs font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
-                        <td className="px-4 py-3.5 text-xs font-black text-slate-900">{bid.id}</td>
-                        <td className="px-4 py-3.5 space-y-0.5">
-                          <p className="text-xs font-bold text-slate-800 leading-snug line-clamp-1">{bid.title}</p>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-semibold text-slate-500">{bid.buyerName}</span>
-                            {bid.buyerType && <BuyerTypeBadge buyerType={bid.buyerType} />}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <MethodBadge method={bid.procurementType || 'Open Bid'} />
-                        </td>
-                        <td className="px-4 py-3.5 text-xs font-semibold text-slate-600">{bid.category}</td>
-                        <td className="px-4 py-3.5 text-xs font-semibold text-slate-600">
-                          {bid.endDate ? new Date(bid.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'NA'}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <ProcurementStatusBadge status={bid.status} />
-                        </td>
-                        <td className="px-4 py-3.5 space-y-1">
-                          <div>{getSubmissionStatusBadge(bid)}</div>
-                          <div className="flex gap-1">
-                            <span className="text-[8px] font-black uppercase text-slate-450">Tech: {bid.technicalStatus || 'Pending'}</span>
-                            <span className="text-[8px] font-black uppercase text-slate-450">Fin: {bid.currentStage || 'Pending'}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <Link href={`/seller/procurement/events/${bid.id}`}>
-                              <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px] font-extrabold uppercase tracking-wide">
-                                <Eye className="mr-1 h-3.5 w-3.5" /> View
-                              </Button>
-                            </Link>
-                            {bid.participated && (
-                              <Link href={`/quotations?tenderId=${bid.id}`}>
-                                <Button type="button" size="sm" className="h-8 rounded-lg bg-[#12335f] text-white hover:bg-[#0b2445] text-[10px] font-extrabold uppercase tracking-wide">
-                                  Quote
-                                </Button>
-                              </Link>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Pagination */}
-            <div className="border-t border-slate-100 bg-slate-50/50">
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-                label="events"
-              />
-            </div>
-          </div>
+          <DataTable<ProcurementBid>
+            data={pageItems}
+            columns={tableColumns}
+            keyExtractor={(bid) => bid.id}
+            showSrNo={true}
+            isLoading={loading}
+            error={error}
+            emptyTitle={viewMeta.empty}
+            emptyDescription={activeView === 'all'
+              ? 'Adjust filters or search query, or verify with buyer organization invitations.'
+              : 'This section is intentionally filtered. Use All Bids & Tenders to see the full list.'}
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            paginationLabel="events"
+            minWidth="min-w-[900px]"
+          />
         </>
       )}
     </div>

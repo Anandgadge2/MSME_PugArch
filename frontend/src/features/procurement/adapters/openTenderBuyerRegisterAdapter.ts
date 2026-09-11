@@ -33,6 +33,8 @@ export const openTenderBuyerRegisterAdapter = {
         return 'border-amber-200 bg-amber-50 text-amber-700';
       case 'awarded':
         return 'border-indigo-200 bg-indigo-50 text-indigo-700';
+      case 'cancelled':
+        return 'border-rose-200 bg-rose-50 text-rose-700';
       case 'draft':
       default:
         return 'border-slate-200 bg-slate-100 text-slate-600';
@@ -47,6 +49,7 @@ export const openTenderBuyerRegisterAdapter = {
       case 'closed': return 'Bidding Closed';
       case 'evaluation': return 'Under Evaluation';
       case 'awarded': return 'Tender Awarded';
+      case 'cancelled': return 'Tender Cancelled';
       case 'draft': return 'Tender Draft';
       default: return status.toUpperCase();
     }
@@ -58,6 +61,7 @@ export const openTenderBuyerRegisterAdapter = {
       canEdit: s === 'draft',
       canEvaluate: ['closed', 'evaluation', 'published'].includes(s),
       canPublish: s === 'draft',
+      canCancel: !['awarded', 'completed', 'cancelled'].includes(s),
       primaryActionLabel: s === 'draft' ? 'Publish Tender' : 'Evaluate Bids'
     };
   }

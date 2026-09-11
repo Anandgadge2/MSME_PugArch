@@ -23,6 +23,7 @@ import { PdfEngine } from '../../../lib/pdfEngine';
 import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    UTILITY HELPERS
@@ -223,6 +224,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
 
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [selectedBuyerResponse, setSelectedBuyerResponse] = useState<any>(null);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
   const bidPacket: any = (bidData as any)?.technicalPacket && typeof (bidData as any).technicalPacket === 'object'
     ? (bidData as any).technicalPacket
@@ -612,6 +614,8 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const isPassed   = !!deadlineDt && deadlineDt.getTime() < Date.now();
   const timer      = calcTimeLeft(deadline);
   const submitted  = Boolean(ownResponse && ownResponse.status !== 'DRAFT');
+  const statusUpper = String(status || 'OPEN').toUpperCase();
+  const canCancel  = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
   /* ── Line Items ── */
   const reqItemCandidates: any[][] = [
@@ -1010,7 +1014,8 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
      RENDER MAIN PAGE (UNIFIED REFERENCE UI)
      ══════════════════════════════════════════════════════════════════════════ */
   return (
-    <ProcurementDetailUnifiedView
+    <>
+      <ProcurementDetailUnifiedView
       procurementType={derivedProcurementType}
       procurementLabel={derivedProcurementLabel}
       backRouteLabel={derivedBackRouteLabel}
@@ -1067,8 +1072,30 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       } : null}
       isConvertingInvoice={isConvertingInvoice}
       onConvertToInvoiceClick={handleConvertToInvoice}
+      onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
+      cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Request' : 'Cancel RFQ'}
       clarificationKind={requirementId || (rawBid?.sourceModel === 'REQUIREMENT') ? 'requirement' : 'quote-request'}
       clarificationEntityId={requirementId || rawBid?.sourceId || targetReqId || requestId}
     />
+    {canCancel && (
+      <CancelProcurementModal
+        isOpen={cancelModalOpen}
+        onClose={() => setCancelModalOpen(false)}
+        procurement={{
+          id: Number(targetReqId || requestId || rawBid?.id || reqObj?.id),
+          type: requirementId || rawBid?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'bid_tender',
+          title: title,
+          referenceNumber: ref,
+          typeLabel: derivedProcurementLabel || 'RFQ',
+          status: statusUpper,
+        }}
+        onConfirm={async (params) => {
+          await postApi('/api/buyer/procurements/cancel', params);
+          toast.success('RFQ cancelled successfully');
+          router.push('/buyer/my-procurements');
+        }}
+      />
+    )}
+    </>
   );
 }

@@ -292,7 +292,25 @@ export const normalizeDataUri = (url: unknown): string => {
 };
 
 export const buildCategoryFallbackSvg = (categoryName: string, accentColor = '#2563eb'): string => {
-    return getBundledPhotoUrl(categoryName);
+    const clean = (categoryName || 'Category').trim();
+    const initial = (clean[0] || 'C').toUpperCase();
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+        <defs>
+            <linearGradient id="bg_${initial}" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0b2447" />
+                <stop offset="100%" stop-color="#1e293b" />
+            </linearGradient>
+            <linearGradient id="glow_${initial}" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="${accentColor}" stop-opacity="0.35" />
+                <stop offset="100%" stop-color="${accentColor}" stop-opacity="0.05" />
+            </linearGradient>
+        </defs>
+        <rect width="400" height="400" fill="url(#bg_${initial})" />
+        <rect width="400" height="400" fill="url(#glow_${initial})" />
+        <circle cx="200" cy="170" r="70" fill="white" fill-opacity="0.1" />
+        <text x="50%" y="48%" dominant-baseline="central" text-anchor="middle" fill="white" font-size="64" font-weight="900" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">${initial}</text>
+    </svg>`;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 };
 
 /**

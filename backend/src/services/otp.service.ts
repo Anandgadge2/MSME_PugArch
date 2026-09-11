@@ -1,4 +1,5 @@
 import prisma from '../lib/prisma.js';
+import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { isRedisReady, redis } from '../config/redis.js';
 import { redisKeys } from '../constants/redis-keys.js';
@@ -241,6 +242,11 @@ export const storeOtp = async (
     await redis.set(attemptsKeyFor(purpose, normalizedIdentity), '0', 'EX', OTP_TTL_SECONDS);
   } else {
     localOtpStore.set(keyFor(purpose, normalizedIdentity), state);
+  }
+
+  if (env.NODE_ENV !== 'production') {
+    logger.info({ channel, identity, otp, purpose }, `[DEV OTP BYPASS] Channel: ${channel} | Identity: ${identity} | OTP: ${otp} | Purpose: ${purpose}`);
+    console.log(`\n\x1b[33m--- [DEV OTP BYPASS] Channel: ${channel} | Identity: ${identity} | OTP: ${otp} | Purpose: ${purpose} ---\x1b[0m\n`);
   }
 
   await prisma.otpVerification.create({

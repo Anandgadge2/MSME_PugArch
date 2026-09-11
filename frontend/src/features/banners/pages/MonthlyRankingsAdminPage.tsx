@@ -24,10 +24,10 @@ import { Card, CardContent } from '../../../components/ui/card';
 import { SearchableSelect } from '../../../components/ui/SearchableSelect';
 import { InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency } from '../../shared/format';
-import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
 import { bannerApi } from '../api';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 const monthName = (month: number, year: number) =>
   new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -157,6 +157,247 @@ export default function MonthlyRankingsAdminPage() {
   const buyerCount = useMemo(() => rawRankings.filter((row: any) => row.organizationType === 'BUYER').length, [rawRankings]);
   const sellerCount = useMemo(() => rawRankings.filter((row: any) => row.organizationType === 'SELLER').length, [rawRankings]);
   const shgCount = useMemo(() => rawRankings.filter((row: any) => row.organizationType === 'SHG').length, [rawRankings]);
+
+  const rankingColumns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'rank',
+      header: 'Rank',
+      width: 'w-[110px]',
+      cell: (row) => {
+        if (row.rank === 1) {
+          return (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-gradient-to-r from-amber-100 to-amber-50 px-2 py-1 text-xs font-black text-amber-900 shadow-xs">
+              <Trophy className="h-3.5 w-3.5 text-amber-600" />
+              #1 Gold
+            </span>
+          );
+        }
+        if (row.rank === 2) {
+          return (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-gradient-to-r from-slate-200 to-slate-100 px-2 py-1 text-xs font-black text-slate-800 shadow-xs">
+              <Trophy className="h-3.5 w-3.5 text-slate-500" />
+              #2 Silver
+            </span>
+          );
+        }
+        if (row.rank === 3) {
+          return (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-amber-600/30 bg-gradient-to-r from-amber-600/15 to-amber-600/5 px-2 py-1 text-xs font-black text-amber-800 shadow-xs">
+              <Trophy className="h-3.5 w-3.5 text-amber-700" />
+              #3 Bronze
+            </span>
+          );
+        }
+        return (
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-xs font-black text-slate-600">
+            #{row.rank}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'organization',
+      header: 'Organization Details',
+      cell: (row) => {
+        const org = row.organization;
+        const orgName = org?.organizationName || `Organization #${row.organizationId}`;
+        const district = org?.district || 'Jharsuguda';
+        const state = org?.state || 'Odisha';
+        const isVerified = org?.verificationStatus === 'VERIFIED';
+        return (
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <p className="font-extrabold text-slate-950 text-sm">{orgName}</p>
+              {isVerified && (
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9px] font-bold text-emerald-700">
+                  <Check className="h-2.5 w-2.5" />
+                  Verified
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-0.5 text-[11px] font-semibold text-slate-500">
+              <span>📍 {district}, {state}</span>
+              {org?.udyamNumber && <span>• Udyam: {org.udyamNumber}</span>}
+              {org?.gstin && <span>• GST: {org.gstin}</span>}
+            </div>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      width: 'w-[140px]',
+      cell: (row) => {
+        if (row.organizationType === 'BUYER') {
+          return (
+            <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-700">
+              <Building2 className="h-3 w-3" />
+              Buyer
+            </span>
+          );
+        }
+        if (row.organizationType === 'SELLER') {
+          return (
+            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+              <Store className="h-3 w-3" />
+              Seller / MSME
+            </span>
+          );
+        }
+        if (row.organizationType === 'SHG') {
+          return (
+            <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-purple-700">
+              <Users2 className="h-3 w-3" />
+              Self-Help Group (SHG)
+            </span>
+          );
+        }
+        return (
+          <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-700">
+            {row.organizationType}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'totalVolume',
+      header: 'Total Volume',
+      width: 'w-[150px]',
+      cell: (row) => (
+        <div>
+          <span className="font-black text-slate-900 text-sm">
+            {formatCurrency(row.organizationType === 'BUYER' ? row.totalPurchaseValue : row.totalSalesValue)}
+          </span>
+          <span className="block text-[10px] font-semibold text-slate-400">
+            Settled Turnover
+          </span>
+        </div>
+      )
+    },
+    {
+      key: 'orders',
+      header: 'Orders',
+      width: 'w-[100px]',
+      cell: (row) => (
+        <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-800">
+          {row.orderCount} {row.orderCount === 1 ? 'order' : 'orders'}
+        </span>
+      )
+    },
+    {
+      key: 'bannerStatus',
+      header: 'Homepage Banner Status',
+      width: 'w-[190px]',
+      cell: (row) => {
+        const isTop3 = row.rank <= 3;
+        const eligibility = row.eligibility;
+        const isEligible = Boolean(eligibility?.isEligible);
+        const banner = row.banner;
+
+        if (banner?.status === 'ACTIVE' || banner?.isActive) {
+          return (
+            <div className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+              <span>Live on Homepage</span>
+            </div>
+          );
+        }
+        if (banner?.status === 'PENDING_APPROVAL') {
+          return (
+            <div className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800">
+              <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+              <span>Banner Pending Approval</span>
+            </div>
+          );
+        }
+        if (isEligible) {
+          return (
+            <div className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-800">
+              <Sparkles className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+              <span>Eligible (Slot Unlocked)</span>
+            </div>
+          );
+        }
+        if (isTop3) {
+          return <span className="text-[11px] font-semibold text-slate-400">Top 3 candidate</span>;
+        }
+        return <span className="text-[11px] font-semibold text-slate-400">Not eligible</span>;
+      }
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-[140px]',
+      align: 'right',
+      cell: (row) => {
+        const eligibility = row.eligibility;
+        const isEligible = Boolean(eligibility?.isEligible);
+        const banner = row.banner;
+        return (
+          <div className="flex items-center justify-end gap-1.5">
+            {banner?.status === 'PENDING_APPROVAL' && (
+              <Link href="/admin/banners">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px] font-bold border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                >
+                  <ArrowUpRight className="mr-1 h-3 w-3" />
+                  Review Banner
+                </Button>
+              </Link>
+            )}
+
+            {isEligible ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={revoke.isPending}
+                className="h-7 px-2 text-[11px] font-bold border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
+                onClick={() =>
+                  revoke.mutate({
+                    organizationId: row.organizationId,
+                    month,
+                    year,
+                    eligibilityType:
+                      eligibility?.eligibilityType ||
+                      (row.organizationType === 'BUYER' ? 'TOP_BUYER' : row.organizationType === 'SHG' ? 'TOP_SHG' : 'TOP_SELLER')
+                  })
+                }
+              >
+                <XCircle className="mr-1 h-3 w-3 text-red-500" />
+                Revoke Slot
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={grant.isPending}
+                className="h-7 px-2 text-[11px] font-bold border-slate-200 text-slate-700 hover:bg-slate-100"
+                onClick={() =>
+                  grant.mutate({
+                    organizationId: row.organizationId,
+                    month,
+                    year,
+                    eligibilityType:
+                      row.organizationType === 'BUYER'
+                        ? 'TOP_BUYER'
+                        : row.organizationType === 'SHG'
+                        ? 'TOP_SHG'
+                        : 'TOP_SELLER'
+                  })
+                }
+              >
+                <Sparkles className="mr-1 h-3 w-3 text-emerald-600" />
+                Grant Banner
+              </Button>
+            )}
+          </div>
+        );
+      }
+    }
+  ], [month, year, grant, revoke]);
 
   if (query.isLoading) return <LoadingState label="Loading authentic monthly rankings..." />;
 
@@ -473,261 +714,21 @@ export default function MonthlyRankingsAdminPage() {
             </div>
           </div>
 
-          {/* Table / Empty State */}
-          {filteredRankings.length === 0 ? (
-            <div className="p-12 text-center">
-              <Trophy className="mx-auto h-10 w-10 text-slate-300" />
-              <h3 className="mt-3 text-sm font-bold text-slate-900">
-                {rawRankings.length === 0
-                  ? 'No rankings computed for this month yet'
-                  : 'No organizations match your selected filters'}
-              </h3>
-              <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
-                {rawRankings.length === 0
-                  ? 'Click "Compute Month" to calculate authentic settled transaction totals from PostgreSQL database records.'
-                  : 'Try selecting a different category tab or clearing your search term.'}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table data-ux-wrapped="true" className="w-full min-w-[920px] text-left text-sm">
-                <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200">
-                  <tr>
-                    <th className="p-3 pl-4">Rank</th>
-                    <th className="p-3">Organization Details</th>
-                    <th className="p-3">Category</th>
-                    <th className="p-3">Total Volume</th>
-                    <th className="p-3">Orders</th>
-                    <th className="p-3">Homepage Banner Status</th>
-                    <th className="p-3 pr-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {pagedRankings.map((row: any) => {
-                    const org = row.organization;
-                    const orgName = org?.organizationName || `Organization #${row.organizationId}`;
-                    const district = org?.district || 'Jharsuguda';
-                    const state = org?.state || 'Odisha';
-                    const isVerified = org?.verificationStatus === 'VERIFIED';
-                    const isTop3 = row.rank <= 3;
-                    const eligibility = row.eligibility;
-                    const isEligible = Boolean(eligibility?.isEligible);
-                    const banner = row.banner;
-
-                    // Rank Medal Badge Styling
-                    let rankBadge = (
-                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-xs font-black text-slate-600">
-                        #{row.rank}
-                      </span>
-                    );
-                    if (row.rank === 1) {
-                      rankBadge = (
-                        <span className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-gradient-to-r from-amber-100 to-amber-50 px-2 py-1 text-xs font-black text-amber-900 shadow-xs">
-                          <Trophy className="h-3.5 w-3.5 text-amber-600" />
-                          #1 Gold
-                        </span>
-                      );
-                    } else if (row.rank === 2) {
-                      rankBadge = (
-                        <span className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-gradient-to-r from-slate-200 to-slate-100 px-2 py-1 text-xs font-black text-slate-800 shadow-xs">
-                          <Trophy className="h-3.5 w-3.5 text-slate-500" />
-                          #2 Silver
-                        </span>
-                      );
-                    } else if (row.rank === 3) {
-                      rankBadge = (
-                        <span className="inline-flex items-center gap-1 rounded-lg border border-amber-600/30 bg-gradient-to-r from-amber-600/15 to-amber-600/5 px-2 py-1 text-xs font-black text-amber-800 shadow-xs">
-                          <Trophy className="h-3.5 w-3.5 text-amber-700" />
-                          #3 Bronze
-                        </span>
-                      );
-                    }
-
-                    // Category Pill
-                    let catPill = (
-                      <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-700">
-                        {row.organizationType}
-                      </span>
-                    );
-                    if (row.organizationType === 'BUYER') {
-                      catPill = (
-                        <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-700">
-                          <Building2 className="h-3 w-3" />
-                          Buyer
-                        </span>
-                      );
-                    } else if (row.organizationType === 'SELLER') {
-                      catPill = (
-                        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">
-                          <Store className="h-3 w-3" />
-                          Seller / MSME
-                        </span>
-                      );
-                    } else if (row.organizationType === 'SHG') {
-                      catPill = (
-                        <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-purple-700">
-                          <Users2 className="h-3 w-3" />
-                          Self-Help Group (SHG)
-                        </span>
-                      );
-                    }
-
-                    return (
-                      <tr key={row.id} className="hover:bg-slate-50/80 transition-colors group">
-                        {/* Rank */}
-                        <td className="p-3.5 pl-4 whitespace-nowrap">
-                          {rankBadge}
-                        </td>
-
-                        {/* Organization Details */}
-                        <td className="p-3.5">
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-2">
-                              <p className="font-extrabold text-slate-950 text-sm">{orgName}</p>
-                              {isVerified && (
-                                <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9px] font-bold text-emerald-700">
-                                  <Check className="h-2.5 w-2.5" />
-                                  Verified
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5 text-[11px] font-semibold text-slate-500">
-                              <span>📍 {district}, {state}</span>
-                              {org?.udyamNumber && <span>• Udyam: {org.udyamNumber}</span>}
-                              {org?.gstin && <span>• GST: {org.gstin}</span>}
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Category */}
-                        <td className="p-3.5 whitespace-nowrap">
-                          {catPill}
-                        </td>
-
-                        {/* Total Value */}
-                        <td className="p-3.5 whitespace-nowrap">
-                          <span className="font-black text-slate-900 text-sm">
-                            {formatCurrency(row.organizationType === 'BUYER' ? row.totalPurchaseValue : row.totalSalesValue)}
-                          </span>
-                          <span className="block text-[10px] font-semibold text-slate-400">
-                            Settled Turnover
-                          </span>
-                        </td>
-
-                        {/* Orders */}
-                        <td className="p-3.5 whitespace-nowrap">
-                          <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-800">
-                            {row.orderCount} {row.orderCount === 1 ? 'order' : 'orders'}
-                          </span>
-                        </td>
-
-                        {/* Banner Promotion Status */}
-                        <td className="p-3.5">
-                          {banner?.status === 'ACTIVE' || banner?.isActive ? (
-                            <div className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800">
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                              <span>Live on Homepage</span>
-                            </div>
-                          ) : banner?.status === 'PENDING_APPROVAL' ? (
-                            <div className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800">
-                              <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                              <span>Banner Pending Approval</span>
-                            </div>
-                          ) : isEligible ? (
-                            <div className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-800">
-                              <Sparkles className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                              <span>Eligible (Slot Unlocked)</span>
-                            </div>
-                          ) : isTop3 ? (
-                            <span className="text-[11px] font-semibold text-slate-400">Top 3 candidate</span>
-                          ) : (
-                            <span className="text-[11px] font-semibold text-slate-400">Not eligible</span>
-                          )}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="p-3.5 pr-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {banner?.status === 'PENDING_APPROVAL' && (
-                              <Link href="/admin/banners">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 px-2 text-[11px] font-bold border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
-                                >
-                                  <ArrowUpRight className="mr-1 h-3 w-3" />
-                                  Review Banner
-                                </Button>
-                              </Link>
-                            )}
-
-                            {isEligible ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={revoke.isPending}
-                                className="h-7 px-2 text-[11px] font-bold border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
-                                onClick={() =>
-                                  revoke.mutate({
-                                    organizationId: row.organizationId,
-                                    month,
-                                    year,
-                                    eligibilityType:
-                                      eligibility?.eligibilityType ||
-                                      (row.organizationType === 'BUYER' ? 'TOP_BUYER' : row.organizationType === 'SHG' ? 'TOP_SHG' : 'TOP_SELLER')
-                                  })
-                                }
-                              >
-                                <XCircle className="mr-1 h-3 w-3 text-red-500" />
-                                Revoke Slot
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={grant.isPending}
-                                className="h-7 px-2 text-[11px] font-bold border-slate-200 text-slate-700 hover:bg-slate-100"
-                                onClick={() =>
-                                  grant.mutate({
-                                    organizationId: row.organizationId,
-                                    month,
-                                    year,
-                                    eligibilityType:
-                                      row.organizationType === 'BUYER'
-                                        ? 'TOP_BUYER'
-                                        : row.organizationType === 'SHG'
-                                        ? 'TOP_SHG'
-                                        : 'TOP_SELLER'
-                                  })
-                                }
-                              >
-                                <Sparkles className="mr-1 h-3 w-3 text-emerald-600" />
-                                Grant Banner
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Pagination */}
-          {filteredRankings.length > 0 && (
-            <div className="border-t border-slate-200 bg-slate-50/50 p-2">
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-                label="rankings"
-              />
-            </div>
-          )}
+          {/* Unified DataTable */}
+          <DataTable<any>
+            columns={rankingColumns}
+            data={pagedRankings}
+            keyExtractor={(row) => String(row.id || `${row.organizationId}-${row.rank}`)}
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            paginationLabel="rankings"
+            minWidth="min-w-[920px]"
+            emptyTitle={rawRankings.length === 0 ? 'No rankings computed for this month yet' : 'No organizations match your selected filters'}
+            emptyDescription={rawRankings.length === 0 ? 'Click "Compute Month" to calculate authentic settled transaction totals from PostgreSQL database records.' : 'Try selecting a different category tab or clearing your search term.'}
+          />
         </CardContent>
       </Card>
     </div>

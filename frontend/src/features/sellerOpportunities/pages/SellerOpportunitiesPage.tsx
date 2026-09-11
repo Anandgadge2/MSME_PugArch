@@ -43,8 +43,10 @@ import { fetchRateContracts } from '../../rateContract/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode } from '../../shared/hooks';
+import { formatDate as formatSharedDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import ProcurementLifecycleTracker from '../../procurementLifecycle/components/ProcurementLifecycleTracker';
 import type { ProcurementLifecycleEvent } from '../../procurementLifecycle/statusMapper';
 import { useAuth } from '../../../hooks/useAuth';
@@ -89,9 +91,8 @@ const DEFAULT_PAGE_SIZE = 10;
 
 const formatDate = (value?: string) => {
   if (!value) return 'Not set';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Not set';
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const formatted = formatSharedDate(value);
+  return formatted === '—' ? 'Not set' : formatted;
 };
 
 const formatMoney = (value?: number) => {
@@ -314,12 +315,13 @@ function CountdownTimer({ endDate }: { endDate?: string }) {
         setTimeLeft('Ended');
         return;
       }
-      const hrs = Math.floor(diff / 3600000);
+      const days = Math.floor(diff / 86400000);
+      const hrs = Math.floor((diff % 86400000) / 3600000);
       const mins = Math.floor((diff % 3600000) / 60000);
       const secs = Math.floor((diff % 60000) / 1000);
       
       const pad = (n: number) => String(n).padStart(2, '0');
-      setTimeLeft(`${pad(hrs)}h : ${pad(mins)}m : ${pad(secs)}s`);
+      setTimeLeft(days > 0 ? `${days}d ${pad(hrs)}h : ${pad(mins)}m : ${pad(secs)}s` : `${pad(hrs)}h : ${pad(mins)}m : ${pad(secs)}s`);
     };
 
     calculateTime();
@@ -1126,6 +1128,149 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
   const pageRows = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page, pageSize]);
 
+  const tableColumns = useMemo<ColumnDef<SellerOpportunity>[]>(() => [
+    {
+      key: 'type',
+      header: 'Type',
+      sortable: true,
+      sortKey: 'type',
+      width: 'w-28',
+      cell: (item) => (
+        <span className={cn(
+          "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border whitespace-nowrap",
+          item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
+          item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
+          item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
+          item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
+          "border-amber-200 bg-amber-50 text-amber-600"
+        )}>
+          {item.type}
+        </span>
+      )
+    },
+    {
+      key: 'title',
+      header: 'Title & Reference',
+      sortable: true,
+      sortKey: 'title',
+      width: 'w-80',
+      cell: (item) => (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+              {item.sourceRef}
+            </span>
+            {item.category && (
+              <span className="text-[9px] font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                {item.category}
+              </span>
+            )}
+          </div>
+          <p className="text-xs font-bold text-slate-900 leading-snug line-clamp-2">
+            {item.title}
+          </p>
+          {cleanOpportunitySummary(item.description) && (
+            <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">
+              {cleanOpportunitySummary(item.description)}
+            </p>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'buyer',
+      header: 'Buyer & Location',
+      sortable: true,
+      sortKey: 'buyer',
+      width: 'w-64',
+      cell: (item) => (
+        <div className="space-y-1">
+          <p className="text-xs font-bold text-slate-900 leading-tight">
+            {item.buyer?.trim() || 'Buyer details controlled'}
+          </p>
+          <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
+            <MapPin className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
+            <span>{formatLocation(item.location)}</span>
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'publishedAt',
+      header: 'Published Date',
+      sortable: true,
+      sortKey: 'publishedAt',
+      width: 'w-32',
+      cell: (item) => (
+        <span className="text-xs font-bold text-slate-600">
+          {formatDate(item.publishedAt)}
+        </span>
+      )
+    },
+    {
+      key: 'closingDate',
+      header: 'Closing Date',
+      sortable: true,
+      sortKey: 'closingDate',
+      width: 'w-36',
+      cell: (item) => {
+        const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
+        return isLiveAuction ? (
+          <div className="space-y-1">
+            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-emerald-600 tracking-wider">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+              Live
+            </span>
+            <div className="block leading-none">
+              <CountdownTimer endDate={item.closingDate} />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-0.5">
+            <span className="font-bold text-slate-700 block">{formatDate(item.closingDate)}</span>
+            <span className="text-[9px] font-black text-amber-600 uppercase tracking-wider block">
+              {getDaysLeftText(item.closingDate)}
+            </span>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'estimatedValue',
+      header: 'Est. Value',
+      sortable: true,
+      sortKey: 'estimatedValue',
+      width: 'w-40',
+      cell: (item) => (
+        <div className="space-y-0.5">
+          <span className="text-xs font-extrabold text-slate-900 block">
+            {formatMoney(item.estimatedValue)}
+          </span>
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+            {item.type === 'Reverse Auction' ? 'Negotiate Price' : 
+             item.type === 'RFP' ? 'Negotiable' : 'Fixed Price'}
+          </span>
+        </div>
+      )
+    },
+    {
+      key: 'actions',
+      header: 'Action',
+      align: 'right',
+      width: 'w-32',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (item) => (
+        <Link
+          href={item.detailsHref}
+          className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-[#12335f] px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-[#0b2445] transition-all duration-200"
+        >
+          View Details
+        </Link>
+      )
+    }
+  ], []);
+
   const reset = () => {
     setQuery('');
     setType('');
@@ -1488,7 +1633,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       ) : (
         <div className="space-y-6">
           {viewMode === 'grid' ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {pageRows.map((item, index) => {
                 const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
                 const isClosingSoon = item.closingDate && (new Date(item.closingDate).getTime() - nowMs) <= 2 * 86400000 && (new Date(item.closingDate).getTime() - nowMs) >= 0;
@@ -1583,175 +1729,36 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                   </div>
                 );
               })}
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={filtered.length}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  label="opportunities"
+                />
+              </div>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
-              <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
-                <thead>
-                  <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                    <th className="px-4 py-3 text-center w-16 select-none">Sr. No.</th>
-                    <th onClick={() => handleSort('type')} className="px-4 py-3 w-28 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Type {renderSortIcon('type')}
-                      </div>
-                    </th>
-                    <th onClick={() => handleSort('title')} className="px-4 py-3 w-80 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Title & Reference {renderSortIcon('title')}
-                      </div>
-                    </th>
-                    <th onClick={() => handleSort('buyer')} className="px-4 py-3 w-64 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Buyer & Location {renderSortIcon('buyer')}
-                      </div>
-                    </th>
-                    <th onClick={() => handleSort('publishedAt')} className="px-4 py-3 w-32 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Published Date {renderSortIcon('publishedAt')}
-                      </div>
-                    </th>
-                    <th onClick={() => handleSort('closingDate')} className="px-4 py-3 w-36 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Closing Date {renderSortIcon('closingDate')}
-                      </div>
-                    </th>
-                    <th onClick={() => handleSort('estimatedValue')} className="px-4 py-3 w-40 cursor-pointer select-none hover:text-[#12335f] transition-colors group">
-                      <div className="flex items-center">
-                        Est. Value {renderSortIcon('estimatedValue')}
-                      </div>
-                    </th>
-                    <th className="px-4 py-3 text-right w-32 select-none">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageRows.map((item, index) => {
-                    const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
-                    
-                    return (
-                      <tr
-                        key={item.id}
-                        className={cn(
-                          "bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] transition hover:shadow-md align-middle",
-                          isLiveAuction && "bg-blue-50/5 hover:bg-blue-50/10"
-                        )}
-                      >
-                        {/* Serial Number */}
-                        <td className="rounded-l-xl px-4 py-4 text-xs font-black text-slate-400 text-center">
-                          {String((page - 1) * pageSize + index + 1).padStart(2, '0')}
-                        </td>
-
-                        {/* Opportunity Type Badge */}
-                        <td className="px-4 py-4">
-                          <span className={cn(
-                            "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border whitespace-nowrap",
-                            item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
-                            item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
-                            item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
-                            item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
-                            "border-amber-200 bg-amber-50 text-amber-600"
-                          )}>
-                            {item.type}
-                          </span>
-                        </td>
-
-                        {/* Title and Reference */}
-                        <td className="px-4 py-4 space-y-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                              {item.sourceRef}
-                            </span>
-                            {item.category && (
-                              <span className="text-[9px] font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
-                                {item.category}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs font-bold text-slate-900 leading-snug line-clamp-2">
-                            {item.title}
-                          </p>
-                          {cleanOpportunitySummary(item.description) && (
-                            <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">
-                              {cleanOpportunitySummary(item.description)}
-                            </p>
-                          )}
-                        </td>
-
-                        {/* Buyer and Location */}
-                        <td className="px-4 py-4 space-y-1">
-                          <p className="text-xs font-bold text-slate-900 leading-tight">
-                            {item.buyer?.trim() || 'Buyer details controlled'}
-                          </p>
-                          <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
-                            <MapPin className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
-                            <span>{formatLocation(item.location)}</span>
-                          </div>
-                        </td>
-
-                        {/* Published Date */}
-                        <td className="px-4 py-4 text-xs font-bold text-slate-600">
-                          {formatDate(item.publishedAt)}
-                        </td>
-
-                        {/* Closing Date / Countdown */}
-                        <td className="px-4 py-4 text-xs">
-                          {isLiveAuction ? (
-                            <div className="space-y-1">
-                              <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-emerald-600 tracking-wider">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-                                Live
-                              </span>
-                              <div className="block leading-none">
-                                <CountdownTimer endDate={item.closingDate} />
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-0.5">
-                              <span className="font-bold text-slate-700 block">{formatDate(item.closingDate)}</span>
-                              <span className="text-[9px] font-black text-amber-600 uppercase tracking-wider block">
-                                {getDaysLeftText(item.closingDate)}
-                              </span>
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Estimated Value */}
-                        <td className="px-4 py-4 space-y-0.5">
-                          <span className="text-xs font-extrabold text-slate-900 block">
-                            {formatMoney(item.estimatedValue)}
-                          </span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-                            {item.type === 'Reverse Auction' ? 'Negotiate Price' : 
-                             item.type === 'RFP' ? 'Negotiable' : 'Fixed Price'}
-                          </span>
-                        </td>
-
-                        {/* Action Link */}
-                        <td className="rounded-r-xl px-4 py-4 text-right">
-                          <Link
-                            href={item.detailsHref}
-                            className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all duration-200"
-                          >
-                            View Details
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <Pagination
+            <DataTable<SellerOpportunity>
+              data={pageRows}
+              columns={tableColumns}
+              keyExtractor={(item) => item.id}
+              showSrNo={true}
               page={page}
               pageSize={pageSize}
               total={filtered.length}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
-              label="opportunities"
+              sortKey={sortField}
+              sortDirection={sortDirection}
+              onSort={(field) => handleSort(field as any)}
+              paginationLabel="opportunities"
+              minWidth="min-w-[950px]"
             />
-          </div>
+          )}
         </div>
       )}
       {selectedItem && <OpportunityDetailsDialog item={selectedItem} onClose={() => setSelectedItem(null)} />}

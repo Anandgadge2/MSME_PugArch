@@ -34,8 +34,8 @@ const normalizeOrganizationType = (value: unknown, fallback: OrganizationType) =
   if (ORGANIZATION_TYPES.has(raw as OrganizationType)) return raw as OrganizationType;
   if (raw.includes('GOVERNMENT') || raw === 'GOVT') return OrganizationType.GOVERNMENT;
   if (raw.includes('PSU') || raw.includes('PUBLIC_SECTOR')) return OrganizationType.PSU;
-  if (raw.includes('PRIVATE')) return OrganizationType.PRIVATE_LIMITED;
   if (raw.includes('PUBLIC')) return OrganizationType.PUBLIC_LIMITED;
+  if (raw.includes('PRIVATE') || raw.includes('COMPANY')) return OrganizationType.PRIVATE_LIMITED;
   if (raw.includes('LLP')) return OrganizationType.LLP;
   if (raw.includes('PARTNER')) return OrganizationType.PARTNERSHIP;
   if (raw.includes('PROPRIET')) return OrganizationType.PROPRIETORSHIP;

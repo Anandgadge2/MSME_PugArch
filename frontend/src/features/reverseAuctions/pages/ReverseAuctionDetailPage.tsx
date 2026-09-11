@@ -33,19 +33,24 @@ import {
   Sparkles,
   Info,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Ban
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../../shared/format';
 import { reverseAuctionApi } from '../api';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import AuctionClarificationPanel from '../components/AuctionClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { marketplaceApi, type MarketplaceSeller } from '../../marketplace/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
 import { KpiCard } from '../../shared/KpiCard';
+import { postApi } from '../../shared/apiClient';
+import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
 
 function formatEnumLabel(val?: string | null): string {
   if (!val) return 'N/A';
@@ -63,6 +68,38 @@ function formatEnumLabel(val?: string | null): string {
     .replace(/\b\w/g, l => l.toUpperCase());
 }
 
+const lineItemColumns: ColumnDef<any>[] = [
+  {
+    key: 'itemName',
+    header: 'Item',
+    width: 'w-[30%]',
+    cell: (item) => <span className="font-bold text-slate-900">{item.itemName || '—'}</span>
+  },
+  {
+    key: 'description',
+    header: 'Description',
+    width: 'w-[40%]',
+    cell: (item) => (
+      <span title={item.description || '—'} className="text-slate-500 max-w-[260px] truncate block">
+        {item.description || '—'}
+      </span>
+    )
+  },
+  {
+    key: 'quantity',
+    header: 'Qty',
+    width: 'w-[15%]',
+    align: 'right',
+    cell: (item) => <span className="tabular-nums font-bold text-slate-900">{item.quantity ?? '—'}</span>
+  },
+  {
+    key: 'unitOfMeasure',
+    header: 'Unit',
+    width: 'w-[15%]',
+    cell: (item) => <span>{item.unitOfMeasure || '—'}</span>
+  }
+];
+
 export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   const qc = useQueryClient();
   const router = useRouter();
@@ -70,6 +107,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   const isSeller = user?.role === 'seller';
   const [message, setMessage] = useState('');
   const [selectedSeller, setSelectedSeller] = useState<MarketplaceSeller | null>(null);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
   // Return to the page the seller came from; fall back to their opportunities list on a cold open.
   const goBack = () => {
@@ -490,6 +528,16 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
               <Square className="mr-2 h-4 w-4" /> Close
             </Button>
           )}
+          {!['CANCELLED', 'CLOSED', 'AWARDED', 'COMPLETED'].includes(status) && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCancelModalOpen(true)}
+              className="rounded-xl font-bold text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+            >
+              <Ban className="mr-2 h-4 w-4" /> {status === 'DRAFT' ? 'Withdraw Auction' : 'Cancel Auction'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -600,6 +648,24 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
           </Card>
         </div>
       </div>
+      <CancelProcurementModal
+        isOpen={cancelModalOpen}
+        onClose={() => setCancelModalOpen(false)}
+        procurement={{
+          id: Number(id),
+          type: 'reverse_auction',
+          title: auction.data?.title || 'Reverse Auction Sourcing',
+          referenceNumber: auction.data?.auctionCode || `RA-${id}`,
+          typeLabel: 'Reverse Auction',
+          status: status,
+        }}
+        onConfirm={async (params) => {
+          await postApi('/api/buyer/procurements/cancel', params);
+          toast.success('Reverse auction cancelled successfully');
+          invalidate();
+          router.push('/buyer/my-procurements');
+        }}
+      />
     </div>
   );
 }
@@ -649,32 +715,15 @@ function LinkedRequirementPanel({ requirement }: { requirement: NonNullable<impo
       {items.length > 0 && (
         <div className="mt-6">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2.5">Line Items ({items.length})</p>
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
-            <div className="overflow-x-auto w-full">
-              <table className="w-full min-w-[560px] text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <tr>
-                    <th className="p-3 w-12 text-center">#</th>
-                    <th className="p-3">Item</th>
-                    <th className="p-3">Description</th>
-                    <th className="p-3 text-right">Qty</th>
-                    <th className="p-3">Unit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                  {items.map((item, i) => (
-                    <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="p-3 text-slate-400 font-black text-center">{i + 1}</td>
-                      <td className="p-3 font-bold text-slate-900">{item.itemName || '—'}</td>
-                      <td title={item.description || '—'} className="p-3 text-slate-500 max-w-[260px] truncate">{item.description || '—'}</td>
-                      <td className="p-3 text-right tabular-nums font-bold text-slate-900">{item.quantity ?? '—'}</td>
-                      <td className="p-3">{item.unitOfMeasure || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <DataTable<any>
+            columns={lineItemColumns}
+            data={items}
+            keyExtractor={(item, i) => item.id || `item-${i}`}
+            showSrNo={true}
+            srNoHeader="#"
+            srNoWidth="w-12"
+            minWidth="min-w-[560px]"
+          />
         </div>
       )}
 

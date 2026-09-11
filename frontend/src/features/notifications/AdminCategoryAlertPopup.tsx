@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
-import { X, Image as ImageIcon, Building2, User as UserIcon, ArrowRight, Sparkles, AlertCircle } from 'lucide-react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { X, Image as ImageIcon, Building2, User as UserIcon, ArrowRight, Sparkles, AlertCircle, Clock } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '../../hooks/useAuth';
 import { getApi, postApi } from '../shared/apiClient';
-import type { PortalNotification } from '../../lib/notifications';
 
 interface PendingCategoryAlert {
   id: number;
@@ -16,97 +16,102 @@ interface PendingCategoryAlert {
   redirectUrl?: string;
 }
 
+const REMIND_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+
 export default function AdminCategoryAlertPopup() {
   const { user } = useAuth();
   const [alerts, setAlerts] = useState<PendingCategoryAlert[]>([]);
   const [visible, setVisible] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const snoozeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  const getSnoozeKey = useCallback(() => {
+    return `admin-category-remind-until:${user?.id || 'default'}`;
+  }, [user?.id]);
+
+  const loadPendingCategoryAlerts = useCallback(async () => {
+    if (!user?.id) return;
+    const isAdmin = user.role === 'admin' || user.role === 'master_admin';
+    if (!isAdmin) return;
+
+    try {
+      // Query backend for all user-added custom categories that still don't have an image
+      const pendingRes = await getApi<any>('/api/admin/categories/pending-review').catch(() => null);
+      const pendingList: PendingCategoryAlert[] = Array.isArray(pendingRes) ? pendingRes : pendingRes?.data || [];
+
+      if (pendingList.length === 0) {
+        // If all images are uploaded, clear any remaining snooze and hide
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(getSnoozeKey());
+        }
+        setVisible(false);
+        return;
+      }
+
+      setAlerts(pendingList);
+      setVisible(true);
+    } catch (err) {
+      console.warn('[AdminCategoryAlert] Failed to check alerts:', err);
+    }
+  }, [user?.id, user?.role, getSnoozeKey]);
 
   useEffect(() => {
     if (!user?.id) return;
     const isAdmin = user.role === 'admin' || user.role === 'master_admin';
     if (!isAdmin) return;
 
-    const sessionKey = `admin-category-alert-dismissed:${user.id}`;
-    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(sessionKey)) {
-      return;
-    }
-
-    let alive = true;
-
-    async function loadPendingCategoryAlerts() {
-      try {
-        const collected: PendingCategoryAlert[] = [];
-
-        // 1. Check unread notifications for custom category additions
-        const notifRes = await getApi<any>('/api/notifications?status=unread&pageSize=20').catch(() => null);
-        const notifs: PortalNotification[] = Array.isArray(notifRes?.notifications) ? notifRes.notifications : [];
-        const categoryNotifs = notifs.filter(item => {
-          const t = String(item.type || '').toLowerCase();
-          return t === 'category_custom_added' || (t.includes('category') && t.includes('custom'));
-        });
-
-        for (const notif of categoryNotifs) {
-          // Extract category ID from redirectUrl (e.g. /admin/categories?edit=123)
-          let catId = 0;
-          if (notif.redirectUrl) {
-            const match = notif.redirectUrl.match(/edit=(\d+)/);
-            if (match) catId = Number(match[1]);
-          }
-
-          // Extract category name from title (e.g. New Custom Category: "Solar Panels")
-          let name = 'Custom Category';
-          const titleMatch = notif.title?.match(/["']([^"']+)["']/);
-          if (titleMatch) {
-            name = titleMatch[1];
-          } else if (notif.title) {
-            name = notif.title.replace(/^New Custom Category:\s*/i, '');
-          }
-
-          // Extract User & Org from message (e.g. "Added by John Doe (Acme Corp)...")
-          let userName = '';
-          let orgName = '';
-          if (notif.message) {
-            const authorMatch = notif.message.match(/Added by ([^(]+)\(([^)]+)\)/i);
-            if (authorMatch) {
-              userName = authorMatch[1].trim();
-              orgName = authorMatch[2].trim();
-            }
-          }
-
-          collected.push({
-            id: catId,
-            notificationId: notif.id,
-            name,
-            userName,
-            orgName,
-            message: notif.message,
-            redirectUrl: notif.redirectUrl || (catId ? `/admin/categories?edit=${catId}` : '/admin/categories')
-          });
+    const snoozeKey = getSnoozeKey();
+    if (typeof localStorage !== 'undefined') {
+      const storedSnooze = localStorage.getItem(snoozeKey);
+      if (storedSnooze) {
+        const snoozeTime = Number(storedSnooze);
+        const remaining = snoozeTime - Date.now();
+        if (remaining > 0) {
+          // Still within the 5-minute snooze window; set timer to awaken when remaining time expires
+          if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
+          snoozeTimerRef.current = setTimeout(() => {
+            localStorage.removeItem(snoozeKey);
+            void loadPendingCategoryAlerts();
+          }, remaining);
+          return;
+        } else {
+          localStorage.removeItem(snoozeKey);
         }
-
-        if (!alive || collected.length === 0) return;
-
-        setAlerts(collected);
-        setVisible(true);
-      } catch (err) {
-        console.warn('[AdminCategoryAlert] Failed to check alerts:', err);
       }
     }
 
     void loadPendingCategoryAlerts();
 
     return () => {
-      alive = false;
+      if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
     };
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, loadPendingCategoryAlerts, getSnoozeKey]);
 
-  // Handle ESC key to dismiss
+  const remindIn5Minutes = () => {
+    const snoozeUntil = Date.now() + REMIND_DELAY_MS;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(getSnoozeKey(), String(snoozeUntil));
+    }
+    setVisible(false);
+    toast.info('Reminder scheduled for 5 minutes', {
+      description: 'This pop-up will reappear in 5 minutes until the category photo is uploaded.'
+    });
+
+    if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
+    snoozeTimerRef.current = setTimeout(() => {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(getSnoozeKey());
+      }
+      void loadPendingCategoryAlerts();
+    }, REMIND_DELAY_MS);
+  };
+
+  // Handle ESC key to dismiss with 5-minute snooze
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && visible) {
-        close();
+        remindIn5Minutes();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -117,18 +122,11 @@ export default function AdminCategoryAlertPopup() {
 
   const current = alerts[activeIndex] || alerts[0];
 
-  const close = () => {
-    if (user?.id && typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem(`admin-category-alert-dismissed:${user.id}`, '1');
-    }
-    setVisible(false);
-  };
-
   const openCategoryPhotoEditor = async () => {
     if (current.notificationId) {
       void postApi(`/api/notifications/${current.notificationId}/read`, {}).catch(() => undefined);
     }
-    close();
+    setVisible(false);
     const dest = current.redirectUrl || `/admin/categories?edit=${current.id}`;
     window.location.href = dest;
   };
@@ -139,126 +137,141 @@ export default function AdminCategoryAlertPopup() {
       aria-modal="true"
       aria-labelledby="admin-category-alert-title"
       aria-describedby="admin-category-alert-desc"
-      ref={modalRef}
-      className="fixed right-4 top-16 z-[95] w-[min(94vw,440px)] overflow-hidden rounded-2xl border border-amber-300/80 bg-white shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in duration-200"
+      onClick={(e) => {
+        // Dismiss with 5-minute reminder when clicking on the blurred backdrop
+        if (e.target === e.currentTarget) {
+          remindIn5Minutes();
+        }
+      }}
     >
-      {/* Top Banner */}
-      <div className="flex items-center justify-between gap-2.5 border-b border-amber-200/90 bg-gradient-to-r from-amber-50 via-amber-100/60 to-orange-50 px-4 py-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-xs">
-            <ImageIcon className="h-4 w-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 rounded bg-amber-200/70 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-900">
-                <Sparkles className="h-2.5 w-2.5" /> Action Required
-              </span>
-              {alerts.length > 1 && (
-                <span className="text-[10px] font-bold text-amber-800">
-                  ({activeIndex + 1} of {alerts.length})
+      <div
+        ref={modalRef}
+        className="w-full max-w-lg overflow-hidden rounded-2xl border border-amber-200/90 bg-white shadow-2xl animate-in zoom-in-95 duration-200"
+      >
+        {/* Top Header Banner */}
+        <div className="flex items-center justify-between gap-3 border-b border-amber-200/90 bg-gradient-to-r from-amber-50 via-amber-100/60 to-orange-50 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-sm">
+              <ImageIcon className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded bg-amber-200/80 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-950">
+                  <Sparkles className="h-2.5 w-2.5" /> Action Required
                 </span>
-              )}
+                {alerts.length > 1 && (
+                  <span className="text-[11px] font-bold text-amber-900">
+                    ({activeIndex + 1} of {alerts.length})
+                  </span>
+                )}
+              </div>
+              <h2 id="admin-category-alert-title" className="text-sm font-black uppercase tracking-wide text-slate-900 mt-0.5">
+                New Custom Category Added
+              </h2>
             </div>
-            <h2 id="admin-category-alert-title" className="text-xs font-black uppercase tracking-wide text-slate-900">
-              New Custom Category Added
-            </h2>
           </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={close}
-          aria-label="Dismiss custom category alert"
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-amber-200 bg-white text-slate-500 transition hover:border-red-300 hover:text-red-600"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="p-4 space-y-3.5">
-        {/* Category Highlight Card */}
-        <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-            Category Name
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-extrabold text-slate-900 line-clamp-1">
-              {current.name}
-            </span>
-            <span className="shrink-0 rounded-md border border-amber-300 bg-amber-100/80 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-900">
-              No Image
-            </span>
-          </div>
-
-          {/* User & Organization Attribution */}
-          {(current.userName || current.orgName) && (
-            <div className="pt-2 border-t border-slate-200/70 space-y-1 text-xs">
-              {current.userName && (
-                <div className="flex items-center gap-1.5 text-slate-600">
-                  <UserIcon className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                  <span className="font-semibold text-slate-500">Requested by:</span>
-                  <span className="font-bold text-slate-800">{current.userName}</span>
-                </div>
-              )}
-              {current.orgName && (
-                <div className="flex items-center gap-1.5 text-slate-600">
-                  <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                  <span className="font-semibold text-slate-500">Organization:</span>
-                  <span className="font-bold text-slate-800">{current.orgName}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Guidance Text */}
-        <div id="admin-category-alert-desc" className="flex items-start gap-2 text-xs text-slate-600 leading-relaxed bg-blue-50/60 p-2.5 rounded-lg border border-blue-100">
-          <AlertCircle className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-          <p className="text-[11px]">
-            This category is live without a display image. Upload a 3:4 portrait photo (PNG/JPG/WebP) so it renders properly across the buyer marketplace cards.
-          </p>
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center justify-between gap-2 pt-1">
-          {alerts.length > 1 ? (
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setActiveIndex(prev => (prev > 0 ? prev - 1 : alerts.length - 1))}
-                className="text-[11px] font-bold text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100"
-              >
-                Previous
-              </button>
-              <span className="text-slate-300">•</span>
-              <button
-                type="button"
-                onClick={() => setActiveIndex(prev => (prev < alerts.length - 1 ? prev + 1 : 0))}
-                className="text-[11px] font-bold text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100"
-              >
-                Next ({alerts.length})
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={close}
-              className="text-xs font-bold text-slate-500 hover:text-slate-700 px-2 py-1.5"
-            >
-              Review Later
-            </button>
-          )}
 
           <button
             type="button"
-            onClick={openCategoryPhotoEditor}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#12335f] px-4 py-2 text-xs font-black uppercase tracking-wider text-white shadow-md transition hover:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20"
+            onClick={remindIn5Minutes}
+            title="Remind me in 5 minutes"
+            aria-label="Dismiss custom category alert for 5 minutes"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-200 bg-white text-slate-500 transition hover:border-red-300 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
           >
-            <ImageIcon className="h-3.5 w-3.5" />
-            <span>Upload Image Now</span>
-            <ArrowRight className="h-3.5 w-3.5" />
+            <X className="h-4 w-4" />
           </button>
+        </div>
+
+        {/* Main Content Area */}
+        <div className="p-6 space-y-4">
+          {/* Category Highlight Card */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-4 space-y-2.5 shadow-2xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Category Name
+            </span>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-base font-black text-slate-900">
+                {current.name}
+              </span>
+              <span className="shrink-0 rounded-md border border-amber-300 bg-amber-100/90 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-amber-900">
+                No Image
+              </span>
+            </div>
+
+            {/* User & Organization Attribution */}
+            {(current.userName || current.orgName) && (
+              <div className="pt-3 border-t border-slate-200/80 space-y-1.5 text-xs">
+                {current.userName && (
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <UserIcon className="h-4 w-4 text-slate-400 shrink-0" />
+                    <span className="font-semibold text-slate-500">Requested by:</span>
+                    <span className="font-extrabold text-slate-800">{current.userName}</span>
+                  </div>
+                )}
+                {current.orgName && (
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Building2 className="h-4 w-4 text-slate-400 shrink-0" />
+                    <span className="font-semibold text-slate-500">Organization:</span>
+                    <span className="font-extrabold text-slate-800">{current.orgName}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Guidance Info Banner */}
+          <div id="admin-category-alert-desc" className="flex items-start gap-2.5 text-xs text-slate-600 leading-relaxed bg-blue-50/70 p-3 rounded-xl border border-blue-100">
+            <AlertCircle className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+            <p className="text-[11px] leading-relaxed">
+              This category was created by an enterprise user and is live without a display image. Upload an official 3:4 portrait photo (PNG/JPG/WebP) so it renders properly across the buyer marketplace cards.
+            </p>
+          </div>
+
+          {/* Carousel navigation if multiple custom categories are pending */}
+          {alerts.length > 1 && (
+            <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
+              <button
+                type="button"
+                onClick={() => setActiveIndex(prev => (prev > 0 ? prev - 1 : alerts.length - 1))}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 px-2.5 py-1 rounded hover:bg-slate-100"
+              >
+                &larr; Previous Category
+              </button>
+              <span className="text-[11px] font-semibold text-slate-400">
+                {activeIndex + 1} of {alerts.length} pending
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveIndex(prev => (prev < alerts.length - 1 ? prev + 1 : 0))}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 px-2.5 py-1 rounded hover:bg-slate-100"
+              >
+                Next Category &rarr;
+              </button>
+            </div>
+          )}
+
+          {/* Action Footer Buttons */}
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={remindIn5Minutes}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs focus:outline-none focus:ring-2 focus:ring-slate-300"
+            >
+              <Clock className="h-3.5 w-3.5 text-slate-500" />
+              <span>Remind me in 5 min</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={openCategoryPhotoEditor}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#12335f] px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-md transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+            >
+              <ImageIcon className="h-4 w-4" />
+              <span>Upload Image Now</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

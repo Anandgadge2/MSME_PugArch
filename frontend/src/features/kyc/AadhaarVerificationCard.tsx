@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { aadhaarKycApi, type AadhaarKycStatus } from './aadhaarKycApi';
 import { cn } from '../../lib/utils';
+import { formatDateTime } from '../shared/format';
 
 const statusCopy: Record<AadhaarKycStatus['status'], { label: string; className: string; description: string }> = {
   NOT_STARTED: {
@@ -83,8 +84,8 @@ export function AadhaarVerificationCard({ compact = false }: { compact?: boolean
   const canRetry = status === 'FAILED' || status === 'EXPIRED' || status === 'PENDING';
   const verifiedAt = useMemo(() => {
     if (!query.data?.verifiedAt) return '';
-    const date = new Date(query.data.verifiedAt);
-    return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    const formatted = formatDateTime(query.data.verifiedAt);
+    return formatted === '—' ? '' : formatted;
   }, [query.data?.verifiedAt]);
 
   return (

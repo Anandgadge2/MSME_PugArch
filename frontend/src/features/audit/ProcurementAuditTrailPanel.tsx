@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { fetchProcurementAuditTrail } from './api';
 import { AUDIT_ACTION_LABELS, AUDIT_ACTION_COLORS, type ProcurementAuditEntry } from './types';
 import { CANONICAL_METHOD_LABELS } from '../../types/enums';
+import { formatDateTime } from '../shared/format';
 
 interface Props {
   bidId: number | string;
@@ -65,7 +66,7 @@ function AuditEntryRow({ entry }: { entry: ProcurementAuditEntry }) {
           </span>
           <span className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
-            {date.toLocaleDateString('en-IN')} {date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            {formatDateTime(date)}
           </span>
         </div>
         {hasDetails && (

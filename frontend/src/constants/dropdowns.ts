@@ -175,9 +175,6 @@ export const ITEM_CONDITIONS = [
 // ── Payment Terms ───────────────────────────────────────────────────────────
 export const PAYMENT_TERMS = [
   { value: 'ADVANCE_PAYMENT', label: 'Advance Payment' },
-  { value: 'CREDIT_PAYMENT', label: 'Credit Payment' },
-  { value: 'PARTIAL_ADVANCE', label: 'Partial Advance' },
-  { value: 'MILESTONE_BASED', label: 'Milestone Based' },
   { value: 'ON_DELIVERY', label: 'On Delivery' },
 ] as const;
 

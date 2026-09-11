@@ -6,13 +6,9 @@ import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { useClarifications, useAskClarification, useReplyClarification, type ClarificationKind } from '../hooks';
+import { formatDateTime } from '../../shared/format';
 
-const formatWhen = (value?: string | null) => {
-  if (!value) return '';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
+const formatWhen = (value?: string | null) => (value ? formatDateTime(value) : '');
 
 interface ClarificationPanelProps {
   /** QuoteRequest id (kind='quote-request') OR BuyerRequirement id (kind='requirement'). */

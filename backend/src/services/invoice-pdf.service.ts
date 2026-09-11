@@ -34,6 +34,18 @@ function formatInr(val: number | string | undefined | null): string {
   return `INR ${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'] as const;
+
+function formatDate(val: unknown): string {
+  if (!val) return '—';
+  const d = val instanceof Date ? val : new Date(String(val));
+  if (Number.isNaN(d.getTime())) return '—';
+  const day = d.getDate();
+  const month = MONTH_NAMES[d.getMonth()] ?? '';
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
 /**
  * Generates an official, high-precision GST Tax Invoice PDF Buffer using PDFKit.
  */
@@ -64,9 +76,7 @@ export async function generateInvoicePdfBuffer(invoice: TaxInvoicePdfInput): Pro
       const buyerPan = buyer.organization?.panNumber || buyer.buyerProfile?.pan || 'PFGPK6340B';
 
       const invNo = invoice.invoiceNumber || `INV-${po.poNumber || invoice.id || '2026-001'}`;
-      const dateStr = invoice.createdAt
-        ? new Date(invoice.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-        : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      const dateStr = formatDate(invoice.createdAt || new Date());
 
       const rawItems = invoice.items?.length ? invoice.items : (po.items?.length ? po.items : []);
       const totalAmountNum = Number(invoice.amount || po.amount || 0);
@@ -332,12 +342,8 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
       const sellerEmail = seller.email || 'seller@msme-portal.in';
 
       const poNum = po.poNumber || `PO-${po.id || '2026-001'}`;
-      const dateStr = po.createdAt
-        ? new Date(po.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-        : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-      const deliveryDateStr = po.expectedDelivery
-        ? new Date(po.expectedDelivery).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-        : 'As per schedule';
+      const dateStr = formatDate(po.createdAt || new Date());
+      const deliveryDateStr = po.expectedDelivery ? formatDate(po.expectedDelivery) : 'As per schedule';
 
       const rawItems = po.items?.length ? po.items : [];
       const totalAmountNum = Number(po.amount || po.totalValue || 0);
@@ -539,9 +545,7 @@ export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
 
     const formattedAmount = `₹${Number(po.amount || po.totalValue || 0).toLocaleString('en-IN')}`;
     const poNum = po.poNumber || `PO-${po.id}`;
-    const deliveryDateStr = po.expectedDelivery
-      ? new Date(po.expectedDelivery).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-      : 'As per schedule';
+    const deliveryDateStr = po.expectedDelivery ? formatDate(po.expectedDelivery) : 'As per schedule';
 
     const meta = (typeof po.metadata === 'object' && po.metadata !== null ? po.metadata : {}) as Record<string, any>;
     const billingDetails = (meta.billingDetails || {}) as Record<string, any>;
@@ -782,9 +786,7 @@ export async function generatePaymentReceiptPdfBuffer(input: PaymentReceiptPdfIn
 
       doc.fillColor('#0f172a').fontSize(20).font('Helvetica-Bold').text('Official Payment Receipt', pageMargin, currentY);
       
-      const dateStr = input.paidAt || input.completedAt || input.createdAt
-        ? new Date(input.paidAt || input.completedAt || input.createdAt!).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-        : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      const dateStr = formatDate(input.paidAt || input.completedAt || input.createdAt || new Date());
       
       doc.fillColor('#475569').fontSize(8).font('Helvetica-Bold').text(`DATE: ${dateStr.toUpperCase()}`, pageMargin + contentWidth - 170, currentY + 6, { width: 90, align: 'right' });
 

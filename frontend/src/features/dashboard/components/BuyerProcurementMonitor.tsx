@@ -196,7 +196,7 @@ export function BuyerProcurementMonitor() {
           <Link href="/buyer/procurement/create">
             <Button className="h-7 bg-[#12335f] hover:bg-[#0b2445] text-white rounded px-2.5 text-[10px] font-bold uppercase tracking-wide shadow-sm flex items-center gap-1">
               <PlusCircle className="h-3 w-3" />
-              New RFQ / Tender
+              New RFQ
             </Button>
           </Link>
           <Link href="/buyer/my-procurements">

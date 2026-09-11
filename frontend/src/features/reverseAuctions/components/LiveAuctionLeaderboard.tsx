@@ -22,6 +22,8 @@ import {
 import { Button } from '../../../components/ui/button';
 import { reverseAuctionApi, type ReverseAuction, type ReverseAuctionParticipant } from '../api';
 import { toast } from 'sonner';
+import { formatTime } from '../../shared/format';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 export interface LiveAuctionLeaderboardProps {
   auctionId: number;
@@ -97,10 +99,15 @@ export default function LiveAuctionLeaderboard({
       if (diff <= 0) {
         setTimeLeft('00:00:00');
       } else {
-        const hrs = String(Math.floor(diff / 3600000)).padStart(2, '0');
+        const days = Math.floor(diff / 86400000);
+        const hrs = String(Math.floor((diff % 86400000) / 3600000)).padStart(2, '0');
         const mins = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
         const secs = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
-        setTimeLeft(`${hrs}:${mins}:${secs}`);
+        if (days > 0) {
+          setTimeLeft(`${days}d ${hrs}h ${mins}m ${secs}s`);
+        } else {
+          setTimeLeft(`${hrs}:${mins}:${secs}`);
+        }
       }
     };
 
@@ -140,6 +147,96 @@ export default function LiveAuctionLeaderboard({
     }
   };
 
+  const startPrice = Number(auction?.startPrice || 0);
+
+  const leaderboardColumns = React.useMemo<ColumnDef<ReverseAuctionParticipant>[]>(() => [
+    {
+      key: 'rank',
+      header: 'Rank',
+      width: 'w-[15%]',
+      cell: (part, idx) => {
+        const rank = part.currentRank || idx + 1;
+        const isL1 = rank === 1;
+        return (
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black ${
+              isL1
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                : rank === 2
+                ? 'bg-slate-200 text-slate-800'
+                : rank === 3
+                ? 'bg-amber-50 text-amber-800'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {isL1 ? '🥇 L1' : rank === 2 ? '🥈 L2' : rank === 3 ? '🥉 L3' : `L${rank}`}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'vendor',
+      header: 'Vendor Organization',
+      width: 'w-[35%]',
+      cell: (part) => (
+        <span className="text-slate-900 font-black">
+          {part.sellerOrgName || `Vendor #${part.sellerOrgId}`}
+        </span>
+      )
+    },
+    {
+      key: 'bestBid',
+      header: 'Best Bid (INR)',
+      width: 'w-[20%]',
+      cell: (part) => {
+        const amount = Number(part.lastBidAmount || 0);
+        const isL1 = (part.currentRank || 1) === 1;
+        return (
+          <span className={`text-xs font-black ${isL1 ? 'text-emerald-700' : 'text-slate-900'}`}>
+            {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : 'Awaiting Bid'}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'savings',
+      header: 'Savings from Opening',
+      width: 'w-[18%]',
+      cell: (part) => {
+        const amount = Number(part.lastBidAmount || 0);
+        const diffFromStart = startPrice > amount && amount > 0 ? startPrice - amount : 0;
+        return diffFromStart > 0 ? (
+          <span className="text-emerald-600 font-bold text-[11px]">
+            -₹{diffFromStart.toLocaleString('en-IN')}
+          </span>
+        ) : (
+          <span className="text-slate-500">Opening Level</span>
+        );
+      }
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-[12%]',
+      align: 'right',
+      cell: (part, idx) => {
+        const rank = part.currentRank || idx + 1;
+        const isL1 = rank === 1;
+        return (
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase ${
+              isL1
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {isL1 ? 'Winning Lead' : 'Participating'}
+          </span>
+        );
+      }
+    }
+  ], [startPrice]);
+
   if (loading && !auction) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs flex items-center justify-center gap-3 text-slate-500">
@@ -154,7 +251,6 @@ export default function LiveAuctionLeaderboard({
   const status = String(auction.statusEnum || auction.status || 'DRAFT').toUpperCase();
   const isLive = status === 'LIVE';
   const isCompleted = ['CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(status);
-  const startPrice = Number(auction.startPrice || 0);
   const currentLowest = Number(auction.currentLowestAmount || auction.currentLowestBid || auction.currentBid || startPrice);
   const savings = startPrice > 0 && currentLowest > 0 && currentLowest < startPrice ? startPrice - currentLowest : 0;
   const savingsPercent = startPrice > 0 && savings > 0 ? (savings / startPrice) * 100 : 0;
@@ -353,92 +449,18 @@ export default function LiveAuctionLeaderboard({
         <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
           <Trophy className="h-4 w-4 text-amber-500" /> Live Bid Ranking Leaderboard
         </h3>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/90 border-b border-slate-200">
-                <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3">Rank</th>
-                  <th className="px-4 py-3">Vendor Organization</th>
-                  <th className="px-4 py-3">Best Bid (INR)</th>
-                  <th className="px-4 py-3">Savings from Opening</th>
-                  <th className="px-4 py-3 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                {sortedParticipants.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-400 font-medium">
-                      No participating vendors recorded yet.
-                    </td>
-                  </tr>
-                ) : (
-                  sortedParticipants.map((part, idx) => {
-                    const rank = part.currentRank || idx + 1;
-                    const amount = Number(part.lastBidAmount || 0);
-                    const isL1 = rank === 1;
-                    const diffFromStart = startPrice > amount && amount > 0 ? startPrice - amount : 0;
-
-                    return (
-                      <tr
-                        key={part.id || idx}
-                        className={`transition ${
-                          isL1
-                            ? 'bg-emerald-50/40 hover:bg-emerald-50/70 font-bold'
-                            : 'hover:bg-slate-50'
-                        }`}
-                      >
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black ${
-                              isL1
-                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                : rank === 2
-                                ? 'bg-slate-200 text-slate-800'
-                                : rank === 3
-                                ? 'bg-amber-50 text-amber-800'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {isL1 ? '🥇 L1' : rank === 2 ? '🥈 L2' : rank === 3 ? '🥉 L3' : `L${rank}`}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-900 font-black">
-                          {part.sellerOrgName || `Vendor #${part.sellerOrgId}`}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs font-black ${isL1 ? 'text-emerald-700' : 'text-slate-900'}`}>
-                            {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : 'Awaiting Bid'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-500">
-                          {diffFromStart > 0 ? (
-                            <span className="text-emerald-600 font-bold text-[11px]">
-                              -₹{diffFromStart.toLocaleString('en-IN')}
-                            </span>
-                          ) : (
-                            'Opening Level'
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase ${
-                              isL1
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {isL1 ? 'Winning Lead' : 'Participating'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable<ReverseAuctionParticipant>
+          columns={leaderboardColumns}
+          data={sortedParticipants}
+          keyExtractor={(part, idx) => String(part.id || idx)}
+          emptyTitle="No participating vendors"
+          emptyDescription="No participating vendors recorded yet."
+          minWidth="min-w-[640px]"
+          rowClassName={(part, idx) => {
+            const rank = part.currentRank || idx + 1;
+            return rank === 1 ? 'bg-emerald-50/40 font-bold' : '';
+          }}
+        />
       </div>
 
       {/* Real-time Bid Activity Stream */}
@@ -451,7 +473,7 @@ export default function LiveAuctionLeaderboard({
             {bids.slice(0, 10).map((bidItem, idx) => (
               <div key={bidItem.id || idx} className="flex items-center justify-between text-xs text-slate-600">
                 <span className="font-mono text-[10px] text-slate-400">
-                  {bidItem.submittedAt ? new Date(bidItem.submittedAt).toLocaleTimeString() : 'Recent'}
+                  {bidItem.submittedAt ? formatTime(bidItem.submittedAt) : '—'}
                 </span>
                 <span className="font-bold text-slate-800">
                   {bidItem.sellerOrgName || `Vendor #${bidItem.sellerOrgId}`} submitted offer of{' '}

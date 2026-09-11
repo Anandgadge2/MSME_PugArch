@@ -278,7 +278,7 @@ async function downloadAndUploadUrl(
       };
     }
     const arrayBuffer = await res.arrayBuffer();
-    let buffer = Buffer.from(arrayBuffer);
+    let buffer: Buffer = Buffer.from(arrayBuffer);
     if (buffer.length === 0) {
       console.warn(`[Catalogue Import] Empty file downloaded from URL: ${url}`);
       return {
@@ -336,9 +336,9 @@ async function downloadAndUploadUrl(
             finalExt = ".jpg";
           } else {
             // Normalize any other image formats (AVIF, TIFF, GIF, HEIF, SVG) to standard WebP for storage compatibility
-            buffer = await sharp(buffer).webp({ quality: 90 }).toBuffer();
-            finalMime = "image/webp";
-            finalExt = ".webp";
+            buffer = Buffer.from(await sharp(buffer).webp({ quality: 90 }).toBuffer());
+            finalMime = 'image/webp';
+            finalExt = '.webp';
           }
           detectedType = {
             ext: finalExt,
@@ -1123,40 +1123,12 @@ export const catalogueImportService = {
     let duplicateRows = 0;
 
     const knownHeaders = new Set([
-      "product name",
-      "service name",
-      "category",
-      "status",
-      "description",
-      "price",
-      "currency",
-      "gst rate",
-      "unit of measure",
-      "hsn code",
-      "sku",
-      "brand",
-      "model number",
-      "item condition",
-      "msme made",
-      "original price",
-      "discount price",
-      "discount percent",
-      "offer label",
-      "offer start date",
-      "offer end date",
-      "bulk deal available",
-      "bulk minimum quantity",
-      "image urls",
-      "document urls",
-      "pricing model",
-      "base price",
-      "service area",
-      "scope of work",
-      "deliverables",
-      "inclusions",
-      "exclusions",
-      "sla response time",
-      "duration",
+      'product name', 'service name', 'category', 'status', 'description', 'price', 'currency', 'gst rate',
+      'unit of measure', 'hsn code', 'sku', 'brand', 'model number', 'item condition', 'msme made',
+      'original price', 'discount price', 'discount percent', 'offer label', 'offer start date', 'offer end date',
+      'bulk deal available', 'bulk minimum quantity', 'image urls', 'document urls',
+      'pricing model', 'base price', 'service area', 'scope of work', 'deliverables', 'inclusions', 'exclusions', 'sla response time', 'duration',
+      'description / scope of work', 'description/scope of work', 'specifications / scope', 'specifications/scope', 'technical specification', 'technical specifications'
     ]);
     const unknownHeaders = headers.filter((h) => {
       const norm = normalizeHeader(h);
@@ -1168,85 +1140,40 @@ export const catalogueImportService = {
     for (const row of dataRows) {
       const rowNumber = Number(row.__rowNumber || 0);
       const errors: RowError[] = [];
-      const name = sanitizeText(col(row, "Product Name", "Service Name"), 200);
-      const categoryName = sanitizeText(col(row, "Category"), 120);
-      const statusRaw = clean(col(row, "Status")).toUpperCase() || "DRAFT";
-      const rawDescription = sanitizeText(col(row, "Description"));
-      const description = rawDescription || name;
-      const price = parseNumber(col(row, "Price", "Base Price"));
-      const gst = parseNumber(col(row, "GST Rate"));
-      const currency = clean(col(row, "Currency")).toUpperCase() || "INR";
+      const name = sanitizeText(col(row, 'Product Name', 'Service Name'), 200);
+      const categoryName = sanitizeText(col(row, 'Category'), 120);
+      const statusRaw = clean(col(row, 'Status')).toUpperCase() || 'DRAFT';
+      const rawDescription = sanitizeText(col(row, 'Description', 'Description / Scope of Work', 'Description/Scope of Work', 'Scope Of Work', 'Scope of Work', 'Specifications / Scope', 'Specification', 'Specifications'));
+      const scopeOfWork = sanitizeText(col(row, 'Scope Of Work', 'Scope of Work', 'Description / Scope of Work', 'Description/Scope of Work', 'Specifications / Scope'));
+      const description = rawDescription || scopeOfWork || name;
+      const price = parseNumber(col(row, 'Price', 'Base Price'));
+      const gst = parseNumber(col(row, 'GST Rate'));
+      const currency = clean(col(row, 'Currency')).toUpperCase() || 'INR';
 
-      if (!name)
-        errors.push({
-          rowNumber,
-          field: "name",
-          message: "Name is required",
-          rawData: row,
-        });
-      if (!categoryName)
-        errors.push({
-          rowNumber,
-          field: "category",
-          message: "Category is required",
-          rawData: row,
-        });
-      else if (!categories.has(categoryName.toLowerCase()))
-        errors.push({
-          rowNumber,
-          field: "category",
-          message: `Category "${categoryName}" not found`,
-          rawData: row,
-        });
-      if (!PRODUCT_STATUSES.has(statusRaw))
-        errors.push({
-          rowNumber,
-          field: "status",
-          message: "Status must be DRAFT, ACTIVE, or INACTIVE",
-          rawData: row,
-        });
-      if (type === "PRODUCT") {
-        const uom = sanitizeText(col(row, "Unit Of Measure"), 40);
-        if (!uom)
-          errors.push({
-            rowNumber,
-            field: "unitOfMeasure",
-            message: "Unit Of Measure is required",
-            rawData: row,
-          });
-        if (price === null || price < 0)
-          errors.push({
-            rowNumber,
-            field: "price",
-            message: "Price must be a number >= 0",
-            rawData: row,
-          });
+      if (!name) errors.push({ rowNumber, field: 'name', message: 'Name is required', rawData: row });
+      if (!categoryName) errors.push({ rowNumber, field: 'category', message: 'Category is required', rawData: row });
+      else if (!categories.has(categoryName.toLowerCase())) errors.push({ rowNumber, field: 'category', message: `Category "${categoryName}" not found`, rawData: row });
+      if (!PRODUCT_STATUSES.has(statusRaw)) errors.push({ rowNumber, field: 'status', message: 'Status must be DRAFT, ACTIVE, or INACTIVE', rawData: row });
+      let pricingModel: string | null = null;
+      if (type === 'PRODUCT') {
+        const uom = sanitizeText(col(row, 'Unit Of Measure'), 40);
+        if (!uom) errors.push({ rowNumber, field: 'unitOfMeasure', message: 'Unit Of Measure is required', rawData: row });
+        if (price === null || price < 0) errors.push({ rowNumber, field: 'price', message: 'Price must be a number >= 0', rawData: row });
       } else {
-        const pricingModel =
-          clean(col(row, "Pricing Model")).toUpperCase() || "FIXED";
-        if (!PRICING_MODELS.has(pricingModel))
-          errors.push({
-            rowNumber,
-            field: "pricingModel",
-            message: "Invalid pricing model",
-            rawData: row,
-          });
-        const serviceArea = sanitizeText(col(row, "Service Area"), 300);
-        if (!serviceArea)
-          errors.push({
-            rowNumber,
-            field: "serviceArea",
-            message: "Service Area is required",
-            rawData: row,
-          });
-        const basePrice = parseNumber(col(row, "Base Price"));
-        if (pricingModel === "FIXED" && (basePrice === null || basePrice < 0)) {
-          errors.push({
-            rowNumber,
-            field: "basePrice",
-            message: "Base Price required for FIXED pricing",
-            rawData: row,
-          });
+        const rawModel = clean(col(row, 'Pricing Model')).toUpperCase() || 'FIXED';
+        pricingModel = rawModel === 'PROJECT' ? 'PER_PROJECT'
+          : rawModel === 'RETAINER' ? 'MONTHLY'
+          : rawModel === 'PER_UNIT' || rawModel === 'UNIT' ? 'FIXED'
+          : rawModel === 'PER_HOUR' ? 'HOURLY'
+          : rawModel === 'PER_DAY' ? 'DAILY'
+          : rawModel === 'PER_MONTH' ? 'MONTHLY'
+          : rawModel;
+        if (!PRICING_MODELS.has(pricingModel)) errors.push({ rowNumber, field: 'pricingModel', message: 'Invalid pricing model', rawData: row });
+        const serviceArea = sanitizeText(col(row, 'Service Area'), 300);
+        if (!serviceArea) errors.push({ rowNumber, field: 'serviceArea', message: 'Service Area is required', rawData: row });
+        const basePrice = parseNumber(col(row, 'Base Price'));
+        if (pricingModel === 'FIXED' && (basePrice === null || basePrice < 0)) {
+          errors.push({ rowNumber, field: 'basePrice', message: 'Base Price required for FIXED pricing', rawData: row });
         }
       }
       if (gst !== null && (gst < 0 || gst > 40))
@@ -1470,17 +1397,16 @@ export const catalogueImportService = {
               isMsmeMade: parseBool(col(row, "MSME Made")) ?? false,
             }
           : {
-              pricingModel:
-                clean(col(row, "Pricing Model")).toUpperCase() || "FIXED",
-              basePrice: parseNumber(col(row, "Base Price")),
-              serviceArea: sanitizeText(col(row, "Service Area"), 300),
-              scopeOfWork: sanitizeText(col(row, "Scope Of Work")),
-              deliverables: sanitizeText(col(row, "Deliverables")),
-              inclusions: sanitizeText(col(row, "Inclusions")),
-              exclusions: sanitizeText(col(row, "Exclusions")),
-              slaResponseTime: sanitizeText(col(row, "SLA Response Time"), 120),
-              duration: sanitizeText(col(row, "Duration"), 120),
-            }),
+            pricingModel: pricingModel || 'FIXED',
+            basePrice: parseNumber(col(row, 'Base Price')),
+            serviceArea: sanitizeText(col(row, 'Service Area'), 300),
+            scopeOfWork: scopeOfWork || sanitizeText(col(row, 'Scope Of Work')),
+            deliverables: sanitizeText(col(row, 'Deliverables')),
+            inclusions: sanitizeText(col(row, 'Inclusions')),
+            exclusions: sanitizeText(col(row, 'Exclusions')),
+            slaResponseTime: sanitizeText(col(row, 'SLA Response Time'), 120),
+            duration: sanitizeText(col(row, 'Duration'), 120)
+          })
       });
     }
 

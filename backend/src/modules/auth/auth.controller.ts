@@ -180,10 +180,6 @@ const sendOtpByChannel = async (
   subject: string,
   purpose: string
 ) => {
-  if (env.NODE_ENV !== 'production') {
-    logger.info({ channel, identity, otp, purpose }, `[DEV OTP BYPASS] Channel: ${channel} | Identity: ${identity} | OTP: ${otp} | Purpose: ${purpose}`);
-    console.log(`\n\x1b[33m--- [DEV OTP BYPASS] Channel: ${channel} | Identity: ${identity} | OTP: ${otp} | Purpose: ${purpose} ---\x1b[0m\n`);
-  }
   if (channel === 'sms') {
     return smsService.sendOtpSms(identity, otp, smsPurposeForOtp(purpose));
   }
@@ -216,10 +212,29 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
   const gst = firstValue(user.buyerProfile?.gst, sellerOffice?.gstNumber, registration.gstin);
 
   const defaultCompanyId = await getDefaultCompanyId();
+  const dualOrgType: OrganizationType = (() => {
+    if (targetRole === 'buyer') return 'GOVERNMENT';
+    const typeStr = String(registration.businessType || registration.organisationType || user.sellerProfile?.organizationType || '').trim().toUpperCase();
+    if (typeStr.includes('PROPRIETORSHIP')) return 'PROPRIETORSHIP';
+    if (typeStr.includes('PARTNERSHIP')) return 'PARTNERSHIP';
+    if (typeStr.includes('LLP')) return 'LLP';
+    if (typeStr.includes('STARTUP')) return 'STARTUP';
+    if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) return 'PUBLIC_LIMITED';
+    if (typeStr.includes('COMPANY') || typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
+      const isPublic = typeStr.includes('PUBLIC') || (!typeStr.includes('PVT') && !typeStr.includes('PRIVATE') && String(orgName).toUpperCase().includes('LIMITED') && !String(orgName).toUpperCase().includes('PVT') && !String(orgName).toUpperCase().includes('PRIVATE'));
+      return isPublic ? 'PUBLIC_LIMITED' : 'PRIVATE_LIMITED';
+    }
+    if (typeStr.includes('SHG')) return 'SHG';
+    if (typeStr.includes('NGO')) return 'NGO';
+    if (typeStr.includes('TRUST')) return 'TRUST';
+    if (typeStr.includes('SOCIETY')) return 'SOCIETY';
+    return 'MSME';
+  })();
+
   return prisma.organization.create({
     data: {
       organizationName: orgName,
-      organizationType: targetRole === 'buyer' ? 'GOVERNMENT' : 'MSME',
+      organizationType: dualOrgType,
       panNumber: pan || null,
       gstin: gst || null,
       cinNumber: firstValue(user.buyerProfile?.cin, registration.cinNumber, registration.cin) || null,
@@ -266,10 +281,6 @@ export const authController = {
       const otp = generateOtp();
 
       const otpState = await storeEmailOtp(email, otp);
-      if (env.NODE_ENV !== 'production') {
-        logger.info({ email, otp }, `[DEV OTP BYPASS] Email: ${email} | OTP: ${otp}`);
-        console.log(`\n\x1b[33m--- [DEV OTP BYPASS] Email: ${email} | OTP: ${otp} ---\x1b[0m\n`);
-      }
 
       const deliveryConfigured = await sendOtpEmail(email, otp, '[SECURE AUTH] Email verification code');
       await auditLog({
@@ -348,10 +359,6 @@ export const authController = {
 
       const otp = generateOtp();
       const otpState = await storeMobileOtp(mobile, otp);
-      if (env.NODE_ENV !== 'production') {
-        logger.info({ mobile, otp }, `[DEV OTP BYPASS] Mobile: ${mobile} | OTP: ${otp}`);
-        console.log(`\n\x1b[33m--- [DEV OTP BYPASS] Mobile: ${mobile} | OTP: ${otp} ---\x1b[0m\n`);
-      }
       const sms = await smsService.sendOtpSms(mobile, otp, 'registration_otp');
       await auditLog({
         action: 'auth.mobile_otp.sent',
@@ -669,10 +676,11 @@ export const authController = {
             orgType = 'LLP';
           } else if (typeStr.includes('STARTUP')) {
             orgType = 'STARTUP';
-          } else if (typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
-            orgType = 'PRIVATE_LIMITED';
           } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
             orgType = 'PUBLIC_LIMITED';
+          } else if (typeStr.includes('COMPANY') || typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
+            const isPublic = typeStr.includes('PUBLIC') || (!typeStr.includes('PVT') && !typeStr.includes('PRIVATE') && String(orgName).toUpperCase().includes('LIMITED') && !String(orgName).toUpperCase().includes('PVT') && !String(orgName).toUpperCase().includes('PRIVATE'));
+            orgType = isPublic ? 'PUBLIC_LIMITED' : 'PRIVATE_LIMITED';
           } else if (typeStr.includes('SHG')) {
             orgType = 'SHG';
           } else if (typeStr.includes('NGO')) {
@@ -1057,10 +1065,11 @@ export const authController = {
           : { scopeType: 'PLATFORM' as const, scopeId: null };
       const permissions = isMasterAdmin(updatedUser) ? ['*'] : await getActivePermissionCodes(updatedUser.id, loginScope as any);
       const loginEnabledFeatures = await resolveEnabledFeatures(districtAssignment?.scopeId ?? null);
+      const safeUser = await buildSafeAuthPayload(updatedUser.id);
       res.json({
         ...tokens,
         user: toSafeUser({
-          ...updatedUser,
+          ...(safeUser || updatedUser),
           permissions,
           enabledFeatures: loginEnabledFeatures
         })
@@ -1127,10 +1136,11 @@ export const authController = {
           })
         : null;
       const twoFaEnabledFeatures = await resolveEnabledFeatures(twoFaDistrictAssignment?.scopeId ?? null);
+      const safeUser = await buildSafeAuthPayload(updatedUser.id);
       res.json({
         ...tokens,
         user: toSafeUser({
-          ...updatedUser,
+          ...(safeUser || updatedUser),
           permissions: twoFaPermissions,
           enabledFeatures: twoFaEnabledFeatures
         })
@@ -1729,10 +1739,6 @@ export const authController = {
 
       const otp = generateOtp();
       const otpState = await storeOtp('sub_user_mobile_verify', mobile, otp);
-      if (env.NODE_ENV !== 'production') {
-        logger.info({ mobile, otp }, `[SUB-USER MOBILE OTP] Mobile: ${mobile} | OTP: ${otp}`);
-        console.log(`\n\x1b[33m--- [SUB-USER MOBILE OTP] Mobile: ${mobile} | OTP: ${otp} ---\x1b[0m\n`);
-      }
 
       await smsService.sendOtpSms(mobile, otp, 'registration_otp');
       await auditLog({

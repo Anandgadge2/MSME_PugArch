@@ -49,9 +49,9 @@ import {
   SectionCard
 } from '../../procurementWizard/components/SourcingWizardComponents';
 import { KpiCard } from '../../shared/KpiCard';
-import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
-import { Pagination } from '../../shared/Pagination';
+import { DataTable, ColumnDef, type SortDirection } from '../../../components/ui/data-table';
 import { usePagination } from '../../shared/hooks';
+import { formatDate } from '../../shared/format';
 
 interface NormalizedProcurement {
   id: number;
@@ -101,18 +101,7 @@ const formatCurrency = (val: number) => {
   }).format(val);
 };
 
-const formatDateTime = (value?: string) => {
-  if (!value) return '—';
-  try {
-    return new Date(value).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  } catch {
-    return value;
-  }
-};
+const formatDateTime = (value?: string) => formatDate(value);
 
 export default function BuyerProcurementHub() {
   const { token, user } = useAuth();
@@ -429,6 +418,140 @@ export default function BuyerProcurementHub() {
     setPage,
     setPageSize
   } = usePagination(sortedProcurements, 10);
+
+  const procurementColumns = useMemo<ColumnDef<NormalizedProcurement>[]>(() => [
+    {
+      key: 'referenceNumber',
+      header: 'Procurement Number',
+      sortable: true,
+      sortKey: 'referenceNumber',
+      cell: (p) => (
+        <span className="font-bold text-slate-900 truncate block max-w-[140px]">
+          {p.referenceNumber || `REF-${p.id}`}
+        </span>
+      )
+    },
+    {
+      key: 'title',
+      header: 'Title',
+      sortable: true,
+      sortKey: 'title',
+      minWidth: 'min-w-[180px]',
+      cell: (p) => (
+        <span className="font-bold text-slate-900 line-clamp-1 truncate block max-w-[200px]" title={p.title}>
+          {p.title}
+        </span>
+      )
+    },
+    {
+      key: 'method',
+      header: 'Method',
+      sortable: true,
+      sortKey: 'method',
+      cell: (p) => <MethodBadge method={p.methodLabel || p.method} />
+    },
+    {
+      key: 'buyerType',
+      header: 'Buyer Type',
+      sortable: true,
+      sortKey: 'buyerType',
+      cell: (p) => {
+        const isRowGov = p.typeLabel.toLowerCase().includes('bid') || p.type.toLowerCase().includes('bid') || p.method.toLowerCase().includes('tender') || p.type.toLowerCase().includes('tender');
+        return <BuyerTypeBadge buyerType={isRowGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER'} />;
+      }
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      sortable: true,
+      sortKey: 'category',
+      cell: (p) => (
+        <span className="truncate block max-w-[120px] text-slate-500">
+          {p.category || '—'}
+        </span>
+      )
+    },
+    {
+      key: 'estimatedValue',
+      header: 'Estimated Value',
+      sortable: true,
+      sortKey: 'estimatedValue',
+      align: 'right',
+      cell: (p) => (
+        <span className="font-bold text-slate-950 tabular-nums">
+          {formatCurrency(p.estimatedValue)}
+        </span>
+      )
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortKey: 'status',
+      cell: (p) => <ProcurementStatusBadge status={p.status} />
+    },
+    {
+      key: 'createdAt',
+      header: 'Created Date',
+      sortable: true,
+      sortKey: 'createdAt',
+      cell: (p) => <span className="text-slate-500">{formatDateTime(p.createdAt)}</span>
+    },
+    {
+      key: 'endDate',
+      header: 'Deadline',
+      sortable: true,
+      sortKey: 'endDate',
+      cell: (p) => <span className="text-slate-500">{formatDateTime(p.endDate || p.startDate)}</span>
+    },
+    {
+      key: 'responsesCount',
+      header: 'Responses',
+      sortable: true,
+      sortKey: 'responsesCount',
+      align: 'center',
+      cell: (p) => (
+        <span className="text-slate-950 font-bold tabular-nums">
+          {p.responsesCount ?? 0}
+        </span>
+      )
+    },
+    {
+      key: 'statusGroup',
+      header: 'Approval Status',
+      sortable: true,
+      sortKey: 'statusGroup',
+      cell: (p) => (
+        <span className={cn(
+          "px-2 py-0.5 rounded text-[9px] uppercase font-bold border",
+          p.statusGroup === 'draft' ? "bg-slate-100 border-slate-200 text-slate-700" :
+          p.statusGroup === 'pending_approval' ? "bg-amber-100 border-amber-250 text-amber-800" :
+          "bg-emerald-100 border-emerald-200 text-emerald-800"
+        )}>
+          {p.statusGroup.replace(/_/g, ' ')}
+        </span>
+      )
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      align: 'right',
+      cell: (p) => {
+        const isDraft = p.statusGroup === 'draft' || p.status.toLowerCase().includes('draft');
+        const finalActionUrl = resolveProcurementActionUrl(p);
+        return (
+          <Link href={finalActionUrl} onClick={(e) => e.stopPropagation()}>
+            <Button
+              size="sm"
+              className="h-7 rounded-full bg-[#12335f] px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-[#0f2a4f]"
+            >
+              <Eye className="h-3 w-3 mr-1" /> {isDraft ? 'Resume' : 'View'}
+            </Button>
+          </Link>
+        );
+      }
+    }
+  ], []);
 
   const handleRefresh = () => {
     refetchSummary();
@@ -948,98 +1071,26 @@ export default function BuyerProcurementHub() {
           />
         ) : (
           <div className="space-y-4">
-            <div className="overflow-x-auto rounded-[20px] bg-slate-50/70 p-2">
-              <table className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-xs">
-              <thead>
-                <tr>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Procurement Number</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Title</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Method</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Buyer Type</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Category</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Estimated Value</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Status</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Created Date</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Deadline</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Responses</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500">Approval Status</th>
-                  <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="font-medium text-slate-700">
-                {filteredProcurements.map(p => {
-                  const isRowGov = p.typeLabel.toLowerCase().includes('bid') || p.type.toLowerCase().includes('bid') || p.method.toLowerCase().includes('tender') || p.type.toLowerCase().includes('tender');
-                  const isDraft = p.statusGroup === 'draft' || p.status.toLowerCase().includes('draft');
-                  const finalActionUrl = resolveProcurementActionUrl(p);
-
-                    return (
-                      <tr key={`${p.type}-${p.id}`} className="group bg-white shadow-3xs transition hover:shadow-sm">
-                        <td className="max-w-[120px] truncate rounded-l-2xl px-4 py-3.5 font-bold text-slate-900">
-                          {p.referenceNumber || `REF-${p.id}`}
-                        </td>
-                        <td className="px-4 py-3.5 font-bold text-slate-900 max-w-[200px]">
-                          <span className="line-clamp-1 truncate block">{p.title}</span>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <MethodBadge method={p.methodLabel || p.method} />
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <BuyerTypeBadge buyerType={isRowGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER'} />
-                        </td>
-                        <td className="px-4 py-3.5 truncate max-w-[120px] text-slate-500">
-                          {p.category || '—'}
-                        </td>
-                        <td className="px-4 py-3.5 font-bold text-slate-950 tabular-nums">
-                          {formatCurrency(p.estimatedValue)}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <ProcurementStatusBadge status={p.status} />
-                        </td>
-                        <td className="px-4 py-3.5 text-slate-500">
-                          {formatDateTime(p.createdAt)}
-                        </td>
-                        <td className="px-4 py-3.5 text-slate-500">
-                          {formatDateTime(p.endDate || p.startDate)}
-                        </td>
-                        <td className="px-4 py-3.5 text-slate-950 font-bold tabular-nums text-center">
-                          {p.responsesCount ?? 0}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className={cn(
-                            "px-2 py-0.5 rounded text-[9px] uppercase font-bold border",
-                            p.statusGroup === 'draft' ? "bg-slate-100 border-slate-200 text-slate-700" :
-                            p.statusGroup === 'pending_approval' ? "bg-amber-100 border-amber-250 text-amber-800" :
-                            "bg-emerald-100 border-emerald-200 text-emerald-800"
-                          )}>
-                            {p.statusGroup.replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                        <td className="shrink-0 rounded-r-2xl px-4 py-3.5 text-right">
-                          <Link href={finalActionUrl}>
-                            <Button
-                              size="sm"
-                              className="h-7 rounded-full bg-[#12335f] px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-[#0f2a4f]"
-                            >
-                              <Eye className="h-3 w-3 mr-1" /> {isDraft ? 'Resume' : 'View'}
-                            </Button>
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-                label="procurements"
-              />
-            </div>
+            <DataTable<NormalizedProcurement>
+              data={pagedProcurements}
+              columns={procurementColumns}
+              keyExtractor={(p) => `${p.type}-${p.id}`}
+              sortKey={sortKey}
+              sortDirection={sortDir}
+              onSort={(field) => handleSort(field as HubSortKey)}
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              paginationLabel="procurements"
+              minWidth="min-w-[1120px]"
+              onRowClick={(p) => {
+                const url = resolveProcurementActionUrl(p);
+                router.push(url);
+              }}
+              rowClassName="hover:bg-slate-50/50 cursor-pointer text-xs"
+            />
           </div>
         )}
       </SectionCard>

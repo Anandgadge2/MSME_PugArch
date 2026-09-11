@@ -15,7 +15,7 @@ import { api } from '../lib/api';
 import { openFileAsset } from '../lib/files';
 import { cn } from '../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../features/shared/FeatureStates';
-import { formatCurrency, formatDate, maskEmail } from '../features/shared/format';
+import { formatCurrency, formatDate, formatDateTime, formatTime, maskEmail } from '../features/shared/format';
 import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
@@ -28,6 +28,7 @@ import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
 import { useDeliveryByPO } from '../features/delivery/hooks';
 import { PageTableSkeleton } from '../components/ui/skeleton';
+import { DataTable, type ColumnDef } from '../components/ui/data-table';
 
 const readableStatus = (value?: string) => String(value || 'generated').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
 const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued'];
@@ -553,17 +554,7 @@ export default function PurchaseOrders() {
   };
 
   const formatTimestamp = (value?: string | Date | null) => {
-    if (!value) return '-';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '-';
-    return date.toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
+    return formatDateTime(value);
   };
 
 
@@ -808,6 +799,92 @@ export default function PurchaseOrders() {
     (expectedDateFilter !== 'All Dates' ? 1 : 0) + 
     ((updatedDateFilter.start || updatedDateFilter.end) ? 1 : 0);
 
+  const poColumns: ColumnDef<PurchaseOrderDto>[] = [
+    {
+      key: 'poNumber',
+      header: <SortHeader label="PO" columnKey="po" sortBy={sortBy} onToggleSort={toggleSort} />,
+      width: 'w-[9%]',
+      cell: (order) => (
+        <span className="font-mono text-xs font-black text-[#12335f] whitespace-nowrap">
+          <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
+        </span>
+      ),
+    },
+    {
+      key: 'title',
+      header: <SortHeader label="Title" columnKey="title" sortBy={sortBy} onToggleSort={toggleSort} />,
+      width: 'w-[24%]',
+      cell: (order) => (
+        <div>
+          <p className="font-bold text-slate-900">{order.title}</p>
+          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+            <span className="text-[9px] font-bold text-slate-500">{formatDate(order.createdAt)}</span>
+            {order.paymentTerms && (
+              <span className="text-[9px] font-black text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded uppercase">
+                {readableStatus(order.paymentTerms)}
+              </span>
+            )}
+            {order.deliveryType && (
+              <span className="text-[9px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded uppercase">
+                {readableStatus(order.deliveryType)}
+              </span>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'party',
+      header: <SortHeader label="Party" columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} />,
+      width: 'w-[14%]',
+      cell: (order) => (
+        <span className="text-slate-600">{order.seller?.name || maskEmail(order.seller?.email) || `Seller #${order.sellerId || '-'}`}</span>
+      ),
+    },
+    {
+      key: 'value',
+      header: <SortHeader label="Value" columnKey="value" sortBy={sortBy} onToggleSort={toggleSort} />,
+      width: 'w-[10%]',
+      cell: (order) => (
+        <span className="font-bold text-slate-900">{formatCurrency(order.amount || order.totalValue)}</span>
+      ),
+    },
+    {
+      key: 'expected',
+      header: <SortHeader label="Expected" columnKey="expected" sortBy={sortBy} onToggleSort={toggleSort} />,
+      width: 'w-[8%]',
+      cell: (order) => <span className="text-slate-500">{formatDate(order.expectedDelivery)}</span>,
+    },
+    {
+      key: 'updated',
+      header: <SortHeader label="Updated At" columnKey="updated" sortBy={sortBy} onToggleSort={toggleSort} />,
+      width: 'w-[11%]',
+      cell: (order) =>
+        order.updatedAt ? (
+          <div>
+            <p className="text-slate-700">{formatDate(order.updatedAt)}</p>
+            <p className="text-[9px] font-semibold text-slate-400 mt-0.5">{formatTime(order.updatedAt)}</p>
+          </div>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
+    {
+      key: 'status',
+      header: <SortHeader label="Status" columnKey="status" sortBy={sortBy} onToggleSort={toggleSort} />,
+      width: 'w-[12%]',
+      cell: (order) => <StatusPill status={order.status} />,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-[8%]',
+      align: 'right',
+      cellClassName: 'text-right',
+      cell: (order) => renderOrderActions(order),
+    },
+  ];
+
   if ((loading || refreshing) && (!allOrders || allOrders.length === 0)) {
     return <PageTableSkeleton kpiCount={4} />;
   }
@@ -998,87 +1075,19 @@ export default function PurchaseOrders() {
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="overflow-x-auto w-full max-w-full">
-            <table className="w-full min-w-[1000px] border-collapse text-left text-xs table-fixed">
-              <colgroup>
-                <col className="w-[4%]" />
-                <col className="w-[9%]" />
-                <col className="w-[24%]" />
-                <col className="w-[14%]" />
-                <col className="w-[10%]" />
-                <col className="w-[8%]" />
-                <col className="w-[11%]" />
-                <col className="w-[12%]" />
-                <col className="w-[8%]" />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/75">
-                  <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Sr. No</th>
-                  <th className="p-3"><SortHeader label="PO" columnKey="po" sortBy={sortBy} onToggleSort={toggleSort} /></th>
-                  <th className="p-3"><SortHeader label="Title" columnKey="title" sortBy={sortBy} onToggleSort={toggleSort} /></th>
-                  <th className="p-3"><SortHeader label="Party" columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} /></th>
-                  <th className="p-3"><SortHeader label="Value" columnKey="value" sortBy={sortBy} onToggleSort={toggleSort} /></th>
-                  <th className="p-3"><SortHeader label="Expected" columnKey="expected" sortBy={sortBy} onToggleSort={toggleSort} /></th>
-                  <th className="p-3"><SortHeader label="Updated At" columnKey="updated" sortBy={sortBy} onToggleSort={toggleSort} /></th>
-                  <th className="p-3"><SortHeader label="Status" columnKey="status" sortBy={sortBy} onToggleSort={toggleSort} /></th>
-                  <th className="p-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                {visibleOrders.map((order, index) => {
-                  const rowIndex = (page - 1) * pageSize + index + 1;
-                  return (
-                    <tr key={order.id} className="hover:bg-slate-50/50 transition">
-                      <td className="p-3 font-mono text-xs text-slate-500">
-                        {String(rowIndex).padStart(2, '0')}
-                      </td>
-                      <td className="p-3 font-mono text-xs font-black text-[#12335f] whitespace-nowrap">
-                        <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
-                      </td>
-                      <td className="p-3">
-                        <p className="font-bold text-slate-900">{order.title}</p>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                          <span className="text-[9px] font-bold text-slate-500">{formatDate(order.createdAt)}</span>
-                          {order.paymentTerms && (
-                            <span className="text-[9px] font-black text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded uppercase">
-                              {readableStatus(order.paymentTerms)}
-                            </span>
-                          )}
-                          {order.deliveryType && (
-                            <span className="text-[9px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded uppercase">
-                              {readableStatus(order.deliveryType)}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-3 text-slate-600">{order.seller?.name || maskEmail(order.seller?.email) || `Seller #${order.sellerId || '-'}`}</td>
-                      <td className="p-3 font-bold text-slate-900">{formatCurrency(order.amount || order.totalValue)}</td>
-                      <td className="p-3 text-slate-500">{formatDate(order.expectedDelivery)}</td>
-                      <td className="p-3">
-                        {order.updatedAt ? (
-                          <div>
-                            <p className="text-slate-700">{formatDate(order.updatedAt)}</p>
-                            <p className="text-[9px] font-semibold text-slate-400 mt-0.5">
-                              {new Date(order.updatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                            </p>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="p-3"><StatusPill status={order.status} /></td>
-                      <td className="p-3 text-right">
-                        {renderOrderActions(order)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="orders" />
-        </div>
+        <DataTable<PurchaseOrderDto>
+          data={visibleOrders}
+          columns={poColumns}
+          keyExtractor={(order) => order.id}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          paginationLabel="orders"
+          srNoWidth="w-[4%]"
+          minWidth="min-w-[1000px]"
+        />
       )}
 
       {confirming && (
@@ -1498,37 +1507,55 @@ export default function PurchaseOrders() {
                   </span>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-100/70 text-[9px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200/80">
-                      <tr>
-                        <th className="w-16 px-4 py-3">Sr. No</th>
-                        <th className="px-4 py-3">Item Description</th>
-                        <th className="px-4 py-3 w-20 text-center">Qty</th>
-                        <th className="px-4 py-3 text-right w-32">Unit Price</th>
-                        <th className="px-4 py-3 text-right w-36">Total Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {(viewingOrder.items?.length ? viewingOrder.items : [{ itemName: viewingOrder.title, quantity: 1, unitPrice: viewingOrder.amount || viewingOrder.totalValue, totalAmount: viewingOrder.amount || viewingOrder.totalValue }]).map((item, idx) => (
-                        <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
-                          <td className="px-4 py-3.5 text-xs font-black text-slate-400 font-mono">{String(idx + 1).padStart(2, '0')}</td>
-                          <td className="px-4 py-3.5">
+                  <DataTable
+                    data={viewingOrder.items?.length ? viewingOrder.items : [{ itemName: viewingOrder.title, quantity: 1, unitPrice: viewingOrder.amount || viewingOrder.totalValue, totalAmount: viewingOrder.amount || viewingOrder.totalValue }]}
+                    columns={[
+                      {
+                        key: 'itemName',
+                        header: 'Item Description',
+                        cell: (item: any) => (
+                          <div>
                             <p className="font-black text-slate-900 text-xs">{item.itemName || viewingOrder.title}</p>
                             {(item as any).description && <p className="text-[10px] font-semibold text-slate-500 mt-0.5">{(item as any).description}</p>}
-                          </td>
-                          <td className="px-4 py-3.5 text-center">
-                            <span className="inline-block rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-800 font-mono">
-                              {Number(item.quantity || 1)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5 text-right font-semibold text-slate-600 font-mono">{formatCurrency(item.unitPrice)}</td>
-                          <td className="px-4 py-3.5 text-right font-black text-slate-900 font-mono">{formatCurrency(item.totalAmount || (Number(item.quantity || 1) * Number(item.unitPrice || 0)))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                          </div>
+                        )
+                      },
+                      {
+                        key: 'quantity',
+                        header: 'Qty',
+                        width: 'w-20',
+                        align: 'center',
+                        cell: (item: any) => (
+                          <span className="inline-block rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-800 font-mono">
+                            {Number(item.quantity || 1)}
+                          </span>
+                        )
+                      },
+                      {
+                        key: 'unitPrice',
+                        header: 'Unit Price',
+                        width: 'w-32',
+                        align: 'right',
+                        cell: (item: any) => (
+                          <span className="font-semibold text-slate-600 font-mono">{formatCurrency(item.unitPrice)}</span>
+                        )
+                      },
+                      {
+                        key: 'totalAmount',
+                        header: 'Total Amount',
+                        width: 'w-36',
+                        align: 'right',
+                        cell: (item: any) => (
+                          <span className="font-black text-slate-900 font-mono">{formatCurrency(item.totalAmount || (Number(item.quantity || 1) * Number(item.unitPrice || 0)))}</span>
+                        )
+                      }
+                    ]}
+                    keyExtractor={(item: any, idx: number) => item.id || `po-item-${idx}`}
+                    showSrNo={true}
+                    srNoHeader="Sr. No"
+                    srNoWidth="w-16"
+                    rowClassName="hover:bg-blue-50/30 transition-colors"
+                  />
 
                 <div className="flex justify-end p-4 bg-slate-50/60 border-t border-slate-200/80">
                   <div className="bg-[#12335f] text-white rounded-2xl px-6 py-3 text-right shadow-md">

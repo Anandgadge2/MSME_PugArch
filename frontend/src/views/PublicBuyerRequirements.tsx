@@ -29,8 +29,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { downloadCsv } from '../features/shared/exportUtils';
-import { Pagination } from '../features/shared/Pagination';
-import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
+import { type SortDirection } from '../features/shared/SortableHeader';
+import { DataTable, type ColumnDef } from '../components/ui/data-table';
 import { KpiCard } from '../features/shared/KpiCard';
 
 type RequirementSortKey = 'serialNo' | 'itemDescription' | 'category' | 'estimatedMonthlyRequirement' | 'unit' | 'remarks';
@@ -180,6 +180,65 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
     }
     return palette[Math.abs(hash) % palette.length];
   };
+
+  const requirementColumns: ColumnDef<any>[] = useMemo(() => [
+    {
+      key: 'itemDescription',
+      header: 'Item Description',
+      sortable: true,
+      sortKey: 'itemDescription',
+      cellClassName: 'font-black text-slate-900 max-w-xs break-words',
+      cell: (item: any) => <div className="leading-snug">{item.itemDescription}</div>
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      sortable: true,
+      sortKey: 'category',
+      width: 'w-36',
+      cell: (item: any) => item.category ? (
+        <span className={`inline-block rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wider border ${getCategoryColor(item.category)}`}>
+          {item.category}
+        </span>
+      ) : (
+        <span className="text-slate-400 font-medium italic">Uncategorized</span>
+      )
+    },
+    {
+      key: 'estimatedMonthlyRequirement',
+      header: 'Monthly Requirement',
+      sortable: true,
+      sortKey: 'estimatedMonthlyRequirement',
+      align: 'center',
+      width: 'w-36',
+      cell: (item: any) => item.estimatedMonthlyRequirement ? (
+        <span className="inline-block bg-blue-50/80 text-blue-900 border border-blue-200/80 px-2.5 py-0.5 rounded-md font-black text-xs">
+          {item.estimatedMonthlyRequirement}
+        </span>
+      ) : (
+        <span className="text-slate-400">-</span>
+      )
+    },
+    {
+      key: 'unit',
+      header: 'Unit',
+      sortable: true,
+      sortKey: 'unit',
+      align: 'center',
+      width: 'w-24',
+      cellClassName: 'font-bold text-slate-600',
+      cell: (item: any) => item.unit || '-'
+    },
+    {
+      key: 'remarks',
+      header: 'Remarks',
+      sortable: true,
+      sortKey: 'remarks',
+      width: 'w-48',
+      cellClassName: 'text-slate-500 font-medium max-w-xs truncate text-xs',
+      cell: (item: any) => <span title={item.remarks}>{item.remarks || '-'}</span>
+    }
+  ], []);
 
   if (loading) {
     return (
@@ -572,107 +631,29 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
                 </div>
 
                 {/* Table */}
-                <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-xs">
-                  <table className="w-full border-collapse text-left text-xs font-semibold text-slate-700">
-                    <thead>
-                      <tr className="bg-gradient-to-r from-slate-100 via-blue-50/50 to-slate-100 border-b border-slate-200 text-[10px] font-black uppercase text-slate-600 tracking-wider">
-                        <th className="p-4 w-16 text-center">Sl.</th>
-                        <th className="p-4"><SortableHeader label="Item Description" field="itemDescription" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                        <th className="p-4 w-36"><SortableHeader label="Category" field="category" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                        <th className="p-4 w-36 text-center"><SortableHeader label="Monthly Requirement" field="estimatedMonthlyRequirement" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                        <th className="p-4 w-24 text-center"><SortableHeader label="Unit" field="unit" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                        <th className="p-4 w-48"><SortableHeader label="Remarks" field="remarks" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {itemsLoading ? (
-                        <tr>
-                          <td colSpan={6} className="p-12 text-center bg-slate-50/30">
-                            <div className="flex flex-col items-center gap-3">
-                              <div className="h-8 w-8 rounded-full border-3 border-blue-200 border-t-blue-600 animate-spin" />
-                              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Filtering items...</span>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : currentItems.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="p-12 text-center bg-slate-50/30">
-                            <div className="flex flex-col items-center justify-center gap-2">
-                              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center">
-                                <Search className="h-6 w-6" />
-                              </div>
-                              <p className="text-slate-700 font-extrabold text-sm uppercase">No Requirements Found</p>
-                              <p className="text-xs text-slate-400 font-medium">Try clearing your search term or selecting a different category.</p>
-                              {(searchTerm || selectedCategory) && (
-                                <Button
-                                  onClick={() => { setSearchTerm(''); setSelectedCategory(''); }}
-                                  variant="outline"
-                                  className="mt-3 text-xs font-bold h-8 rounded-xl"
-                                >
-                                  Clear Filters
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ) : (
-                        currentItems.map((item, index) => (
-                          <tr
-                            key={item.id || index}
-                            className="hover:bg-blue-50/40 transition-colors group"
-                          >
-                            <td className="p-4 text-center">
-                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 group-hover:bg-blue-100 text-slate-600 group-hover:text-blue-800 text-[11px] font-bold">
-                                {item.serialNo || (indexOfFirstItem + index + 1)}
-                              </span>
-                            </td>
-                            <td className="p-4 font-black text-slate-900 max-w-xs break-words">
-                              <div className="leading-snug">{item.itemDescription}</div>
-                            </td>
-                            <td className="p-4">
-                              {item.category ? (
-                                <span className={`inline-block rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wider border ${getCategoryColor(item.category)}`}>
-                                  {item.category}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 font-medium italic">Uncategorized</span>
-                              )}
-                            </td>
-                            <td className="p-4 text-center">
-                              {item.estimatedMonthlyRequirement ? (
-                                <span className="inline-block bg-blue-50/80 text-blue-900 border border-blue-200/80 px-2.5 py-0.5 rounded-md font-black text-xs">
-                                  {item.estimatedMonthlyRequirement}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">-</span>
-                              )}
-                            </td>
-                            <td className="p-4 text-center font-bold text-slate-600">
-                              {item.unit || '-'}
-                            </td>
-                            <td className="p-4 text-slate-500 font-medium max-w-xs truncate text-xs" title={item.remarks}>
-                              {item.remarks || '-'}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Pagination */}
-                {!itemsLoading && items.length > 0 && (
-                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                    <Pagination
-                      page={currentPage}
-                      pageSize={itemsPerPage}
-                      total={items.length}
-                      onPageChange={setCurrentPage}
-                      onPageSizeChange={setItemsPerPage}
-                      label="items"
-                    />
-                  </div>
-                )}
+                <DataTable
+                  data={currentItems}
+                  columns={requirementColumns}
+                  keyExtractor={(item: any, index) => item.id || index}
+                  showSrNo={true}
+                  srNoHeader="Sl."
+                  srNoWidth="w-16"
+                  minWidth="min-w-[700px]"
+                  sortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onSort={(key) => toggleSort(key as RequirementSortKey)}
+                  isLoading={itemsLoading}
+                  page={currentPage}
+                  pageSize={itemsPerPage}
+                  total={items.length}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setItemsPerPage}
+                  pageSizeOptions={[10, 20, 50]}
+                  paginationLabel="items"
+                  emptyTitle="No Requirements Found"
+                  emptyDescription="Try clearing your search term or selecting a different category."
+                  rowClassName="hover:bg-blue-50/40 transition-colors group"
+                />
               </CardContent>
             </Card>
           </div>

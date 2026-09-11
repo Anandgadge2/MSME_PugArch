@@ -14,6 +14,7 @@ import {
   Loader2,
   AlertCircle,
   EyeOff,
+  Info,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { reverseAuctionApi, type ReverseAuction, type ReverseAuctionParticipant } from '../api';
@@ -67,10 +68,15 @@ export default function SellerLiveAuctionBanner({
       if (diff <= 0) {
         setTimeLeft('00:00:00');
       } else {
-        const hrs = String(Math.floor(diff / 3600000)).padStart(2, '0');
+        const days = Math.floor(diff / 86400000);
+        const hrs = String(Math.floor((diff % 86400000) / 3600000)).padStart(2, '0');
         const mins = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
         const secs = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
-        setTimeLeft(`${hrs}:${mins}:${secs}`);
+        if (days > 0) {
+          setTimeLeft(`${days}d ${hrs}h ${mins}m ${secs}s`);
+        } else {
+          setTimeLeft(`${hrs}:${mins}:${secs}`);
+        }
       }
     };
     updateTimer();
@@ -108,13 +114,16 @@ export default function SellerLiveAuctionBanner({
               <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
             </span>
             <span className="text-xs font-black uppercase tracking-widest text-red-400">
-              Live Reverse Auction Active
+              Stage 2: Live Reverse Auction Active
             </span>
             {procurementReference && (
               <span className="rounded-md bg-slate-800 border border-slate-700 px-2 py-0.5 text-[10px] font-mono font-bold text-slate-300">
                 {procurementReference}
               </span>
             )}
+            <span className="rounded-full bg-red-950/80 border border-red-500/30 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-300">
+              Dynamic Bidding Window
+            </span>
           </div>
 
           <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 bg-slate-800/80 px-3 py-1 rounded-full border border-slate-700">
@@ -123,17 +132,25 @@ export default function SellerLiveAuctionBanner({
           </div>
         </div>
 
+        {/* Two-Stage Explanatory Banner */}
+        <div className="mt-3.5 flex items-center gap-2 rounded-xl bg-slate-900/90 border border-slate-800 px-3.5 py-2 text-[11px] text-slate-300">
+          <Info className="h-4 w-4 text-amber-400 shrink-0" />
+          <span>
+            <strong className="text-amber-300">Two-Stage Procurement Notice:</strong> This banner reflects the <strong>Stage 2 Live Reverse Auction</strong> closing time. Initial qualification quotes must be submitted by the <strong>Stage 1 Submission Deadline</strong> below.
+          </span>
+        </div>
+
         {/* Content & KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 py-5">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 py-4">
           {/* Time Remaining */}
           <div className="space-y-1">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5 text-red-400" /> Time Remaining
+              <Clock className="h-3.5 w-3.5 text-red-400" /> Auction Closes In
             </span>
             <p className="font-mono text-2xl font-black text-red-400 tracking-wider">
               {timeLeft}
             </p>
-            <p className="text-[10px] text-slate-400 font-medium">Validated with server time</p>
+            <p className="text-[10px] text-red-300/90 font-medium">Stage 2 Live Auction Cutoff</p>
           </div>
 
           {/* Market L1 */}

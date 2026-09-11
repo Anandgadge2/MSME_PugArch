@@ -49,8 +49,11 @@ import {
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
+import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
+import { useOrgRole } from '../../../hooks/useOrgRole';
+import { getResolvedOrgName } from '../../../utils/organizationUtils';
 import { marketplaceApi } from '../../marketplace/api';
 import { DELIVERY_TYPES, PAYMENT_TERMS, QUANTITY_UNITS } from '../../../constants/dropdowns';
 import { formatRefId } from '../../../utils/refIdUtils';
@@ -63,6 +66,7 @@ import {
 import { api, BASE_URL, readJsonResponse, unwrapApiData } from '../../../lib/api';
 import { authHeaders, unwrap } from '../../shared/apiClient';
 import { downloadCsv } from '../../shared/exportUtils';
+import ExcelJS from 'exceljs';
 import { fetchDeliveryAddresses, createDeliveryAddress, type DeliveryAddressDto } from '../../directPurchase/api';
 import { useActiveCart } from '../../cart/hooks';
 import type { CartItemDto } from '../../cart/api';
@@ -377,7 +381,7 @@ const isRateContractMethod = (method: ProcurementMethodId) => method === 'RATE_C
 const itemTemplateHeaders = [
   'Item Type',
   'Item Name',
-  'Description',
+  'Description / Scope of Work',
   'Quantity',
   'Unit',
   'Unit Price',
@@ -432,39 +436,208 @@ const parseCsvText = (text: string): string[][] => {
   return rows;
 };
 
+const readSpreadsheetRows = async (file: File): Promise<string[][]> => {
+  const lowerName = file.name.toLowerCase();
+  const isExcel = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
+
+  if (isExcel) {
+    const workbook = new ExcelJS.Workbook();
+    const arrayBuffer = await file.arrayBuffer();
+    await workbook.xlsx.load(arrayBuffer);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) return [];
+
+    const rows: string[][] = [];
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      const rowValues: string[] = [];
+      const values = row.values;
+      if (Array.isArray(values)) {
+        for (let i = 1; i < values.length; i++) {
+          const val = values[i];
+          if (val === null || val === undefined) {
+            rowValues.push('');
+          } else if (typeof val === 'object' && 'result' in val) {
+            rowValues.push(String((val as any).result ?? '').trim());
+          } else if (typeof val === 'object' && 'text' in val) {
+            rowValues.push(String((val as any).text ?? '').trim());
+          } else {
+            rowValues.push(String(val).trim());
+          }
+        }
+      }
+      if (rowValues.some(c => c.length > 0)) {
+        rows.push(rowValues);
+      }
+    });
+    return rows;
+  }
+
+  return parseCsvText(await file.text());
+};
+
 const normalizeImportHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+const DESCRIPTION_SCOPE_ALIASES = [
+  'descriptionscopeofwork',
+  'descriptionscope',
+  'scopeofwork',
+  'scopeofworkdeliverables',
+  'scopeofworkanddeliverables',
+  'scopeofworkdeliverablesdetails',
+  'scopeofworkdetails',
+  'scopedeliverables',
+  'specificationsscope',
+  'specificationsscopeofwork',
+  'specificationscope',
+  'specificationscopeofwork',
+  'scopespecifications',
+  'scopespecification',
+  'technicalspecification',
+  'technicalspecifications',
+  'technicalspecs',
+  'detailedtechnicalspecifications',
+  'detailedtechnicalspecification',
+  'technicaldetails',
+  'itemdescription',
+  'productdescription',
+  'servicedescription',
+  'workdescription',
+  'detailedscopeofwork',
+  'detailedscope',
+  'description',
+  'specification',
+  'specifications',
+  'scope',
+  'sow',
+  'details',
+  'desc',
+  'remarks',
+  'technicalnote',
+  'technicalnotes',
+  'requirements',
+  'requirement',
+  'specificationname',
+  'specificationvalue'
+];
+
+const ITEM_NAME_ALIASES = [
+  'itemname',
+  'name',
+  'itemservicename',
+  'productservicename',
+  'productname',
+  'servicename',
+  'itemservice',
+  'item',
+  'product',
+  'service',
+  'title',
+  'itemtitle',
+  'particulars',
+  'itemparticulars',
+  'materialname',
+  'equipmentname',
+  'productservice'
+];
+
 const importedCsvRowToItem = (headers: string[], row: string[], index: number): ItemRow | null => {
-  const get = (...names: string[]) => {
-    const headerIndex = headers.findIndex(header => names.includes(normalizeImportHeader(header)));
-    return headerIndex >= 0 ? String(row[headerIndex] || '').trim() : '';
+  const normHeaders = headers.map(normalizeImportHeader);
+
+  const getByAliases = (...aliases: string[]) => {
+    const idx = normHeaders.findIndex(h => aliases.includes(h));
+    return idx >= 0 ? String(row[idx] || '').trim() : '';
   };
 
-  const name = get('itemname', 'name', 'productservice');
+  let name = getByAliases(...ITEM_NAME_ALIASES);
+  let nameColIdx = normHeaders.findIndex(h => ITEM_NAME_ALIASES.includes(h));
+
+  // 1. Direct alias match for Description / Scope of Work
+  let specification = '';
+  for (const alias of DESCRIPTION_SCOPE_ALIASES) {
+    const idx = normHeaders.indexOf(alias);
+    if (idx >= 0 && idx !== nameColIdx && String(row[idx] || '').trim()) {
+      specification = String(row[idx] || '').trim();
+      break;
+    }
+  }
+
+  // 2. Fallback: match any column containing scope, spec, desc, sow, detail (excluding name col)
+  if (!specification) {
+    const candidateIdx = normHeaders.findIndex((h, i) => {
+      if (i === nameColIdx) return false;
+      return (
+        (h.includes('scope') || h.includes('spec') || h.includes('desc') || h.includes('sow') || h.includes('detail')) &&
+        !h.includes('file') && !h.includes('doc') && !h.includes('attach')
+      );
+    });
+    if (candidateIdx >= 0 && String(row[candidateIdx] || '').trim()) {
+      specification = String(row[candidateIdx] || '').trim();
+    }
+  }
+
+  // If name wasn't found, check if a descriptive column exists to use as name
+  if (!name) {
+    const descColIdx = normHeaders.findIndex(h => h.includes('itemdescription') || h === 'particulars' || h === 'description');
+    if (descColIdx >= 0 && String(row[descColIdx] || '').trim()) {
+      name = String(row[descColIdx] || '').trim();
+      nameColIdx = descColIdx;
+      const remColIdx = normHeaders.findIndex(h => h.includes('remark') || h.includes('spec') || h.includes('scope'));
+      if (remColIdx >= 0 && remColIdx !== descColIdx && String(row[remColIdx] || '').trim()) {
+        specification = String(row[remColIdx] || '').trim();
+      } else {
+        specification = name;
+      }
+    }
+  }
+
   if (!name) return null;
 
-  const rawType = get('itemtype', 'type').toLowerCase();
+  const rawType = getByAliases('itemtype', 'type', 'category', 'kind', 'itemkind', 'productservice', 'classification').toLowerCase();
   const itemType: 'Product' | 'Service' = rawType.includes('service') ? 'Service' : 'Product';
-  const quantity = Math.max(1, Math.round(Number(get('quantity', 'qty')) || 1));
+  const quantity = Math.max(1, Math.round(Number(getByAliases('quantity', 'qty', 'count', 'units', 'numberofunits', 'targetqty', 'requiredqty', 'monthlyrequirement', 'estimatedmonthlyrequirement', 'estimatedquantity')) || 1));
+
+  const uom = getByAliases('unit', 'uom', 'unitofmeasure', 'measuringunit', 'unittype', 'measurementunit') || (itemType === 'Service' ? 'Set' : 'Nos');
+  const unitPrice = Number(getByAliases('unitprice', 'rate', 'estimatedunitprice', 'estimatedrate', 'price', 'baseprice', 'cost', 'unitrate', 'estimatedrateinr', 'targetprice')) || 0;
+  const gst = Number(getByAliases('gst', 'gstpercent', 'gstpercentage', 'gstrate', 'tax', 'taxpercent', 'taxpercentage')) || 18;
+  const deliveryDate = getByAliases('deliverydate', 'requireddate', 'expecteddate', 'deliverytimeline', 'date') || nextFortnight;
+  const hsn_sac_code = getByAliases('hsnsac', 'hsn', 'sac', 'hsncode', 'saccode', 'hsnsaccode');
+  const brand_preference = getByAliases('preferredbrand', 'brandpreference', 'brand', 'make', 'brandname', 'manufacturer', 'makemodel');
+  const brand_flexible = getByAliases('brandflexible', 'alternatebrandsallowed', 'brandflexibility') || 'Yes';
 
   return {
     id: `import:${Date.now()}:${index}:${makeId()}`,
     itemType,
     name,
-    specification: get('description', 'specification', 'specifications', 'details'),
+    specification,
     quantity,
-    unit: get('unit', 'uom', 'unitofmeasure') || (itemType === 'Service' ? 'Set' : 'Nos'),
-    unitPrice: Number(get('unitprice', 'rate', 'estimatedunitprice')) || 0,
-    gst: Number(get('gst', 'gstpercent', 'gstpercentage')) || 18,
-    deliveryDate: get('deliverydate', 'requireddate') || nextFortnight,
+    unit: uom,
+    unitPrice,
+    gst,
+    deliveryDate,
     brandPolicy: 'Equivalent allowed',
-    technicalSpecification: get('description', 'specification', 'specifications', 'details'),
+    technicalSpecification: specification,
     specificationFileName: '',
-    hsn_sac_code: get('hsnsac', 'hsn', 'sac', 'hsncode', 'saccode'),
-    brand_preference: get('preferredbrand', 'brandpreference', 'brand'),
-    brand_flexible: get('brandflexible', 'alternatebrandsallowed') || 'Yes',
+    hsn_sac_code,
+    brand_preference,
+    brand_flexible,
     fileAssetId: null,
     attachments: [],
+  };
+};
+
+const normalizeDraftItem = (it: any, idx: number): ItemRow => {
+  const sp = (typeof it.specifications === 'object' && it.specifications) ? it.specifications : {};
+  const specText = it.specification || it.technicalSpecification || sp.specification || sp.technicalSpecification || sp.scopeOfWork || sp.description || it.description || it.scopeOfWork || '';
+  return {
+    ...it,
+    id: it.id || `item:${Date.now()}:${idx}:${makeId()}`,
+    itemType: (it.itemType || sp.itemType || 'Product').toLowerCase().includes('service') ? 'Service' : 'Product',
+    name: it.name || it.itemName || sp.name || sp.itemName || `Item #${idx + 1}`,
+    specification: specText,
+    technicalSpecification: it.technicalSpecification || specText,
+    unit: it.unit || it.unitOfMeasure || sp.unit || 'Nos',
+    unitPrice: Number(it.unitPrice || it.estimatedUnitPrice || 0),
+    gst: Number(it.gst || sp.gst || 18),
   };
 };
 
@@ -620,7 +793,7 @@ const getTotalProcurementQty = (draft: Draft): number => {
 const cartItemToProcurementItem = (item: CartItemDto): ItemRow => {
   const product = item.product;
   const service = item.service;
-  const description = product?.description || service?.description || item.technicalNote || item.itemName;
+  const description = product?.description || service?.description || (service as any)?.scopeOfWork || item.technicalNote || item.itemName;
   const unitPrice = Number(item.unitPrice || product?.price || service?.basePrice || 0);
 
   return {
@@ -863,7 +1036,7 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     rebidsAllowed: true,
   },
   terms: {
-    paymentTerms: '100% after delivery and acceptance',
+    paymentTerms: 'ON_DELIVERY',
     deliveryTerms: 'Door delivery to site',
     freightIncluded: true,
     gstIncluded: false,
@@ -903,6 +1076,8 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
 export default function CreateProcurementPage() {
   const router = useRouter();
   const { user, token } = useAuth();
+  const { orgStatus } = useOrgRole();
+  const resolvedOrgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
   const { data: activeCart, isLoading: isCartLoading } = useActiveCart({ enabled: true });
   const searchParams = useSearchParams();
   const draftIdParam = searchParams?.get('id') || searchParams?.get('draftId');
@@ -920,24 +1095,31 @@ export default function CreateProcurementPage() {
 
   // Determine initial buyer type from profile (Government Buyer option removed, defaulting to PRIVATE_BUYER)
   const initialBuyerType = useMemo<BuyerType>(() => {
-    // const u = user as any;
-    // const orgType = u?.buyerProfile?.organizationType || u?.organization?.organizationType || u?.organizationType || '';
-    // const isGov = String(orgType).toUpperCase().includes('GOVT') ||
-    //   String(orgType).toUpperCase().includes('GOVERNMENT') ||
-    //   String(orgType).toUpperCase().includes('MINISTRY') ||
-    //   String(orgType).toUpperCase().includes('DEPT') ||
-    //   String(orgType).toUpperCase().includes('PSU');
-    // return isGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER';
     return 'PRIVATE_BUYER';
   }, []);
 
   const [draft, setDraft] = useState<Draft>(() => {
+    let cachedOrg = '';
     if (typeof window !== 'undefined') {
+      try {
+        const rawUser = localStorage.getItem('msme_user_cache');
+        if (rawUser) {
+          cachedOrg = getResolvedOrgName(JSON.parse(rawUser));
+        }
+      } catch {
+        // ignore
+      }
       try {
         const raw = localStorage.getItem('msme:guided-procurement-create:v2');
         if (raw) {
           const saved = JSON.parse(raw);
           if (saved && typeof saved === 'object') {
+            if (Array.isArray(saved.items)) {
+              saved.items = saved.items.map((it: any, idx: number) => normalizeDraftItem(it, idx));
+            }
+            if (saved.internal && !saved.internal.orgName && cachedOrg) {
+              saved.internal.orgName = cachedOrg;
+            }
             return saved;
           }
         }
@@ -945,7 +1127,11 @@ export default function CreateProcurementPage() {
         console.error('Failed to load local draft from localStorage', e);
       }
     }
-    return defaultDraft(initialMethod, initialBuyerType);
+    const def = defaultDraft(initialMethod, initialBuyerType);
+    if (cachedOrg) {
+      def.internal.orgName = cachedOrg;
+    }
+    return def;
   });
   const draftIdRef = React.useRef<number | undefined>(draft?.id);
   useEffect(() => {
@@ -1057,32 +1243,55 @@ export default function CreateProcurementPage() {
     };
   }, [showItemDrawer]);
 
-  // Auto-fill buyer details and organization on load for new drafts
+  // Auto-fill and reactively keep buyer details & organization in sync from authenticated profile
   useEffect(() => {
-    if (user && !draftIdParam && !hasAutofilled) {
-      const u = user as any;
-      const orgName = u.organization?.organizationName || u.buyerProfile?.organizationName || '';
-      const department = u.buyerProfile?.department || '';
-      const contactPerson = u.buyerProfile?.representativeName || u.name || '';
-      const email = u.buyerProfile?.email || u.email || '';
-      const mobile = u.buyerProfile?.mobile || u.mobile || '';
+    if (!user && !orgStatus) return;
+    const u = user as any;
+    const org = resolvedOrgName || u?.organization?.organizationName || u?.buyerProfile?.organizationName || '';
+    const department = u?.buyerProfile?.department || '';
+    const contactPerson = u?.buyerProfile?.representativeName || u?.name || '';
+    const email = u?.buyerProfile?.email || u?.email || '';
+    const mobile = u?.buyerProfile?.mobile || u?.mobile || '';
 
-      queueMicrotask(() => {
-        setDraft(current => ({
-          ...current,
-          internal: {
-            ...current.internal,
-            orgName: current.internal.orgName || orgName,
-            department: current.internal.department || department,
-            contactPerson: current.internal.contactPerson || contactPerson,
-            email: current.internal.email || email,
-            mobile: current.internal.mobile || mobile,
-          }
-        }));
-        setHasAutofilled(true);
-      });
-    }
-  }, [user, draftIdParam, hasAutofilled]);
+    setDraft(current => {
+      let changed = false;
+      const nextInternal = { ...current.internal };
+
+      if (!nextInternal.orgName?.trim() && org) {
+        nextInternal.orgName = org;
+        changed = true;
+      }
+      if (!nextInternal.department?.trim() && department) {
+        nextInternal.department = department;
+        changed = true;
+      }
+      if (!nextInternal.contactPerson?.trim() && contactPerson) {
+        nextInternal.contactPerson = contactPerson;
+        changed = true;
+      }
+      if (!nextInternal.email?.trim() && email) {
+        nextInternal.email = email;
+        changed = true;
+      }
+      if (!nextInternal.mobile?.trim() && mobile) {
+        nextInternal.mobile = mobile;
+        changed = true;
+      }
+
+      if (!changed) return current;
+
+      const nextDraft = { ...current, internal: nextInternal };
+      if (!draftIdParam && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(nextDraft));
+        } catch {
+          // ignore
+        }
+      }
+      return nextDraft;
+    });
+    setHasAutofilled(true);
+  }, [user, orgStatus, resolvedOrgName, draftIdParam]);
 
   // Auto-fill buyer type on load
   useEffect(() => {
@@ -1125,7 +1334,7 @@ export default function CreateProcurementPage() {
         const base = defaultDraft(payload.type || 'RFQ', payload.basics?.buyerType || initialBuyerType);
 
         const u = userRef.current as any;
-        const orgName = u?.organization?.organizationName || u?.buyerProfile?.organizationName || '';
+        const orgName = resolvedOrgName || u?.organization?.organizationName || u?.buyerProfile?.organizationName || '';
         const department = u?.buyerProfile?.department || '';
         const contactPerson = u?.buyerProfile?.representativeName || u?.name || '';
         const email = u?.buyerProfile?.email || u?.email || '';
@@ -1147,7 +1356,7 @@ export default function CreateProcurementPage() {
           internal: {
             ...base.internal,
             ...internalPayload,
-            orgName: internalPayload.orgName || orgName,
+            orgName: (internalPayload.orgName || '').trim() || orgName,
             department: internalPayload.department || department,
             contactPerson: internalPayload.contactPerson || contactPerson,
             email: internalPayload.email || email,
@@ -1184,7 +1393,7 @@ export default function CreateProcurementPage() {
             ...base.rateContractConfig,
             ...(payload.rateContractConfig || payload.rateContract || {}),
           },
-          items: Array.isArray(payload.items) ? payload.items : base.items,
+          items: Array.isArray(payload.items) ? payload.items.map((it: any, idx: number) => normalizeDraftItem(it, idx)) : base.items,
           boqTable: Array.isArray(payload.boqTable) ? payload.boqTable : base.boqTable,
           requiredDocs: Array.isArray(payload.requiredDocs) ? payload.requiredDocs : base.requiredDocs,
         });
@@ -1443,7 +1652,6 @@ export default function CreateProcurementPage() {
         const end = new Date(auction.endDateTime).getTime();
         if (!auction.auctionTitle.trim()) return false;
         if (!auction.auctionCategory.trim() || auction.auctionCategory === 'Other') return false;
-        if (!auction.auctionSubCategory.trim() || auction.auctionSubCategory === 'Other') return false;
         if (!auction.currency.trim() || auction.currency === 'Other') return false;
         if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
         if (auction.durationMinutes <= 0) return false;
@@ -1711,10 +1919,6 @@ export default function CreateProcurementPage() {
         }
         if (!auction.auctionCategory.trim() || auction.auctionCategory === 'Other') {
           toast.error('Auction category is required.');
-          return false;
-        }
-        if (!auction.auctionSubCategory.trim() || auction.auctionSubCategory === 'Other') {
-          toast.error('Auction subcategory is required.');
           return false;
         }
         if (!auction.currency.trim() || auction.currency === 'Other') {
@@ -2074,6 +2278,7 @@ export default function CreateProcurementPage() {
                 <InternalDetailsForm
                   draft={draft}
                   updateDraft={updateDraft}
+                  resolvedOrgName={resolvedOrgName}
                 />
               </SectionCard>
             )}
@@ -2951,26 +3156,56 @@ function BasicsStepForm({
 // ─────────────────────────────────────────────────────────────────────────────
 function InternalDetailsForm({
   draft,
-  updateDraft
+  updateDraft,
+  resolvedOrgName
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
+  resolvedOrgName?: string;
 }) {
   // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   const updateInternal = (key: keyof Draft['internal'], val: string | boolean) => {
     updateDraft(c => ({ ...c, internal: { ...c.internal, [key]: val } }));
   };
 
+  useEffect(() => {
+    if (!draft.internal.orgName?.trim() && resolvedOrgName) {
+      updateInternal('orgName', resolvedOrgName);
+    }
+  }, [draft.internal.orgName, resolvedOrgName]);
+
+  const isAutoFetched = Boolean(resolvedOrgName && draft.internal.orgName?.trim().toLowerCase() === resolvedOrgName.trim().toLowerCase());
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Organization name" required>
-          <input
-            value={draft.internal.orgName}
-            onChange={e => updateInternal('orgName', e.target.value)}
-            className={inputClass}
-            placeholder="Enter organization title"
-          />
+          <div className="space-y-1.5">
+            <div className="relative flex items-center">
+              <input
+                value={draft.internal.orgName}
+                onChange={e => updateInternal('orgName', e.target.value)}
+                className={inputClass}
+                placeholder="Enter organization title"
+              />
+              {resolvedOrgName && !isAutoFetched && (
+                <button
+                  type="button"
+                  onClick={() => updateInternal('orgName', resolvedOrgName)}
+                  className="absolute right-2 text-[11px] font-bold text-[#12335f] hover:text-[#0d2342] bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition"
+                  title={`Use verified organization: ${resolvedOrgName}`}
+                >
+                  Auto-fill from profile
+                </button>
+              )}
+            </div>
+            {isAutoFetched && (
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>Auto-fetched from verified organization profile</span>
+              </p>
+            )}
+          </div>
         </Field>
 
         {/* Buying Department field commented out as requested */}
@@ -4126,12 +4361,59 @@ function ItemsDetailsForm({
     });
   };
 
-  const handleDownloadItemTemplate = () => {
-    downloadCsv('procurement-items-services-template.csv', [
-      itemTemplateHeaders,
-      ['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness', 1000, 'Nos', 45, 18, '6810', '', 'Yes', nextFortnight],
-      ['Service', 'Annual Maintenance Contract', 'Preventive maintenance with quarterly visits and call support', 1, 'Set', 25000, 18, '9987', '', 'Yes', nextFortnight],
-    ]);
+  const handleDownloadItemTemplate = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'MSME Procurement Portal';
+      workbook.created = new Date();
+      const sheet = workbook.addWorksheet('Schedule Items', { views: [{ showGridLines: true }] });
+
+      sheet.addRow(itemTemplateHeaders);
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF12335F' }
+      };
+      headerRow.height = 24;
+
+      sheet.addRow(['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness, heavy duty traffic rated', 1000, 'Nos', 45, 18, '6810', 'UltraTech / Equivalent', 'Yes', nextFortnight]);
+      sheet.addRow(['Service', 'Annual Maintenance Contract', 'Comprehensive preventive maintenance with quarterly visits, emergency breakdown support, and calibration', 1, 'Set', 25000, 18, '9987', '', 'Yes', nextFortnight]);
+
+      sheet.columns = [
+        { width: 14 },
+        { width: 30 },
+        { width: 50 },
+        { width: 12 },
+        { width: 10 },
+        { width: 16 },
+        { width: 10 },
+        { width: 14 },
+        { width: 24 },
+        { width: 16 },
+        { width: 16 },
+      ];
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'procurement_items_services_template.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success('Downloaded Excel template (.xlsx)');
+    } catch {
+      downloadCsv('procurement-items-services-template.csv', [
+        itemTemplateHeaders,
+        ['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness, heavy duty traffic rated', 1000, 'Nos', 45, 18, '6810', 'UltraTech / Equivalent', 'Yes', nextFortnight],
+        ['Service', 'Annual Maintenance Contract', 'Comprehensive preventive maintenance with quarterly visits, emergency breakdown support, and calibration', 1, 'Set', 25000, 18, '9987', '', 'Yes', nextFortnight],
+      ]);
+      toast.success('Downloaded CSV template');
+    }
   };
 
   const handleImportItemTemplate = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4139,13 +4421,17 @@ function ItemsDetailsForm({
     e.target.value = '';
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt')) {
-      toast.error('Use the CSV template format for item import.');
+    const lowerName = file.name.toLowerCase();
+    const isCsv = lowerName.endsWith('.csv') || lowerName.endsWith('.txt');
+    const isExcel = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
+
+    if (!isCsv && !isExcel) {
+      toast.error('Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.');
       return;
     }
 
     try {
-      const rows = parseCsvText(await file.text());
+      const rows = await readSpreadsheetRows(file);
       if (rows.length < 2) {
         toast.error('Template has no item rows to import.');
         return;
@@ -4235,12 +4521,66 @@ function ItemsDetailsForm({
       const asset = resData.file || resData;
       const fileId = Number(resData.fileId || asset.id || 0);
 
-      updateDraft(c => ({
-        ...c,
-        boqFileAssetId: fileId,
-        boqFileName: asset.originalName || file.name
-      }));
-      toast.success('BOQ file uploaded successfully');
+      // Parse spreadsheet rows if it's an Excel or CSV file
+      let parsedBoqRows: BOQRow[] = [];
+      try {
+        const lowerName = file.name.toLowerCase();
+        if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.csv') || lowerName.endsWith('.txt')) {
+          const rows = await readSpreadsheetRows(file);
+          if (rows.length >= 2) {
+            const [headers, ...dataRows] = rows;
+            const normH = headers.map(normalizeImportHeader);
+            const findCol = (...aliases: string[]) => normH.findIndex(h => aliases.includes(h));
+            const descIdx = findCol('itemdescription', 'description', 'descriptionscopeofwork', 'descriptionscope', 'scopeofwork', 'itemname', 'name', 'particulars', 'details');
+            const catIdx = findCol('category', 'itemcategory');
+            const qtyIdx = findCol('quantity', 'qty', 'units');
+            const uomIdx = findCol('uom', 'unit', 'unitofmeasure');
+            const rateIdx = findCol('estimatedrateinr', 'estimatedrate', 'rate', 'estimatedunitprice', 'unitprice', 'price');
+            const taxIdx = findCol('tax', 'taxpercent', 'taxpercentage', 'gst', 'gstpercent');
+            const remIdx = findCol('remarks', 'remark', 'specification', 'specifications', 'scopeofwork', 'scope', 'notes');
+
+            dataRows.forEach((r, idx) => {
+              const desc = descIdx >= 0 ? String(r[descIdx] || '').trim() : '';
+              if (desc) {
+                const qty = Math.max(1, Number(qtyIdx >= 0 ? r[qtyIdx] : 1) || 1);
+                const rate = Math.max(0, Number(rateIdx >= 0 ? r[rateIdx] : 0) || 0);
+                const tax = Number(taxIdx >= 0 ? r[taxIdx] : 18) || 18;
+                parsedBoqRows.push({
+                  srNo: idx + 1,
+                  description: desc,
+                  category: catIdx >= 0 && r[catIdx] ? String(r[catIdx]).trim() : 'General',
+                  quantity: qty,
+                  uom: uomIdx >= 0 && r[uomIdx] ? String(r[uomIdx]).trim() : 'Nos',
+                  estimatedRate: rate,
+                  taxPercent: tax,
+                  total: qty * rate,
+                  remarks: remIdx >= 0 && r[remIdx] ? String(r[remIdx]).trim() : '',
+                });
+              }
+            });
+          }
+        }
+      } catch (parseErr) {
+        console.warn('Could not parse BOQ spreadsheet rows:', parseErr);
+      }
+
+      updateDraft(c => {
+        const nextTable = parsedBoqRows.length > 0 ? parsedBoqRows : c.boqTable;
+        const totalSum = nextTable.reduce((acc, row) => acc + (Number(row.total) || (Number(row.quantity || 0) * Number(row.estimatedRate || 0))), 0);
+        return {
+          ...c,
+          boqFileAssetId: fileId,
+          boqFileName: asset.originalName || file.name,
+          boqTable: nextTable,
+          basics: {
+            ...c.basics,
+            estimatedValue: parsedBoqRows.length > 0 ? totalSum : c.basics.estimatedValue
+          }
+        };
+      });
+      toast.success(parsedBoqRows.length > 0
+        ? `BOQ file uploaded & ${parsedBoqRows.length} item row${parsedBoqRows.length === 1 ? '' : 's'} imported`
+        : 'BOQ file uploaded successfully');
     } catch (err: any) {
       toast.error(err.message || 'Failed to upload BOQ');
     } finally {
@@ -4304,6 +4644,185 @@ function ItemsDetailsForm({
       return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: sum } };
     });
   };
+
+  const procurementItemColumns: ColumnDef<any>[] = useMemo(() => [
+    {
+      key: 'type',
+      header: 'Type',
+      width: 'w-24',
+      cell: (item: any) => (
+        <span className={cn(
+          "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
+          item.itemType === 'Service'
+            ? "border border-purple-200 bg-purple-50 text-purple-700"
+            : "border border-blue-200 bg-blue-50 text-blue-700"
+        )}>
+          {item.itemType || 'Product'}
+        </span>
+      )
+    },
+    {
+      key: 'name',
+      header: 'Item / Service Name',
+      width: 'w-56',
+      cell: (item: any) => (
+        <div className="font-black text-slate-900 text-xs">
+          {item.name || <span className="text-rose-500 italic">Unnamed Item</span>}
+        </div>
+      )
+    },
+    {
+      key: 'specifications',
+      header: 'Specifications / Scope',
+      cellClassName: 'text-slate-600 font-medium max-w-[240px]',
+      cell: (item: any) => {
+        const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
+        return (
+          <span className="line-clamp-2" title={descText || undefined}>
+            {descText ? descText : <span className="text-slate-400 italic">No description</span>}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'quantity',
+      header: 'Qty & UOM',
+      width: 'w-28',
+      align: 'center',
+      cell: (item: any) => (
+        <div>
+          <span className="font-extrabold text-slate-900">{item.quantity}</span>{' '}
+          <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit}</span>
+        </div>
+      )
+    },
+    {
+      key: 'rate',
+      header: 'Est. Unit Rate',
+      width: 'w-28',
+      align: 'right',
+      cellClassName: 'font-extrabold text-slate-900',
+      cell: (item: any) => (
+        Number(item.unitPrice || 0) > 0 ? (
+          <span>₹{Number(item.unitPrice).toLocaleString('en-IN')}</span>
+        ) : (
+          <span className="text-slate-400 font-normal">-</span>
+        )
+      )
+    },
+    {
+      key: 'hsn',
+      header: 'HSN / SAC',
+      width: 'w-24',
+      align: 'center',
+      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600',
+      cell: (item: any) => item.hsn_sac_code || <span className="text-slate-400">-</span>
+    },
+    {
+      key: 'brand',
+      header: 'Brand & Policy',
+      width: 'w-32',
+      cell: (item: any) => (
+        <div>
+          <div className="text-slate-800 text-[11px] font-bold truncate max-w-[120px]">
+            {item.brand_preference || 'Any Brand'}
+          </div>
+          <div className="mt-0.5">
+            {item.brand_flexible === 'No' ? (
+              <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
+                Lock
+              </span>
+            ) : (
+              <span className="inline-flex items-center text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                Flexible
+              </span>
+            )}
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'documents',
+      header: 'Documents & Specs',
+      width: 'w-40',
+      cell: (item: any) => {
+        const attachmentsList = item.attachments || [];
+        const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
+        const docCount = attachmentsList.length || (item.specificationFileName ? 1 : 0);
+
+        return hasDocs ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setQuickDocItem(item)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2 py-1 text-[10px] font-extrabold text-emerald-800 hover:bg-emerald-100 transition-colors"
+              title="Click to view or manage attachments"
+            >
+              <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
+              <span className="truncate max-w-[90px]">
+                {docCount} file{docCount === 1 ? '' : 's'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickDocItem(item)}
+              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+              title="Add more documents"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setQuickDocItem(item)}
+            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all"
+            title="Attach specification or drawing"
+          >
+            <FilePlus className="h-3 w-3 text-slate-400" />
+            <span>+ Attach Doc</span>
+          </button>
+        );
+      }
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-28',
+      align: 'right',
+      cell: (item: any) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedItemForEdit(item);
+              setShowItemDrawer(true);
+            }}
+            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors"
+            title="Edit specifications"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDuplicateItem(item)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            title="Duplicate line item"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleRemoveItem(item.id)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+            title="Delete line item"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )
+    }
+  ], [handleDuplicateItem, handleRemoveItem]);
 
   // 1. BOQ Table Mode
   if (whatBuying === 'BOQ') {
@@ -4508,7 +5027,7 @@ function ItemsDetailsForm({
             variant="outline"
             onClick={handleDownloadItemTemplate}
             className="h-8.5 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            title="Download CSV template for bulk items"
+            title="Download Excel template (.xlsx) for bulk items"
           >
             <Download className="h-3.5 w-3.5 mr-1 text-slate-500" /> Template
           </Button>
@@ -4517,16 +5036,16 @@ function ItemsDetailsForm({
             <input
               type="file"
               id="item-template-import"
-              accept=".csv,.txt"
+              accept=".xlsx,.xls,.csv,.txt"
               onChange={handleImportItemTemplate}
               className="hidden"
             />
             <label
               htmlFor="item-template-import"
               className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50"
-              title="Import items from CSV spreadsheet"
+              title="Import items from Excel (.xlsx) or CSV spreadsheet"
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Import CSV
+              <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Import Excel / CSV
             </label>
           </div>
 
@@ -4581,243 +5100,42 @@ function ItemsDetailsForm({
       </div>
 
       {/* Modern Schedule Table */}
-      <div className="overflow-hidden border border-slate-200 rounded-xl bg-white shadow-3xs">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] border-collapse text-left text-xs">
-            <thead className="bg-slate-50/90 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200 tracking-wider">
-              <tr>
-                <th className="px-3.5 py-3 w-24">Type</th>
-                <th className="px-3.5 py-3 w-56">Item / Service Name</th>
-                <th className="px-3.5 py-3">Specifications / Scope</th>
-                <th className="px-3.5 py-3 w-28 text-center">Qty & UOM</th>
-                <th className="px-3.5 py-3 w-28 text-right">Est. Unit Rate</th>
-                <th className="px-3.5 py-3 w-24 text-center">HSN / SAC</th>
-                <th className="px-3.5 py-3 w-32">Brand & Policy</th>
-                <th className="px-3.5 py-3 w-40">Documents & Specs</th>
-                <th className="px-3.5 py-3 w-28 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {draft.items.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
-                    <div className="flex flex-col items-center justify-center space-y-3 max-w-md mx-auto">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                        <Package className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-extrabold text-slate-700">No items or services added yet</p>
-                        <p className="text-[11px] text-slate-500 font-medium mt-1">
-                          Add line items individually, upload a CSV schedule, or import from your marketplace cart.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => handleAddNewItem('Product')}
-                          className="h-8 px-3.5 text-xs font-bold bg-[#12335f] text-white hover:bg-[#0b2445]"
-                        >
-                          <Plus className="h-3.5 w-3.5 mr-1" /> Add Product
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleAddNewItem('Service')}
-                          className="h-8 px-3.5 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
-                        >
-                          <Plus className="h-3.5 w-3.5 mr-1" /> Add Service
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={handleImportCartItems}
-                          className="h-8 px-3.5 text-xs font-bold text-slate-700"
-                        >
-                          <ShoppingCart className="h-3.5 w-3.5 mr-1" /> Import Cart
-                        </Button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                draft.items.map((item, index) => {
-                  const attachmentsList = item.attachments || [];
-                  const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
-                  const firstDoc = attachmentsList[0];
-                  const docCount = attachmentsList.length || (item.specificationFileName ? 1 : 0);
-
-                  return (
-                    <tr key={item.id || index} className="align-middle hover:bg-slate-50/70 transition-colors group">
-                      {/* Type */}
-                      <td className="px-3.5 py-3.5">
-                        <span className={cn(
-                          "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
-                          item.itemType === 'Service'
-                            ? "border border-purple-200 bg-purple-50 text-purple-700"
-                            : "border border-blue-200 bg-blue-50 text-blue-700"
-                        )}>
-                          {item.itemType || 'Product'}
-                        </span>
-                      </td>
-
-                      {/* Name */}
-                      <td className="px-3.5 py-3.5">
-                        <div className="font-black text-slate-900 text-xs">
-                          {item.name || <span className="text-rose-500 italic">Unnamed Item</span>}
-                        </div>
-                      </td>
-
-                      {/* Description */}
-                      <td className="px-3.5 py-3.5 text-slate-600 font-medium max-w-[240px]">
-                        <span className="line-clamp-2" title={item.specification}>
-                          {item.specification || <span className="text-slate-400 italic">No description</span>}
-                        </span>
-                      </td>
-
-                      {/* Quantity & Unit */}
-                      <td className="px-3.5 py-3.5 text-center">
-                        <span className="font-extrabold text-slate-900">{item.quantity}</span>{' '}
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit}</span>
-                      </td>
-
-                      {/* Rate */}
-                      <td className="px-3.5 py-3.5 text-right font-extrabold text-slate-900">
-                        {Number(item.unitPrice || 0) > 0 ? (
-                          <span>₹{Number(item.unitPrice).toLocaleString('en-IN')}</span>
-                        ) : (
-                          <span className="text-slate-400 font-normal">-</span>
-                        )}
-                      </td>
-
-                      {/* HSN/SAC */}
-                      <td className="px-3.5 py-3.5 text-center font-mono text-[11px] font-semibold text-slate-600">
-                        {item.hsn_sac_code || <span className="text-slate-400">-</span>}
-                      </td>
-
-                      {/* Brand & Policy */}
-                      <td className="px-3.5 py-3.5">
-                        <div className="text-slate-800 text-[11px] font-bold truncate max-w-[120px]">
-                          {item.brand_preference || 'Any Brand'}
-                        </div>
-                        <div className="mt-0.5">
-                          {item.brand_flexible === 'No' ? (
-                            <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
-                              Lock
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
-                              Flexible
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Documents / Attachments */}
-                      <td className="px-3.5 py-3.5">
-                        {hasDocs ? (
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setQuickDocItem(item)}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2 py-1 text-[10px] font-extrabold text-emerald-800 hover:bg-emerald-100 transition-colors"
-                              title="Click to view or manage attachments"
-                            >
-                              <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
-                              <span className="truncate max-w-[90px]">
-                                {docCount} file{docCount === 1 ? '' : 's'}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setQuickDocItem(item)}
-                              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
-                              title="Add more documents"
-                            >
-                              <Plus className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setQuickDocItem(item)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all"
-                            title="Attach specification or drawing"
-                          >
-                            <FilePlus className="h-3 w-3 text-slate-400" />
-                            <span>+ Attach Doc</span>
-                          </button>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-3.5 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedItemForEdit(item);
-                              setShowItemDrawer(true);
-                            }}
-                            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors"
-                            title="Edit specifications"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDuplicateItem(item)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-                            title="Duplicate line item"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                            title="Delete line item"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Bottom Table Quick Add Bar */}
-        <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => handleAddNewItem('Product')}
-              className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445]"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add Product Line
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => handleAddNewItem('Service')}
-              className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add Service Line
-            </Button>
+      <DataTable
+        data={draft.items}
+        columns={procurementItemColumns}
+        keyExtractor={(item: any, idx) => item.id || idx}
+        showSrNo={false}
+        minWidth="min-w-[1100px]"
+        rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
+        emptyTitle="No items or services added yet"
+        emptyDescription="Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
+        footer={
+          <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleAddNewItem('Product')}
+                className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445]"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add Product Line
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => handleAddNewItem('Service')}
+                className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add Service Line
+              </Button>
+            </div>
+            <span className="text-[11px] font-semibold text-slate-500">
+              {draft.items.length} line item{draft.items.length === 1 ? '' : 's'} scheduled
+            </span>
           </div>
-          <span className="text-[11px] font-semibold text-slate-500">
-            {draft.items.length} line item{draft.items.length === 1 ? '' : 's'} scheduled
-          </span>
-        </div>
-      </div>
+        }
+      />
 
       {/* Summary Metrics Bar */}
       {(() => {
@@ -5215,7 +5533,7 @@ function ScheduleStepForm({
   const isOtherAuctionSubCategory = draft.auctionConfig.auctionSubCategory === 'Other' || Boolean(draft.auctionConfig.auctionSubCategory && !auctionSubCategoryOptions.includes(draft.auctionConfig.auctionSubCategory));
   const isOtherCurrency = draft.auctionConfig.currency === 'Other' || Boolean(draft.auctionConfig.currency && !currencyOptions.includes(draft.auctionConfig.currency));
   const auctionCategoryMissing = !draft.auctionConfig.auctionCategory.trim() || draft.auctionConfig.auctionCategory === 'Other';
-  const auctionSubCategoryMissing = !draft.auctionConfig.auctionSubCategory.trim() || draft.auctionConfig.auctionSubCategory === 'Other';
+  const auctionSubCategoryMissing = false;
   const currencyMissing = !draft.auctionConfig.currency.trim() || draft.auctionConfig.currency === 'Other';
   const missing = (value: unknown) => showErrors && !String(value ?? '').trim();
   const fieldError = (condition: boolean, message: string) => condition ? message : undefined;
@@ -5395,21 +5713,21 @@ function ScheduleStepForm({
                 />
               )}
             </Field>
-            <Field label="Auction Subcategory" required error={fieldError(showErrors && auctionSubCategoryMissing, 'Auction subcategory is required.')}>
+            <Field label="Auction Subcategory (Optional)">
               <select
                 value={isOtherAuctionSubCategory ? 'Other' : draft.auctionConfig.auctionSubCategory}
                 onChange={e => updateAuction('auctionSubCategory', e.target.value)}
-                className={controlClass(fieldError(showErrors && auctionSubCategoryMissing, 'Auction subcategory is required.'))}
+                className={inputClass}
               >
-                <option value="">Select subcategory</option>
+                <option value="">Select subcategory (Optional)</option>
                 {auctionSubCategoryOptions.map(option => <option key={option} value={option}>{option}</option>)}
               </select>
               {isOtherAuctionSubCategory && (
                 <input
                   value={draft.auctionConfig.auctionSubCategory === 'Other' ? '' : draft.auctionConfig.auctionSubCategory}
                   onChange={e => updateAuction('auctionSubCategory', e.target.value)}
-                  className={controlClass(fieldError(showErrors && auctionSubCategoryMissing, 'Auction subcategory is required.'))}
-                  placeholder="Enter auction subcategory"
+                  className={cn(inputClass, 'mt-2')}
+                  placeholder="Enter auction subcategory (Optional)"
                 />
               )}
             </Field>
@@ -5674,8 +5992,8 @@ function ScheduleStepForm({
             <Field label="Contract Category">
               <input value={draft.rateContractConfig.contractCategory} onChange={e => updateRateContract('contractCategory', e.target.value)} className={inputClass} />
             </Field>
-            <Field label="Contract Subcategory">
-              <input value={draft.rateContractConfig.contractSubCategory} onChange={e => updateRateContract('contractSubCategory', e.target.value)} className={inputClass} />
+            <Field label="Contract Subcategory (Optional)">
+              <input value={draft.rateContractConfig.contractSubCategory} onChange={e => updateRateContract('contractSubCategory', e.target.value)} className={inputClass} placeholder="Enter contract subcategory (Optional)" />
             </Field>
             <Field label="Contract Start Date" required>
               <input type="date" value={draft.rateContractConfig.periodStartDate} onChange={e => updateRateContract('periodStartDate', e.target.value)} className={inputClass} />
@@ -5691,7 +6009,6 @@ function ScheduleStepForm({
                 <option value="SINGLE_SUPPLIER">Single Supplier</option>
                 <option value="MULTI_SUPPLIER">Multiple Suppliers</option>
                 <option value="PANEL_RATE_CONTRACT">Panel Rate Contract</option>
-                <option value="ITEM_WISE_L1">Item-wise L1</option>
               </select>
             </Field>
             <Field label="Selected Supplier(s)" required>
@@ -5943,8 +6260,18 @@ function CommercialTermsForm({
 
           <Field label="Payment terms" required error={fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.')}>
             <select
-              value={draft.terms.paymentTerms}
-              onChange={e => updateTerms('paymentTerms', e.target.value)}
+              value={draft.terms.paymentTerms === 'ADVANCE_PAYMENT' ? 'ADVANCE_PAYMENT' : 'ON_DELIVERY'}
+              onChange={e => {
+                const val = e.target.value;
+                updateDraft(c => ({
+                  ...c,
+                  terms: {
+                    ...c.terms,
+                    paymentTerms: val,
+                    advanceAllowed: val === 'ADVANCE_PAYMENT',
+                  }
+                }));
+              }}
               className={controlClass(fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.'))}
             >
               {PAYMENT_TERMS.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -6149,46 +6476,15 @@ function EvaluationBasisForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Evaluation Method basis" required>
           <select
-            value={draft.evaluation.method}
-            onChange={e => {
-              const val = e.target.value;
-              updateEval('method', val);
-              if (val === 'Two-stage bid with Reverse Auction (e-RA)' || val === 'Reverse auction final rank') {
-                updateDraft(c => ({
-                  ...c,
-                  basics: { ...c.basics, isReverseAuctionNeeded: true },
-                  auctionConfig: {
-                    ...c.auctionConfig,
-                    procurementMethod: 'BID_WITH_REVERSE_AUCTION',
-                    auctionTitle: c.auctionConfig.auctionTitle || c.basics.title || 'Live Reverse Auction',
-                    auctionCategory: c.auctionConfig.auctionCategory || c.basics.category,
-                    auctionSubCategory: c.auctionConfig.auctionSubCategory || c.basics.subCategory,
-                    startingBidPrice: c.auctionConfig.startingBidPrice || c.basics.estimatedValue || 0,
-                    minimumBidDecrement: c.auctionConfig.minimumBidDecrement > 0 ? c.auctionConfig.minimumBidDecrement : Math.max(500, Math.round((c.basics.estimatedValue || 100000) * 0.01)),
-                    autoExtensionEnabled: true,
-                    extensionTriggerMinutes: 5,
-                    extensionDurationMinutes: 5,
-                    maximumExtensions: 3,
-                    rankVisibility: 'SHOW_RANK_ONLY',
-                  }
-                }));
-              }
-            }}
+            value={draft.evaluation.method === 'QCBS / weighted technical-commercial score' ? 'QCBS / weighted technical-commercial score' : 'L1 total value'}
+            onChange={e => updateEval('method', e.target.value)}
             className={inputClass}
           >
-            <>
-              <option value="L1 total value">L1 Total Value basis</option>
-              <option value="Item-wise L1">Item-wise L1 rates basis</option>
-              <option value="Package-wise L1">Package-wise L1 rates basis</option>
-              <option value="Technical qualification then L1">Technical Qualification then L1 Sourcing</option>
-              <option value="Two-stage bid with Reverse Auction (e-RA)">Two-Stage Bid with Live Reverse Auction (e-RA)</option>
-              <option value="QCBS / weighted technical-commercial score">Quality and Cost Based Selection (QCBS)</option>
-              <option value="Reverse auction final rank">Reverse Auction Final Bid Rank</option>
-              <option value="Lowest landed cost">Lowest Landed Cost</option>
-            </>
+            <option value="L1 total value">L1 Total Value Basis (Lowest Landed Cost)</option>
+            <option value="QCBS / weighted technical-commercial score">Quality and Cost Based Selection (QCBS)</option>
           </select>
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            Choose how vendor proposals are evaluated. Enable Reverse Auction below to conduct real-time price compression among qualified bidders.
+            Choose how vendor proposals are evaluated. Use the Live Reverse Auction card below if dynamic downward price bidding is required.
           </p>
         </Field>
 
@@ -6651,29 +6947,44 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   const mappedItems = draft.basics.whatAreYouBuying === 'BOQ'
     ? draft.boqTable.map(item => ({
         itemName: item.description,
-        description: item.remarks || '',
+        description: item.remarks || item.description || '',
         quantity: item.quantity,
         unitOfMeasure: item.uom,
         estimatedUnitPrice: item.estimatedRate,
-      }))
-    : draft.items.map(item => ({
-        itemType: item.itemType || 'Product',
-        itemName: item.name,
-        description: item.specification || '',
-        quantity: item.quantity,
-        unitOfMeasure: item.unit,
-        estimatedUnitPrice: Number(item.unitPrice || 0),
         specifications: {
-          itemType: item.itemType || 'Product',
-          hsn_sac_code: item.hsn_sac_code || '',
-          brand_preference: item.brand_preference || '',
-          brand_flexible: item.brand_flexible || 'Yes',
-          gst: Number(item.gst || 0),
-          fileAssetId: item.fileAssetId || null,
-          specificationFileName: item.specificationFileName || '',
-          attachments: item.attachments || [],
+          itemType: 'Product',
+          description: item.remarks || item.description || '',
+          specification: item.remarks || item.description || '',
+          scopeOfWork: item.remarks || item.description || '',
+          category: item.category || 'General',
+          taxPercent: item.taxPercent || 18,
         }
-      }));
+      }))
+    : draft.items.map(item => {
+        const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || '';
+        return {
+          itemType: item.itemType || 'Product',
+          itemName: item.name,
+          description: descText,
+          quantity: item.quantity,
+          unitOfMeasure: item.unit,
+          estimatedUnitPrice: Number(item.unitPrice || 0),
+          specifications: {
+            itemType: item.itemType || 'Product',
+            specification: descText,
+            scopeOfWork: descText,
+            technicalSpecification: item.technicalSpecification || descText,
+            description: descText,
+            hsn_sac_code: item.hsn_sac_code || '',
+            brand_preference: item.brand_preference || '',
+            brand_flexible: item.brand_flexible || 'Yes',
+            gst: Number(item.gst || 0),
+            fileAssetId: item.fileAssetId || null,
+            specificationFileName: item.specificationFileName || '',
+            attachments: item.attachments || [],
+          }
+        };
+      });
 
   // Build default consignee matching total quantity.
   // IMPORTANT: derive the total from `mappedItems` (the exact lines sent to the backend as

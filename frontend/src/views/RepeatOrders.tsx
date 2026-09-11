@@ -42,6 +42,7 @@ import { PageToolbar } from '../features/shared/PageToolbar';
 import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
 import { PageTableSkeleton } from '../components/ui/skeleton';
+import { DataTable, ColumnDef } from '../components/ui/data-table';
 
 type StatusTab = 'Delivered' | 'All';
 
@@ -391,6 +392,137 @@ export default function RepeatOrders() {
     );
   };
 
+  const activeSortKey = sortBy.startsWith('value') ? 'value' :
+    sortBy.startsWith('po') ? 'po' :
+    sortBy.startsWith('title') ? 'title' :
+    sortBy.startsWith('party') ? 'party' :
+    sortBy.startsWith('qty') ? 'qty' :
+    sortBy.startsWith('updated') ? 'updated' : '';
+  const activeSortDirection: 'asc' | 'desc' = (sortBy.endsWith('_asc') || sortBy === 'value_low') ? 'asc' : 'desc';
+
+  const orderColumns: ColumnDef<PurchaseOrderDto>[] = [
+    {
+      key: 'poNumber',
+      header: 'PO Number',
+      sortable: true,
+      sortKey: 'po',
+      width: 'w-[18%]',
+      cell: (order) => (
+        <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
+      ),
+    },
+    {
+      key: 'title',
+      header: 'Procurement Name',
+      sortable: true,
+      sortKey: 'title',
+      width: 'w-[26%]',
+      cell: (order) => {
+        const item = order.items?.[0] || { itemName: order.title, quantity: 1 };
+        const procurementName = order.title || (order as any).tender?.title || item.itemName || 'Procurement Order';
+        return (
+          <div>
+            <p className="font-bold text-slate-900">{procurementName}</p>
+            {item.itemName && item.itemName !== procurementName && (
+              <p className="text-[10px] font-semibold text-slate-500 mt-0.5">Item: {item.itemName}</p>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'seller',
+      header: 'Supplier',
+      sortable: true,
+      sortKey: 'party',
+      width: 'w-[18%]',
+      cell: (order) => (
+        <span className="text-slate-600">{order.seller?.name || `Seller #${order.sellerId || '-'}`}</span>
+      ),
+    },
+    {
+      key: 'qty',
+      header: 'Qty',
+      sortable: true,
+      sortKey: 'qty',
+      width: 'w-20',
+      align: 'right',
+      cell: (order) => {
+        const item = order.items?.[0] || { quantity: 1 };
+        return <span className="text-slate-900">{Number(item.quantity || 0).toLocaleString()}</span>;
+      },
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      sortable: true,
+      sortKey: 'value',
+      width: 'w-[14%]',
+      align: 'right',
+      cell: (order) => (
+        <span className="font-bold text-slate-900">{formatCurrency(order.amount || order.totalValue)}</span>
+      ),
+    },
+    {
+      key: 'updatedAt',
+      header: 'Delivered On',
+      sortable: true,
+      sortKey: 'updated',
+      width: 'w-[14%]',
+      cell: (order) => <span className="text-slate-500">{formatDate(order.updatedAt)}</span>,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-24',
+      align: 'right',
+      cell: (order) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <ActionMenu 
+            order={order}
+            onView={setViewingOrder}
+            onRepeat={handleOpenRepeatModal}
+            openKebabId={openKebabId}
+            setOpenKebabId={setOpenKebabId}
+          />
+        </div>
+      ),
+    },
+  ];
+
+  const modalLineItemColumns: ColumnDef<any>[] = [
+    {
+      key: 'item',
+      header: 'Item',
+      cell: (it: any, idx: number) => <span className="font-semibold text-slate-700">{it.itemName || it.description || `Item ${idx + 1}`}</span>,
+    },
+    {
+      key: 'qty',
+      header: 'Qty',
+      align: 'right',
+      width: 'w-24',
+      cell: (it: any) => <span className="font-semibold text-slate-700">{Number(it.quantity || 0).toLocaleString()}</span>,
+    },
+    {
+      key: 'unitPrice',
+      header: 'Unit Price',
+      align: 'right',
+      width: 'w-32',
+      cell: (it: any) => <span className="font-semibold text-slate-700">{formatCurrency(it.unitPrice)}</span>,
+    },
+    {
+      key: 'total',
+      header: 'Total',
+      align: 'right',
+      width: 'w-36',
+      cell: (it: any) => (
+        <span className="font-bold text-slate-900">
+          {formatCurrency(Number(it.quantity || 0) * Number(it.unitPrice || 0))}
+        </span>
+      ),
+    },
+  ];
+
   if (loadingAll && (!deliveredOrders || deliveredOrders.length === 0)) {
     return <PageTableSkeleton kpiCount={4} />;
   }
@@ -724,61 +856,21 @@ export default function RepeatOrders() {
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="completed orders" />
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="overflow-x-auto w-full max-w-full">
-            <table className="w-full min-w-[860px] border-collapse text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/75">
-                  <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
-                  <th className="p-3"><SortHeader label="PO Number" columnKey="title" /></th>
-                  <th className="p-3"><SortHeader label="PROCUREMENT NAME" columnKey="title" /></th>
-                  <th className="p-3"><SortHeader label="Supplier" columnKey="party" /></th>
-                  <th className="p-3"><SortHeader label="Qty" columnKey="qty" /></th>
-                  <th className="p-3"><SortHeader label="Amount" columnKey="value" /></th>
-                  <th className="p-3"><SortHeader label="Delivered On" columnKey="updated" /></th>
-                  <th className="p-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                {visibleOrders.map((order, index) => {
-                  const rowIndex = (page - 1) * pageSize + index + 1;
-                  const item = order.items?.[0] || { itemName: order.title, quantity: 1 };
-                  const procurementName = order.title || (order as any).tender?.title || item.itemName || 'Procurement Order';
-                  return (
-                    <tr key={order.id} className="hover:bg-slate-50/50 transition">
-                      <td className="p-3 font-mono text-xs text-slate-500">
-                        {String(rowIndex).padStart(2, '0')}
-                      </td>
-                      <td className="p-3">
-                        <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
-                      </td>
-                      <td className="p-3">
-                        <p className="font-bold text-slate-900">{procurementName}</p>
-                        {item.itemName && item.itemName !== procurementName && (
-                          <p className="text-[10px] font-semibold text-slate-500 mt-0.5">Item: {item.itemName}</p>
-                        )}
-                      </td>
-                      <td className="p-3 text-slate-600">{order.seller?.name || `Seller #${order.sellerId || '-'}`}</td>
-                      <td className="p-3 text-slate-900">{Number(item.quantity || 0).toLocaleString()}</td>
-                      <td className="p-3 font-bold text-slate-900">{formatCurrency(order.amount || order.totalValue)}</td>
-                      <td className="p-3 text-slate-500">{formatDate(order.updatedAt)}</td>
-                      <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        <ActionMenu 
-                          order={order}
-                          onView={setViewingOrder}
-                          onRepeat={handleOpenRepeatModal}
-                          openKebabId={openKebabId}
-                          setOpenKebabId={setOpenKebabId}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="completed orders" />
-        </div>
+        <DataTable<PurchaseOrderDto>
+          data={visibleOrders}
+          columns={orderColumns}
+          keyExtractor={(order) => order.id}
+          sortKey={activeSortKey}
+          sortDirection={activeSortDirection}
+          onSort={toggleSort}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          paginationLabel="completed orders"
+          minWidth="min-w-[860px]"
+        />
       )}
 
       {/* View Order Details Modal */}
@@ -809,23 +901,13 @@ export default function RepeatOrders() {
               {viewingOrder.items && viewingOrder.items.length > 0 && (
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">Line Items</p>
-                  <div className="rounded-xl border border-slate-200 overflow-x-auto">
-                    <table className="w-full text-xs min-w-[500px]">
-                      <thead><tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                        <th className="p-2 text-left">Item</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Unit Price</th><th className="p-2 text-right">Total</th>
-                      </tr></thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {viewingOrder.items.map((it: any, idx: number) => (
-                          <tr key={idx} className="font-semibold text-slate-700">
-                            <td className="p-2">{it.itemName || it.description || `Item ${idx + 1}`}</td>
-                            <td className="p-2 text-right">{Number(it.quantity || 0).toLocaleString()}</td>
-                            <td className="p-2 text-right">{formatCurrency(it.unitPrice)}</td>
-                            <td className="p-2 text-right font-bold text-slate-900">{formatCurrency(Number(it.quantity || 0) * Number(it.unitPrice || 0))}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <DataTable<any>
+                    data={viewingOrder.items}
+                    columns={modalLineItemColumns}
+                    keyExtractor={(_, idx) => idx}
+                    minWidth="min-w-[500px]"
+                    showSrNo={false}
+                  />
                 </div>
               )}
 

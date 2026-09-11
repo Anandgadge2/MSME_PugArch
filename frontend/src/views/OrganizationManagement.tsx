@@ -35,7 +35,9 @@ import { SortableHeader } from '../features/shared/SortableHeader';
 import { Pagination } from '../features/shared/Pagination';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../features/shared/hooks';
+import { formatDateTime } from '../features/shared/format';
 import { cn } from '../lib/utils';
+import { DataTable, ColumnDef } from '../components/ui/data-table';
 
 interface Organization {
   id: number;
@@ -405,6 +407,131 @@ export default function OrganizationManagement() {
     );
   };
 
+  const orgColumns: ColumnDef<Organization>[] = [
+    {
+      key: 'name',
+      header: 'Company Details',
+      sortable: true,
+      sortKey: 'name',
+      width: 'w-[30%]',
+      cell: (org) => (
+        <button
+          type="button"
+          onClick={() => setDetailOrg(org)}
+          className="flex items-start gap-3 text-left group min-w-0 w-full"
+          title="View company details"
+        >
+          <div className="h-10 w-10 rounded-lg bg-[#0c2340]/5 flex items-center justify-center text-[#0c2340] shrink-0 border border-slate-100 shadow-sm group-hover:bg-[#0c2340] group-hover:text-white transition-colors">
+            <Building2 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h4 className="font-extrabold text-neutral-900 text-sm group-hover:text-[#0c2340] group-hover:underline decoration-[#c5a556] underline-offset-2 transition-colors text-wrap-anywhere">
+              {org.organizationName}
+            </h4>
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 block">
+              ID: ORG-{org.id}
+            </span>
+          </div>
+        </button>
+      ),
+    },
+    {
+      key: 'tax',
+      header: 'Tax IDs',
+      sortable: true,
+      sortKey: 'gst',
+      width: 'w-[24%]',
+      cell: (org) => (
+        <div className="space-y-1 text-xs font-mono">
+          <div>
+            <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mr-1">GSTIN:</span>
+            <span className="text-slate-800 font-bold text-wrap-anywhere">{org.gstin || 'N/A'}</span>
+          </div>
+          <div>
+            <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mr-2">PAN:</span>
+            <span className="text-slate-800 font-bold text-wrap-anywhere">{org.panNumber || 'N/A'}</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'scope',
+      header: 'Scope',
+      sortable: true,
+      sortKey: 'scope',
+      width: 'w-[18%]',
+      align: 'center',
+      cell: (org) => (
+        <div className="flex items-center justify-center gap-1.5 text-xs">
+          <button
+            type="button"
+            onClick={() => { setScopeOrg(org); setScopeTab('users'); }}
+            title="View users"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 hover:text-[#0c2340] transition-colors"
+          >
+            <Users className="h-3.5 w-3.5" />
+            <span className="font-bold">{org._count?.users ?? 0}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setScopeOrg(org); setScopeTab('products'); }}
+            title="View products"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 hover:text-[#0c2340] transition-colors"
+          >
+            <Package className="h-3.5 w-3.5" />
+            <span className="font-bold">{org._count?.products ?? 0}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setScopeOrg(org); setScopeTab('services'); }}
+            title="View services"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 hover:text-[#0c2340] transition-colors"
+          >
+            <Wrench className="h-3.5 w-3.5" />
+            <span className="font-bold">{org._count?.services ?? 0}</span>
+          </button>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortKey: 'status',
+      width: 'w-[18%]',
+      align: 'center',
+      cell: (org) => (
+        <div className="flex flex-col items-center gap-1">
+          <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${statusTone(org.verificationStatus)}`}>
+            {org.verificationStatus}
+          </span>
+          <AadhaarBadge org={org} />
+          {org.isBlacklisted && (
+            <span className="flex items-center gap-0.5 bg-red-50 border border-red-200 text-red-700 text-[9px] uppercase font-extrabold tracking-wider px-1.5 py-0.5 rounded" title={org.blacklistReason}>
+              <ShieldAlert className="h-2.5 w-2.5" /> RESTRICTED
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-16',
+      align: 'right',
+      cell: (org) => (
+        <button
+          id={`org-action-btn-${org.id}`}
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === org.id ? null : org.id); }}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-[#0c2340]/20 shadow-sm"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Banner / Header */}
@@ -513,287 +640,133 @@ export default function OrganizationManagement() {
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
         </div>
       </div>
-
-      {/* Main Stakeholders Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-        {loading ? (
-          viewMode === 'list' ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    <th className="px-4 py-4 w-12 text-center">Sr.</th>
-                    <th className="px-4 py-4 w-[28%]">Company Details</th>
-                    <th className="px-4 py-4 w-[22%]">Tax IDs</th>
-                    <th className="px-4 py-4 text-center">Scope</th>
-                    <th className="px-4 py-4 text-center">Status</th>
-                    <th className="px-4 py-4 text-right w-16">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {[...Array(6)].map((_, i) => (
-                    <tr key={i} className="animate-pulse">
-                      <td className="px-4 py-4">
-                        <div className="h-3 w-4 bg-slate-200/80 rounded mx-auto" />
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-start gap-3">
-                          <div className="h-10 w-10 rounded-lg bg-slate-200/80 shrink-0" />
-                          <div className="space-y-2 flex-1 py-1">
-                            <div className="h-3.5 w-3/4 bg-slate-200/80 rounded" />
-                            <div className="h-2.5 w-1/3 bg-slate-200/80 rounded" />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="space-y-2.5 py-1">
-                          <div className="h-3 w-24 bg-slate-200/80 rounded" />
-                          <div className="h-3 w-20 bg-slate-200/80 rounded" />
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <div className="h-6 w-12 bg-slate-200/80 rounded-md" />
-                          <div className="h-6 w-12 bg-slate-200/80 rounded-md" />
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-col items-center gap-1.5">
-                          <div className="h-5 w-20 bg-slate-200/80 rounded-md" />
-                          <div className="h-4 w-24 bg-slate-200/80 rounded-md" />
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex items-center justify-end">
-                          <div className="h-8 w-8 bg-slate-200/80 rounded-lg" />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="bg-white border border-slate-200/60 rounded-xl p-4 flex flex-col gap-4 animate-pulse shadow-sm">
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-slate-200/80 shrink-0" />
-                    <div className="space-y-2 flex-1 py-1">
-                      <div className="h-3.5 w-3/4 bg-slate-200/80 rounded" />
-                      <div className="h-2.5 w-1/2 bg-slate-200/80 rounded" />
-                    </div>
-                  </div>
-                  <div className="space-y-2.5 pt-2">
-                    <div className="h-3 w-24 bg-slate-200/80 rounded" />
-                    <div className="h-3 w-20 bg-slate-200/80 rounded" />
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-auto pt-2">
-                    <div className="h-6 w-16 bg-slate-200/80 rounded-md" />
-                    <div className="h-6 w-20 bg-slate-200/80 rounded-md" />
+      {/* Main Stakeholders Content */}
+      {viewMode === 'list' ? (
+        <DataTable<Organization>
+          data={sortedOrgs}
+          columns={orgColumns}
+          keyExtractor={(org) => org.id}
+          isLoading={loading}
+          sortKey={sortKey}
+          sortDirection={sortDirection}
+          onSort={(key) => toggleSort(key as any)}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSizeState}
+          paginationLabel="organizations"
+          emptyTitle="No organizations found"
+          emptyDescription="No registered organizations match your current search or filter criteria."
+        />
+      ) : loading ? (
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-white border border-slate-200/60 rounded-xl p-4 flex flex-col gap-4 animate-pulse shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-slate-200/80 shrink-0" />
+                  <div className="space-y-2 flex-1 py-1">
+                    <div className="h-3.5 w-3/4 bg-slate-200/80 rounded" />
+                    <div className="h-2.5 w-1/2 bg-slate-200/80 rounded" />
                   </div>
                 </div>
-              ))}
-            </div>
-          )
-        ) : orgs.length > 0 ? (
-          viewMode === 'list' ? (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      <th className="px-4 py-4 w-12 text-center">Sr.</th>
-                      <th className="px-4 py-4 w-[28%]"><SortHeader label="Company Details" columnKey="name" /></th>
-                      <th className="px-4 py-4 w-[22%]"><SortHeader label="Tax IDs" columnKey="gst" /></th>
-                      <th className="px-4 py-4 text-center"><SortHeader label="Scope" columnKey="scope" className="justify-center w-full" /></th>
-                      <th className="px-4 py-4 text-center"><SortHeader label="Status" columnKey="status" className="justify-center w-full" /></th>
-                      <th className="px-4 py-4 text-right w-16">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {sortedOrgs.map((org, index) => (
-                      <tr key={org.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-4 text-center text-xs font-black text-slate-400">
-                          {String((page - 1) * pageSize + index + 1).padStart(2, '0')}
-                        </td>
-                        <td className="px-4 py-4">
-                          <button
-                            type="button"
-                            onClick={() => setDetailOrg(org)}
-                            className="flex items-start gap-3 text-left group min-w-0 w-full"
-                            title="View company details"
-                          >
-                            <div className="h-10 w-10 rounded-lg bg-[#0c2340]/5 flex items-center justify-center text-[#0c2340] shrink-0 border border-slate-100 shadow-sm group-hover:bg-[#0c2340] group-hover:text-white transition-colors">
-                              <Building2 className="h-5 w-5" />
-                            </div>
-                            <div className="min-w-0">
-                              <h4 className="font-extrabold text-neutral-900 text-sm group-hover:text-[#0c2340] group-hover:underline decoration-[#c5a556] underline-offset-2 transition-colors text-wrap-anywhere">
-                                {org.organizationName}
-                              </h4>
-                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 block">
-                                ID: ORG-{org.id}
-                              </span>
-                            </div>
-                          </button>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="space-y-1 text-xs font-mono">
-                            <div>
-                              <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mr-1">GSTIN:</span>
-                              <span className="text-slate-800 font-bold text-wrap-anywhere">{org.gstin || 'N/A'}</span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mr-2">PAN:</span>
-                              <span className="text-slate-800 font-bold text-wrap-anywhere">{org.panNumber || 'N/A'}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5 text-xs">
-                            <button
-                              type="button"
-                              onClick={() => { setScopeOrg(org); setScopeTab('users'); }}
-                              title="View users"
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 hover:text-[#0c2340] transition-colors"
-                            >
-                              <Users className="h-3.5 w-3.5" />
-                              <span className="font-bold">{org._count?.users ?? 0}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setScopeOrg(org); setScopeTab('products'); }}
-                              title="View products"
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 hover:text-[#0c2340] transition-colors"
-                            >
-                              <Package className="h-3.5 w-3.5" />
-                              <span className="font-bold">{org._count?.products ?? 0}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setScopeOrg(org); setScopeTab('services'); }}
-                              title="View services"
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 hover:text-[#0c2340] transition-colors"
-                            >
-                              <Wrench className="h-3.5 w-3.5" />
-                              <span className="font-bold">{org._count?.services ?? 0}</span>
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 text-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${statusTone(org.verificationStatus)}`}>
-                              {org.verificationStatus}
-                            </span>
-                            <AadhaarBadge org={org} />
-                            {org.isBlacklisted && (
-                              <span className="flex items-center gap-0.5 bg-red-50 border border-red-200 text-red-700 text-[9px] uppercase font-extrabold tracking-wider px-1.5 py-0.5 rounded" title={org.blacklistReason}>
-                                <ShieldAlert className="h-2.5 w-2.5" /> RESTRICTED
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 text-right">
-                          <button
-                            id={`org-action-btn-${org.id}`}
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === org.id ? null : org.id); }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-[#0c2340]/20 shadow-sm"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="space-y-2.5 pt-2">
+                  <div className="h-3 w-24 bg-slate-200/80 rounded" />
+                  <div className="h-3 w-20 bg-slate-200/80 rounded" />
+                </div>
+                <div className="flex flex-wrap gap-2 mt-auto pt-2">
+                  <div className="h-6 w-16 bg-slate-200/80 rounded-md" />
+                  <div className="h-6 w-20 bg-slate-200/80 rounded-md" />
+                </div>
               </div>
-              <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="organizations" />
-            </>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {sortedOrgs.map((org, index) => (
-                  <div key={org.id} className="rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all flex flex-col h-full overflow-hidden">
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[10px] font-black text-[#12335f] uppercase tracking-widest">
-                          ORG-{org.id}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${statusTone(org.verificationStatus)}`}>
-                          {org.verificationStatus}
-                        </span>
-                      </div>
-                      <button
-                        id={`org-grid-btn-${org.id}`}
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === org.id ? null : org.id); }}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200/50 hover:text-slate-900 transition-colors focus:outline-none"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
+            ))}
+          </div>
+        </div>
+      ) : orgs.length > 0 ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {sortedOrgs.map((org, index) => (
+              <div key={org.id} className="rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all flex flex-col h-full overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] font-black text-[#12335f] uppercase tracking-widest">
+                      ORG-{org.id}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${statusTone(org.verificationStatus)}`}>
+                      {org.verificationStatus}
+                    </span>
+                  </div>
+                  <button
+                    id={`org-grid-btn-${org.id}`}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === org.id ? null : org.id); }}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200/50 hover:text-slate-900 transition-colors focus:outline-none"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div className="p-4 flex-1 flex flex-col space-y-4">
+                  <div>
+                    <button type="button" onClick={() => setDetailOrg(org)} className="text-left group w-full text-wrap-anywhere">
+                      <h4 className="font-extrabold text-slate-900 text-sm group-hover:text-[#0c2340] group-hover:underline decoration-[#c5a556] underline-offset-2 transition-colors">
+                        {org.organizationName}
+                      </h4>
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs text-slate-600 font-medium">
+                    <div className="flex items-center gap-2 truncate text-wrap-anywhere">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-12 shrink-0">GSTIN</span>
+                      <span className="truncate font-bold">{org.gstin || '—'}</span>
                     </div>
-
-                    {/* Body */}
-                    <div className="p-4 flex-1 flex flex-col space-y-4">
-                      <div>
-                        <button type="button" onClick={() => setDetailOrg(org)} className="text-left group w-full text-wrap-anywhere">
-                          <h4 className="font-extrabold text-slate-900 text-sm group-hover:text-[#0c2340] group-hover:underline decoration-[#c5a556] underline-offset-2 transition-colors">
-                            {org.organizationName}
-                          </h4>
-                        </button>
-                      </div>
-
-                      <div className="space-y-1.5 text-xs text-slate-600 font-medium">
-                        <div className="flex items-center gap-2 truncate text-wrap-anywhere">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-12 shrink-0">GSTIN</span>
-                          <span className="truncate font-bold">{org.gstin || '—'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 truncate text-wrap-anywhere">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-12 shrink-0">PAN</span>
-                          <span className="truncate font-bold">{org.panNumber || '—'}</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 pt-3 border-t border-slate-100 mt-auto">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Compliance</span>
-                          <AadhaarBadge org={org} />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 pt-3 border-t border-slate-100">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Scope</span>
-                        <div className="grid grid-cols-3 gap-2">
-                          <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('users'); }} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 transition-colors truncate">
-                            <Users className="h-3 w-3 shrink-0" />
-                            <span className="truncate">{org._count?.users ?? 0}</span>
-                          </button>
-                          <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('products'); }} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 transition-colors truncate">
-                            <Package className="h-3 w-3 shrink-0" />
-                            <span className="truncate">{org._count?.products ?? 0}</span>
-                          </button>
-                          <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('services'); }} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 transition-colors truncate">
-                            <Wrench className="h-3 w-3 shrink-0" />
-                            <span className="truncate">{org._count?.services ?? 0}</span>
-                          </button>
-                        </div>
-                      </div>
+                    <div className="flex items-center gap-2 truncate text-wrap-anywhere">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-12 shrink-0">PAN</span>
+                      <span className="truncate font-bold">{org.panNumber || '—'}</span>
                     </div>
                   </div>
-                ))}
+
+                  <div className="space-y-2 pt-3 border-t border-slate-100 mt-auto">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">KYC Status</span>
+                      <AadhaarBadge org={org} />
+                    </div>
+                    {org.isBlacklisted && (
+                      <div className="flex items-center gap-1 text-red-600 text-[10px] font-bold bg-red-50 p-1.5 rounded-lg border border-red-100">
+                        <ShieldAlert className="h-3 w-3 shrink-0" />
+                        <span className="truncate">Restricted: {org.blacklistReason}</span>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-3 gap-1 pt-1">
+                      <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('users'); }} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 transition-colors truncate">
+                        <Users className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{org._count?.users ?? 0}</span>
+                      </button>
+                      <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('products'); }} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 transition-colors truncate">
+                        <Package className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{org._count?.products ?? 0}</span>
+                      </button>
+                      <button type="button" onClick={() => { setScopeOrg(org); setScopeTab('services'); }} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:border-[#0c2340] hover:bg-[#0c2340]/5 transition-colors truncate">
+                        <Wrench className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{org._count?.services ?? 0}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="organizations" />
-            </>
-          )
-        ) : (
-          <div className="py-16 text-center">
-            <Building2 className="h-12 w-12 text-slate-200 mx-auto mb-3" />
-            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No organizations found</p>
+            ))}
           </div>
-        )}
-      </div>
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSizeState} label="organizations" />
+        </div>
+      ) : (
+        <div className="py-16 text-center bg-white rounded-2xl border border-slate-200/80 shadow-sm">
+          <Building2 className="h-12 w-12 text-slate-200 mx-auto mb-3" />
+          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No organizations found</p>
+        </div>
+      )}
 
       {/* Feature Flags Modal */}
       {isFeatureModalOpen && selectedOrg && (
@@ -1061,7 +1034,7 @@ export default function OrganizationManagement() {
                     </div>
                     <div>
                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Verified At</p>
-                      <p className="mt-0.5 text-xs font-bold text-slate-700">{detailOrg.aadhaarKyc.verifiedAt ? new Date(detailOrg.aadhaarKyc.verifiedAt).toLocaleDateString('en-IN') : 'Not available'}</p>
+                      <p className="mt-0.5 text-xs font-bold text-slate-700">{detailOrg.aadhaarKyc.verifiedAt ? formatDateTime(detailOrg.aadhaarKyc.verifiedAt) : 'Not available'}</p>
                     </div>
                     <div>
                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Reference / Subject</p>
@@ -1419,39 +1392,51 @@ function ScopeListPanel({
     return () => { cancelled = true; };
   }, [orgId, tab, count, authHeaders]);
 
-  if (loading) return <p className="text-center text-xs font-bold text-slate-400 py-8">Loading {tab}...</p>;
+  const columns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'name',
+      header: 'Name',
+      cell: (item: any) => (
+        <span className="font-bold text-slate-900 text-wrap-anywhere">
+          {item.name || item.email || '—'}
+        </span>
+      )
+    },
+    {
+      key: 'detail',
+      header: tab === 'users' ? 'Email' : tab === 'products' ? 'SKU / HSN' : 'Pricing',
+      cell: (item: any) => (
+        <span className="text-xs text-slate-600 text-wrap-anywhere">
+          {tab === 'users' ? item.email || '—' : tab === 'products' ? (item.sku || item.hsnCode || '—') : (item.pricingModel || '—')}
+        </span>
+      )
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (item: any) => (
+        <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-600 text-[10px] font-black uppercase">
+          {item.status || item.accountStatus || item.role || '—'}
+        </span>
+      )
+    }
+  ], [tab]);
+
   if (error) return <p className="text-center text-xs font-bold text-red-500 py-8">{error}</p>;
-  if (items.length === 0) return <p className="text-center text-xs font-bold text-slate-400 py-8">No {tab} found for this organization.</p>;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
-          <tr>
-            <th className="px-3 py-2 w-12">#</th>
-            <th className="px-3 py-2">Name</th>
-            <th className="px-3 py-2">{tab === 'users' ? 'Email' : tab === 'products' ? 'SKU / HSN' : 'Pricing'}</th>
-            <th className="px-3 py-2">Status</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {items.map((item, idx) => (
-            <tr key={item.id || idx} className="hover:bg-slate-50/50">
-              <td className="px-3 py-2 font-mono text-[10px] font-black text-slate-400">{String(idx + 1).padStart(2, '0')}</td>
-              <td className="px-3 py-2 font-bold text-slate-900 text-wrap-anywhere">{item.name || item.email || '—'}</td>
-              <td className="px-3 py-2 text-xs text-slate-600 text-wrap-anywhere">
-                {tab === 'users' ? item.email || '—' : tab === 'products' ? (item.sku || item.hsnCode || '—') : (item.pricingModel || '—')}
-              </td>
-              <td className="px-3 py-2 text-[10px] font-black uppercase">
-                <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-600">
-                  {item.status || item.accountStatus || item.role || '—'}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      data={items}
+      columns={columns}
+      keyExtractor={(item: any, idx: number) => item.id || `org-${tab}-${idx}`}
+      isLoading={loading}
+      showSrNo={true}
+      srNoHeader="#"
+      srNoWidth="w-12"
+      emptyTitle={`No ${tab} found`}
+      emptyDescription={`No ${tab} found for this organization.`}
+      rowClassName="hover:bg-slate-50/50 text-sm"
+    />
   );
 }
 

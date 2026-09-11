@@ -43,6 +43,7 @@ import { useResponsiveViewMode, usePaginatedFeatureQuery } from '../../shared/ho
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { PaymentReceiptUploadModal } from '../components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../components/PaymentReceiptViewModal';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { useOrgRole } from '../../../hooks/useOrgRole';
 
 type PaymentRow = {
@@ -192,6 +193,239 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
     setSortKey(field);
     setPage(1);
   };
+
+  const paymentColumns = useMemo<ColumnDef<PaymentRow>[]>(() => [
+    {
+      key: 'reference',
+      header: 'Reference',
+      sortable: true,
+      sortKey: 'reference',
+      width: 'w-[14%]',
+      cell: (payment) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <EntityIdLink
+            label={payment.referenceId}
+            id={payment.id}
+            size="sm"
+            onClick={() => {
+              setDetailTab('receipt');
+              setSelected(payment);
+            }}
+          />
+          <p className="mt-1 text-[10px] font-semibold text-slate-500">
+            Invoice {payment.invoice?.invoiceNumber || payment.invoiceId || '-'}
+          </p>
+        </div>
+      )
+    },
+    {
+      key: 'parties',
+      header: 'Parties',
+      sortable: true,
+      sortKey: 'parties',
+      width: 'w-[14%]',
+      cell: (payment) => (
+        <div className="text-[10px] font-bold text-slate-500">
+          From {payment.payer?.name || `#${payment.payer?.id || '-'}`}
+          <br />
+          To {payment.payee?.name || `#${payment.payee?.id || '-'}`}
+        </div>
+      )
+    },
+    {
+      key: 'gateway',
+      header: 'Gateway',
+      sortable: true,
+      sortKey: 'gateway',
+      width: 'w-[12%]',
+      cell: (payment) => (
+        <span className="text-xs font-bold uppercase text-slate-600">
+          {payment.gateway || 'manual'} / {payment.method || 'bank_transfer'}
+        </span>
+      )
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      sortable: true,
+      sortKey: 'amount',
+      width: 'w-[10%]',
+      cell: (payment) => (
+        <span className="text-xs font-black text-slate-900">
+          {formatCurrency(payment.amount)}
+        </span>
+      )
+    },
+    {
+      key: 'tax',
+      header: 'Tax/TDS',
+      sortable: true,
+      sortKey: 'tax',
+      width: 'w-[12%]',
+      cell: (payment) => {
+        const tax = payment.metadata?.taxSummary || {};
+        return (
+          <span className="text-[10px] font-bold text-slate-500">
+            GST {formatCurrency(tax.totalTaxAmount || 0)} | TDS {formatCurrency(tax.tdsAmount || 0)}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'escrow',
+      header: 'Escrow Vault',
+      sortable: true,
+      sortKey: 'escrow',
+      width: 'w-[11%]',
+      cell: (payment) => {
+        if (!payment.escrowAccount) {
+          return <span className="text-[10px] font-semibold text-slate-400 italic">Not funded</span>;
+        }
+        return (
+          <span
+            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black uppercase ${
+              payment.escrowAccount.status === 'held'
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
+                : 'bg-slate-50 text-[#12335f] border border-blue-200/50'
+            }`}
+          >
+            <Lock className="h-2.5 w-2.5" /> #{payment.escrowAccount.id} {payment.escrowAccount.status}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'ledger',
+      header: 'Ledger Entries',
+      sortable: true,
+      sortKey: 'ledger',
+      width: 'w-[9%]',
+      cell: (payment) => (
+        <span className="flex items-center gap-1 font-mono text-xs text-slate-900 bg-slate-50 px-2 py-0.5 rounded w-max border border-slate-100">
+          <FileSpreadsheet className="h-3 w-3" /> {payment.ledgerEntries?.length || 0} items
+        </span>
+      )
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortKey: 'status',
+      width: 'w-[9%]',
+      cell: (payment) => {
+        const isSuccess = ['success', 'escrow_released'].includes(payment.status || '');
+        return (
+          <span
+            className={`rounded-lg border px-2.5 py-0.5 text-[9px] font-black uppercase ${
+              isSuccess
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : payment.status === 'failed'
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : 'border-blue-200 bg-slate-50 text-[#12335f]'
+            }`}
+          >
+            {String(payment.status || 'initiated').replace(/_/g, ' ')}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      sortable: true,
+      sortKey: 'date',
+      width: 'w-[9%]',
+      cell: (payment) => (
+        <span className="text-xs font-bold text-slate-500">
+          {formatDate(payment.completedAt || payment.createdAt)}
+        </span>
+      )
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-16',
+      align: 'right',
+      cell: (payment, index) => (
+        <div className="relative inline-flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpenKebabId(openKebabId === payment.id ? null : payment.id);
+            }}
+            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+            title="Actions"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+
+          {openKebabId === payment.id && (
+            <div
+              className={cn(
+                'absolute right-0 z-50 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100',
+                pagedPayments.length > 2 && index >= pagedPayments.length - 2
+                  ? 'bottom-full mb-1.5 origin-bottom-right'
+                  : 'top-full mt-1.5 origin-top-right'
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenKebabId(null);
+                  setViewProofPayment(payment);
+                  setViewProofModalOpen(true);
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+              >
+                <FileCheck className="h-3.5 w-3.5 text-blue-600" />
+                <span>View Proof</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenKebabId(null);
+                  setSelectedProofPayment(payment);
+                  setUploadProofModalOpen(true);
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+              >
+                <Upload className="h-3.5 w-3.5 text-blue-600" />
+                <span>Upload Slip</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenKebabId(null);
+                  setDetailTab('receipt');
+                  setSelected(payment);
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+              >
+                <Eye className="h-3.5 w-3.5 text-slate-500" />
+                <span>View Receipt</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenKebabId(null);
+                  setDetailTab('timeline');
+                  setSelected(payment);
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+              >
+                <Clock3 className="h-3.5 w-3.5 text-slate-500" />
+                <span>Track Timeline</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )
+    }
+  ], [openKebabId, pagedPayments.length]);
 
   const isKpisLoading = loading && filtered.length === 0;
 
@@ -406,6 +640,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
               : 'No transactions are linked to your account yet. Payments appear after invoice checkout, offline proof verification, or escrow release.'}
         />
       ) : viewMode === 'grid' ? (
+        <>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {pagedPayments.map((payment, index) => {
             const tax = payment.metadata?.taxSummary || {};
@@ -501,164 +736,31 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
             );
           })}
         </div>
+        <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="payments" />
+        </>
       ) : (
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm flex flex-col">
-          <div className="overflow-x-auto w-full min-h-[260px]">
-            <table data-ux-wrapped="true" className="w-full min-w-[1080px] border-collapse text-left text-xs mb-6">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-                    <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
-                    <th className="p-3"><SortableHeader label="Reference" field="reference" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="p-3"><SortableHeader label="Parties" field="parties" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="p-3"><SortableHeader label="Gateway" field="gateway" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="p-3"><SortableHeader label="Amount" field="amount" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="p-3"><SortableHeader label="Tax/TDS" field="tax" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="p-3"><SortableHeader label="Escrow Vault" field="escrow" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="p-3"><SortableHeader label="Ledger Entries" field="ledger" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="p-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="p-3"><SortableHeader label="Date" field="date" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="p-3 text-right w-16 text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                  {pagedPayments.map((payment, index) => {
-                    const tax = payment.metadata?.taxSummary || {};
-                    const isSuccess = ['success', 'escrow_released'].includes(payment.status || '');
-                    const rowNumber = (page - 1) * pageSize + index + 1;
-
-                    return (
-                      <tr key={payment.id} className={cn("hover:bg-slate-50/50 transition cursor-pointer", openKebabId === payment.id ? "relative z-50" : "relative z-0 hover:z-10")} onClick={() => { setDetailTab('receipt'); setSelected(payment); }}>
-                        <td className="p-3 font-mono text-xs text-slate-500">{rowNumber}</td>
-                        <td className="p-3" onClick={e => e.stopPropagation()}>
-                          <EntityIdLink label={payment.referenceId} id={payment.id} size="sm" onClick={() => { setDetailTab('receipt'); setSelected(payment); }} />
-                          <p className="mt-1 text-[10px] font-semibold text-slate-500">
-                            Invoice {payment.invoice?.invoiceNumber || payment.invoiceId || '-'}
-                          </p>
-                        </td>
-                        <td className="p-3 text-[10px] font-bold text-slate-500">
-                          From {payment.payer?.name || `#${payment.payer?.id || '-'}`}
-                          <br />
-                          To {payment.payee?.name || `#${payment.payee?.id || '-'}`}
-                        </td>
-                        <td className="p-3 text-xs font-bold uppercase text-slate-600">
-                          {payment.gateway || 'manual'} / {payment.method || 'bank_transfer'}
-                        </td>
-                        <td className="p-3 text-xs font-black text-slate-900">{formatCurrency(payment.amount)}</td>
-                        <td className="p-3 text-[10px] font-bold text-slate-500">
-                          GST {formatCurrency(tax.totalTaxAmount || 0)} | TDS {formatCurrency(tax.tdsAmount || 0)}
-                        </td>
-                        <td className="p-3">
-                          {payment.escrowAccount ? (
-                            <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black uppercase ${payment.escrowAccount.status === 'held'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
-                              : 'bg-slate-50 text-[#12335f] border border-blue-200/50'
-                              }`}>
-                              <Lock className="h-2.5 w-2.5" /> #{payment.escrowAccount.id} {payment.escrowAccount.status}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-semibold text-slate-400 italic">Not funded</span>
-                          )}
-                        </td>
-                        <td className="p-3 text-xs font-bold text-slate-600">
-                          <span className="flex items-center gap-1 font-mono text-xs text-slate-900 bg-slate-50 px-2 py-0.5 rounded w-max border border-slate-100">
-                            <FileSpreadsheet className="h-3 w-3" /> {payment.ledgerEntries?.length || 0} items
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className={`rounded-lg border px-2.5 py-0.5 text-[9px] font-black uppercase ${isSuccess
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : payment.status === 'failed'
-                              ? 'border-red-200 bg-red-50 text-red-700'
-                              : 'border-blue-200 bg-slate-50 text-[#12335f]'
-                            }`}>
-                            {String(payment.status || 'initiated').replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                        <td className="p-3 text-xs font-bold text-slate-500">
-                          {formatDate(payment.completedAt || payment.createdAt)}
-                        </td>
-                        <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                          <div className="relative inline-flex items-center justify-end">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenKebabId(openKebabId === payment.id ? null : payment.id);
-                              }}
-                              className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
-                              title="Actions"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </button>
-
-                            {openKebabId === payment.id && (
-                              <div className={cn(
-                                "absolute right-0 z-50 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100",
-                                pagedPayments.length > 2 && index >= pagedPayments.length - 2 ? "bottom-full mb-1.5 origin-bottom-right" : "top-full mt-1.5 origin-top-right"
-                              )}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenKebabId(null);
-                                    setViewProofPayment(payment);
-                                    setViewProofModalOpen(true);
-                                  }}
-                                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
-                                >
-                                  <FileCheck className="h-3.5 w-3.5 text-blue-600" />
-                                  <span>View Proof</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenKebabId(null);
-                                    setSelectedProofPayment(payment);
-                                    setUploadProofModalOpen(true);
-                                  }}
-                                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                                >
-                                  <Upload className="h-3.5 w-3.5 text-blue-600" />
-                                  <span>Upload Slip</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenKebabId(null);
-                                    setDetailTab('receipt');
-                                    setSelected(payment);
-                                  }}
-                                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                                >
-                                  <Eye className="h-3.5 w-3.5 text-slate-500" />
-                                  <span>View Receipt</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenKebabId(null);
-                                    setDetailTab('timeline');
-                                    setSelected(payment);
-                                  }}
-                                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                                >
-                                  <Clock3 className="h-3.5 w-3.5 text-slate-500" />
-                                  <span>Track Timeline</span>
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="payments" />
-        </div>
+        <DataTable<PaymentRow>
+          data={pagedPayments}
+          columns={paymentColumns}
+          keyExtractor={(payment) => payment.id}
+          sortKey={sortKey}
+          sortDirection={sortDirection}
+          onSort={(field) => toggleSort(field as PaymentSortKey)}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          paginationLabel="payments"
+          showSrNo={true}
+          srNoHeader="Sr. No"
+          srNoWidth="w-16"
+          minWidth="min-w-[1080px]"
+          onRowClick={(payment) => {
+            setDetailTab('receipt');
+            setSelected(payment);
+          }}
+        />
       )}
 
       {selected && (
@@ -1009,38 +1111,56 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
                       <ShieldCheck className="h-3 w-3" /> Verified Format
                     </span>
                   </div>
-                  {(payment.ledgerEntries || []).length === 0 ? (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center text-xs font-semibold text-slate-500">
-                      Ledger entry is pending for this payment record.
-                    </div>
-                  ) : (
-                    <div className="overflow-hidden rounded-lg border border-slate-200">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                          <tr>
-                            <th className="w-16 p-3">Sr. No</th>
-                            <th className="p-3">Entry</th>
-                            <th className="p-3">Debit Account</th>
-                            <th className="p-3">Credit Account</th>
-                            <th className="p-3 text-right">Amount</th>
-                            <th className="p-3">Recorded On</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {payment.ledgerEntries?.map((entry, index) => (
-                            <tr key={entry.id}>
-                              <td className="p-3 text-xs font-black text-slate-500">{String(index + 1).padStart(2, '0')}</td>
-                              <td className="p-3 font-black uppercase text-slate-800">{entry.entryType.replace(/_/g, ' ')}</td>
-                              <td className="p-3 font-mono font-semibold text-slate-600">{entry.debitAccount || '-'}</td>
-                              <td className="p-3 font-mono font-semibold text-slate-600">{entry.creditAccount || '-'}</td>
-                              <td className="p-3 text-right font-black text-slate-950">{formatCurrency(entry.amount)}</td>
-                              <td className="p-3 font-semibold text-slate-500">{formatDate(entry.createdAt)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                  <DataTable
+                    data={payment.ledgerEntries || []}
+                    columns={[
+                      {
+                        key: 'entryType',
+                        header: 'Entry',
+                        cell: (entry: any) => (
+                          <span className="font-black uppercase text-slate-800">
+                            {entry.entryType.replace(/_/g, ' ')}
+                          </span>
+                        )
+                      },
+                      {
+                        key: 'debitAccount',
+                        header: 'Debit Account',
+                        cell: (entry: any) => (
+                          <span className="font-mono font-semibold text-slate-600">{entry.debitAccount || '-'}</span>
+                        )
+                      },
+                      {
+                        key: 'creditAccount',
+                        header: 'Credit Account',
+                        cell: (entry: any) => (
+                          <span className="font-mono font-semibold text-slate-600">{entry.creditAccount || '-'}</span>
+                        )
+                      },
+                      {
+                        key: 'amount',
+                        header: 'Amount',
+                        align: 'right',
+                        cell: (entry: any) => (
+                          <span className="font-black text-slate-950">{formatCurrency(entry.amount)}</span>
+                        )
+                      },
+                      {
+                        key: 'createdAt',
+                        header: 'Recorded On',
+                        cell: (entry: any) => (
+                          <span className="font-semibold text-slate-500">{formatDate(entry.createdAt)}</span>
+                        )
+                      }
+                    ]}
+                    keyExtractor={(entry: any) => entry.id}
+                    showSrNo={true}
+                    srNoHeader="Sr. No"
+                    srNoWidth="w-16"
+                    emptyTitle="Ledger entry pending"
+                    emptyDescription="Ledger entry is pending for this payment record."
+                    rowClassName="hover:bg-slate-50/50 text-xs"
+                  />
                 </div>
 
                 <div className="border-t border-slate-200 bg-slate-50 px-5 py-4 text-xs font-semibold text-slate-500">

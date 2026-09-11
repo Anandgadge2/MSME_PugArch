@@ -19,7 +19,7 @@ import { Card, CardContent, Badge } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input, Select } from '../../../components/ui/input';
 import { KpiCard } from '../../shared/KpiCard';
-import { Pagination } from '../../shared/Pagination';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { PageToolbar } from '../../shared/PageToolbar';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { ListSkeleton } from '../../../components/ui/skeleton';
@@ -110,6 +110,110 @@ export default function FraudAlertsPage() {
         const critical = records.filter(a => a.severity === 'CRITICAL').length;
         return { open, review, critical };
     }, [records]);
+
+    const isFiltered = Boolean(q || status || severity || type);
+
+    const resetFilters = () => {
+        setQ('');
+        setStatus('');
+        setSeverity('');
+        setType('');
+        setPage(1);
+    };
+
+    const fraudColumns = useMemo<ColumnDef<FraudAlertDto>[]>(() => [
+        {
+            key: 'type',
+            header: 'Alert Type',
+            sortable: true,
+            width: 'w-48',
+            cell: (alert) => (
+                <div className="text-wrap-anywhere">
+                    <p className="text-xs font-black text-[#12335f]">{ALERT_TYPE_LABELS[alert.alertType] || alert.alertType}</p>
+                    <code className="mt-0.5 inline-block text-[10px] text-slate-400">{alert.alertType}</code>
+                </div>
+            )
+        },
+        {
+            key: 'subject',
+            header: 'Subject',
+            sortable: true,
+            cell: (alert) => (
+                <div className="text-wrap-anywhere">
+                    <p className="text-xs font-bold text-slate-900">
+                        {alert.user?.name || alert.organization?.organizationName || (alert.entityType ? `${alert.entityType}#${alert.entityId}` : 'System-wide')}
+                    </p>
+                    {alert.user?.email && <p className="text-[10px] text-slate-500">{alert.user.email}</p>}
+                </div>
+            )
+        },
+        {
+            key: 'severity',
+            header: 'Severity',
+            sortable: true,
+            width: 'w-28',
+            cell: (alert) => (
+                <Badge className={cn('rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wide', SEVERITY_TONE[alert.severity])}>
+                    {alert.severity}
+                </Badge>
+            )
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            sortable: true,
+            width: 'w-32',
+            cell: (alert) => (
+                <Badge className={cn('rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wide', STATUS_TONE[alert.status])}>
+                    {alert.status.replace(/_/g, ' ')}
+                </Badge>
+            )
+        },
+        {
+            key: 'reviewer',
+            header: 'Reviewer',
+            sortable: true,
+            width: 'w-40',
+            cell: (alert) => (
+                <div className="text-xs font-semibold text-slate-700 text-wrap-anywhere">
+                    {alert.reviewedBy?.name || '—'}
+                    {alert.reviewedAt && (
+                        <p className="text-[10px] text-slate-400">{formatRelative(alert.reviewedAt)}</p>
+                    )}
+                </div>
+            )
+        },
+        {
+            key: 'createdAt',
+            header: 'Raised',
+            sortable: true,
+            width: 'w-40',
+            cell: (alert) => (
+                <div className="text-xs font-semibold text-slate-700">
+                    <p>{formatDateTime(alert.createdAt)}</p>
+                    <p className="text-[10px] text-slate-400">{formatRelative(alert.createdAt)}</p>
+                </div>
+            )
+        },
+        {
+            key: 'actions',
+            header: 'Actions',
+            align: 'right',
+            width: 'w-24',
+            cell: (alert) => (
+                <button
+                    type="button"
+                    onClick={e => {
+                        e.stopPropagation();
+                        setOpenId(alert.id);
+                    }}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:border-[#12335f] hover:text-[#12335f]"
+                >
+                    Review
+                </button>
+            )
+        }
+    ], []);
 
     return (
         <div className="space-y-4">
@@ -202,13 +306,7 @@ export default function FraudAlertsPage() {
                         options: Object.entries(ALERT_TYPE_LABELS).map(([value, label]) => ({ value, label }))
                     }
                 ]}
-                onReset={() => {
-                    setQ('');
-                    setStatus('');
-                    setSeverity('');
-                    setType('');
-                    setPage(1);
-                }}
+                onReset={resetFilters}
             />
 
             {list.error && (
@@ -218,91 +316,29 @@ export default function FraudAlertsPage() {
                 />
             )}
 
-            {list.isLoading && !list.data ? (
-                <ListSkeleton rows={4} />
-            ) : records.length === 0 ? (
-                <EmptyState title="No fraud alerts" description="No alerts match the current filters. The detection rules are running quietly." />
-            ) : (
-                <Card>
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[1000px] text-sm">
-                                <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                    <tr>
-                                        <th className="px-4 py-2.5 text-left w-12">#</th>
-                                        <th className="px-4 py-2.5 text-left"><SortableHeader label="Alert Type" field="type" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left"><SortableHeader label="Subject" field="subject" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left w-28"><SortableHeader label="Severity" field="severity" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left w-32"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left w-44"><SortableHeader label="Reviewer" field="reviewer" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left w-44"><SortableHeader label="Raised" field="createdAt" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-right w-24">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {sortedRecords.map((alert, idx) => (
-                                        <tr key={alert.id} className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setOpenId(alert.id)}>
-                                            <td className="px-4 py-3 text-xs font-mono text-slate-400">
-                                                {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
-                                            </td>
-                                            <td className="px-4 py-3 text-wrap-anywhere">
-                                                <p className="text-xs font-black text-[#12335f]">{ALERT_TYPE_LABELS[alert.alertType] || alert.alertType}</p>
-                                                <code className="mt-0.5 inline-block text-[10px] text-slate-400">{alert.alertType}</code>
-                                            </td>
-                                            <td className="px-4 py-3 text-wrap-anywhere">
-                                                <p className="text-xs font-bold text-slate-900">
-                                                    {alert.user?.name || alert.organization?.organizationName || (alert.entityType ? `${alert.entityType}#${alert.entityId}` : 'System-wide')}
-                                                </p>
-                                                {alert.user?.email && <p className="text-[10px] text-slate-500">{alert.user.email}</p>}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <Badge className={cn('rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wide', SEVERITY_TONE[alert.severity])}>
-                                                    {alert.severity}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <Badge className={cn('rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wide', STATUS_TONE[alert.status])}>
-                                                    {alert.status.replace(/_/g, ' ')}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-4 py-3 text-xs font-semibold text-slate-700 text-wrap-anywhere">
-                                                {alert.reviewedBy?.name || '—'}
-                                                {alert.reviewedAt && (
-                                                    <p className="text-[10px] text-slate-400">{formatRelative(alert.reviewedAt)}</p>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-xs font-semibold text-slate-700">
-                                                <p>{formatDateTime(alert.createdAt)}</p>
-                                                <p className="text-[10px] text-slate-400">{formatRelative(alert.createdAt)}</p>
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <button
-                                                    type="button"
-                                                    onClick={e => {
-                                                        e.stopPropagation();
-                                                        setOpenId(alert.id);
-                                                    }}
-                                                    className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:border-[#12335f] hover:text-[#12335f]"
-                                                >
-                                                    Review
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <Pagination
-                            page={page}
-                            pageSize={pageSize}
-                            total={total}
-                            onPageChange={setPage}
-                            onPageSizeChange={setPageSize}
-                            label="alerts"
-                        />
-                    </CardContent>
-                </Card>
-            )}
+            <DataTable<FraudAlertDto>
+                data={sortedRecords}
+                columns={fraudColumns}
+                keyExtractor={(alert) => alert.id}
+                isLoading={list.isLoading && !list.data}
+                showSrNo={true}
+                srNoHeader="#"
+                srNoWidth="w-14"
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                onSort={(key) => toggleSort(key as FraudSortKey)}
+                onRowClick={(alert) => setOpenId(alert.id)}
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                paginationLabel="alerts"
+                emptyTitle="No fraud alerts"
+                emptyDescription="No alerts match the current filters. The detection rules are running quietly."
+                emptyAction={isFiltered ? { label: 'Reset Filters', onClick: resetFilters } : undefined}
+                caption="Fraud Signal Detection and Review Queue Table"
+            />
 
             {openId !== null && <FraudAlertDetail id={openId} onClose={() => setOpenId(null)} />}
         </div>

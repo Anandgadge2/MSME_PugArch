@@ -18,6 +18,7 @@ import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 
 
 
@@ -155,6 +156,85 @@ export default function EscrowPage() {
   const frozenCount = escrows.filter(item => item.status === 'frozen').length;
   const milestoneCount = escrows.reduce((sum, item) => sum + (item.milestones?.length || 0), 0);
 
+  const escrowColumns = useMemo<ColumnDef<EscrowAccount>[]>(() => [
+    {
+      key: 'escrow',
+      header: 'Escrow',
+      width: 'w-[16%]',
+      sortable: true,
+      cell: (escrow) => (
+        <div>
+          <EntityIdLink
+            label={`ESC-${escrow.id}`}
+            id={escrow.id}
+            size="sm"
+            onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}
+          />
+          <p className="mt-1 text-xs text-slate-500">{formatCurrency(escrow.amount)}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'parties',
+      header: 'Buyer / Seller',
+      width: 'w-[24%]',
+      sortable: true,
+      cell: (escrow) => (
+        <div className="text-xs font-semibold text-slate-600">
+          <span className="text-wrap-anywhere">{escrow.buyer?.name || `Buyer #${escrow.buyerId}`}</span>
+          <br />
+          <span className="text-wrap-anywhere">{escrow.seller?.name || `Seller #${escrow.sellerId}`}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      width: 'w-[14%]',
+      sortable: true,
+      align: 'right',
+      cell: (escrow) => (
+        <span className="text-xs font-semibold text-slate-700">{formatCurrency(escrow.amount)}</span>
+      ),
+    },
+    {
+      key: 'reference',
+      header: 'PO / Reference',
+      width: 'w-[18%]',
+      sortable: true,
+      cell: (escrow) => (
+        <div className="text-xs text-slate-500">
+          PO {escrow.purchaseOrder?.poNumber || '-'}
+          <br />
+          Ref {escrow.paymentTransaction?.referenceId || '-'}
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-[12%]',
+      sortable: true,
+      cell: (escrow) => (
+        <span className={cn('inline-flex rounded-full border px-2 py-1 text-[10px] font-black uppercase', statusClass(escrow.status))}>
+          {escrow.status}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-[12%]',
+      align: 'right',
+      cell: (escrow) => (
+        <div className="space-x-2" onClick={e => e.stopPropagation()}>
+          <Button size="sm" variant="outline" onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}>View</Button>
+          <Button size="sm" className="bg-[#12335f] text-white" onClick={() => { void handleTrackClick(escrow); }}>Track</Button>
+        </div>
+      ),
+    },
+  ], []);
+
   if (loading) return <EscrowPageSkeleton />;
 
   return (
@@ -252,87 +332,61 @@ export default function EscrowPage() {
       {filtered.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center text-sm font-semibold text-slate-500">No escrow accounts match the current filters.</div> : (
         <div className="space-y-3">
           {viewMode === 'list' ? (
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-              <table className="min-w-full text-left text-sm text-slate-700">
-                <thead className="bg-slate-50 text-xs uppercase tracking-[0.18em] text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Sr. No</th>
-                    <th className="px-4 py-3"><SortableHeader label="Escrow" field="escrow" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="px-4 py-3"><SortableHeader label="Buyer / Seller" field="parties" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="px-4 py-3"><SortableHeader label="Amount" field="amount" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="px-4 py-3"><SortableHeader label="PO / Reference" field="reference" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="px-4 py-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                    <th className="px-4 py-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {pagedEscrows.map((escrow, index) => (
-                    <tr key={escrow.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-xs font-black text-slate-700">{(page - 1) * pageSize + index + 1}</td>
-                      <td className="px-4 py-3">
-                        <EntityIdLink
-                          label={`ESC-${escrow.id}`}
-                          id={escrow.id}
-                          size="sm"
-                          onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}
-                        />
-                        <p className="mt-1 text-xs text-slate-500">{formatCurrency(escrow.amount)}</p>
-                      </td>
-                      <td className="px-4 py-3 text-xs font-semibold text-slate-600">
-                        <span className="text-wrap-anywhere">{escrow.buyer?.name || `Buyer #${escrow.buyerId}`}</span>
-                        <br />
-                        <span className="text-wrap-anywhere">{escrow.seller?.name || `Seller #${escrow.sellerId}`}</span>
-                      </td>
-                      <td className="px-4 py-3 text-xs font-semibold text-slate-700">{formatCurrency(escrow.amount)}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">PO {escrow.purchaseOrder?.poNumber || '-'}<br />Ref {escrow.paymentTransaction?.referenceId || '-'}</td>
-                      <td className="px-4 py-3"><span className={cn('inline-flex rounded-full border px-2 py-1 text-[10px] font-black uppercase', statusClass(escrow.status))}>{escrow.status}</span></td>
-                      <td className="px-4 py-3 space-x-2">
-                        <Button size="sm" variant="outline" onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}>View</Button>
-                        <Button size="sm" className="bg-[#12335f] text-white" onClick={() => { void handleTrackClick(escrow); }}>Track</Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable<EscrowAccount>
+              data={pagedEscrows}
+              columns={escrowColumns}
+              keyExtractor={(escrow) => escrow.id}
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onSort={(field) => toggleSort(field as any)}
+              showSrNo
+              srNoWidth="w-[4%]"
+              caption="Escrow Accounts List"
+            />
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {pagedEscrows.map(escrow => (
-                <Card key={escrow.id} className="rounded-lg border-slate-200 shadow-none">
-                  <CardContent className="space-y-4 p-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <div>
-                        <EntityIdLink
-                          label={`ESC-${escrow.id}`}
-                          id={escrow.id}
-                          size="sm"
-                          onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}
-                        />
-                        <p className="mt-2 text-xs font-bold text-slate-500 text-wrap-anywhere">{formatCurrency(escrow.amount)} | PO {escrow.purchaseOrder?.poNumber || '-'}</p>
-                        <p className="mt-2 text-xs text-slate-500 text-wrap-anywhere">Ref {escrow.paymentTransaction?.referenceId || '-'} | {escrow.buyer?.name || `Buyer #${escrow.buyerId}`} → {escrow.seller?.name || `Seller #${escrow.sellerId}`}</p>
-                      </div>
-                      <div className="flex flex-col items-start gap-2 sm:items-end">
-                        <span className={cn('rounded-full border px-3 py-1 text-[10px] font-black uppercase', statusClass(escrow.status))}>{escrow.status}</span>
-                        <div className="flex flex-wrap gap-2">
-                          <Button variant="outline" size="sm" onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}>Details</Button>
-                          <Button size="sm" className="bg-[#12335f] text-white" onClick={() => { void handleTrackClick(escrow); }}>Track</Button>
+            <>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {pagedEscrows.map(escrow => (
+                  <Card key={escrow.id} className="rounded-lg border-slate-200 shadow-none">
+                    <CardContent className="space-y-4 p-4">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <EntityIdLink
+                            label={`ESC-${escrow.id}`}
+                            id={escrow.id}
+                            size="sm"
+                            onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}
+                          />
+                          <p className="mt-2 text-xs font-bold text-slate-500 text-wrap-anywhere">{formatCurrency(escrow.amount)} | PO {escrow.purchaseOrder?.poNumber || '-'}</p>
+                          <p className="mt-2 text-xs text-slate-500 text-wrap-anywhere">Ref {escrow.paymentTransaction?.referenceId || '-'} | {escrow.buyer?.name || `Buyer #${escrow.buyerId}`} → {escrow.seller?.name || `Seller #${escrow.sellerId}`}</p>
+                        </div>
+                        <div className="flex flex-col items-start gap-2 sm:items-end">
+                          <span className={cn('rounded-full border px-3 py-1 text-[10px] font-black uppercase', statusClass(escrow.status))}>{escrow.status}</span>
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" onClick={() => { setDetailTab('receipt'); setSelected(escrow); }}>Details</Button>
+                            <Button size="sm" className="bg-[#12335f] text-white" onClick={() => { void handleTrackClick(escrow); }}>Track</Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="grid gap-2 md:grid-cols-3">
-                      <DetailMetric label="Status" value={escrow.status} />
-                      <DetailMetric label="Funded" value={escrow.fundedAt ? formatDate(escrow.fundedAt) : 'Pending'} />
-                      <DetailMetric label="Milestones" value={String((escrow.milestones || []).length)} />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                      <div className="grid gap-2 md:grid-cols-3">
+                        <DetailMetric label="Status" value={escrow.status} />
+                        <DetailMetric label="Funded" value={escrow.fundedAt ? formatDate(escrow.fundedAt) : 'Pending'} />
+                        <DetailMetric label="Milestones" value={String((escrow.milestones || []).length)} />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="escrow accounts" />
+              </div>
+            </>
           )}
-
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="escrow accounts" />
-          </div>
         </div>
       )}
 

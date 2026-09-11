@@ -325,14 +325,17 @@ const recalculateRanks = async (tx: any, auctionId: number) => {
 
 router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const rawId = req.params.procurementId;
+    const rawId = String(req.params.procurementId || '').trim();
     const numId = Number(rawId);
 
-    const auction = await db.auction.findFirst({
+    // 1. Direct match by referenceNo or auctionCode first (prevents integer ID cross-contamination between bids & requirements)
+    let auction = await db.auction.findFirst({
       where: {
         OR: [
-          ...(Number.isFinite(numId) && numId > 0 ? [{ linkedBidId: numId }, { linkedRequirementId: numId }] : []),
-          { referenceNo: String(rawId) }
+          { referenceNo: rawId },
+          { referenceNo: `RFQ-${rawId}` },
+          { referenceNo: `REQ-${rawId}` },
+          { auctionCode: rawId },
         ]
       },
       include: {
@@ -344,6 +347,55 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
       },
       orderBy: { id: 'desc' }
     });
+
+    // 2. If not found by reference string, resolve via specific linked entity
+    if (!auction && Number.isFinite(numId) && numId > 0) {
+      // Check if numeric ID is a ProcurementBid
+      const pb = await db.procurementBid.findUnique({
+        where: { id: numId },
+        select: { id: true, bidNumber: true }
+      }).catch(() => null);
+
+      if (pb) {
+        auction = await db.auction.findFirst({
+          where: {
+            OR: [
+              { linkedBidId: pb.id },
+              ...(pb.bidNumber ? [{ referenceNo: pb.bidNumber }, { auctionCode: pb.bidNumber }] : [])
+            ]
+          },
+          include: {
+            winnerSeller: { select: { id: true, name: true, email: true } },
+            bids: { orderBy: { createdAt: 'desc' }, take: 10 }
+          },
+          orderBy: { id: 'desc' }
+        });
+      }
+
+      // If still not found, check Requirement
+      if (!auction) {
+        const reqItem = await (db as any).requirement.findUnique({
+          where: { id: numId },
+          select: { id: true, requirementNumber: true }
+        }).catch(() => null);
+
+        if (reqItem) {
+          auction = await db.auction.findFirst({
+            where: {
+              OR: [
+                { linkedRequirementId: reqItem.id },
+                ...(reqItem.requirementNumber ? [{ referenceNo: reqItem.requirementNumber }] : [])
+              ]
+            },
+            include: {
+              winnerSeller: { select: { id: true, name: true, email: true } },
+              bids: { orderBy: { createdAt: 'desc' }, take: 10 }
+            },
+            orderBy: { id: 'desc' }
+          });
+        }
+      }
+    }
 
     if (!auction) {
       return apiResponse.success(res, null, 200, 'No auction linked to this procurement');
@@ -422,7 +474,17 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     let [auction, participant] = await Promise.all([
       db.auction.findUnique({ where: { id } }),
-      req.user?.role === 'seller' ? db.auctionParticipant.findFirst({ where: { auctionId: id, sellerOrgId: req.user.organizationId || -1 } }) : Promise.resolve(null)
+      req.user?.role === 'seller'
+        ? db.auctionParticipant.findFirst({
+            where: {
+              auctionId: id,
+              OR: [
+                ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+                ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
+              ]
+            }
+          })
+        : Promise.resolve(null)
     ]);
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     auction = await withEffectiveStatus(auction);
@@ -666,9 +728,12 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
           auctionId: auction.id,
           sellerOrgId,
           sellerUserId,
-          status: 'ACCEPTED',
+          status: 'TECHNICALLY_QUALIFIED',
+          qualificationStatus: 'APPROVED',
+          qualifiedAt: new Date(),
           currentRank: rank,
-          lastBidAmount: amount
+          lastBidAmount: amount,
+          initialQuoteTotal: amount
         }
       });
       participantRecords.push(part);
@@ -696,6 +761,16 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
           currentWinnerId: participantRecords[0].sellerUserId || null
         }
       });
+    }
+
+    // Advance linked procurementBid lifecycle stage
+    if (linkedBid) {
+      await db.procurementBid.update({
+        where: { id: linkedBid.id },
+        data: {
+          lifecycleStage: 'FINANCIAL_EVALUATION'
+        }
+      }).catch(() => null);
     }
 
     // Write audit event
@@ -805,7 +880,12 @@ router.patch('/reverse-auctions/:id', requirePermission('reverse_auction.update'
 // Before an auction can go LIVE, enough sellers must have cleared the pre-bid
 // qualification stage — otherwise the auction opens with no eligible bidders.
 const assertEnoughQualifiedBidders = async (auction: any) => {
-  const qualified = await db.auctionParticipant.count({ where: { auctionId: auction.id, status: 'TECHNICALLY_QUALIFIED' } });
+  const qualified = await db.auctionParticipant.count({
+    where: {
+      auctionId: auction.id,
+      status: { in: ['TECHNICALLY_QUALIFIED', 'ACCEPTED'] }
+    }
+  });
   const minimum = Math.max(1, Number(auction.minimumQualifiedBidders) || 1);
   if (qualified < minimum) {
     throw new ApiError(400, `At least ${minimum} technically qualified bidder(s) are required before the auction can go live (currently ${qualified}).`, 'AUCTION_INSUFFICIENT_QUALIFIED');
@@ -1347,8 +1427,11 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
         const participant = await tx.auctionParticipant.findFirst({
           where: {
             auctionId,
-            sellerOrgId: req.user?.organizationId || -1,
-            status: 'TECHNICALLY_QUALIFIED'
+            OR: [
+              ...(req.user?.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+              ...(req.user?.id ? [{ sellerUserId: req.user.id }] : [])
+            ],
+            status: { in: ['TECHNICALLY_QUALIFIED', 'ACCEPTED'] }
           }
         });
         if (!participant) throw new ApiError(403, 'Only technically qualified sellers can bid. Complete the qualification stage first.', 'AUCTION_SELLER_NOT_QUALIFIED');

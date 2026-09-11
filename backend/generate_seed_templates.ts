@@ -2,124 +2,1137 @@ import { PrismaClient } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
 
 const prisma = new PrismaClient();
-
 const OUTPUT_DIR = path.resolve('seeded_templates');
 
-// We use reliable placeholder images and dummy PDFs that the backend can download
-const IMAGE_URLS = [
-  'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158',
-  'https://images.unsplash.com/photo-1581092160562-40aa08e11576',
-  'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952',
-  'https://images.unsplash.com/photo-1530124566582-a618bc2615dc',
-  'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122',
-  'https://images.unsplash.com/photo-1581092335397-9583eb92d232'
-];
-
+// Reliable, verified 200 OK document URLs
 const DOC_URLS = [
-  'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-  'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf',
-  'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/test/pdfs/xfa_xobject.pdf'
+  'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/test/pdfs/basicapi.pdf',
+  'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf'
 ];
 
-const getRandomImages = () => {
-    const shuffled = [...IMAGE_URLS].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, 3 + Math.floor(Math.random() * 2)).join(', '); // 3 to 4 images
-};
+// Curated realistic products with category mapping and verified 200 OK Unsplash photography
+const REALISTIC_PRODUCTS = [
+  {
+    name: 'Fe 550D TMT Rebar (12mm x 12m Bundles)',
+    category: 'Steel & Metal Products',
+    status: 'ACTIVE',
+    description: 'High-strength thermo-mechanically treated Fe 550D rebars with superior bendability, ductility, and seismic resistance for industrial RCC structures.',
+    price: 58500,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'MT',
+    hsn: '721420',
+    sku: 'STEEL-TMT-550D-12',
+    brand: 'Jindal Panther / Tata Tiscon',
+    model: 'FE-550D-12MM',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 62000,
+    discountPrice: 58500,
+    discountPercent: 5.65,
+    offerLabel: 'District Infrastructure Bulk Rate',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 10,
+    images: 'https://images.unsplash.com/photo-1618090584176-7132b9911657?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Grade', 'Fe 550D', ''],
+      ['Diameter', '12', 'mm'],
+      ['Standard', 'IS 1786:2008', ''],
+      ['Yield Strength', '550', 'N/mm²'],
+      ['Elongation', '14.5', '%']
+    ]
+  },
+  {
+    name: 'Industrial Safety Helmet Class-E with 6-Point Ratchet',
+    category: 'Safety Equipment & Industrial Safety',
+    status: 'ACTIVE',
+    description: 'High-density polyethylene (HDPE) electrical shock-proof safety helmet with 6-point nylon ratchet harness, chin strap, and sweatband.',
+    price: 450,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Nos',
+    hsn: '650610',
+    sku: 'SAF-HLM-PRO-E',
+    brand: 'Karam / Udyogi',
+    model: 'SHEL-E500',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 550,
+    discountPrice: 450,
+    discountPercent: 18.18,
+    offerLabel: 'MSME Site Safety Special',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 50,
+    images: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Shell Material', 'High-Density Polyethylene (HDPE)', ''],
+      ['Electrical Resistance', '20000', 'Volts'],
+      ['Standard Certification', 'IS 2925:1984 / EN 397', ''],
+      ['Impact Energy Absorption', '50', 'Joules']
+    ]
+  },
+  {
+    name: 'High-Pressure Carbon Steel Flanged Ball Valve (Class 300, 4-Inch)',
+    category: 'Pipes, Tiles & Hardware',
+    status: 'ACTIVE',
+    description: 'Cast carbon steel two-piece full bore flanged ball valve designed for industrial steam, oil, water, and gas isolation pipelines.',
+    price: 9200,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Nos',
+    hsn: '848180',
+    sku: 'VALV-BV-CS-100',
+    brand: 'Audco / L&T',
+    model: 'FB-CS300-4IN',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 10500,
+    discountPrice: 9200,
+    discountPercent: 12.38,
+    offerLabel: 'Plant Spares Special',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 5,
+    images: 'https://images.unsplash.com/photo-1565043666747-69f6646db940?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Body Material', 'ASTM A216 Gr. WCB', ''],
+      ['Nominal Size', '4', 'Inch'],
+      ['Pressure Rating', 'Class 300 (PN 50)', ''],
+      ['End Connection', 'Flanged RF (ASME B16.5)', ''],
+      ['Hydrostatic Shell Test', '76', 'Bar']
+    ]
+  },
+  {
+    name: '3-Phase Squirrel Cage Induction Motor (15 HP / 11 kW, 1440 RPM)',
+    category: 'Pumps, Motors & Hydraulics',
+    status: 'ACTIVE',
+    description: 'Energy-efficient IE3 cast iron frame 3-phase induction motor with IP55 protection for severe industrial environments and continuous duty S1.',
+    price: 36800,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Nos',
+    hsn: '850152',
+    sku: 'MOT-IND-15HP-4P',
+    brand: 'Bharat Bijlee / ABB',
+    model: 'IE3-160M-4P',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 42000,
+    discountPrice: 36800,
+    discountPercent: 12.38,
+    offerLabel: 'Factory Modernization Offer',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 2,
+    images: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Rated Output', '11', 'kW'],
+      ['Horsepower', '15', 'HP'],
+      ['Speed', '1440', 'RPM'],
+      ['Efficiency Class', 'IE3 Premium Efficiency', ''],
+      ['Frame Size', '160M', ''],
+      ['Enclosure / IP Rating', 'IP55 Totally Enclosed Fan Cooled', '']
+    ]
+  },
+  {
+    name: '1.1 kV XLPE 4-Core Aluminium Armoured Power Cable (185 sq.mm)',
+    category: 'Electrical Cables & Power Equipment',
+    status: 'ACTIVE',
+    description: 'Heavy duty stranded aluminium conductor underground armoured power cable with cross-linked polyethylene (XLPE) insulation and galvanized steel strip armour.',
+    price: 1150,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Meter',
+    hsn: '854449',
+    sku: 'CBL-PWR-4C-185AL',
+    brand: 'Polycab / Havells',
+    model: 'A2XFY-4X185',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 1280,
+    discountPrice: 1150,
+    discountPercent: 10.16,
+    offerLabel: 'Substation Project Rate',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 100,
+    images: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Voltage Rating', '1100', 'V'],
+      ['Cross Sectional Area', '185', 'sq.mm'],
+      ['Conductor Material', 'EC Grade Stranded Aluminium', ''],
+      ['Standard', 'IS 7098 (Part 1)', '']
+    ]
+  },
+  {
+    name: 'Grade 8.8 High-Tensile Hot-Dip Galvanized Hex Bolts & Nuts (M16 x 80mm)',
+    category: 'Industrial Fasteners & Components',
+    status: 'ACTIVE',
+    description: 'Precision forged high-tensile structural bolts conforming to DIN 933 with matching heavy hex nuts and spring washers, hot-dip galvanized for corrosion resistance.',
+    price: 48,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Nos',
+    hsn: '731815',
+    sku: 'FAS-HEX-M16-80',
+    brand: 'Sundram Fasteners / Unbrako',
+    model: 'HDG-8.8-M16',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 55,
+    discountPrice: 48,
+    discountPercent: 12.73,
+    offerLabel: 'Bulk Erection Fasteners Deal',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 500,
+    images: 'https://images.unsplash.com/photo-1586864387967-d02ef85d93e8?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Thread Size', 'M16 x 2.0mm', ''],
+      ['Bolt Length', '80', 'mm'],
+      ['Property Class', '8.8', ''],
+      ['Coating', 'Hot Dip Galvanized (HDG > 45 micron)', '']
+    ]
+  },
+  {
+    name: 'Deep Groove Ball Bearing 6312-2RS1/C3 (60x130x31 mm)',
+    category: 'Bearings & Mechanical Components',
+    status: 'ACTIVE',
+    description: 'Single row deep groove ball bearing with C3 radial internal clearance and dual synthetic rubber contact seals on both sides for heavy industrial vibration duties.',
+    price: 1850,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Nos',
+    hsn: '848210',
+    sku: 'BRG-DGB-6312-2RS',
+    brand: 'SKF / FAG',
+    model: '6312-2RS1-C3',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 2100,
+    discountPrice: 1850,
+    discountPercent: 11.90,
+    offerLabel: 'Original Spares Assured',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 10,
+    images: 'https://images.unsplash.com/photo-1581092334651-ddf26d9a09d0?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Bore Diameter (d)', '60', 'mm'],
+      ['Outer Diameter (D)', '130', 'mm'],
+      ['Width (B)', '31', 'mm'],
+      ['Dynamic Load Rating', '85.2', 'kN'],
+      ['Limiting Speed', '3800', 'RPM']
+    ]
+  },
+  {
+    name: 'Double-Acting Heavy Duty Industrial Hydraulic Cylinder (100mm Bore x 400mm Stroke)',
+    category: 'Hydraulics & Pneumatics',
+    status: 'ACTIVE',
+    description: 'Tie-rod industrial hydraulic ram cylinder engineered for 210 bar working pressure with hard chrome plated rod and imported polyurethane chevron seals.',
+    price: 26500,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Nos',
+    hsn: '841221',
+    sku: 'HYD-CYL-100-400',
+    brand: 'Yuken / Rexroth MSME Partner',
+    model: 'HC-210B-100-400',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 31000,
+    discountPrice: 26500,
+    discountPercent: 14.52,
+    offerLabel: 'Hydraulics Manufacturer Special',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 2,
+    images: 'https://images.unsplash.com/photo-1581092162384-8987c1d64718?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Bore Diameter', '100', 'mm'],
+      ['Stroke Length', '400', 'mm'],
+      ['Operating Pressure', '210', 'Bar'],
+      ['Piston Rod Diameter', '56', 'mm'],
+      ['Proof Pressure', '315', 'Bar']
+    ]
+  },
+  {
+    name: 'Portland Slag Cement (PSC) 50 Kg Moisture-Proof Bags',
+    category: 'Cement & Concrete Products',
+    status: 'ACTIVE',
+    description: 'High performance slag cement manufactured with high glass content granulated blast furnace slag. Exceptional resistance to chemical and sulphate attack.',
+    price: 345,
+    currency: 'INR',
+    gstRate: 28,
+    uom: 'Bags',
+    hsn: '252329',
+    sku: 'CEM-PSC-50KG',
+    brand: 'UltraTech / Dalmia',
+    model: 'PSC-IS455',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 380,
+    discountPrice: 345,
+    discountPercent: 9.21,
+    offerLabel: 'Construction Bulk Depot Price',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 200,
+    images: 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Standard Conformance', 'IS 455:2015', ''],
+      ['Bag Weight', '50', 'Kg'],
+      ['28-Day Compressive Strength', '52', 'MPa'],
+      ['Initial Setting Time', '140', 'Minutes']
+    ]
+  },
+  {
+    name: 'IGBT Multi-Process Inverter Welding Machine (400 Amp, 3-Phase)',
+    category: 'Welding & Cutting Equipment',
+    status: 'ACTIVE',
+    description: 'Heavy duty digital industrial MMA/TIG inverter arc welding machine with thermal overload protection, arc force adjustment, and anti-stick features.',
+    price: 32000,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Nos',
+    hsn: '851539',
+    sku: 'WELD-INV-400A-3P',
+    brand: 'ESAB / Ador Welding',
+    model: 'ARC-400-IGBT',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 37500,
+    discountPrice: 32000,
+    discountPercent: 14.67,
+    offerLabel: 'Fabrication Workshop Kit',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 2,
+    images: 'https://images.unsplash.com/photo-1581092583537-20d51b4b4f1b?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Output Current Range', '20 - 400', 'Amps'],
+      ['Input Voltage', '415V ± 15% (3-Phase)', 'V'],
+      ['Duty Cycle at 400A', '60', '%'],
+      ['Usable Electrode Diameter', '2.5 - 5.0', 'mm']
+    ]
+  },
+  {
+    name: 'High Alumina 70% Industrial Refractory Fire Bricks (IS 8 Standard)',
+    category: 'Refractories',
+    status: 'ACTIVE',
+    description: 'High-density Al2O3 refractory bricks for blast furnaces, steel reheating furnaces, rotary kilns, and high-temperature thermal power incinerators.',
+    price: 72,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Nos',
+    hsn: '690220',
+    sku: 'REF-BRK-HA70-IS8',
+    brand: 'TRL Krosaki / RHI Magnesita',
+    model: 'HA-70-STD',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 85,
+    discountPrice: 72,
+    discountPercent: 15.29,
+    offerLabel: 'Thermal Kiln Maintenance Special',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 1000,
+    images: 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Alumina Content (Al2O3)', '70', '%'],
+      ['Refractoriness (PCE)', '+37 (> 1820°C)', 'PCE'],
+      ['Bulk Density', '2.68', 'g/cc'],
+      ['Cold Crushing Strength', '650', 'kg/cm²']
+    ]
+  },
+  {
+    name: 'Authentic Sambalpuri Handloom Pure Cotton Ikat Saree (GI Certified)',
+    category: 'Textile & Garments Supply',
+    status: 'ACTIVE',
+    description: 'Traditional handcrafted Sambalpuri cotton saree produced by registered Odisha SHG weavers with intricate tie-and-dye Ikat floral border and pallu.',
+    price: 3400,
+    currency: 'INR',
+    gstRate: 5,
+    uom: 'Nos',
+    hsn: '520852',
+    sku: 'SHG-SAM-SAREE-01',
+    brand: 'Boyanika / Odisha Weavers Federation',
+    model: 'SAM-IKAT-100C',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 4200,
+    discountPrice: 3400,
+    discountPercent: 19.05,
+    offerLabel: 'herSHG Artisan Direct Fair',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 10,
+    images: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Fabric', '100% Pure Organic Combed Cotton', ''],
+      ['Weave Pattern', 'Traditional Odisha Bandhakala (Ikat)', ''],
+      ['Saree Length', '6.3 (with Blouse Piece)', 'Meters'],
+      ['Origin Certification', 'Geographical Indication (GI) Tagged', '']
+    ]
+  },
+  {
+    name: 'Odisha Dhokra Brass Lost-Wax Casting Tribal Art Figurine (8-Inch)',
+    category: 'FMCG & Daily Utility Supply',
+    status: 'ACTIVE',
+    description: 'Handmade bell-metal non-ferrous casting made by tribal artisan self-help groups using ancient lost-wax technique. Ideal for corporate gifts & mementos.',
+    price: 1950,
+    currency: 'INR',
+    gstRate: 12,
+    uom: 'Nos',
+    hsn: '830629',
+    sku: 'SHG-DHK-FIG-08',
+    brand: 'Utkalika / Tribal SHG Federation',
+    model: 'DHOKRA-8IN',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 2400,
+    discountPrice: 1950,
+    discountPercent: 18.75,
+    offerLabel: 'Tribal Handicrafts Promotion',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 25,
+    images: 'https://images.unsplash.com/photo-1590736704728-f4730bb30770?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Material', 'Brass / Bronze Bell Metal Alloy', ''],
+      ['Height', '8', 'Inch'],
+      ['Weight', '1.1', 'Kg'],
+      ['Craft Technique', 'Lost Wax Metal Casting (Cire Perdue)', '']
+    ]
+  },
+  {
+    name: 'Industrial Heavy Duty Nitrile Chemical Gauntlet Gloves (15-Inch, 15 Mil)',
+    category: 'Safety Equipment & Industrial Safety',
+    status: 'ACTIVE',
+    description: 'Flock-lined green nitrile gloves offering premium resistance against corrosive acids, caustic solvents, oils, and grease in chemical plants and refineries.',
+    price: 240,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Pair',
+    hsn: '401519',
+    sku: 'SAF-GLV-NIT-15',
+    brand: 'Ansell / Honeywell',
+    model: 'SOLVEX-15M',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 290,
+    discountPrice: 240,
+    discountPercent: 17.24,
+    offerLabel: 'PPE Bulk Deal',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 100,
+    images: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Material', '100% Acrylonitrile Butadiene', ''],
+      ['Glove Length', '15 (380mm)', 'Inch'],
+      ['Thickness', '15', 'Mil'],
+      ['Standard Rating', 'EN 388 (4101X) / EN ISO 374-1 Type A', '']
+    ]
+  },
+  {
+    name: 'Heat-Resistant EP Rubber Conveyor Belt (EP 400/3, 800mm Wide)',
+    category: 'Conveyor & Material Handling Equipment',
+    status: 'ACTIVE',
+    description: 'Heavy duty multi-ply rubber conveyor belting with polyester warp and polyamide weft fabric for transporting coal, clinker, limestone, and ore.',
+    price: 2600,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Meter',
+    hsn: '401012',
+    sku: 'CNV-BLT-EP400-800',
+    brand: 'Dunlop / Fenner',
+    model: 'EP400-3PLY-HR',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 3000,
+    discountPrice: 2600,
+    discountPercent: 13.33,
+    offerLabel: 'Bulk Mining Conveyor Discount',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 50,
+    images: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Belt Width', '800', 'mm'],
+      ['Tensile Strength', '400', 'N/mm'],
+      ['Number of Plies', '3', 'Plies'],
+      ['Temperature Rating', 'Up to 150°C continuous', '°C'],
+      ['Top / Bottom Rubber Cover', '5mm / 2mm Grade HR', 'mm']
+    ]
+  },
+  {
+    name: 'Technical Grade Caustic Soda Flakes / Sodium Hydroxide (99.5% Pure, 50kg)',
+    category: 'Industrial Chemicals',
+    status: 'ACTIVE',
+    description: 'High-purity sodium hydroxide flakes used extensively in alumina refining, water treatment, paper manufacturing, and textile effluent neutralization.',
+    price: 2850,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Bags',
+    hsn: '281511',
+    sku: 'CHM-CS-FLK-50KG',
+    brand: 'GACL / DCM Shriram',
+    model: 'NaOH-99.5-FLK',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 3200,
+    discountPrice: 2850,
+    discountPercent: 10.94,
+    offerLabel: 'Chemical Bulk Tanker / Bagged Deal',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 20,
+    images: 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Assay (as NaOH)', '99.5 Min', '%'],
+      ['Sodium Carbonate (Na2CO3)', '0.4 Max', '%'],
+      ['Form', 'Dry White Deliquescent Flakes', ''],
+      ['Packaging', '50 Kg HDPE Laminated Bags with Liner', 'Kg']
+    ]
+  },
+  {
+    name: 'Heavy Duty Mining Dumper Radial Tyre (10.00 R20 16PR All-Steel)',
+    category: 'Tyres & Rubber Products',
+    status: 'ACTIVE',
+    description: 'All-steel radial commercial truck and dumper tyre engineered with stone-ejecting grooves and chip-resistant tread compound for rough quarry mining roads.',
+    price: 22800,
+    currency: 'INR',
+    gstRate: 28,
+    uom: 'Nos',
+    hsn: '401120',
+    sku: 'TYR-R20-16PR-HD',
+    brand: 'Apollo / MRF / BKT',
+    model: 'LUG-PLUS-1000R20',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 25500,
+    discountPrice: 22800,
+    discountPercent: 10.59,
+    offerLabel: 'Mining Fleet Maintenance Price',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 8,
+    images: 'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Tyre Size', '10.00 R20', ''],
+      ['Ply Rating', '16', 'PR'],
+      ['Tread Depth', '16.5', 'mm'],
+      ['Speed Symbol / Load Index', '146/143 K (3000 kg/tyre)', '']
+    ]
+  },
+  {
+    name: 'Enterprise 2U Rackmount Server Dual Intel Xeon Silver 64GB ECC RAM',
+    category: 'IT & Computer Equipment',
+    status: 'ACTIVE',
+    description: 'Mission-critical enterprise rack server configured with dual scalable Intel Xeon processors, redundant 80-Plus Platinum power supplies, and RAID controller.',
+    price: 195000,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Nos',
+    hsn: '847150',
+    sku: 'IT-SRV-2U-XEON-64',
+    brand: 'Dell PowerEdge / HP ProLiant',
+    model: 'PE-R750-XEON',
+    condition: 'NEW',
+    msmeMade: 'No',
+    originalPrice: 220000,
+    discountPrice: 195000,
+    discountPercent: 11.36,
+    offerLabel: 'Enterprise Digital Infrastructure Special',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 2,
+    images: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Processor', '2x Intel Xeon Silver 4310 (24 Cores total)', ''],
+      ['Memory', '64GB (2x32GB) DDR4-3200 ECC RDIMM', 'GB'],
+      ['Storage', '2x 960GB Enterprise SAS Mixed-Use SSD', 'GB'],
+      ['RAID Controller', 'Hardware PERC H745 with 4GB NV Cache', '']
+    ]
+  },
+  {
+    name: 'Pneumatic Heavy Duty Industrial Air Impact Wrench (1-Inch Drive, 2600 Nm)',
+    category: 'Tools & Industrial Hardware',
+    status: 'ACTIVE',
+    description: 'Pin-less hammer mechanism air impact wrench delivering up to 2600 Nm break-away torque for heavy truck wheel lug nuts and heavy structural bolting.',
+    price: 19500,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Nos',
+    hsn: '846711',
+    sku: 'TOOL-AIW-1IN-2600',
+    brand: 'Ingersoll Rand / Chicago Pneumatic',
+    model: 'IR-2600-1IN',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 23000,
+    discountPrice: 19500,
+    discountPercent: 15.22,
+    offerLabel: 'Workshop Tooling Bundle',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 3,
+    images: 'https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Square Drive Size', '1', 'Inch'],
+      ['Max Working Torque', '2600', 'Nm'],
+      ['Free Speed', '4200', 'RPM'],
+      ['Recommended Air Pressure', '6.2 - 8.0', 'Bar']
+    ]
+  },
+  {
+    name: 'Industrial PLC Automation Control Panel with 7-Inch Color Touch HMI',
+    category: 'Automation & Robotics',
+    status: 'ACTIVE',
+    description: 'Custom-built IP65 electrical automation control desk panel incorporating programmable logic controller, variable frequency drives, SMPS, and safety relays.',
+    price: 98000,
+    currency: 'INR',
+    gstRate: 18,
+    uom: 'Set',
+    hsn: '853710',
+    sku: 'AUTO-PLC-PNL-7HMI',
+    brand: 'Siemens / Schneider MSME Integrator',
+    model: 'S7-1200-HMI7',
+    condition: 'NEW',
+    msmeMade: 'Yes',
+    originalPrice: 115000,
+    discountPrice: 98000,
+    discountPercent: 14.78,
+    offerLabel: 'Industrial Automation Promotion',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'No',
+    bulkMinQty: 1,
+    images: 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Main Controller', 'Siemens Simatic S7-1200 CPU 1214C DC/DC/DC', ''],
+      ['HMI Touch Display', '7 Inch 800x480 Widescreen 65K Colors', ''],
+      ['Communication Protocol', 'Profinet / Modbus TCP/IP', ''],
+      ['Enclosure Protection', 'IP65 Powder Coated CRCA Steel 2mm', '']
+    ]
+  }
+];
 
-const getRandomDocs = () => {
-    const shuffled = [...DOC_URLS].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, 2 + Math.floor(Math.random() * 2)).join(', '); // 2 to 3 docs
-};
+// Curated realistic industrial services with category mapping and verified 200 OK Unsplash photography
+const REALISTIC_SERVICES = [
+  {
+    name: 'Annual Substation Transformer Testing, Oil Filtration & Thermography Audit',
+    category: 'Industrial Maintenance Services',
+    status: 'ACTIVE',
+    description: 'Turnkey on-site testing of 11kV/33kV power transformers including breakdown voltage (BDV) testing, dissolved gas analysis (DGA), winding resistance, and infrared thermography scans.',
+    pricingModel: 'FIXED',
+    basePrice: 48000,
+    currency: 'INR',
+    gstRate: 18,
+    serviceArea: 'Jharsuguda District & Western Odisha Industrial Belt',
+    scopeOfWork: 'Complete on-site electrical substation inspection, high-vacuum oil dehydration & filtration, dielectric strength measurement, Tan Delta measurement, and thermography hotspots mapping.',
+    deliverables: 'Official NABL-accredited diagnostic test certificate, comprehensive thermography inspection report with IR thermal radiometric image logs, and root-cause maintenance recommendations.',
+    inclusions: 'Licensed Grade-A Electrical Supervisors, calibrated diagnostic instruments, on-site mobile vacuum filtration rig, travel within district.',
+    exclusions: 'Supply of fresh transformer oil top-up, high-voltage bushing replacement parts.',
+    slaTime: '24 Hours for emergency breakdown',
+    duration: '1 Year Annual Maintenance Contract (AMC)',
+    originalPrice: 55000,
+    discountPrice: 48000,
+    discountPercent: 12.73,
+    offerLabel: 'Annual Plant Maintenance Retainer',
+    offerStart: '2026-09-01',
+    offerEnd: '2027-08-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 3,
+    images: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Applicable Standards', 'IS 2026 / IS 1866 / IEEE C57.106', ''],
+      ['BDV Oil Test Rig Capability', '100', 'kV'],
+      ['IR Camera Thermal Resolution', '384 x 288 (< 0.05°C NETD)', 'Pixels'],
+      ['Supervising Engineer License', 'State Electrical Licensing Board Grade-A', '']
+    ]
+  },
+  {
+    name: 'Heavy Structural Steel Fabrication & On-Site Certified SMAW/MIG Arc Welding',
+    category: 'Fabrication & Welding Services',
+    status: 'ACTIVE',
+    description: 'Custom fabrication, cutting, fit-up, and certified radiographic-grade welding of heavy industrial trusses, columns, conveyor galleries, and storage silos according to structural drawings.',
+    pricingModel: 'PER_PROJECT',
+    basePrice: 19500,
+    currency: 'INR',
+    gstRate: 18,
+    serviceArea: 'On-site at Client Plant / Workshop Fabrication',
+    scopeOfWork: 'CNC profile cutting, plate bevelling, structural assembly, multi-pass full penetration welding, post-weld slag cleaning, red oxide primer application.',
+    deliverables: 'Fabricated structural assemblies, 100% visual inspection log, dye-penetrant test (DPT) reports, welder qualification records (WQR), raw material reconciliation sheet.',
+    inclusions: 'Qualified AWS D1.1 certified welders, multi-operator welding power sources, cutting torches, grinding tools, basic handling consumables.',
+    exclusions: 'Supply of raw parent steel structural plates and beams (can be supplied on order), crane lifting for heavy erection.',
+    slaTime: '48 Hours mobilization',
+    duration: 'As per Project Milestone Schedule',
+    originalPrice: 22000,
+    discountPrice: 19500,
+    discountPercent: 11.36,
+    offerLabel: 'Infrastructure Fabrication Bulk Discount',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 25,
+    images: 'https://images.unsplash.com/photo-1581092583537-20d51b4b4f1b?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Welding Process Standards', 'AWS D1.1 / ASME Section IX', ''],
+      ['NDT Coverage', '100% Visual + 20% Dye Penetrant Test', ''],
+      ['Primer Application', 'Zinc Chromate / Red Oxide Epoxy (35 micron DFT)', ''],
+      ['Fabrication Tolerances', 'Conforming to IS 7215', '']
+    ]
+  },
+  {
+    name: 'Industrial Heavy Equipment Reinforced Foundation & RCC Machine Bed Casting',
+    category: 'Construction & Civil Work Services',
+    status: 'ACTIVE',
+    description: 'Precision civil engineering services for casting vibration-damped concrete equipment foundations, crusher beds, compressor plinths, and heavy crane track foundations.',
+    pricingModel: 'PER_PROJECT',
+    basePrice: 135000,
+    currency: 'INR',
+    gstRate: 18,
+    serviceArea: 'Jharsuguda Industrial Corridor / Western Odisha',
+    scopeOfWork: 'Earth excavation, PCC levelling course, high-tensile steel rebar cage placement, precision template anchor bolt fixing, M35 grade ready-mix concrete pouring, mechanical vibration, and 28-day water curing.',
+    deliverables: 'Finished machine plinth ready for equipment erection, concrete cube 7-day and 28-day compressive strength test reports, total station bolt coordinates survey report.',
+    inclusions: 'Civil site engineers, total station coordinate survey, shuttering formwork, high-frequency immersion vibrators, safety scaffolding.',
+    exclusions: 'Supply of anchor foundation bolts (unless provided with machine drawings), specialized non-shrink epoxy grout top-coating.',
+    slaTime: '7 Days notice before commencement',
+    duration: '30 Days Execution & Curing',
+    originalPrice: 155000,
+    discountPrice: 135000,
+    discountPercent: 12.90,
+    offerLabel: 'Turnkey Civil Package Rate',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'No',
+    bulkMinQty: 1,
+    images: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Concrete Design Mix Grade', 'M35 / M40 (Target Strength > 43.5 MPa)', ''],
+      ['Anchor Bolt Tolerance', '< ±1.5 mm in Coordinate Axis', 'mm'],
+      ['Testing Standard', 'IS 456:2000 / IS 516 (Cube Testing)', ''],
+      ['Vibration Isolation Capability', 'Engineered for Dynamic Fatigue Loading', '']
+    ]
+  },
+  {
+    name: 'Non-Destructive Testing (NDT) - Ultrasonic Testing (UT) & Magnetic Particle Inspection (MPI)',
+    category: 'Engineering Consultancy Services',
+    status: 'ACTIVE',
+    description: 'Comprehensive third-party NDT quality evaluation of pressure vessels, heavy weld joints, boiler tubes, crane hooks, and forged shafts to detect internal flaws and surface fissures.',
+    pricingModel: 'DAILY',
+    basePrice: 28000,
+    currency: 'INR',
+    gstRate: 18,
+    serviceArea: 'Pan-Odisha / Eastern India Industrial Plants',
+    scopeOfWork: 'Surface calibration, ultrasonic flaw detection (DAC curve calibration), magnetic particle inspection with AC electromagnetic yoke, thickness gauging, and radiographic film evaluation.',
+    deliverables: 'Signed Level-II NDT inspection certificate, A-Scan ultrasonic flaw mapping data sheet, pictorial defect reports with acceptance/rejection recommendations per ASME Section VIII.',
+    inclusions: 'ASNT / ISNT Level II certified NDT technicians, calibrated Olympus/Krautkramer digital flaw detectors, probes, couplant, magnetic dry/wet powder.',
+    exclusions: 'Scaffolding for elevations exceeding 3 meters, specialized radiographic isotope camera hire.',
+    slaTime: '24 Hours response time',
+    duration: '1-2 Days per Equipment Audit',
+    originalPrice: 32000,
+    discountPrice: 28000,
+    discountPercent: 12.50,
+    offerLabel: 'Plant Quality Assurance Bundle',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 3,
+    images: 'https://images.unsplash.com/photo-1581092334651-ddf26d9a09d0?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Inspector Qualification', 'ASNT SNT-TC-1A / ISO 9712 Level II', ''],
+      ['Applicable Codes', 'ASME Sec V, ASME Sec VIII Div 1, AWS D1.1', ''],
+      ['Ultrasonic Testing Resolution', 'Flaw Detection Down to 0.5 mm equivalent flat bottom hole', 'mm'],
+      ['MPI Magnetizing Force', '10 lb (4.5 kg) AC Lift Capacity Verified', '']
+    ]
+  },
+  {
+    name: 'Industrial Effluent Treatment Plant (ETP) & STP Comprehensive Operation & Maintenance',
+    category: 'Environmental & Waste Management',
+    status: 'ACTIVE',
+    description: 'Full-time operational management and environmental compliance monitoring of industrial effluent and sewage treatment plants to achieve zero liquid discharge (ZLD).',
+    pricingModel: 'MONTHLY',
+    basePrice: 68000,
+    currency: 'INR',
+    gstRate: 18,
+    serviceArea: 'Jharsuguda Industrial Cluster & Surrounding Mining Districts',
+    scopeOfWork: 'Daily chemical dosing management (alum, lime, poly-electrolyte), clarifier scraping, sludge dewatering press operation, weekly laboratory sampling (BOD, COD, TSS, Heavy Metals).',
+    deliverables: 'Monthly environmental logbook, water quality analysis test certificates by accredited laboratory, compliance report for submission to State Pollution Control Board (OSPCB).',
+    inclusions: 'Dedicated plant operators (3 shifts), chemical dosing optimization, maintenance of blowers, dosing pumps, and aerators.',
+    exclusions: 'Procurement cost of bulk treatment chemicals (lime, alum, chlorine), RO membrane replacement.',
+    slaTime: '12 Hours on-call emergency chemical balance assistance',
+    duration: '1 Year Annual Service Contract',
+    originalPrice: 78000,
+    discountPrice: 68000,
+    discountPercent: 12.82,
+    offerLabel: 'Green Factory Environmental Retainer',
+    offerStart: '2026-09-01',
+    offerEnd: '2027-08-31',
+    bulkDeal: 'No',
+    bulkMinQty: 1,
+    images: 'https://images.unsplash.com/photo-1565043666747-69f6646db940?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Plant Capacity Handled', 'Up to 500 KLD (Kilolitres per Day)', 'KLD'],
+      ['Regulatory Standard Conformance', 'OSPCB / CPCB General Discharge Standards', ''],
+      ['Outlet Quality Target', 'BOD < 10 mg/L, COD < 50 mg/L, TSS < 20 mg/L', ''],
+      ['Staffing Allocation', '1 Plant Supervisor + 3 Qualified Operators (Round-the-clock)', '']
+    ]
+  },
+  {
+    name: 'Heavy Plant Machinery Erection, Precision Dual-Laser Alignment & Commissioning',
+    category: 'Mechanical & Engineering',
+    status: 'ACTIVE',
+    description: 'Turnkey industrial rigging, base leveling, anchor grouting, and precision laser shaft alignment of heavy rotating equipment: ball mills, crushers, turbo-blowers, and multistage pumps.',
+    pricingModel: 'PER_PROJECT',
+    basePrice: 88000,
+    currency: 'INR',
+    gstRate: 18,
+    serviceArea: 'Industrial Plants across Odisha & Jharkhand',
+    scopeOfWork: 'Equipment offloading, positioning with hydraulic jacks/rollers, base-plate elevation setting, non-shrink epoxy grout injection, dual-laser collinear alignment across coupling, no-load & full-load trial runs.',
+    deliverables: 'Detailed laser alignment measurement report before/after thermal growth compensation, initial vibration baseline spectral analysis sheet, commissioning handover certificate.',
+    inclusions: 'Lead mechanical commissioning engineers, Easy-Laser / Pruftechnik precision laser alignment tool, dial test indicators, high-strength rigging equipment.',
+    exclusions: 'Mobile hydraulic crane hire (20T-100T) for primary lifting off transport trailers.',
+    slaTime: '72 Hours advance notice',
+    duration: '7-14 Days depending on machine complexity',
+    originalPrice: 102000,
+    discountPrice: 88000,
+    discountPercent: 13.73,
+    offerLabel: 'Plant Commissioning Package',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 2,
+    images: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Shaft Alignment Tooling', 'Dual Beam Wireless Laser Geometry System', ''],
+      ['Alignment Tolerance Achieved', 'Parallel < 0.03 mm, Angular < 0.04 mm/100mm', 'mm'],
+      ['Vibration Analysis Standard', 'ISO 10816-3 (Mechanical Vibration Severity)', ''],
+      ['Anchor Grout Compressive Strength', '> 60 MPa at 24 Hours (Non-Shrink Polymer)', 'MPa']
+    ]
+  },
+  {
+    name: 'Industrial Overhead EOT Crane Annual Safety Audit, Proof Load Testing & Servicing',
+    category: 'Repair & Service Provider',
+    status: 'ACTIVE',
+    description: 'Statutory annual safety inspection, brake shoe relining, wire rope ultrasonic flaw testing, deflection measurement, and full 125% proof load testing under Factories Act Form 9.',
+    pricingModel: 'FIXED',
+    basePrice: 38000,
+    currency: 'INR',
+    gstRate: 18,
+    serviceArea: 'District Workshops, Smelters, Steel Plants, Power Facilities',
+    scopeOfWork: 'Complete inspection of long travel (LT) and cross travel (CT) gearboxes, wire rope diameter measurement & lubrication, hook trunnion NDT, electrical panel contactor overhaul, static proof load test.',
+    deliverables: 'Competent Person Safety Inspection Certificate (Form 9 - Factories Act), wire rope discard assessment log, deflection measurement graph, electrical safety report.',
+    inclusions: 'Government recognized Competent Person inspector, crane maintenance technician, digital dynamometer load cell, NDT kit.',
+    exclusions: 'Supply of certified test weights (client to arrange or rented separately), major motor rewinding.',
+    slaTime: '48 Hours emergency crane breakdown',
+    duration: '1-2 Days per Crane Unit',
+    originalPrice: 44000,
+    discountPrice: 38000,
+    discountPercent: 13.64,
+    offerLabel: 'Crane Statutory Safety Bundle',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 3,
+    images: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Crane Capacity Range', 'Up to 100 Tonne EOT / Gantry Cranes', 'Tonnes'],
+      ['Statutory Conformance', 'Indian Factories Act 1948 (Section 29) / IS 3177', ''],
+      ['Proof Load Testing Capability', '125% of Safe Working Load (SWL)', '%'],
+      ['Hook NDT Inspection', '100% Magnetic Particle Inspection for Throat Opening & Cracks', '']
+    ]
+  },
+  {
+    name: 'Turnkey Rooftop Commercial Solar PV EPC Installation & Grid Synchronization (100 kWp)',
+    category: 'Power & Energy Equipment',
+    status: 'ACTIVE',
+    description: 'Complete engineering, procurement, and construction of industrial rooftop solar system with high-efficiency Tier-1 mono PERC modules, string inverters, and net-metering approval.',
+    pricingModel: 'PER_PROJECT',
+    basePrice: 3850000,
+    currency: 'INR',
+    gstRate: 12,
+    serviceArea: 'Odisha State / Western Discom Grid Connected Zones',
+    scopeOfWork: 'Shadow analysis, structural load evaluation, galvanized aluminium mounting structure installation, solar module stringing, DC/AC cabling, inverter installation, lightning arrester & chemical earthing, DISCOM net-metering liaison.',
+    deliverables: 'Operational 100 kWp solar plant, generation monitoring app credentials, electrical inspectorate (CEI) approval certificate, 25-year solar module performance warranty papers.',
+    inclusions: 'Tier-1 Mono-crystalline PERC 545Wp+ modules, IP66 100kW grid-tie inverter, hot-dip galvanized mounting structures, Class-I SPD protection panels, liaison services.',
+    exclusions: 'Civil roof sheet replacement if existing sheet is rusted beyond structural safety.',
+    slaTime: '5-year free comprehensive AMC included',
+    duration: '45 Days to Grid Synchronization',
+    originalPrice: 4200000,
+    discountPrice: 3850000,
+    discountPercent: 8.33,
+    offerLabel: 'Clean Energy MSME Subsidy Package',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'No',
+    bulkMinQty: 1,
+    images: 'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Installed Capacity', '100', 'kWp'],
+      ['Solar Module Efficiency', '> 21.2% Tier-1 Mono PERC Bi-facial', '%'],
+      ['Inverter Efficiency', '> 98.7% European Standard IP66', '%'],
+      ['Estimated Annual Clean Power', '1,45,000', 'kWh (Units)']
+    ]
+  },
+  {
+    name: 'Dedicated Heavy Mining Tipper & Industrial Flatbed Trailer Logistics Fleet Service',
+    category: 'Logistics & Supply Services',
+    status: 'ACTIVE',
+    description: 'Contract logistics and bulk transport management for coal, iron ore, steel billets, and finished machinery across major industrial corridors with GPS live-tracked fleet.',
+    pricingModel: 'DAILY',
+    basePrice: 1250,
+    currency: 'INR',
+    gstRate: 5,
+    serviceArea: 'Jharsuguda, Rourkela, Angul, Kalinganagar, Paradip Port',
+    scopeOfWork: 'Dedicated dispatch of 10-wheeler tippers and 40-foot articulated multi-axle trailers, electronic weighment at origin/destination, electronic e-way bill generation, real-time GPS tracking.',
+    deliverables: 'Original clean proof of delivery (POD), electronic weighbridge slips, daily fleet movement tracker, goods-in-transit summary statements.',
+    inclusions: 'Licensed heavy vehicle drivers, GPS navigation hardware, fuel, standard motor transit insurance coverage, 24x7 control room tracking.',
+    exclusions: 'Toll plaza charges and state transit entry permits (reimbursable at actuals), crane loading/unloading detention exceeding 6 hours.',
+    slaTime: '12 Hours placement of fleet vehicles upon dispatch notice',
+    duration: 'Monthly or Per-Trip Movement Contracts',
+    originalPrice: 1400,
+    discountPrice: 1250,
+    discountPercent: 10.71,
+    offerLabel: 'Industrial Corridor Bulk Freight Rate',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 100,
+    images: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[0],
+    specs: [
+      ['Fleet Configuration', '10-Wheeler Tippers (21T) & 40ft High-Bed Trailers (35T)', ''],
+      ['Fleet Tracking Interface', '24x7 Satellite GPS Telematics with Client API Access', ''],
+      ['Driver Regulatory Compliance', 'Valid HMV License, Medical Fitness & Defensive Driving Certified', ''],
+      ['Transit Insurance Cover', 'Marine Cargo Policy up to ₹1.5 Crore per Consignment', '']
+    ]
+  },
+  {
+    name: 'Clean Room & Heavy Industrial HVAC Chiller Plant Overhaul & De-scaling',
+    category: 'Industrial Maintenance Services',
+    status: 'ACTIVE',
+    description: 'Comprehensive mechanical servicing of screw and centrifugal water-cooled chillers, cooling tower fan balancing, chemical condenser tube de-scaling, and AHU filter sanitization.',
+    pricingModel: 'FIXED',
+    basePrice: 52000,
+    currency: 'INR',
+    gstRate: 18,
+    serviceArea: 'Pharmaceuticals, Electronics, Control Rooms, Hospital Facilities',
+    scopeOfWork: 'Condenser head removal, motorized rotary brush tube de-scaling, non-destructive eddy current tube testing, compressor oil & filter replacement, refrigerant pressure optimization, cooling tower nozzle cleaning.',
+    deliverables: 'Pre-service vs post-service heat transfer approach temperature report, refrigerant leakage certification, dynamic fan balancing report, service logbook.',
+    inclusions: 'HVAC technicians, chemical descaling recirculating pumps, inhibited descaling chemicals, tube nylon brushes, recovery cylinders.',
+    exclusions: 'Refrigerant gas top-up (R134a/R410a billed as per actual kg required), major compressor stator winding.',
+    slaTime: '24 Hours emergency breakdown support',
+    duration: '2-3 Days per Chiller Unit',
+    originalPrice: 60000,
+    discountPrice: 52000,
+    discountPercent: 13.33,
+    offerLabel: 'Energy Saving HVAC Overhaul',
+    offerStart: '2026-09-01',
+    offerEnd: '2026-12-31',
+    bulkDeal: 'Yes',
+    bulkMinQty: 2,
+    images: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=1200&auto=format&fit=crop',
+    docs: DOC_URLS[1],
+    specs: [
+      ['Chiller Capacity Handled', 'Up to 400 TR Water-Cooled Chillers', 'TR'],
+      ['Approach Temperature Improvement', 'Reduced Condenser Approach to < 1.5°C', '°C'],
+      ['Descaling Chemistry', 'Inhibited Sulfamic Acid with pH Neutralizer', ''],
+      ['Vibration Measurement', 'Conforming to ISO 10816 Criteria', '']
+    ]
+  }
+];
 
 async function main() {
-    const productCategories = await prisma.category.findMany({ where: { isActive: true, OR: [{ type: 'PRODUCT' }, { type: 'BOTH' }] } });
-    const serviceCategories = await prisma.category.findMany({ where: { isActive: true, OR: [{ type: 'SERVICE' }, { type: 'BOTH' }] } });
+  console.log('Generating realistic, high-quality seeded import templates...');
 
-    const prodCatNames = productCategories.map(c => c.name);
-    const servCatNames = serviceCategories.map(c => c.name);
+  // Fetch active categories from DB
+  const productCategories = await prisma.category.findMany({
+    where: { isActive: true, OR: [{ type: 'PRODUCT' }, { type: 'BOTH' }] },
+    select: { name: true },
+    orderBy: { name: 'asc' }
+  });
 
-    const defaultProdCat = prodCatNames[0] || 'Safety Equipment & Industrial Safety';
-    const defaultServCat = servCatNames[0] || 'Industrial Maintenance Services';
+  const serviceCategories = await prisma.category.findMany({
+    where: { isActive: true, OR: [{ type: 'SERVICE' }, { type: 'BOTH' }] },
+    select: { name: true },
+    orderBy: { name: 'asc' }
+  });
 
-    // 1. Generate Products
-    const productHeaders = [
-      'Product Name *', 'Category *', 'Status', 'Description', 'Price *', 'Currency', 'GST Rate (%)',
-      'Unit Of Measure *', 'HSN Code', 'SKU', 'Brand', 'Model Number', 'Item Condition', 'MSME Made (Yes/No)',
-      'Original Price', 'Discount Price', 'Discount Percent', 'Offer Label', 'Offer Start Date (YYYY-MM-DD)',
-      'Offer End Date (YYYY-MM-DD)', 'Bulk Deal Available (Yes/No)', 'Bulk Minimum Quantity', 'Image URLs', 'Document URLs'
+  const prodCatNames = productCategories.map(c => c.name);
+  const servCatNames = serviceCategories.map(c => c.name);
+
+  // 1. Generate Products Workbook
+  const productHeaders = [
+    'Product Name *', 'Category *', 'Status', 'Description', 'Price *', 'Currency', 'GST Rate (%)',
+    'Unit Of Measure *', 'HSN Code', 'SKU', 'Brand', 'Model Number', 'Item Condition', 'MSME Made (Yes/No)',
+    'Original Price', 'Discount Price', 'Discount Percent', 'Offer Label', 'Offer Start Date (YYYY-MM-DD)',
+    'Offer End Date (YYYY-MM-DD)', 'Bulk Deal Available (Yes/No)', 'Bulk Minimum Quantity', 'Image URLs', 'Document URLs'
+  ];
+
+  const productRows = REALISTIC_PRODUCTS.map(p => {
+    // If exact category exists in DB, use it; otherwise fallback to first matching or first available
+    const matchedCategory = prodCatNames.find(c => c.toLowerCase() === p.category.toLowerCase())
+      || prodCatNames.find(c => c.toLowerCase().includes(p.category.toLowerCase().split(' ')[0]))
+      || prodCatNames[0]
+      || p.category;
+
+    return [
+      p.name,
+      matchedCategory,
+      p.status,
+      p.description,
+      p.price,
+      p.currency,
+      p.gstRate,
+      p.uom,
+      p.hsn,
+      p.sku,
+      p.brand,
+      p.model,
+      p.condition,
+      p.msmeMade,
+      p.originalPrice,
+      p.discountPrice,
+      p.discountPercent,
+      p.offerLabel,
+      p.offerStart,
+      p.offerEnd,
+      p.bulkDeal,
+      p.bulkMinQty,
+      p.images,
+      p.docs
     ];
-    
-    const products = [];
-    const prodSpecs = [];
-    
-    for (let i = 1; i <= 20; i++) {
-        const name = `Premium Industrial Product Variant ${i}`;
-        const sku = `PROD-2026-${1000 + i}`;
-        const cat = prodCatNames[i % prodCatNames.length] || defaultProdCat;
-        
-        products.push([
-            name, cat, 'ACTIVE', `High quality industrial product ${i} with premium build. Ideal for heavy duty applications.`, (150 * i), 'INR', 18,
-            'Nos', `HSN${8000+i}`, sku, `IndustrialBrand${i}`, `MOD-PRO-${i}`, 'NEW', 'Yes', 
-            (180 * i), '', '', 'Special Offer', '', '', 'Yes', 10, getRandomImages(), getRandomDocs()
-        ]);
+  });
 
-        prodSpecs.push([sku, name, 'Material', `High-Grade Alloy Type ${i}`, '']);
-        prodSpecs.push([sku, name, 'Weight', `${i * 1.5}`, 'Kg']);
-        prodSpecs.push([sku, name, 'Warranty', '2 Years', '']);
-        prodSpecs.push([sku, name, 'Safety Standard', 'ISO 9001:2015', '']);
-    }
+  const productSpecRows = REALISTIC_PRODUCTS.flatMap(p =>
+    p.specs.map(s => [p.sku, p.name, s[0], s[1], s[2]])
+  );
 
-    // 2. Generate Services
-    const serviceHeaders = [
-      'Service Name *', 'Category *', 'Status', 'Description', 'Pricing Model *', 'Base Price *', 'Currency',
-      'GST Rate (%)', 'Service Area *', 'Scope Of Work', 'Deliverables', 'Inclusions', 'Exclusions', 'SLA Response Time', 'Duration',
-      'Original Price', 'Discount Price', 'Discount Percent', 'Offer Label', 'Offer Start Date (YYYY-MM-DD)', 'Offer End Date (YYYY-MM-DD)',
-      'Bulk Deal Available (Yes/No)', 'Bulk Minimum Quantity', 'Image URLs', 'Document URLs'
+  const wbProd = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wbProd, XLSX.utils.aoa_to_sheet([productHeaders, ...productRows]), 'Products');
+  XLSX.utils.book_append_sheet(wbProd, XLSX.utils.aoa_to_sheet([['Product SKU', 'Product Name', 'Specification Name *', 'Specification Value *', 'Unit'], ...productSpecRows]), 'Product Specifications');
+  XLSX.utils.book_append_sheet(wbProd, XLSX.utils.aoa_to_sheet([['Categories'], ...prodCatNames.map(c => [c])]), 'Dropdown Values');
+
+  // 2. Generate Services Workbook
+  const serviceHeaders = [
+    'Service Name *', 'Category *', 'Status', 'Description', 'Pricing Model *', 'Base Price *', 'Currency',
+    'GST Rate (%)', 'Service Area *', 'Scope Of Work', 'Deliverables', 'Inclusions', 'Exclusions', 'SLA Response Time', 'Duration',
+    'Original Price', 'Discount Price', 'Discount Percent', 'Offer Label', 'Offer Start Date (YYYY-MM-DD)', 'Offer End Date (YYYY-MM-DD)',
+    'Bulk Deal Available (Yes/No)', 'Bulk Minimum Quantity', 'Image URLs', 'Document URLs'
+  ];
+
+  const serviceRows = REALISTIC_SERVICES.map(s => {
+    const matchedCategory = servCatNames.find(c => c.toLowerCase() === s.category.toLowerCase())
+      || servCatNames.find(c => c.toLowerCase().includes(s.category.toLowerCase().split(' ')[0]))
+      || servCatNames[0]
+      || s.category;
+
+    return [
+      s.name,
+      matchedCategory,
+      s.status,
+      s.description,
+      s.pricingModel,
+      s.basePrice,
+      s.currency,
+      s.gstRate,
+      s.serviceArea,
+      s.scopeOfWork,
+      s.deliverables,
+      s.inclusions,
+      s.exclusions,
+      s.slaTime,
+      s.duration,
+      s.originalPrice,
+      s.discountPrice,
+      s.discountPercent,
+      s.offerLabel,
+      s.offerStart,
+      s.offerEnd,
+      s.bulkDeal,
+      s.bulkMinQty,
+      s.images,
+      s.docs
     ];
+  });
 
-    const services = [];
-    const servSpecs = [];
+  const serviceSpecRows = REALISTIC_SERVICES.flatMap(s =>
+    s.specs.map(spec => [s.name, spec[0], spec[1], spec[2]])
+  );
 
-    for (let i = 1; i <= 20; i++) {
-        const name = `Professional Maintenance & Audit Service ${i}`;
-        const cat = servCatNames[i % servCatNames.length] || defaultServCat;
+  const wbServ = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wbServ, XLSX.utils.aoa_to_sheet([serviceHeaders, ...serviceRows]), 'Services');
+  XLSX.utils.book_append_sheet(wbServ, XLSX.utils.aoa_to_sheet([['Service Name', 'Specification Name *', 'Specification Value *', 'Unit'], ...serviceSpecRows]), 'Service Specifications');
+  XLSX.utils.book_append_sheet(wbServ, XLSX.utils.aoa_to_sheet([['Categories'], ...servCatNames.map(c => [c])]), 'Dropdown Values');
 
-        services.push([
-            name, cat, 'ACTIVE', `Comprehensive industrial service ${i} provided by certified experts. Includes end-to-end management.`, 'FIXED', (5000 * i), 'INR',
-            18, 'Pan-India', `Perform thorough audit and preventive maintenance for facility ${i}.`, `Detailed Audit Report, Compliance Certificate ${i}`, `Travel, Calibrated Tools, Engineer Visit`, `Spare Parts, Consumables`,
-            '24 Hours', '1 Year Contract', (6000 * i), '', '', 'Annual Discount', '', '', 'Yes', 3, getRandomImages(), getRandomDocs()
-        ]);
+  // Write output files
+  if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
-        servSpecs.push([name, 'Certified Technicians', `Yes - Grade A Level ${i}`, '']);
-        servSpecs.push([name, 'Visit Frequency', `${i + 1} visits per year`, 'Visits']);
-        servSpecs.push([name, 'Emergency Support', `24x7 Breakdown On-call`, '']);
-    }
+  const prodPath = path.join(OUTPUT_DIR, 'Seeded_Products_Import.xlsx');
+  const servPath = path.join(OUTPUT_DIR, 'Seeded_Services_Import.xlsx');
 
-    // Prepare Workbooks
-    const wbProd = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wbProd, XLSX.utils.aoa_to_sheet([productHeaders, ...products]), 'Products');
-    XLSX.utils.book_append_sheet(wbProd, XLSX.utils.aoa_to_sheet([['Product SKU', 'Product Name', 'Specification Name *', 'Specification Value *', 'Unit'], ...prodSpecs]), 'Product Specifications');
-    XLSX.utils.book_append_sheet(wbProd, XLSX.utils.aoa_to_sheet([['Categories'], ...prodCatNames.map(c => [c])]), 'Dropdown Values');
+  fs.writeFileSync(prodPath, XLSX.write(wbProd, { type: 'buffer', bookType: 'xlsx' }));
+  fs.writeFileSync(servPath, XLSX.write(wbServ, { type: 'buffer', bookType: 'xlsx' }));
 
-    const wbServ = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wbServ, XLSX.utils.aoa_to_sheet([serviceHeaders, ...services]), 'Services');
-    XLSX.utils.book_append_sheet(wbServ, XLSX.utils.aoa_to_sheet([['Service Name', 'Specification Name *', 'Specification Value *', 'Unit'], ...servSpecs]), 'Service Specifications');
-    XLSX.utils.book_append_sheet(wbServ, XLSX.utils.aoa_to_sheet([['Categories'], ...servCatNames.map(c => [c])]), 'Dropdown Values');
-
-    if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-
-    const prodPath = path.join(OUTPUT_DIR, 'Seeded_Products_Import.xlsx');
-    const servPath = path.join(OUTPUT_DIR, 'Seeded_Services_Import.xlsx');
-
-    fs.writeFileSync(prodPath, XLSX.write(wbProd, { type: 'buffer', bookType: 'xlsx' }));
-    fs.writeFileSync(servPath, XLSX.write(wbServ, { type: 'buffer', bookType: 'xlsx' }));
-
-    console.log('Successfully generated seeded templates.');
-    console.log('Product Path:', prodPath);
-    console.log('Service Path:', servPath);
+  console.log('✓ Successfully generated realistic seeded Excel templates:');
+  console.log('  Products (.xlsx):', prodPath);
+  console.log('  Services (.xlsx):', servPath);
+  console.log(`  Included ${REALISTIC_PRODUCTS.length} realistic industrial products & ${REALISTIC_SERVICES.length} realistic industrial services.`);
 }
 
-main().catch(console.error);
+main().catch(console.error).finally(() => prisma.$disconnect());

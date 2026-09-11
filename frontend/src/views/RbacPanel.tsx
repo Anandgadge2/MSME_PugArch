@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
 import { usePagination } from '../features/shared/hooks';
+import { formatDateTime } from '../features/shared/format';
 import { useAuth } from '../hooks/useAuth';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName, validateRequiredText } from '../lib/validation';
 
@@ -662,7 +663,7 @@ export default function RbacPanel() {
               <div key={log.id} className="grid gap-2 p-4 text-sm md:grid-cols-[220px_1fr_180px]">
                 <span className="font-mono text-xs font-bold text-slate-700">{log.action}</span>
                 <span className="text-slate-600">{log.User?.name || 'System'} changed {log.entityType || 'rbac'} #{log.entityId || ''}</span>
-                <span className="text-xs text-slate-500">{new Date(log.createdAt).toLocaleString()}</span>
+                <span className="text-xs text-slate-500">{formatDateTime(log.createdAt)}</span>
               </div>
             ))}
             {auditLogs.length === 0 && <div className="p-8 text-center text-sm text-slate-500">No RBAC audit activity yet.</div>}
