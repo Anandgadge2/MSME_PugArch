@@ -11,6 +11,7 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
+import { formatDate as formatSharedDate } from '../shared/format';
 
 export type BidStatus = 'Open' | 'Closing Soon' | 'Under Evaluation' | 'Awarded' | 'Closed';
 export type BidType = 'Product' | 'Service' | 'Works' | 'Rate Contract';
@@ -251,7 +252,7 @@ export function money(value: number) {
 }
 
 export function formatDate(date: string) {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatSharedDate(date);
 }
 
 export const sampleBidDocuments: Array<{ icon: LucideIcon; name: string; meta: string }> = [];

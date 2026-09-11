@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
     Store,
@@ -33,12 +33,115 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 type RoleTab = 'all' | 'seller' | 'buyer' | 'shg';
+
+interface ComparisonRow {
+    feature: string;
+    seller: string;
+    buyer: string;
+    shg: string;
+}
+
+const COMPARISON_ROWS: ComparisonRow[] = [
+    {
+        feature: 'Account Registration & Verification',
+        seller: 'Udyam, GST & PAN Verified',
+        buyer: 'Corporate CIN / GST Audited',
+        shg: 'Aadhaar & SHG Resolution Verified',
+    },
+    {
+        feature: 'Direct Access to Large Industrial Demands',
+        seller: 'Instant RFQ / Tender Visibility',
+        buyer: 'Publish Custom Requirements',
+        shg: 'Canteen & Facility Supply Bids',
+    },
+    {
+        feature: 'Payment & Settlement Guarantee',
+        seller: 'Escrow Lock & Direct Bank Disbursal',
+        buyer: 'Milestone & GRN Inspection Controlled',
+        shg: '100% Value Direct Bank Transfer',
+    },
+    {
+        feature: 'Platform Fees & Commissions',
+        seller: 'Zero Commission / Free Listing',
+        buyer: 'Zero Platform Convenience Fee',
+        shg: 'Zero Commission / Free Assistance',
+    },
+    {
+        feature: 'Pricing & Sourcing Mechanisms',
+        seller: 'Direct Quote, Rate Contract, Reverse Auction',
+        buyer: 'Lowest Price Bidding & Reverse Auctions',
+        shg: 'Standardized Rate Contracts & Direct Orders',
+    },
+    {
+        feature: 'District MSME Priority Tagging',
+        seller: 'Exclusive Jharsuguda Local Badge',
+        buyer: 'District Mandate Compliance Tracking',
+        shg: 'Special HerSHG District Priority',
+    },
+    {
+        feature: 'Digital Invoicing & GRN Tracking',
+        seller: '1-Click Invoice & Delivery Dispatch',
+        buyer: 'Quality Check & Digital GRN Sign-Off',
+        shg: 'Simplified Paperless Handover',
+    },
+    {
+        feature: 'Dedicated District Cell Handholding',
+        seller: 'Online + In-Person Helpdesk',
+        buyer: 'Enterprise Liaison Manager',
+        shg: 'Free In-Person Field Assistance',
+    },
+];
 
 export default function MarketplaceBenefitsPage() {
     const [selectedTab, setSelectedTab] = useState<RoleTab>('all');
     const { user } = useAuth();
+
+    const matrixColumns = useMemo<ColumnDef<ComparisonRow>[]>(() => [
+        {
+            key: 'feature',
+            header: 'Portal Feature / Guarantee',
+            cell: (row) => <span className="font-bold text-slate-900">{row.feature}</span>,
+        },
+        {
+            key: 'seller',
+            header: 'MSME Seller / Vendor',
+            headerClassName: 'text-center bg-blue-900/40 text-blue-100',
+            cellClassName: 'text-center bg-blue-50/20',
+            cell: (row) => (
+                <div className="inline-flex items-center gap-1.5 justify-center font-semibold text-slate-700">
+                    <Check className="h-4 w-4 text-blue-600 shrink-0" />
+                    <span>{row.seller}</span>
+                </div>
+            ),
+        },
+        {
+            key: 'buyer',
+            header: 'Enterprise Buyer / Plant',
+            headerClassName: 'text-center bg-emerald-900/40 text-emerald-100',
+            cellClassName: 'text-center bg-emerald-50/20',
+            cell: (row) => (
+                <div className="inline-flex items-center gap-1.5 justify-center font-semibold text-slate-700">
+                    <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>{row.buyer}</span>
+                </div>
+            ),
+        },
+        {
+            key: 'shg',
+            header: 'HerSHG / Women Collective',
+            headerClassName: 'text-center bg-amber-900/40 text-amber-100',
+            cellClassName: 'text-center bg-amber-50/20',
+            cell: (row) => (
+                <div className="inline-flex items-center gap-1.5 justify-center font-semibold text-slate-700">
+                    <Check className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>{row.shg}</span>
+                </div>
+            ),
+        },
+    ], []);
 
     return (
         <div className="min-h-screen bg-slate-50/50 text-slate-900 font-sans">
@@ -717,102 +820,13 @@ export default function MarketplaceBenefitsPage() {
                         </p>
                     </div>
 
-                    <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-                        <div className="overflow-x-auto">
-                            <table className="w-full border-collapse text-left text-xs">
-                                <thead>
-                                    <tr className="bg-[#0b2447] text-white">
-                                        <th className="px-5 py-4 font-black uppercase tracking-wider text-xs">Portal Feature / Guarantee</th>
-                                        <th className="px-5 py-4 font-black uppercase tracking-wider text-xs text-center bg-blue-900/60">
-                                            MSME Seller / Vendor
-                                        </th>
-                                        <th className="px-5 py-4 font-black uppercase tracking-wider text-xs text-center bg-emerald-900/60">
-                                            Enterprise Buyer / Plant
-                                        </th>
-                                        <th className="px-5 py-4 font-black uppercase tracking-wider text-xs text-center bg-amber-900/60">
-                                            HerSHG / Women Collective
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200">
-                                    {[
-                                        {
-                                            feature: 'Account Registration & Verification',
-                                            seller: 'Udyam, GST & PAN Verified',
-                                            buyer: 'Corporate CIN / GST Audited',
-                                            shg: 'Aadhaar & SHG Resolution Verified',
-                                        },
-                                        {
-                                            feature: 'Direct Access to Large Industrial Demands',
-                                            seller: 'Instant RFQ / Tender Visibility',
-                                            buyer: 'Publish Custom Requirements',
-                                            shg: 'Canteen & Facility Supply Bids',
-                                        },
-                                        {
-                                            feature: 'Payment & Settlement Guarantee',
-                                            seller: 'Escrow Lock & Direct Bank Disbursal',
-                                            buyer: 'Milestone & GRN Inspection Controlled',
-                                            shg: '100% Value Direct Bank Transfer',
-                                        },
-                                        {
-                                            feature: 'Platform Fees & Commissions',
-                                            seller: 'Zero Commission / Free Listing',
-                                            buyer: 'Zero Platform Convenience Fee',
-                                            shg: 'Zero Commission / Free Assistance',
-                                        },
-                                        {
-                                            feature: 'Pricing & Sourcing Mechanisms',
-                                            seller: 'Direct Quote, Rate Contract, Reverse Auction',
-                                            buyer: 'Lowest Price Bidding & Reverse Auctions',
-                                            shg: 'Standardized Rate Contracts & Direct Orders',
-                                        },
-                                        {
-                                            feature: 'District MSME Priority Tagging',
-                                            seller: 'Exclusive Jharsuguda Local Badge',
-                                            buyer: 'District Mandate Compliance Tracking',
-                                            shg: 'Special HerSHG District Priority',
-                                        },
-                                        {
-                                            feature: 'Digital Invoicing & GRN Tracking',
-                                            seller: '1-Click Invoice & Delivery Dispatch',
-                                            buyer: 'Quality Check & Digital GRN Sign-Off',
-                                            shg: 'Simplified Paperless Handover',
-                                        },
-                                        {
-                                            feature: 'Dedicated District Cell Handholding',
-                                            seller: 'Online + In-Person Helpdesk',
-                                            buyer: 'Enterprise Liaison Manager',
-                                            shg: 'Free In-Person Field Assistance',
-                                        },
-                                    ].map((row, idx) => (
-                                        <tr key={row.feature} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                                            <td className="px-5 py-4 font-bold text-slate-900">
-                                                {row.feature}
-                                            </td>
-                                            <td className="px-5 py-4 text-center text-slate-700 font-semibold bg-blue-50/20">
-                                                <div className="inline-flex items-center gap-1.5 justify-center">
-                                                    <Check className="h-4 w-4 text-blue-600 shrink-0" />
-                                                    <span>{row.seller}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-5 py-4 text-center text-slate-700 font-semibold bg-emerald-50/20">
-                                                <div className="inline-flex items-center gap-1.5 justify-center">
-                                                    <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                                                    <span>{row.buyer}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-5 py-4 text-center text-slate-700 font-semibold bg-amber-50/20">
-                                                <div className="inline-flex items-center gap-1.5 justify-center">
-                                                    <Check className="h-4 w-4 text-amber-600 shrink-0" />
-                                                    <span>{row.shg}</span>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                    <DataTable<ComparisonRow>
+                        data={COMPARISON_ROWS}
+                        columns={matrixColumns}
+                        keyExtractor={(row) => row.feature}
+                        emptyTitle="No features found"
+                        emptyDescription="No comparison features available."
+                    />
                 </section>
 
                 {/* ──────────────────────────────────────────────────────────── */}

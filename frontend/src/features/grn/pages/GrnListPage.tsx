@@ -21,8 +21,9 @@ import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
+import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { useGrns } from '../hooks';
-import type { GrnStatus } from '../api';
+import type { GrnDto, GrnStatus } from '../api';
 import { GrnCreateModal } from '../components/GrnCreateModal';
 
 import { useRef, useEffect } from 'react';
@@ -235,12 +236,6 @@ export default function GrnListPage() {
         });
     }, [grns, search, sortDirection, sortKey, filter, filterPo, filterSeller, filterItems, filterReceivedFrom, filterReceivedTo, filterUpdatedFrom, filterUpdatedTo]);
 
-    const { page, pageSize, pageItems, total, setPage, setPageSize } = usePagination(visibleGrns, 10);
-
-    if (!canViewGrns) {
-        return <InlineError message="You do not have permission to view goods receipt notes." />;
-    }
-
     const toggleSort = (field: GrnSortKey) => {
         setSortDirection(prev => sortKey === field && prev === 'asc' ? 'desc' : 'asc');
         setSortKey(field);
@@ -276,6 +271,81 @@ export default function GrnListPage() {
         PARTIAL: grns.filter(g => g.status === 'PARTIAL').length,
         REJECTED: grns.filter(g => g.status === 'REJECTED').length
     };
+
+    const grnColumns = useMemo<ColumnDef<GrnDto>[]>(() => [
+        {
+            key: 'grnNumber',
+            header: 'GRN ID',
+            width: 'w-[12%]',
+            sortable: true,
+            cell: (g) => (
+                <div onClick={(e) => e.stopPropagation()}>
+                    <EntityIdLink label={g.grnNumber} id={g.id} size="sm" onClick={() => router.push(`/grn/${g.id}`)} />
+                </div>
+            ),
+        },
+        {
+            key: 'poNumber',
+            header: 'Purchase Order',
+            width: 'w-[38%]',
+            sortable: true,
+            cell: (g) => (
+                <div>
+                    <p className="text-xs font-black text-slate-900 break-words">{g.purchaseOrder?.poNumber}</p>
+                    <p className="text-[10px] font-semibold text-slate-500 break-words">{g.purchaseOrder?.title}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Seller: {g.purchaseOrder?.seller?.name}</p>
+                </div>
+            ),
+        },
+        {
+            key: 'items',
+            header: 'Items',
+            width: 'w-[9%]',
+            sortable: true,
+            cell: (g) => (
+                <span className="text-xs font-semibold text-slate-700">
+                    {g.items.length} line{g.items.length === 1 ? '' : 's'}
+                </span>
+            ),
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            width: 'w-[10%]',
+            sortable: true,
+            cell: (g) => <StatusPill status={g.status} />,
+        },
+        {
+            key: 'receivedAt',
+            header: 'Received',
+            width: 'w-[13%]',
+            sortable: true,
+            cell: (g) => (
+                <div className="text-xs font-semibold text-slate-700">
+                    <p>{formatDateTime(g.receivedAt)}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">by {g.receivedBy.name}</p>
+                </div>
+            ),
+        },
+        {
+            key: 'updatedAt',
+            header: 'Updated',
+            width: 'w-[13%]',
+            sortable: true,
+            cell: (g) => (
+                <div className="text-xs font-semibold text-slate-700">
+                    <p>{formatDateTime(g.updatedAt)}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{formatRelative(g.updatedAt)}</p>
+                </div>
+            ),
+        },
+    ], [router]);
+
+    const { page, pageSize, pageItems, total, setPage, setPageSize } = usePagination(visibleGrns, 10);
+
+    if (!canViewGrns) {
+        return <InlineError message="You do not have permission to view goods receipt notes." />;
+    }
 
     return (
         <div className="space-y-6">
@@ -483,97 +553,63 @@ export default function GrnListPage() {
                     action={{ label: 'Clear Filters', onClick: clearFilters }}
                 />
             ) : viewMode === 'grid' ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {pageItems.map((g: any, index) => {
-                        const rowIndex = (page - 1) * pageSize + index + 1;
-                        return (
-                            <button
-                                type="button"
-                                key={g.id}
-                                onClick={() => router.push(`/grn/${g.id}`)}
-                                className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
-                            >
-                                <div className="w-full space-y-3">
-                                    <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
-                                                    {String(rowIndex).padStart(2, '0')}
-                                                </span>
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-[#c86413]">{g.grnNumber}</span>
+                <>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {pageItems.map((g: any, index) => {
+                            const rowIndex = (page - 1) * pageSize + index + 1;
+                            return (
+                                <button
+                                    type="button"
+                                    key={g.id}
+                                    onClick={() => router.push(`/grn/${g.id}`)}
+                                    className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
+                                >
+                                    <div className="w-full space-y-3">
+                                        <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
+                                                        {String(rowIndex).padStart(2, '0')}
+                                                    </span>
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-[#c86413]">{g.grnNumber}</span>
+                                                </div>
+                                                <h2 className="mt-2 text-sm font-black text-slate-900 group-hover:text-[#12335f] transition-colors">{g.purchaseOrder?.poNumber || 'Purchase Order'}</h2>
+                                                <p className="mt-1 text-xs font-semibold text-slate-500 line-clamp-1">{g.purchaseOrder?.title}</p>
                                             </div>
-                                            <h2 className="mt-2 text-sm font-black text-slate-900 group-hover:text-[#12335f] transition-colors">{g.purchaseOrder?.poNumber || 'Purchase Order'}</h2>
-                                            <p className="mt-1 text-xs font-semibold text-slate-500 line-clamp-1">{g.purchaseOrder?.title}</p>
+                                            <StatusPill status={g.status} />
                                         </div>
-                                        <StatusPill status={g.status} />
+                                        <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 border-t border-slate-100 pt-3">
+                                            <InfoTile label="Seller" value={g.purchaseOrder?.seller?.name || '-'} />
+                                            <InfoTile label="Items Count" value={`${g.items.length} line${g.items.length === 1 ? '' : 's'}`} />
+                                            <InfoTile label="Received" value={formatDateTime(g.receivedAt)} />
+                                            <InfoTile label="Updated" value={formatRelative(g.updatedAt)} />
+                                        </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 border-t border-slate-100 pt-3">
-                                        <InfoTile label="Seller" value={g.purchaseOrder?.seller?.name || '-'} />
-                                        <InfoTile label="Items Count" value={`${g.items.length} line${g.items.length === 1 ? '' : 's'}`} />
-                                        <InfoTile label="Received" value={formatDateTime(g.receivedAt)} />
-                                        <InfoTile label="Updated" value={formatRelative(g.updatedAt)} />
-                                    </div>
-                                </div>
-                            </button>
-                        );
-                    })}
-                </div>
-            ) : (
-                <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-                    <div className="overflow-x-auto w-full">
-                        <table data-ux-wrapped="true" className="w-full min-w-[850px] table-fixed border-collapse text-left text-xs">
-                            <thead>
-                                <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-                                    <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-[5%]">Sr. No</th>
-                                    <th className="p-3 w-[12%]"><SortableHeader label="GRN ID" field="grnNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="p-3 w-[38%]"><SortableHeader label="Purchase Order" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="p-3 w-[9%]"><SortableHeader label="Items" field="items" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="p-3 w-[10%]"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="p-3 w-[13%]"><SortableHeader label="Received" field="receivedAt" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="p-3 w-[13%]"><SortableHeader label="Updated" field="updatedAt" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                                {pageItems.map((g, idx) => {
-                                    const rowIndex = (page - 1) * pageSize + idx + 1;
-                                    return (
-                                        <tr key={g.id} className="hover:bg-slate-50/50 transition cursor-pointer" onClick={() => router.push(`/grn/${g.id}`)}>
-                                            <td className="p-3 font-mono text-xs text-slate-500">
-                                                {String(rowIndex).padStart(2, '0')}
-                                            </td>
-                                            <td className="p-3" onClick={e => e.stopPropagation()}>
-                                                <EntityIdLink label={g.grnNumber} id={g.id} size="sm" onClick={() => router.push(`/grn/${g.id}`)} />
-                                            </td>
-                                            <td className="p-3">
-                                                <p className="text-xs font-black text-slate-900 break-words">{g.purchaseOrder?.poNumber}</p>
-                                                <p className="text-[10px] font-semibold text-slate-500 break-words">{g.purchaseOrder?.title}</p>
-                                                <p className="text-[10px] text-slate-400 mt-0.5">Seller: {g.purchaseOrder?.seller?.name}</p>
-                                            </td>
-                                            <td className="p-3 text-xs font-semibold text-slate-700">
-                                                {g.items.length} line{g.items.length === 1 ? '' : 's'}
-                                            </td>
-                                            <td className="p-3">
-                                                <StatusPill status={g.status} />
-                                            </td>
-                                            <td className="p-3 text-xs font-semibold text-slate-700">
-                                                <p>{formatDateTime(g.receivedAt)}</p>
-                                                <p className="text-[10px] text-slate-400 mt-0.5">by {g.receivedBy.name}</p>
-                                            </td>
-                                            <td className="p-3 text-xs font-semibold text-slate-700">
-                                                <p>{formatDateTime(g.updatedAt)}</p>
-                                                <p className="text-[10px] text-slate-400 mt-0.5">{formatRelative(g.updatedAt)}</p>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                                </button>
+                            );
+                        })}
                     </div>
-                </div>
-            )}
-
-            {!isLoading && grns.length > 0 && (
-                <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="GRNs" />
+                    <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="GRNs" />
+                </>
+            ) : (
+                <DataTable<GrnDto>
+                    data={pageItems}
+                    columns={grnColumns}
+                    keyExtractor={(g) => g.id}
+                    page={page}
+                    pageSize={pageSize}
+                    total={total}
+                    onPageChange={setPage}
+                    onPageSizeChange={setPageSize}
+                    sortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={(field) => toggleSort(field as any)}
+                    showSrNo
+                    srNoWidth="w-[5%]"
+                    onRowClick={(g) => router.push(`/grn/${g.id}`)}
+                    rowClassName="cursor-pointer"
+                    caption="Goods Receipt Notes List"
+                />
             )}
 
             {showCreate && (

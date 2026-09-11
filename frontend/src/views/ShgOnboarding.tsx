@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, ArrowRight, BookOpen, CalendarDays, CheckCircle2, ClipboardList, FileText, Landmark, Mail, Phone, ShieldCheck, Store, Users } from 'lucide-react';
 import { Button } from '../components/ui/button';
-import { Badge, Card, CardContent, CardHeader, CardTitle, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/card';
+import { Badge, Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { DataTable, ColumnDef } from '../components/ui/data-table';
 import { Input, Select } from '../components/ui/input';
 import { cn } from '../lib/utils';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { shgApi, type ShgProfile } from '../features/shg/api';
+import { formatDate } from '../features/shared/format';
 import SellerOnboarding from './SellerOnboarding';
 
 const steps = [
@@ -384,6 +386,52 @@ function SellerBackedShgPage({ section }: { section: string }) {
     };
   }, []);
 
+  const memberDocColumns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'documentType',
+      header: 'Record',
+      cell: (document) => <span className="font-semibold text-slate-900">{readable(document.documentType)}</span>,
+    },
+    {
+      key: 'file',
+      header: 'File',
+      cell: (document) => <span>{document.fileAsset?.originalName || document.fileName || 'Uploaded document'}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (document) => <StatusBadge value={document.status || 'UPLOADED'} />,
+    },
+    {
+      key: 'uploadedAt',
+      header: 'Uploaded',
+      cell: (document) => <span>{formatDate(document.uploadedAt || document.createdAt)}</span>,
+    },
+  ], []);
+
+  const meetingColumns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'date',
+      header: 'Date',
+      cell: (meeting) => <span>{formatDate(meeting.meetingDate || meeting.date)}</span>,
+    },
+    {
+      key: 'title',
+      header: 'Meeting',
+      cell: (meeting, idx) => <span className="font-semibold text-slate-900">{meeting.title || `Meeting ${idx + 1}`}</span>,
+    },
+    {
+      key: 'agenda',
+      header: 'Agenda',
+      cell: (meeting) => <span>{meeting.agenda || '—'}</span>,
+    },
+    {
+      key: 'decision',
+      header: 'Decision',
+      cell: (meeting) => <span>{meeting.decisions || meeting.resolution || '—'}</span>,
+    },
+  ], []);
+
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse" aria-label="Loading SHG workspace">
@@ -426,19 +474,13 @@ function SellerBackedShgPage({ section }: { section: string }) {
           <CardHeader><CardTitle>Member records and resolutions</CardTitle></CardHeader>
           <CardContent>
             {memberDocuments.length ? (
-              <Table>
-                <TableHeader><TableRow><TableHead>Record</TableHead><TableHead>File</TableHead><TableHead>Status</TableHead><TableHead>Uploaded</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {memberDocuments.map((document: any) => (
-                    <TableRow key={document.id || document.documentType}>
-                      <TableCell>{readable(document.documentType)}</TableCell>
-                      <TableCell>{document.fileAsset?.originalName || document.fileName || 'Uploaded document'}</TableCell>
-                      <TableCell><StatusBadge value={document.status || 'UPLOADED'} /></TableCell>
-                      <TableCell>{formatDate(document.uploadedAt || document.createdAt)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <DataTable<any>
+                data={memberDocuments}
+                columns={memberDocColumns}
+                keyExtractor={(document, idx) => String(document.id || document.documentType || idx)}
+                emptyTitle="No member records"
+                emptyDescription="No member documents uploaded."
+              />
             ) : (
               <EmptyWorkspaceState
                 icon={Users}
@@ -466,17 +508,13 @@ function SellerBackedShgPage({ section }: { section: string }) {
           <CardHeader><CardTitle>Meeting register</CardTitle></CardHeader>
           <CardContent>
             {meetings.length ? (
-              <Table>
-                <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Meeting</TableHead><TableHead>Agenda</TableHead><TableHead>Decision</TableHead></TableRow></TableHeader>
-                <TableBody>{meetings.map((meeting: any, index: number) => (
-                  <TableRow key={meeting.id || index}>
-                    <TableCell>{formatDate(meeting.meetingDate || meeting.date)}</TableCell>
-                    <TableCell>{meeting.title || `Meeting ${index + 1}`}</TableCell>
-                    <TableCell>{meeting.agenda || '—'}</TableCell>
-                    <TableCell>{meeting.decisions || meeting.resolution || '—'}</TableCell>
-                  </TableRow>
-                ))}</TableBody>
-              </Table>
+              <DataTable<any>
+                data={meetings}
+                columns={meetingColumns}
+                keyExtractor={(meeting, index) => String(meeting.id || index)}
+                emptyTitle="No meetings"
+                emptyDescription="No meeting records found."
+              />
             ) : (
               <EmptyWorkspaceState
                 icon={CalendarDays}
@@ -602,11 +640,6 @@ function SupportCard({ icon: Icon, title, text, href }: { icon: React.ComponentT
 }
 
 const readable = (value: unknown) => String(value || '—').replaceAll('_', ' ').replaceAll('-', ' ').toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
-const formatDate = (value: unknown) => {
-  if (!value) return '—';
-  const date = new Date(String(value));
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-};
 
 function ShgDashboardSection({ section, profile, progress }: { section: string; profile: ShgProfile; progress: number }) {
   const status = profile.applicationStatus || 'IN_PROGRESS';
@@ -736,23 +769,48 @@ function BusinessPanel({ draft, setDraft }: { draft: any; setDraft: (value: any)
 
 function DocumentTable({ profile }: { profile: ShgProfile }) {
   const docs = profile.documents || [];
+  const rows = useMemo(() => [
+    ...requiredDocs.map(([type, label]) => ({ documentType: type, label, required: true })),
+    ...docs.filter(doc => !requiredDocs.some(([type]) => type === doc.documentType)).map(doc => ({ ...doc, label: doc.documentType, required: doc.required }))
+  ], [docs]);
+
+  const columns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'label',
+      header: 'Document',
+      cell: (row) => <span className="font-semibold text-slate-900">{row.label}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (row) => {
+        const uploaded = docs.find(doc => doc.documentType === row.documentType);
+        return <Badge variant={uploaded?.status === 'VERIFIED' ? 'success' : uploaded ? 'warning' : 'default'}>{uploaded?.status || 'NOT_UPLOADED'}</Badge>;
+      },
+    },
+    {
+      key: 'required',
+      header: 'Required',
+      cell: (row) => <span>{row.required ? 'Required' : 'Optional'}</span>,
+    },
+    {
+      key: 'remarks',
+      header: 'Remarks',
+      cell: (row) => {
+        const uploaded = docs.find(doc => doc.documentType === row.documentType);
+        return <span>{uploaded?.remarks || '-'}</span>;
+      },
+    },
+  ], [docs]);
+
   return (
-    <Table>
-      <TableHeader><TableRow><TableHead>Document</TableHead><TableHead>Status</TableHead><TableHead>Required</TableHead><TableHead>Remarks</TableHead></TableRow></TableHeader>
-      <TableBody>
-        {[...requiredDocs.map(([type, label]) => ({ documentType: type, label, required: true })), ...docs.filter(doc => !requiredDocs.some(([type]) => type === doc.documentType)).map(doc => ({ ...doc, label: doc.documentType, required: doc.required }))].map(row => {
-          const uploaded = docs.find(doc => doc.documentType === row.documentType);
-          return (
-            <TableRow key={row.documentType}>
-              <TableCell>{row.label}</TableCell>
-              <TableCell><Badge variant={uploaded?.status === 'VERIFIED' ? 'success' : uploaded ? 'warning' : 'default'}>{uploaded?.status || 'NOT_UPLOADED'}</Badge></TableCell>
-              <TableCell>{row.required ? 'Required' : 'Optional'}</TableCell>
-              <TableCell>{uploaded?.remarks || '-'}</TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+    <DataTable<any>
+      data={rows}
+      columns={columns}
+      keyExtractor={(row) => row.documentType}
+      emptyTitle="No documents"
+      emptyDescription="No documents found."
+    />
   );
 }
 
@@ -775,12 +833,18 @@ function InfoRow({ label, value }: { label: string; value: any }) {
 
 function SimpleTable({ rows, columns }: { rows: any[]; columns: string[] }) {
   if (!rows.length) return <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">No records yet.</p>;
+  const columnDefs: ColumnDef<any>[] = columns.map(column => ({
+    key: column,
+    header: column,
+    cell: (row) => <span>{typeof row[column] === 'boolean' ? (row[column] ? 'Yes' : 'No') : row[column] || '-'}</span>,
+  }));
   return (
-    <Table>
-      <TableHeader><TableRow>{columns.map(column => <TableHead key={column}>{column}</TableHead>)}</TableRow></TableHeader>
-      <TableBody>
-        {rows.map(row => <TableRow key={row.id}>{columns.map(column => <TableCell key={column}>{typeof row[column] === 'boolean' ? (row[column] ? 'Yes' : 'No') : row[column] || '-'}</TableCell>)}</TableRow>)}
-      </TableBody>
-    </Table>
+    <DataTable<any>
+      data={rows}
+      columns={columnDefs}
+      keyExtractor={(row, idx) => String(row.id || idx)}
+      emptyTitle="No records"
+      emptyDescription="No data available."
+    />
   );
 }

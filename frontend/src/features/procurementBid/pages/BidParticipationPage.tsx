@@ -30,6 +30,7 @@ import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import type { DocumentPreview } from '../../../lib/files';
 import { getDocumentPreviewMode } from '../../../lib/files';
 import { useAuth } from '../../../hooks/useAuth';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { EmdCard, EmdInfo, isEmdApplicable } from '../../rfq/components/EmdCard';
 import { EmdPaymentModal } from '../../rfq/components/EmdPaymentModal';
 import {
@@ -1695,6 +1696,71 @@ function UploadedList({ docs, title }: { docs: ParticipationDocument[]; title: s
 
 function ReviewStep({ bid, participation, technicalDocs, financialDocs, technicalOffer, boqTechnicalOffers, quote, boqFinancialOffers, declaration, setDeclaration, onNext, disabled, onSaveDraft, savingDraft }: { bid: any; participation: any; technicalDocs: any[]; financialDocs: any[]; technicalOffer: any; boqTechnicalOffers: any; quote: any; boqFinancialOffers: any; declaration: boolean; setDeclaration: (val: boolean) => void; onNext: () => void; disabled?: boolean; onSaveDraft: () => void; savingDraft: boolean }) {
   const isBoq = bid?.technicalPacket?.items && bid.technicalPacket.items.length > 0;
+
+  interface BoqSummaryItem {
+    id: string | number;
+    itemName: string;
+    quantity: number | string;
+    unit: string;
+    unitPrice: number;
+    gstPercentage: number;
+    lineTotal: number;
+  }
+
+  const summaryData = useMemo<BoqSummaryItem[]>(() => {
+    if (!isBoq || !bid?.technicalPacket?.items) return [];
+    return bid.technicalPacket.items
+      .map((item: any) => {
+        const offer = boqFinancialOffers[item.id];
+        if (!offer) return null;
+        const up = parseFloat(offer.unitPrice) || 0;
+        const qty = parseFloat(item.quantity) || 1;
+        const gst = parseFloat(offer.gstPercentage) || 0;
+        const lineTotal = (up * qty) * (1 + gst / 100);
+        return {
+          id: item.id,
+          itemName: item.itemName,
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: up,
+          gstPercentage: gst,
+          lineTotal,
+        };
+      })
+      .filter(Boolean) as BoqSummaryItem[];
+  }, [isBoq, bid?.technicalPacket?.items, boqFinancialOffers]);
+
+  const summaryColumns = useMemo<ColumnDef<BoqSummaryItem>[]>(() => [
+    {
+      key: 'itemName',
+      header: 'Item Name',
+      cell: (item) => <span className="font-semibold text-slate-800">{item.itemName}</span>,
+    },
+    {
+      key: 'quantity',
+      header: 'Qty',
+      align: 'right',
+      cell: (item) => <span>{item.quantity} {item.unit}</span>,
+    },
+    {
+      key: 'unitPrice',
+      header: 'Unit Price',
+      align: 'right',
+      cell: (item) => <span>₹{item.unitPrice.toFixed(2)}</span>,
+    },
+    {
+      key: 'gstPercentage',
+      header: 'GST',
+      align: 'right',
+      cell: (item) => <span>{item.gstPercentage}%</span>,
+    },
+    {
+      key: 'lineTotal',
+      header: 'Total',
+      align: 'right',
+      cell: (item) => <span className="font-medium">₹{item.lineTotal.toFixed(2)}</span>,
+    },
+  ], []);
   
   return (
     <div className="space-y-6">
@@ -1730,42 +1796,23 @@ function ReviewStep({ bid, participation, technicalDocs, financialDocs, technica
       <div className={panelClass}>
         <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800"><CheckCircle2 className="h-5 w-5 text-emerald-500" /> Summary of Financial Quote</h3>
         {isBoq ? (
-          <div className="rounded-lg border border-slate-100 bg-white overflow-hidden">
-            <table className="w-full text-left text-sm text-slate-600">
-              <thead className="bg-slate-50 text-xs font-medium text-slate-500">
-                <tr>
-                  <th className="p-3">Item Name</th>
-                  <th className="p-3 text-right">Qty</th>
-                  <th className="p-3 text-right">Unit Price</th>
-                  <th className="p-3 text-right">GST</th>
-                  <th className="p-3 text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bid.technicalPacket.items.map((item: any) => {
-                  const offer = boqFinancialOffers[item.id];
-                  if (!offer) return null;
-                  const up = parseFloat(offer.unitPrice) || 0;
-                  const qty = parseFloat(item.quantity) || 1;
-                  const gst = parseFloat(offer.gstPercentage) || 0;
-                  const lineTotal = (up * qty) * (1 + gst / 100);
-                  return (
-                    <tr key={item.id} className="border-t border-slate-100">
-                      <td className="p-3">{item.itemName}</td>
-                      <td className="p-3 text-right">{item.quantity} {item.unit}</td>
-                      <td className="p-3 text-right">₹{up.toFixed(2)}</td>
-                      <td className="p-3 text-right">{gst}%</td>
-                      <td className="p-3 text-right font-medium">₹{lineTotal.toFixed(2)}</td>
-                    </tr>
-                  );
-                })}
-                <tr className="bg-slate-50 font-bold text-slate-800">
-                  <td colSpan={4} className="p-3 text-right">Grand Total</td>
-                  <td className="p-3 text-right text-[var(--bid-primary)]">₹{parseFloat(quote?.totalAmount || '0').toFixed(2)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <DataTable<BoqSummaryItem>
+            data={summaryData}
+            columns={summaryColumns}
+            keyExtractor={(item) => String(item.id)}
+            footer={
+              <tr>
+                <td colSpan={5} className="p-3 text-right font-bold text-slate-800">
+                  Grand Total
+                </td>
+                <td className="p-3 text-right font-bold text-[var(--bid-primary)]">
+                  ₹{parseFloat(quote?.totalAmount || '0').toFixed(2)}
+                </td>
+              </tr>
+            }
+            emptyTitle="No financial quote items"
+            emptyDescription="No BOQ items were quoted."
+          />
         ) : (
           <div className="grid grid-cols-2 gap-4 rounded-lg bg-white p-4 text-sm sm:grid-cols-3">
             <div><span className="block text-xs text-slate-500">Quoted Amount</span>₹ {quote?.quotedAmount || '0'}</div>

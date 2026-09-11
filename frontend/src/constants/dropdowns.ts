@@ -174,8 +174,8 @@ export const ITEM_CONDITIONS = [
 
 // ── Payment Terms ───────────────────────────────────────────────────────────
 export const PAYMENT_TERMS = [
-  { value: 'ON_DELIVERY', label: 'On Delivery' },
-  { value: 'ADVANCE_PAYMENT', label: 'Advance Payment' }
+  { value: 'ADVANCE_PAYMENT', label: 'Advance Payment' },
+  { value: 'ON_DELIVERY', label: 'On Delivery' }
 ] as const;
 
 // ── Delivery Type ───────────────────────────────────────────────────────────

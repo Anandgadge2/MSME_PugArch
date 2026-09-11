@@ -38,6 +38,7 @@ import { EmdPaymentModal } from '../components/EmdPaymentModal';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { getDocumentPreviewMode, type DocumentPreview } from '../../../lib/files';
 import { parseQuoteRequestItems, cleanItemName } from '../utils/quoteItemParser';
+import { formatDate, formatDateTime, formatTime } from '../../shared/format';
 
 const formatBytes = (bytes?: number): string => {
   if (!bytes || bytes <= 0) return '';
@@ -97,17 +98,6 @@ const uploadFile = (file: File, onProgress?: (percent: number) => void): Promise
     xhr.onabort = () => reject(new Error('Upload aborted'));
     xhr.send(formData);
   });
-
-const formatDate = (dateStr?: string | Date) => {
-  if (!dateStr) return '—';
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return String(dateStr);
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-  } catch {
-    return String(dateStr);
-  }
-};
 
 const formatCurrency = (val?: number | string) => {
   if (!val) return '—';
@@ -693,7 +683,7 @@ export default function SubmitQuotationPage() {
     
     const savedAt = ownResponse.submittedAt || ownResponse.updatedAt || ownResponse.createdAt;
     if (savedAt) {
-      const savedTime = new Date(savedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      const savedTime = formatTime(savedAt);
       setLastSaved(savedTime);
     }
 
@@ -733,7 +723,7 @@ export default function SubmitQuotationPage() {
 
       await postApi(`/api/marketplace/requirements/${resolvedId}/responses`, payload);
       
-      const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const now = formatTime(new Date());
       setLastSaved(now);
       setDraftSaved(true);
       toast.success('Draft saved successfully');
@@ -1489,15 +1479,7 @@ export default function SubmitQuotationPage() {
   };
 
   const submittedAtValue = ownResponse?.submittedAt || ownResponse?.updatedAt || ownResponse?.createdAt;
-  const submittedAtDisplay = submittedAtValue
-    ? new Date(submittedAtValue).toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    : null;
+  const submittedAtDisplay = submittedAtValue ? formatDateTime(submittedAtValue) : null;
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 px-4 py-6 md:px-8 pb-12">

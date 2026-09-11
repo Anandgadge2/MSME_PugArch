@@ -2,35 +2,19 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  const user = await prisma.user.findUnique({
-    where: { email: 'kartikkanzode@gmail.com' }
+  const user = await prisma.user.findFirst({
+    where: { name: { contains: 'Sandhya' } },
+    include: { organization: true, sellerProfile: true }
   });
-  console.log('USER:', user?.id, user?.email);
 
-  const pos = await prisma.purchaseOrder.findMany({
-    where: {
-      sellerId: user?.id
-    },
-    select: { id: true, poNumber: true, status: true }
-  });
-  console.log('POS for user 71:', pos);
-
-  const trackings = await prisma.deliveryTracking.findMany({
-    where: {
-      purchaseOrder: { sellerId: user?.id }
-    },
-    select: { id: true, status: true, trackingNumber: true }
-  });
-  console.log('Trackings for user 71:', trackings);
-
-  // If none, check all POs in the system
-  if (pos.length === 0) {
-    const allPos = await prisma.purchaseOrder.findMany({
-      take: 5,
-      select: { id: true, poNumber: true, sellerId: true, seller: { select: { email: true } } }
-    });
-    console.log('Sample all POs:', allPos);
-  }
+  console.log('USER DATA:', JSON.stringify({
+    id: user?.id,
+    name: user?.name,
+    email: user?.email,
+    registrationDetails: user?.registrationDetails,
+    organization: user?.organization,
+    sellerProfile: user?.sellerProfile
+  }, null, 2));
 }
 
 main().finally(() => prisma.$disconnect());

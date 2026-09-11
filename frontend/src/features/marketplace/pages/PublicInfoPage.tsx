@@ -25,6 +25,7 @@ import {
 import { useAuth } from '../../../hooks/useAuth';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 type PageKey =
   | 'contact'
@@ -572,58 +573,65 @@ function TermsPage() {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
-        <table className="w-full border-collapse text-left text-sm">
-          <thead className="bg-[#0b3a75] text-white">
-            <tr>
-              <th className="px-4 py-3.5 font-extrabold uppercase text-xs tracking-wide">Document Title</th>
-              <th className="px-4 py-3.5 font-extrabold uppercase text-xs tracking-wide">Category</th>
-              <th className="px-4 py-3.5 font-extrabold uppercase text-xs tracking-wide">Format</th>
-              <th className="px-4 py-3.5 font-extrabold uppercase text-xs tracking-wide text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {officialDocuments.map((doc) => (
-              <tr key={doc.title} className="hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-4 font-bold text-slate-900">
-                  <div className="flex items-center gap-2.5">
-                    <FileText className="h-4 w-4 shrink-0 text-[#12335f]" />
-                    <span>{doc.title}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-4">
-                  <span className="inline-flex items-center rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold text-[#12335f] border border-blue-100">
-                    {doc.category}
-                  </span>
-                </td>
-                <td className="px-4 py-4 text-xs font-bold text-slate-500">
-                  OFFICIAL PDF
-                </td>
-                <td className="px-4 py-4 text-right">
-                  <div className="inline-flex items-center gap-3">
-                    <a
-                      href={doc.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-black text-[#0b3a75] hover:underline"
-                    >
-                      View PDF <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                    <a
-                      href={doc.href}
-                      download={doc.file}
-                      className="inline-flex items-center gap-1 rounded bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 hover:bg-[#0b3a75] hover:text-white transition-colors"
-                      title="Download File"
-                    >
-                      <Download className="h-3.5 w-3.5" /> Download
-                    </a>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        data={officialDocuments}
+        columns={[
+          {
+            key: 'title',
+            header: 'Document Title',
+            cell: (doc: any) => (
+              <div className="flex items-center gap-2.5">
+                <FileText className="h-4 w-4 shrink-0 text-[#12335f]" />
+                <span className="font-bold text-slate-900">{doc.title}</span>
+              </div>
+            )
+          },
+          {
+            key: 'category',
+            header: 'Category',
+            width: 'w-56',
+            cell: (doc: any) => (
+              <span className="inline-flex items-center rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold text-[#12335f] border border-blue-100">
+                {doc.category}
+              </span>
+            )
+          },
+          {
+            key: 'format',
+            header: 'Format',
+            width: 'w-32',
+            cell: () => <span className="text-xs font-bold text-slate-500">OFFICIAL PDF</span>
+          },
+          {
+            key: 'action',
+            header: 'Action',
+            align: 'right',
+            width: 'w-60',
+            cell: (doc: any) => (
+              <div className="inline-flex items-center gap-3">
+                <a
+                  href={doc.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-black text-[#0b3a75] hover:underline"
+                >
+                  View PDF <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+                <a
+                  href={doc.href}
+                  download={doc.file}
+                  className="inline-flex items-center gap-1 rounded bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 hover:bg-[#0b3a75] hover:text-white transition-colors"
+                  title="Download File"
+                >
+                  <Download className="h-3.5 w-3.5" /> Download
+                </a>
+              </div>
+            )
+          }
+        ]}
+        keyExtractor={(doc) => doc.title}
+        rowClassName="hover:bg-slate-50 transition-colors text-sm"
+      />
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 space-y-3 text-xs font-semibold leading-relaxed text-slate-600">
         <p><strong className="text-slate-800">Compliance & Legal Usage:</strong> Use of JsgSmile is subject to lawful, responsible, and authorized activity by buyers, sellers, SHGs, administrators, and other stakeholders.</p>

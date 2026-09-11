@@ -558,6 +558,12 @@ const allowedFileEntityTypes = new Set([
   'payment_proof',
   'receipt',
   'offline_payment',
+  'banner',
+  'organization_banner',
+  'logo',
+  'organization_logo',
+  'company_logo',
+  'public',
   'general'
 ]);
 

@@ -9,10 +9,11 @@ import { loadSavedSuppliers, removeSavedSupplier, type SavedSupplier } from '../
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
+import { formatDate as formatSharedDate } from '../../shared/format';
 
 const formatDate = (value: string) => {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? 'Recently saved' : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const formatted = formatSharedDate(value);
+    return formatted === '—' ? 'Recently saved' : formatted;
 };
 
 export default function SavedSuppliersPage() {

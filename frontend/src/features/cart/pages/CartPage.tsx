@@ -23,6 +23,7 @@ import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureState
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { KpiCard } from '../../shared/KpiCard';
 import { runWithToast } from '../../../lib/toast';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { postApi } from '../../shared/apiClient';
 import { CreateConversationModal } from '../../messages/pages/MessagesPage';
 import {
@@ -214,9 +215,6 @@ export default function CartPage() {
         setQuoteModalState(null);
         router.push(`/buyer/messages?conversationId=${id}`);
     };
-    if (permissionsLoading && !canViewCart) {
-        return <LoadingState label="Loading cart..." />;
-    }
 
     const handleSort = (field: SortField) => {
         if (sortField === field) {
@@ -248,10 +246,6 @@ export default function CartPage() {
         </th>
     );
 
-    if (!canViewCart) {
-        return <InlineError message="You do not have permission to view organisation carts." />;
-    }
-
     const handleRemove = (item: CartItemDto) => {
         removeMut.mutate(item.id, {
             onSuccess: () => {
@@ -274,6 +268,216 @@ export default function CartPage() {
             }
         );
     };
+
+    const cartColumns = useMemo<ColumnDef<CartItemDto>[]>(() => [
+        {
+            key: 'select',
+            header: (
+                <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    ref={el => {
+                        if (el) el.indeterminate = isSomeSelected;
+                    }}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
+                    title="Select all items"
+                    aria-label="Select all items"
+                />
+            ),
+            width: 'w-10',
+            align: 'center',
+            cell: (item) => (
+                <input
+                    type="checkbox"
+                    checked={selectedItemIds.has(item.id)}
+                    onChange={() => toggleSelectItem(item.id)}
+                    className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
+                    aria-label={`Select ${item.itemName}`}
+                />
+            )
+        },
+        {
+            key: 'item',
+            header: 'Item',
+            sortable: true,
+            sortKey: 'item',
+            cell: (item) => {
+                const itemUrl = item.productId
+                    ? `/marketplace/products/${item.productId}`
+                    : item.serviceId
+                        ? `/marketplace/services/${item.serviceId}`
+                        : null;
+                return (
+                    <div className="flex flex-col gap-0.5">
+                        {itemUrl ? (
+                            <Link
+                                href={itemUrl}
+                                className="text-xs font-bold text-[#12335f] break-words leading-tight hover:underline hover:text-blue-700 transition-colors"
+                            >
+                                {item.itemName}
+                            </Link>
+                        ) : (
+                            <p className="text-xs font-bold text-[#12335f] break-words leading-tight">{item.itemName}</p>
+                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            {itemUrl ? (
+                                <EntityIdLink
+                                    label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId}`}
+                                    id={item.productId || item.serviceId || 0}
+                                    size="sm"
+                                    to={itemUrl}
+                                    target="_blank"
+                                />
+                            ) : (
+                                <EntityIdLink
+                                    label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId}`}
+                                    id={item.productId || item.serviceId || 0}
+                                    size="sm"
+                                    onClick={() => toast.info('Item details are not available')}
+                                />
+                            )}
+                            <span className="text-[9px] font-medium text-slate-500">{item.unitOfMeasure}</span>
+                        </div>
+                    </div>
+                );
+            }
+        },
+        {
+            key: 'seller',
+            header: 'Seller',
+            sortable: true,
+            sortKey: 'seller',
+            cell: (item) => (
+                <div>
+                    {item.sellerId ? (
+                        <Link
+                            href={`/sellers/${item.sellerId}`}
+                            className="text-[11px] font-bold text-slate-900 break-words leading-tight hover:underline hover:text-blue-700 transition-colors"
+                        >
+                            {item.seller?.name || `Seller #${item.sellerId}`}
+                        </Link>
+                    ) : (
+                        <p className="text-[11px] font-bold text-slate-900 break-words leading-tight">{item.seller?.name || `Seller #${item.sellerId}`}</p>
+                    )}
+                    {item.seller?.email && <p className="text-[9px] font-medium text-slate-500 break-all mt-0.5">{item.seller.email}</p>}
+                </div>
+            )
+        },
+        {
+            key: 'unitPrice',
+            header: 'Unit Price',
+            sortable: true,
+            sortKey: 'unitPrice',
+            align: 'right',
+            width: 'w-24',
+            cellClassName: 'text-right',
+            headerClassName: 'text-right',
+            cell: (item) => <span className="text-[11px] font-bold text-slate-700 whitespace-nowrap">{formatCurrency(item.unitPrice)}</span>
+        },
+        {
+            key: 'quantity',
+            header: 'Quantity',
+            sortable: true,
+            sortKey: 'quantity',
+            align: 'center',
+            width: 'w-24',
+            cellClassName: 'text-center',
+            headerClassName: 'text-center',
+            cell: (item) => (
+                cart?.status === 'ACTIVE' && canTransact ? (
+                    <div className="flex items-center justify-center gap-1">
+                        <button
+                            type="button"
+                            onClick={() => handleUpdate(item.id, Number(item.quantity) - 1)}
+                            disabled={Number(item.quantity) <= 1 || item.id < 0}
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-colors"
+                        >
+                            <Minus className="h-3 w-3" />
+                        </button>
+                        <span className="min-w-[20px] text-center font-mono text-[11px] font-bold text-slate-900">{Number(item.quantity)}</span>
+                        <button
+                            type="button"
+                            onClick={() => handleUpdate(item.id, Number(item.quantity) + 1)}
+                            disabled={item.id < 0}
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-colors"
+                        >
+                            <Plus className="h-3 w-3" />
+                        </button>
+                    </div>
+                ) : (
+                    <p className="text-center font-mono text-[11px] font-bold text-slate-900">{Number(item.quantity)}</p>
+                )
+            )
+        },
+        {
+            key: 'total',
+            header: 'Total',
+            sortable: true,
+            sortKey: 'total',
+            align: 'right',
+            width: 'w-24',
+            cellClassName: 'text-right',
+            headerClassName: 'text-right',
+            cell: (item) => {
+                const lineTotal = Number(item.quantity) * Number(item.unitPrice);
+                return <span className="text-[11px] font-black text-slate-900 whitespace-nowrap">{formatCurrency(lineTotal)}</span>;
+            }
+        },
+        {
+            key: 'techStatus',
+            header: 'Tech Status',
+            sortable: true,
+            sortKey: 'techStatus',
+            width: 'w-24',
+            cell: (item) => (
+                item.technicalApproved === null ? (
+                    <span className="inline-flex rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">Pending</span>
+                ) : item.technicalApproved ? (
+                    <span className="inline-flex rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700">Approved</span>
+                ) : (
+                    <span className="inline-flex rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-700" title={item.technicalNote || ''}>Rejected</span>
+                )
+            )
+        },
+        {
+            key: 'createdAt',
+            header: 'Date & Time',
+            sortable: true,
+            sortKey: 'createdAt',
+            width: 'w-28',
+            cell: (item) => <span className="text-[10px] font-medium text-slate-500 leading-tight whitespace-nowrap">{formatDateTime(item.createdAt)}</span>
+        },
+        {
+            key: 'action',
+            header: 'Action',
+            align: 'right',
+            width: 'w-12',
+            cellClassName: 'text-right',
+            headerClassName: 'text-right',
+            cell: (item) => (
+                cart?.status === 'ACTIVE' && canTransact ? (
+                    <button
+                        type="button"
+                        onClick={() => handleRemove(item)}
+                        disabled={removeMut.isPending || item.id < 0}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        title="Remove from cart"
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                ) : null
+            )
+        }
+    ], [isAllSelected, isSomeSelected, toggleSelectAll, selectedItemIds, toggleSelectItem, cart?.status, canTransact, handleUpdate, handleRemove, removeMut.isPending]);
+ 
+    if (permissionsLoading && !canViewCart) {
+        return <LoadingState label="Loading cart..." />;
+    }
+
+    if (!canViewCart) {
+        return <InlineError message="You do not have permission to view organisation carts." />;
+    }
 
     if (cartQuery.isLoading) return <LoadingState label="Loading cart..." />;
     if (cartQuery.error) {
@@ -463,170 +667,26 @@ export default function CartPage() {
                             description="Browse the marketplace and add products or services to your cart."
                         />
                     ) : (
-                        <div className="overflow-x-auto w-full">
-                            <table data-ux-wrapped="true" className="w-full min-w-[760px] text-sm">
-                                <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                    <tr>
-                                        <th className="px-3 py-2 text-center w-10">
-                                            <input
-                                                type="checkbox"
-                                                checked={isAllSelected}
-                                                ref={el => {
-                                                    if (el) el.indeterminate = isSomeSelected;
-                                                }}
-                                                onChange={toggleSelectAll}
-                                                className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
-                                                title="Select all items"
-                                                aria-label="Select all items"
-                                            />
-                                        </th>
-                                        <th className="px-3 py-2 text-left w-10">#</th>
-                                        <SortHeader label="Item" field="item" className="px-3 py-2 text-left min-w-[140px]" />
-                                        <SortHeader label="Seller" field="seller" className="px-3 py-2 text-left min-w-[120px] max-w-[160px]" />
-                                        <SortHeader label="Unit Price" field="unitPrice" className="px-3 py-2 text-right w-24 whitespace-nowrap" align="right" />
-                                        <SortHeader label="Quantity" field="quantity" className="px-3 py-2 text-center w-24 whitespace-nowrap" align="center" />
-                                        <SortHeader label="Total" field="total" className="px-3 py-2 text-right w-24 whitespace-nowrap" align="right" />
-                                        <SortHeader label="Tech Status" field="techStatus" className="px-3 py-2 text-left w-24 whitespace-nowrap" />
-                                        <SortHeader label="Date & Time" field="createdAt" className="px-3 py-2 text-left w-28 min-w-[110px]" />
-                                        <th className="px-3 py-2 text-right w-12 whitespace-nowrap">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {sortedItems.map((item, idx) => {
-                                        const lineTotal = Number(item.quantity) * Number(item.unitPrice);
-                                        const isSelected = selectedItemIds.has(item.id);
-                                        return (
-                                            <tr key={item.id} className={cn("hover:bg-slate-50/60 group transition-colors", isSelected && "bg-indigo-50/20")}>
-                                                <td className="px-3 py-2.5 text-center">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={isSelected}
-                                                        onChange={() => toggleSelectItem(item.id)}
-                                                        className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
-                                                        aria-label={`Select ${item.itemName}`}
-                                                    />
-                                                </td>
-                                                <td className="px-3 py-2.5 font-mono text-[10px] font-bold text-slate-400">{String(idx + 1).padStart(2, '0')}</td>
-                                                <td className="px-3 py-2.5">
-                                                    {(() => {
-                                                        const itemUrl = item.productId
-                                                            ? `/marketplace/products/${item.productId}`
-                                                            : item.serviceId
-                                                                ? `/marketplace/services/${item.serviceId}`
-                                                                : null;
-                                                        return (
-                                                            <div className="flex flex-col gap-0.5">
-                                                                {itemUrl ? (
-                                                                    <Link
-                                                                        href={itemUrl}
-                                                                        className="text-xs font-bold text-[#12335f] break-words leading-tight hover:underline hover:text-blue-700 transition-colors"
-                                                                    >
-                                                                        {item.itemName}
-                                                                    </Link>
-                                                                ) : (
-                                                                    <p className="text-xs font-bold text-[#12335f] break-words leading-tight">{item.itemName}</p>
-                                                                )}
-                                                                <div className="flex items-center gap-1.5 flex-wrap">
-                                                                    {itemUrl ? (
-                                                                        <EntityIdLink
-                                                                            label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId}`}
-                                                                            id={item.productId || item.serviceId || 0}
-                                                                            size="sm"
-                                                                            to={itemUrl}
-                                                                            target="_blank"
-                                                                        />
-                                                                    ) : (
-                                                                        <EntityIdLink
-                                                                            label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId}`}
-                                                                            id={item.productId || item.serviceId || 0}
-                                                                            size="sm"
-                                                                            onClick={() => toast.info('Item details are not available')}
-                                                                        />
-                                                                    )}
-                                                                    <span className="text-[9px] font-medium text-slate-500">{item.unitOfMeasure}</span>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })()}
-                                                </td>
-                                                <td className="px-3 py-2.5">
-                                                    {item.sellerId ? (
-                                                        <Link
-                                                            href={`/sellers/${item.sellerId}`}
-                                                            className="text-[11px] font-bold text-slate-900 break-words leading-tight hover:underline hover:text-blue-700 transition-colors"
-                                                        >
-                                                            {item.seller?.name || `Seller #${item.sellerId}`}
-                                                        </Link>
-                                                    ) : (
-                                                        <p className="text-[11px] font-bold text-slate-900 break-words leading-tight">{item.seller?.name || `Seller #${item.sellerId}`}</p>
-                                                    )}
-                                                    {item.seller?.email && <p className="text-[9px] font-medium text-slate-500 break-all mt-0.5">{item.seller.email}</p>}
-                                                </td>
-                                                <td className="px-3 py-2.5 text-right text-[11px] font-bold text-slate-700 whitespace-nowrap">{formatCurrency(item.unitPrice)}</td>
-                                                <td className="px-3 py-2.5">
-                                                    {cart.status === 'ACTIVE' && canTransact ? (
-                                                        <div className="flex items-center justify-center gap-1">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleUpdate(item.id, Number(item.quantity) - 1)}
-                                                                disabled={Number(item.quantity) <= 1 || item.id < 0}
-                                                                className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-colors"
-                                                            >
-                                                                <Minus className="h-3 w-3" />
-                                                            </button>
-                                                            <span className="min-w-[20px] text-center font-mono text-[11px] font-bold text-slate-900">{Number(item.quantity)}</span>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleUpdate(item.id, Number(item.quantity) + 1)}
-                                                                disabled={item.id < 0}
-                                                                className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-colors"
-                                                            >
-                                                                <Plus className="h-3 w-3" />
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <p className="text-center font-mono text-[11px] font-bold text-slate-900">{Number(item.quantity)}</p>
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2.5 text-right text-[11px] font-black text-slate-900 whitespace-nowrap">{formatCurrency(lineTotal)}</td>
-                                                <td className="px-3 py-2.5 whitespace-nowrap">
-                                                    {item.technicalApproved === null ? (
-                                                        <span className="inline-flex rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">Pending</span>
-                                                    ) : item.technicalApproved ? (
-                                                        <span className="inline-flex rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700">Approved</span>
-                                                    ) : (
-                                                        <span className="inline-flex rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-700" title={item.technicalNote || ''}>Rejected</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2.5 text-[10px] font-medium text-slate-500 leading-tight">
-                                                    {formatDateTime(item.createdAt)}
-                                                </td>
-                                                <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                                                    {cart.status === 'ACTIVE' && canTransact && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleRemove(item)}
-                                                            disabled={removeMut.isPending || item.id < 0}
-                                                            className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                                            title="Remove from cart"
-                                                        >
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                                <tfoot className="border-t-2 border-slate-200 bg-slate-50/80">
-                                    <tr>
-                                        <td colSpan={6} className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">Grand Total</td>
-                                        <td className="px-3 py-2.5 text-right text-sm font-black text-slate-900 whitespace-nowrap">{formatCurrency(totals.total)}</td>
-                                        <td colSpan={3} />
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
+                        <DataTable<CartItemDto>
+                            data={sortedItems}
+                            columns={cartColumns}
+                            keyExtractor={(item) => item.id}
+                            showSrNo={true}
+                            srNoHeader="#"
+                            srNoWidth="w-10"
+                            minWidth="min-w-[760px]"
+                            sortKey={sortField || undefined}
+                            sortDirection={sortDir || 'asc'}
+                            onSort={(field) => handleSort(field as SortField)}
+                            rowClassName={(item) => selectedItemIds.has(item.id) ? "bg-indigo-50/20" : ""}
+                            footer={
+                                <tr>
+                                    <td colSpan={6} className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">Grand Total</td>
+                                    <td className="px-3 py-2.5 text-right text-sm font-black text-slate-900 whitespace-nowrap">{formatCurrency(totals.total)}</td>
+                                    <td colSpan={3} />
+                                </tr>
+                            }
+                        />
                     )}
 
                     {cart && cart.items.length > 0 && (

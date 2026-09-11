@@ -9,6 +9,8 @@ import {
     Compass,
     Sparkles,
     Layers,
+    Package,
+    Wrench,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { marketplaceApi, type MarketplaceCategory } from '../api';
@@ -127,6 +129,41 @@ interface CategoryCatalogueStripProps {
     initialCount?: number;
 }
 
+/**
+ * SUGGESTION B: Products vs. Services Switcher Tabs
+ * Set to false if you want to instantly revert back to the original unsegmented list.
+ */
+export const ENABLE_SUGGESTION_B_SCOPE_TABS = true;
+
+type CategoryScopeFilter = 'ALL' | 'PRODUCT' | 'SERVICE';
+
+const isServiceCategory = (c: MarketplaceCategory) => {
+    const type = String(c.type || '').toUpperCase();
+    if (type === 'SERVICE') return true;
+    if (type === 'BOTH') return true;
+    const name = c.name.toLowerCase();
+    return (
+        name.includes('service') ||
+        name.includes('maintenance') ||
+        name.includes('consultancy') ||
+        name.includes('repair') ||
+        name.includes('logistics') ||
+        name.includes('trading')
+    );
+};
+
+const isProductCategory = (c: MarketplaceCategory) => {
+    const type = String(c.type || '').toUpperCase();
+    if (type === 'PRODUCT') return true;
+    if (type === 'BOTH') return true;
+    const name = c.name.toLowerCase();
+    return (
+        !name.includes('consultancy') &&
+        !name.includes('repair & service') &&
+        !name.includes('logistics & supply')
+    );
+};
+
 export function CategoryCatalogueStrip({
     categories,
     selectedCategoryId,
@@ -138,10 +175,21 @@ export function CategoryCatalogueStrip({
 }: CategoryCatalogueStripProps) {
     const sectionRef = useRef<HTMLElement>(null);
     const [isExpanded, setIsExpanded] = useState(false);
+    const [scopeFilter, setScopeFilter] = useState<CategoryScopeFilter>('ALL');
 
     React.useEffect(() => {
         preloadCriticalCategoryPhotos(initialCount);
     }, [initialCount]);
+
+    const productCategories = useMemo(() => categories.filter(isProductCategory), [categories]);
+    const serviceCategories = useMemo(() => categories.filter(isServiceCategory), [categories]);
+
+    const scopedCategories = useMemo(() => {
+        if (!ENABLE_SUGGESTION_B_SCOPE_TABS) return categories;
+        if (scopeFilter === 'PRODUCT') return productCategories;
+        if (scopeFilter === 'SERVICE') return serviceCategories;
+        return categories;
+    }, [categories, scopeFilter, productCategories, serviceCategories]);
 
     if (!categories.length) return null;
 
@@ -153,9 +201,14 @@ export function CategoryCatalogueStrip({
         }).catch(() => undefined);
     };
 
-    const hasMore = categories.length > initialCount;
-    const displayedCategories = isExpanded || !hasMore ? categories : categories.slice(0, initialCount);
-    const remainingCount = categories.length - initialCount;
+    const hasMore = scopedCategories.length > initialCount;
+    const displayedCategories = isExpanded || !hasMore ? scopedCategories : scopedCategories.slice(0, initialCount);
+    const remainingCount = scopedCategories.length - initialCount;
+
+    const handleScopeChange = (scope: CategoryScopeFilter) => {
+        setScopeFilter(scope);
+        setIsExpanded(false);
+    };
 
     const handleToggleExpand = () => {
         if (isExpanded) {
@@ -203,6 +256,77 @@ export function CategoryCatalogueStrip({
                         </Link>
                     </div>
                 </div>
+
+                {/* Suggestion B: Products vs Services Scope Switcher Tabs */}
+                {ENABLE_SUGGESTION_B_SCOPE_TABS && (
+                    <div className="mb-6 flex flex-wrap items-center gap-2 sm:gap-2.5" role="tablist" aria-label="Filter categories by products or services">
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={scopeFilter === 'ALL'}
+                            onClick={() => handleScopeChange('ALL')}
+                            className={cn(
+                                "inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]/30",
+                                scopeFilter === 'ALL'
+                                    ? "bg-[#0b2447] text-white shadow-md ring-2 ring-[#0b2447]/20"
+                                    : "bg-white text-slate-700 hover:bg-slate-100/90 border border-slate-200/90 hover:border-slate-300"
+                            )}
+                        >
+                            <Layers className={cn("h-4 w-4", scopeFilter === 'ALL' ? "text-cyan-300" : "text-slate-500")} />
+                            <span>All Categories</span>
+                            <span className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight",
+                                scopeFilter === 'ALL' ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+                            )}>
+                                {categories.length}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={scopeFilter === 'PRODUCT'}
+                            onClick={() => handleScopeChange('PRODUCT')}
+                            className={cn(
+                                "inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]/30",
+                                scopeFilter === 'PRODUCT'
+                                    ? "bg-[#0b2447] text-white shadow-md ring-2 ring-[#0b2447]/20"
+                                    : "bg-white text-slate-700 hover:bg-slate-100/90 border border-slate-200/90 hover:border-slate-300"
+                            )}
+                        >
+                            <Package className={cn("h-4 w-4", scopeFilter === 'PRODUCT' ? "text-amber-300" : "text-slate-500")} />
+                            <span>Products &amp; Equipment</span>
+                            <span className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight",
+                                scopeFilter === 'PRODUCT' ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+                            )}>
+                                {productCategories.length}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={scopeFilter === 'SERVICE'}
+                            onClick={() => handleScopeChange('SERVICE')}
+                            className={cn(
+                                "inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]/30",
+                                scopeFilter === 'SERVICE'
+                                    ? "bg-[#0b2447] text-white shadow-md ring-2 ring-[#0b2447]/20"
+                                    : "bg-white text-slate-700 hover:bg-slate-100/90 border border-slate-200/90 hover:border-slate-300"
+                            )}
+                        >
+                            <Wrench className={cn("h-4 w-4", scopeFilter === 'SERVICE' ? "text-emerald-300" : "text-slate-500")} />
+                            <span>Services &amp; Maintenance</span>
+                            <span className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight",
+                                scopeFilter === 'SERVICE' ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+                            )}>
+                                {serviceCategories.length}
+                            </span>
+                        </button>
+                    </div>
+                )}
 
                 {/* Clean, Non-Scrolling Responsive Grid Layout */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3.5 sm:gap-4.5">

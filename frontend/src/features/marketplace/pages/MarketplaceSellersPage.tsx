@@ -28,6 +28,7 @@ import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
+import { DataTable, type ColumnDef } from '../../../components/ui/data-table';
 
 function sellerLogo(seller: MarketplaceSeller) {
     const profile = seller.profile || {};
@@ -89,40 +90,27 @@ function SellerLogoImage({
     );
 }
 
+const sellerSkeletonColumns: ColumnDef<any>[] = [
+    { key: 'org', header: 'Seller Organization', width: 'min-w-[260px]', cell: () => null },
+    { key: 'loc', header: 'Location', width: 'min-w-[180px]', cell: () => null },
+    { key: 'cap', header: 'Capabilities', width: 'min-w-[260px]', cell: () => null },
+    { key: 'prod', header: 'Products', cell: () => null },
+    { key: 'serv', header: 'Services', cell: () => null },
+    { key: 'action', header: 'Action', align: 'right', cell: () => null },
+];
+
 function SellersSkeleton({ viewMode }: { viewMode: 'grid' | 'list' }) {
     if (viewMode === 'list') {
         return (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-2xs">
-                <table className="w-full text-left text-sm">
-                    <thead className="border-b border-slate-200 bg-slate-50">
-                        <tr>
-                            <th className="px-4 py-3 sm:px-6 min-w-[260px]"><Skeleton className="h-4 w-32" /></th>
-                            <th className="px-4 py-3 sm:px-6 min-w-[180px]"><Skeleton className="h-4 w-24" /></th>
-                            <th className="px-4 py-3 sm:px-6 min-w-[260px]"><Skeleton className="h-4 w-28" /></th>
-                            <th className="px-4 py-3 sm:px-6 whitespace-nowrap"><Skeleton className="h-4 w-16" /></th>
-                            <th className="px-4 py-3 sm:px-6 whitespace-nowrap"><Skeleton className="h-4 w-16" /></th>
-                            <th className="px-4 py-3 sm:px-6 text-right whitespace-nowrap"><Skeleton className="h-4 w-24 ml-auto" /></th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {Array.from({ length: 6 }).map((_, idx) => (
-                            <tr key={idx}>
-                                <td className="px-4 py-3.5 sm:px-6">
-                                    <div className="flex items-center gap-3.5">
-                                        <Skeleton className="h-14 w-28 rounded-xl shrink-0" />
-                                        <div className="space-y-1.5 flex-1"><Skeleton className="h-4 w-36" /><Skeleton className="h-3 w-16" /></div>
-                                    </div>
-                                </td>
-                                <td className="px-4 py-3.5 sm:px-6"><Skeleton className="h-4 w-28" /></td>
-                                <td className="px-4 py-3.5 sm:px-6"><div className="flex gap-1.5"><Skeleton className="h-6 w-24 rounded-md" /><Skeleton className="h-6 w-20 rounded-md" /></div></td>
-                                <td className="px-4 py-3.5 sm:px-6"><Skeleton className="h-6 w-14 rounded-lg" /></td>
-                                <td className="px-4 py-3.5 sm:px-6"><Skeleton className="h-6 w-14 rounded-lg" /></td>
-                                <td className="px-4 py-3.5 sm:px-6 text-right"><div className="flex justify-end gap-2"><Skeleton className="h-8 w-16 rounded-lg" /><Skeleton className="h-8 w-16 rounded-lg" /></div></td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+            <DataTable
+                data={[]}
+                columns={sellerSkeletonColumns}
+                isLoading={true}
+                skeletonRows={6}
+                showSrNo={false}
+                keyExtractor={(_, idx) => idx}
+                minWidth="min-w-[900px]"
+            />
         );
     }
 
@@ -257,6 +245,161 @@ export default function MarketplaceSellersPage() {
     };
 
     const hasActiveFilters = Boolean(search || locationFilter || categoryFilter || sortBy !== 'name');
+
+    const sellerColumns: ColumnDef<MarketplaceSeller>[] = useMemo(() => [
+        {
+            key: 'organization',
+            header: 'Seller Organization',
+            width: 'min-w-[260px]',
+            cell: (seller) => {
+                const logo = sellerLogo(seller);
+                const initialsText = initials(seller.organizationName);
+                const initialsBg = getInitialsBg(seller.id);
+                return (
+                    <div className="flex items-center gap-3.5">
+                        <Link href={`/marketplace/sellers/${seller.id}`} className="shrink-0">
+                            <div className="flex h-14 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-2 group-hover:border-[#0b2447] group-hover:shadow-xs transition-all">
+                                <SellerLogoImage
+                                    logo={logo}
+                                    name={seller.organizationName}
+                                    orgInitials={initialsText}
+                                    initialsBg={initialsBg}
+                                    size="md"
+                                />
+                            </div>
+                        </Link>
+                        <div className="flex flex-col min-w-0">
+                            <Link href={`/marketplace/sellers/${seller.id}`} className="font-extrabold text-slate-900 hover:text-[#0b2447] transition-colors leading-snug break-words">
+                                {seller.organizationName}
+                            </Link>
+                            <span className="inline-flex w-fit items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 mt-1">
+                                <BadgeCheck className="h-3 w-3 text-emerald-500" /> Verified
+                            </span>
+                        </div>
+                    </div>
+                );
+            }
+        },
+        {
+            key: 'location',
+            header: 'Location',
+            width: 'min-w-[180px]',
+            cell: (seller) => {
+                const profile = seller.profile || {};
+                const location = Array.from(new Set([seller.city, seller.district, seller.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
+                return (
+                    <div className="flex items-start gap-1.5 text-slate-600 text-xs">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+                        <span className="leading-relaxed break-words">{location || '—'}</span>
+                    </div>
+                );
+            }
+        },
+        {
+            key: 'capabilities',
+            header: 'Capabilities',
+            width: 'min-w-[260px]',
+            cell: (seller) => {
+                const profile = seller.profile || {};
+                const categoriesArr = [
+                    ...(Array.isArray((seller as any).categories) ? (seller as any).categories : []),
+                    ...(Array.isArray(profile.productCategories) ? profile.productCategories : []),
+                    ...(Array.isArray(profile.serviceCategories) ? profile.serviceCategories : []),
+                ].filter(Boolean);
+                if (categoriesArr.length === 0) {
+                    return <span className="text-xs text-slate-400 font-medium">—</span>;
+                }
+                return (
+                    <div className="flex flex-wrap gap-1.5 max-w-sm">
+                        {categoriesArr.slice(0, 2).map((cat, i) => (
+                            <span key={i} className="inline-flex items-center rounded-md bg-blue-50/90 border border-blue-100/90 px-2.5 py-1 text-[11px] font-semibold text-[#0b2447] leading-tight">
+                                {cat}
+                            </span>
+                        ))}
+                        {categoriesArr.length > 2 && (
+                            <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
+                                +{categoriesArr.length - 2} more
+                            </span>
+                        )}
+                    </div>
+                );
+            }
+        },
+        {
+            key: 'products',
+            header: 'Products',
+            cellClassName: 'whitespace-nowrap',
+            cell: (seller) => {
+                const products = seller._count?.products || 0;
+                return (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200/80 px-2.5 py-1 text-xs font-bold text-slate-700">
+                        <Package className="h-3.5 w-3.5 text-blue-600" /> {products}
+                    </span>
+                );
+            }
+        },
+        {
+            key: 'services',
+            header: 'Services',
+            cellClassName: 'whitespace-nowrap',
+            cell: (seller) => {
+                const services = seller._count?.services || 0;
+                return (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200/80 px-2.5 py-1 text-xs font-bold text-slate-700">
+                        <Wrench className="h-3.5 w-3.5 text-indigo-600" /> {services}
+                    </span>
+                );
+            }
+        },
+        {
+            key: 'action',
+            header: 'Action',
+            align: 'right',
+            cellClassName: 'whitespace-nowrap',
+            cell: (seller) => {
+                const profile = seller.profile || {};
+                const location = Array.from(new Set([seller.city, seller.district, seller.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
+                const sUserId = (seller as any).sellerUserId || ((seller as any).users && (seller as any).users[0]?.id) || null;
+                return (
+                    <div className="flex items-center justify-end gap-2">
+                        <Link
+                            href={`/marketplace/sellers/${seller.id}`}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#0b2447] px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#12335f] active:scale-95"
+                        >
+                            <Building2 className="h-3.5 w-3.5" /> Store
+                        </Link>
+                        {user?.role === 'buyer' ? (
+                            <Link
+                                href={sUserId ? `/buyer/rfq?sellerId=${sUserId}` : `/marketplace/sellers/${seller.id}`}
+                                className="inline-flex items-center justify-center rounded-lg border border-orange-200 bg-orange-50 px-3.5 py-1.5 text-xs font-bold text-orange-700 transition-all hover:bg-orange-100 active:scale-95"
+                            >
+                                Quote
+                            </Link>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    saveSupplier({
+                                        id: seller.id,
+                                        sellerUserId: sUserId,
+                                        name: seller.organizationName,
+                                        location,
+                                        verificationStatus: seller.verificationStatus || 'VERIFIED',
+                                        email: (seller as any).email || null,
+                                        mobile: (seller as any).mobile || null,
+                                        source: 'Verified sellers page',
+                                    });
+                                }}
+                                className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300 active:scale-95"
+                            >
+                                <Bookmark className="h-3.5 w-3.5 text-slate-400" /> Save
+                            </button>
+                        )}
+                    </div>
+                );
+            }
+        }
+    ], [user]);
 
     return (
         <div className="min-h-dvh bg-[#f8fafc] text-slate-800">
@@ -408,138 +551,23 @@ export default function MarketplaceSellersPage() {
                         </button>
                     </div>
                 ) : (
-                    <div className="space-y-4">
+                    <>
                         {viewMode === 'list' ? (
-                            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-2xs">
-                                <table className="w-full text-left text-sm">
-                                    <thead className="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                        <tr>
-                                            <th className="px-4 py-3.5 sm:px-6 min-w-[260px]">Seller Organization</th>
-                                            <th className="px-4 py-3.5 sm:px-6 min-w-[180px]">Location</th>
-                                            <th className="px-4 py-3.5 sm:px-6 min-w-[260px]">Capabilities</th>
-                                            <th className="px-4 py-3.5 sm:px-6 whitespace-nowrap">Products</th>
-                                            <th className="px-4 py-3.5 sm:px-6 whitespace-nowrap">Services</th>
-                                            <th className="px-4 py-3.5 sm:px-6 text-right whitespace-nowrap">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {pagedSellers.map((seller: MarketplaceSeller) => {
-                                            const profile = seller.profile || {};
-                                            const location = Array.from(new Set([seller.city, seller.district, seller.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
-                                            const sUserId = (seller as any).sellerUserId || ((seller as any).users && (seller as any).users[0]?.id) || null;
-                                            const categoriesArr = [
-                                                ...(Array.isArray((seller as any).categories) ? (seller as any).categories : []),
-                                                ...(Array.isArray(profile.productCategories) ? profile.productCategories : []),
-                                                ...(Array.isArray(profile.serviceCategories) ? profile.serviceCategories : []),
-                                            ].filter(Boolean);
-                                            const products = seller._count?.products || 0;
-                                            const services = seller._count?.services || 0;
-                                            const logo = sellerLogo(seller);
-                                            const initialsText = initials(seller.organizationName);
-                                            const initialsBg = getInitialsBg(seller.id);
-
-                                            return (
-                                                <tr key={seller.id} className="hover:bg-blue-50/40 transition-colors group">
-                                                    <td className="px-4 py-3.5 sm:px-6">
-                                                        <div className="flex items-center gap-3.5">
-                                                            <Link href={`/marketplace/sellers/${seller.id}`} className="shrink-0">
-                                                                <div className="flex h-14 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-2 group-hover:border-[#0b2447] group-hover:shadow-xs transition-all">
-                                                                    <SellerLogoImage
-                                                                        logo={logo}
-                                                                        name={seller.organizationName}
-                                                                        orgInitials={initialsText}
-                                                                        initialsBg={initialsBg}
-                                                                        size="md"
-                                                                    />
-                                                                </div>
-                                                            </Link>
-                                                            <div className="flex flex-col min-w-0">
-                                                                <Link href={`/marketplace/sellers/${seller.id}`} className="font-extrabold text-slate-900 hover:text-[#0b2447] transition-colors leading-snug break-words">
-                                                                    {seller.organizationName}
-                                                                </Link>
-                                                                <span className="inline-flex w-fit items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 mt-1">
-                                                                    <BadgeCheck className="h-3 w-3 text-emerald-500" /> Verified
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-3.5 sm:px-6">
-                                                        <div className="flex items-start gap-1.5 text-slate-600 text-xs">
-                                                            <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                                                            <span className="leading-relaxed break-words">{location || '—'}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-3.5 sm:px-6">
-                                                        {categoriesArr.length > 0 ? (
-                                                            <div className="flex flex-wrap gap-1.5 max-w-sm">
-                                                                {categoriesArr.slice(0, 2).map((cat, i) => (
-                                                                    <span key={i} className="inline-flex items-center rounded-md bg-blue-50/90 border border-blue-100/90 px-2.5 py-1 text-[11px] font-semibold text-[#0b2447] leading-tight">
-                                                                        {cat}
-                                                                    </span>
-                                                                ))}
-                                                                {categoriesArr.length > 2 && (
-                                                                    <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
-                                                                        +{categoriesArr.length - 2} more
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-xs text-slate-400 font-medium">—</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3.5 sm:px-6 whitespace-nowrap">
-                                                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200/80 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                                            <Package className="h-3.5 w-3.5 text-blue-600" /> {products}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3.5 sm:px-6 whitespace-nowrap">
-                                                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200/80 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                                            <Wrench className="h-3.5 w-3.5 text-indigo-600" /> {services}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3.5 sm:px-6 text-right whitespace-nowrap">
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            <Link
-                                                                href={`/marketplace/sellers/${seller.id}`}
-                                                                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#0b2447] px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#12335f] active:scale-95"
-                                                            >
-                                                                <Building2 className="h-3.5 w-3.5" /> Store
-                                                            </Link>
-                                                            {user?.role === 'buyer' ? (
-                                                                <Link
-                                                                    href={sUserId ? `/buyer/rfq?sellerId=${sUserId}` : `/marketplace/sellers/${seller.id}`}
-                                                                    className="inline-flex items-center justify-center rounded-lg border border-orange-200 bg-orange-50 px-3.5 py-1.5 text-xs font-bold text-orange-700 transition-all hover:bg-orange-100 active:scale-95"
-                                                                >
-                                                                    Quote
-                                                                </Link>
-                                                            ) : (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        saveSupplier({
-                                                                            id: seller.id,
-                                                                            sellerUserId: sUserId,
-                                                                            name: seller.organizationName,
-                                                                            location,
-                                                                            verificationStatus: seller.verificationStatus || 'VERIFIED',
-                                                                            email: (seller as any).email || null,
-                                                                            mobile: (seller as any).mobile || null,
-                                                                            source: 'Verified sellers page',
-                                                                        });
-                                                                    }}
-                                                                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300 active:scale-95"
-                                                                >
-                                                                    <Bookmark className="h-3.5 w-3.5 text-slate-400" /> Save
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
+                            <DataTable
+                                data={pagedSellers}
+                                columns={sellerColumns}
+                                showSrNo={false}
+                                minWidth="min-w-[900px]"
+                                keyExtractor={(seller) => seller.id}
+                                rowClassName="hover:bg-blue-50/40 transition-colors group"
+                                page={page}
+                                pageSize={pageSize}
+                                total={total}
+                                onPageChange={setPage}
+                                onPageSizeChange={setPageSize}
+                                pageSizeOptions={[12, 24, 48]}
+                                paginationLabel="sellers"
+                            />
                         ) : (
                             <div className="grid gap-4 sm:gap-4.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                                 {pagedSellers.map((seller: MarketplaceSeller) => {
@@ -676,16 +704,18 @@ export default function MarketplaceSellersPage() {
                                 })}
                             </div>
                         )}
-                        <Pagination
-                            page={page}
-                            pageSize={pageSize}
-                            total={total}
-                            onPageChange={setPage}
-                            onPageSizeChange={setPageSize}
-                            pageSizeOptions={[12, 24, 48]}
-                            label="sellers"
-                        />
-                    </div>
+                        {viewMode === 'grid' && (
+                            <Pagination
+                                page={page}
+                                pageSize={pageSize}
+                                total={total}
+                                onPageChange={setPage}
+                                onPageSizeChange={setPageSize}
+                                pageSizeOptions={[12, 24, 48]}
+                                label="sellers"
+                            />
+                        )}
+                    </>
                 )}
             </main>
 

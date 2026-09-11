@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
-import App from '@/App';
 import { cookies } from 'next/headers';
+import ClientApp from '@/ClientApp';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +10,7 @@ export default async function CatchAllPage() {
 
   return (
     <Suspense fallback={null}>
-      <App serverInitialLoadComplete={hasLoaded} />
+      <ClientApp serverInitialLoadComplete={hasLoaded} />
     </Suspense>
   );
 }

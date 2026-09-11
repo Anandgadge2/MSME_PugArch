@@ -13,23 +13,35 @@ const safeDate = (value: unknown): Date | null => {
   return Number.isFinite(d.getTime()) ? d : null;
 };
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+
 export const formatDate = (value: unknown): string => {
   const d = safeDate(value);
   if (!d) return '—';
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+};
+
+export const formatTime = (value: unknown): string => {
+  const d = safeDate(value);
+  if (!d) return '—';
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m} ${ampm}`;
 };
 
 export const formatDateTime = (value: unknown): string => {
   const d = safeDate(value);
   if (!d) return '—';
-  // 24 May 2026, 02:32 PM — 12-hour format with AM/PM is the standard the
-  // procurement portal uses on every page (admin queues, notifications,
-  // audit panels, etc.). Keep this in one place so the format stays consistent.
-  return `${d.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  })}, ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+  const day = d.getDate();
+  const month = MONTH_NAMES[d.getMonth()];
+  const year = d.getFullYear();
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${day} ${month} ${year}, ${h}:${m} ${ampm}`;
 };
 
 /** Distance from now in friendly form, supports both past and future dates. */

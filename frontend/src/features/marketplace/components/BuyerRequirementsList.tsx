@@ -28,6 +28,7 @@ import { useResponsiveViewMode } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { cn } from '../../../lib/utils';
 
 // Helper labels
@@ -317,6 +318,162 @@ export function BuyerRequirementsList({
         return { totalCount, openCount, closingSoonCount, publicCount };
     }, [data]);
 
+    const columns: ColumnDef<BuyerRequirement>[] = useMemo(() => [
+        {
+            key: 'buyer',
+            header: 'Buyer / Organization',
+            width: 'w-[28%]',
+            sortable: true,
+            sortKey: 'buyer',
+            cell: (req) => {
+                const buyer = req.buyerOrganization;
+                return (
+                    <div className="flex items-center gap-3">
+                        <BuyerLogo buyer={buyer} />
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug group-hover:text-[#0b2447] transition-colors">
+                                    {buyer?.organizationName || 'Verified Buyer'}
+                                </p>
+                                {buyer?.verificationStatus === 'VERIFIED' && (
+                                    <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                                )}
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mt-0.5">
+                                {buyerTypeLabel(buyer?.organizationType)}
+                            </span>
+                        </div>
+                    </div>
+                );
+            },
+        },
+        {
+            key: 'title',
+            header: 'Requirement Details',
+            width: 'w-[30%]',
+            sortable: true,
+            sortKey: 'title',
+            cell: (req) => (
+                <div className="space-y-1">
+                    <p className="font-extrabold text-xs sm:text-sm text-slate-900 leading-snug group-hover:text-[#0b2447] transition-colors">
+                        {req.title}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                        <span className="inline-block text-[10px] font-mono font-bold text-slate-700 bg-slate-100/90 px-1.5 py-0.5 rounded border border-slate-200/80 shadow-2xs">
+                            {req.requirementNumber || `REQ-${req.id}`}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-500">
+                            {req.category?.name || 'General Category'}
+                        </span>
+                    </div>
+                </div>
+            ),
+        },
+        {
+            key: 'type',
+            header: 'Type',
+            width: 'w-[6%]',
+            sortable: true,
+            sortKey: 'type',
+            cell: (req) => (
+                <span className={cn(
+                    "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider border shadow-2xs",
+                    req.requirementType === 'PRODUCT' 
+                        ? 'bg-blue-50 text-blue-700 border-blue-200/80' 
+                        : 'bg-purple-50 text-purple-700 border-purple-200/80'
+                )}>
+                    {req.requirementType}
+                </span>
+            ),
+        },
+        {
+            key: 'quantity',
+            header: 'Quantity',
+            width: 'w-[7%]',
+            sortable: true,
+            sortKey: 'quantity',
+            cell: (req) => (
+                <span className="text-slate-900 font-extrabold text-xs sm:text-sm whitespace-nowrap">
+                    {req.quantity || 'Estimated'} {req.unit || ''}
+                </span>
+            ),
+        },
+        {
+            key: 'location',
+            header: 'Location',
+            width: 'w-[13%]',
+            sortable: true,
+            sortKey: 'location',
+            cell: (req) => {
+                const buyer = req.buyerOrganization;
+                return (
+                    <div className="flex items-start gap-1 text-slate-600 font-semibold text-xs">
+                        <MapPin className="h-3.5 w-3.5 text-[#8a6a2f] shrink-0 mt-0.5" />
+                        <span className="leading-snug">
+                            {req.location || buyer?.district || buyer?.city || buyer?.state || 'Jharsuguda, Odisha'}
+                        </span>
+                    </div>
+                );
+            },
+        },
+        {
+            key: 'timeline',
+            header: 'Timeline',
+            width: 'w-[8%]',
+            sortable: true,
+            sortKey: 'timeline',
+            cell: (req) => {
+                const daysRemaining = Math.max(0, Math.ceil((new Date(req.lastDate).getTime() - Date.now()) / 86400000));
+                return (
+                    <div className="space-y-0.5 text-xs whitespace-nowrap">
+                        <p className="font-extrabold text-slate-900">{formatDateIN(req.lastDate)}</p>
+                        <span className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                            daysRemaining <= 3 ? 'bg-rose-50 text-rose-700 border-rose-200' : daysRemaining <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-[#0b2447] border-slate-200'
+                        )}>
+                            {daysRemaining <= 0 ? 'Closed' : `${daysRemaining}D REMAINING`}
+                        </span>
+                    </div>
+                );
+            },
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            width: 'w-[8%]',
+            sortable: true,
+            sortKey: 'status',
+            cell: (req) => {
+                const badge = statusBadge(req);
+                return (
+                    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider shadow-2xs whitespace-nowrap", badge.cls)}>
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                        {badge.label}
+                    </span>
+                );
+            },
+        },
+        {
+            key: 'actions',
+            header: 'Actions',
+            width: 'w-[10%]',
+            align: 'right',
+            cellClassName: 'text-right whitespace-nowrap',
+            cell: (req) => (
+                <button 
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewDetails(req);
+                    }} 
+                    className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-[#0b2447] px-3.5 text-xs font-black text-white hover:bg-[#12335f] hover:shadow-md active:scale-95 transition-all duration-200 shadow-sm cursor-pointer"
+                >
+                    View Details
+                </button>
+            ),
+        },
+    ], []);
+
     return (
         <>
             {selected && <BidDetailModal bid={selected} onClose={() => setSelected(null)} />}
@@ -484,7 +641,14 @@ export function BuyerRequirementsList({
                 {/* ── Main content (Loading / Empty / Cards / Table) ── */}
                 {isLoading ? (
                     viewMode === 'list' ? (
-                        <TableSkeleton />
+                        <DataTable<BuyerRequirement>
+                            data={[]}
+                            columns={columns}
+                            keyExtractor={(req) => `${req.sourceModel || 'buyer'}-${req.id}`}
+                            minWidth="min-w-[1000px]"
+                            isLoading={true}
+                            skeletonRows={4}
+                        />
                     ) : (
                         <GridSkeleton />
                     )
@@ -500,142 +664,23 @@ export function BuyerRequirementsList({
                         )}
                     </div>
                 ) : viewMode === 'list' ? (
-                    <div className="overflow-x-auto rounded-3xl border border-slate-200/80 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.03)] w-full">
-                        <table data-ux-wrapped="true" className="w-full text-left text-sm table-auto border-collapse">
-                            <thead>
-                                <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                                    {[
-                                        { label: 'Buyer / Organization', key: 'buyer', className: 'w-[28%]' },
-                                        { label: 'Requirement Details', key: 'title', className: 'w-[30%]' },
-                                        { label: 'Type', key: 'type', className: 'w-[6%]' },
-                                        { label: 'Quantity', key: 'quantity', className: 'w-[7%]' },
-                                        { label: 'Location', key: 'location', className: 'w-[13%]' },
-                                        { label: 'Timeline', key: 'timeline', className: 'w-[8%]' },
-                                        { label: 'Status', key: 'status', className: 'w-[8%]' },
-                                    ].map(col => {
-                                        const isSorted = sort === col.key;
-                                        return (
-                                            <th
-                                                key={col.key}
-                                                onClick={() => handleSortHeader(col.key)}
-                                                className={cn(
-                                                    "px-4 py-3.5 sm:px-5 sm:py-4 cursor-pointer select-none transition-colors group",
-                                                    col.className,
-                                                    isSorted ? 'text-[#0b2447] bg-slate-100/80 font-black' : 'hover:bg-slate-100/50 hover:text-slate-900'
-                                                )}
-                                                title={`Sort by ${col.label} (${isSorted ? (sortDir === 'asc' ? 'Ascending' : 'Descending') : 'Click to sort'})`}
-                                            >
-                                                <div className="inline-flex items-center gap-1.5">
-                                                    <span>{col.label}</span>
-                                                    {isSorted ? (
-                                                        sortDir === 'asc' ? (
-                                                            <ArrowUp className="h-3.5 w-3.5 text-[#0b2447]" />
-                                                        ) : (
-                                                            <ArrowDown className="h-3.5 w-3.5 text-[#0b2447]" />
-                                                        )
-                                                    ) : (
-                                                        <ArrowUpDown className="h-3 w-3 text-slate-400 opacity-40 group-hover:opacity-100 transition-opacity" />
-                                                    )}
-                                                </div>
-                                            </th>
-                                        );
-                                    })}
-                                    <th className="px-4 py-3.5 sm:px-5 sm:py-4 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                                {processedRequirements.map(req => {
-                                    const buyer = req.buyerOrganization;
-                                    const badge = statusBadge(req);
-                                    const isLegacy = isLegacyRequirement(req);
-                                    const detailHref = isLegacy ? '' : `/marketplace/requirements/${req.id}`;
-                                    const daysRemaining = Math.max(0, Math.ceil((new Date(req.lastDate).getTime() - Date.now()) / 86400000));
-
-                                    return (
-                                        <tr key={`${req.sourceModel || 'buyer'}-${req.id}`} className="group hover:bg-slate-50/80 transition-all duration-200 border-b border-slate-100 last:border-0">
-                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <BuyerLogo buyer={buyer} />
-                                                    <div className="min-w-0 flex-1">
-                                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                                            <p className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug group-hover:text-[#0b2447] transition-colors">{buyer?.organizationName || 'Verified Buyer'}</p>
-                                                            {buyer?.verificationStatus === 'VERIFIED' && (
-                                                                <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-600" />
-                                                            )}
-                                                        </div>
-                                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mt-0.5">
-                                                            {buyerTypeLabel(buyer?.organizationType)}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4">
-                                                <div className="space-y-1">
-                                                    <p className="font-extrabold text-xs sm:text-sm text-slate-900 leading-snug group-hover:text-[#0b2447] transition-colors">
-                                                        {req.title}
-                                                    </p>
-                                                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                                                        <span className="inline-block text-[10px] font-mono font-bold text-slate-700 bg-slate-100/90 px-1.5 py-0.5 rounded border border-slate-200/80 shadow-2xs">
-                                                            {req.requirementNumber || `REQ-${req.id}`}
-                                                        </span>
-                                                        <span className="text-[10px] font-bold text-slate-500">
-                                                            {req.category?.name || 'General Category'}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 whitespace-nowrap">
-                                                <span className={cn(
-                                                    "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider border shadow-2xs",
-                                                    req.requirementType === 'PRODUCT' 
-                                                        ? 'bg-blue-50 text-blue-700 border-blue-200/80' 
-                                                        : 'bg-purple-50 text-purple-700 border-purple-200/80'
-                                                )}>
-                                                    {req.requirementType}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-900 font-extrabold text-xs sm:text-sm whitespace-nowrap">
-                                                {req.quantity || 'Estimated'} {req.unit || ''}
-                                            </td>
-                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-600 font-semibold text-xs">
-                                                <div className="flex items-start gap-1">
-                                                    <MapPin className="h-3.5 w-3.5 text-[#8a6a2f] shrink-0 mt-0.5" />
-                                                    <span className="leading-snug">
-                                                        {req.location || buyer?.district || buyer?.city || buyer?.state || 'Jharsuguda, Odisha'}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-800 text-xs whitespace-nowrap">
-                                                <div className="space-y-0.5">
-                                                    <p className="font-extrabold text-slate-900">{new Date(req.lastDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-                                                    <span className={cn(
-                                                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
-                                                        daysRemaining <= 3 ? 'bg-rose-50 text-rose-700 border-rose-200' : daysRemaining <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-[#0b2447] border-slate-200'
-                                                    )}>
-                                                        {daysRemaining <= 0 ? 'Closed' : `${daysRemaining}D REMAINING`}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 whitespace-nowrap">
-                                                <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider shadow-2xs", badge.cls)}>
-                                                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                                                    {badge.label}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-right whitespace-nowrap">
-                                                <button 
-                                                    onClick={() => handleViewDetails(req)} 
-                                                    className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-[#0b2447] px-3.5 text-xs font-black text-white hover:bg-[#12335f] hover:shadow-md active:scale-95 transition-all duration-200 shadow-sm"
-                                                >
-                                                    View Details
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
+                    <DataTable<BuyerRequirement>
+                        data={processedRequirements}
+                        columns={columns}
+                        keyExtractor={(req) => `${req.sourceModel || 'buyer'}-${req.id}`}
+                        page={page}
+                        pageSize={pageSize}
+                        total={data?.total ?? processedRequirements.length}
+                        onPageChange={showPagination ? setPage : undefined}
+                        onPageSizeChange={showPagination ? setPageSize : undefined}
+                        paginationLabel="requirements"
+                        sortKey={sort}
+                        sortDirection={sortDir}
+                        onSort={handleSortHeader}
+                        onRowClick={handleViewDetails}
+                        minWidth="min-w-[1000px]"
+                        isLoading={isLoading}
+                    />
                 ) : (
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         {processedRequirements.map(req => {
@@ -723,8 +768,8 @@ export function BuyerRequirementsList({
                     </div>
                 )}
 
-                {/* ── Pagination ── */}
-                {showPagination && (
+                {/* ── Pagination for Grid View ── */}
+                {showPagination && viewMode === 'grid' && (
                     <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                         <Pagination
                             page={page}
@@ -743,43 +788,6 @@ export function BuyerRequirementsList({
 }
 
 // Loading Skeleton components
-function TableSkeleton() {
-    return (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm animate-pulse">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-sm">
-                <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-400">
-                        <th className="px-5 py-4">Buyer / Org</th>
-                        <th className="px-5 py-4">Requirement</th>
-                        <th className="px-5 py-4">Type</th>
-                        <th className="px-5 py-4">Quantity</th>
-                        <th className="px-5 py-4">Location</th>
-                        <th className="px-5 py-4">Timeline</th>
-                        <th className="px-5 py-4">Status</th>
-                        <th className="px-5 py-4 text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {Array.from({ length: 4 }).map((_, index) => (
-                        <tr key={index} className="border-b border-slate-100">
-                            <td className="px-5 py-4"><div className="h-4 w-32 rounded bg-slate-100" /></td>
-                            <td className="px-5 py-4"><div className="h-4 w-48 rounded bg-slate-100" /></td>
-                            <td className="px-5 py-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>
-                            <td className="px-5 py-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>
-                            <td className="px-5 py-4"><div className="h-4 w-24 rounded bg-slate-100" /></td>
-                            <td className="px-5 py-4"><div className="h-4 w-20 rounded bg-slate-100" /></td>
-                            <td className="px-5 py-4"><div className="h-4 w-16 rounded bg-slate-100" /></td>
-                            <td className="px-5 py-4"><div className="ml-auto h-8 w-24 rounded bg-slate-100" /></td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-</div>
-        </div>
-    );
-}
-
 function GridSkeleton() {
     return (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

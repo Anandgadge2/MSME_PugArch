@@ -33,7 +33,6 @@ import {
   Mail,
   CheckCircle2,
   CheckCircle,
-  Check,
   Scale,
   Sparkles,
   X,
@@ -43,13 +42,13 @@ import {
   Tag,
   AlertCircle,
   HelpCircle,
-  XCircle,
-  Truck,
   Gavel,
+  Ban,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { useAuth } from '../../../hooks/useAuth';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
@@ -64,6 +63,7 @@ import StartReverseAuctionModal, { SubmittedVendorItem } from '../../reverseAuct
 import LiveAuctionLeaderboard from '../../reverseAuctions/components/LiveAuctionLeaderboard';
 import SellerLiveAuctionBanner from '../../reverseAuctions/components/SellerLiveAuctionBanner';
 import { reverseAuctionApi } from '../../reverseAuctions/api';
+import { formatDate, formatDateTime } from '../../shared/format';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
 type Tone = 'slate' | 'emerald' | 'rose' | 'amber' | 'sky' | 'indigo' | 'violet';
@@ -253,20 +253,40 @@ function asArray(val: any): any[] {
   return [val];
 }
 
-function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
+function formatDateString(
+  dateVal?: string | Date | null,
+  includeTime: boolean = false,
+  defaultMidnightTime: 'endOfDay' | 'startOfDay' = 'endOfDay'
+) {
   if (!dateVal) return null;
   try {
     const d = new Date(dateVal);
     if (isNaN(d.getTime())) return String(dateVal);
     const day = String(d.getDate()).padStart(2, '0');
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
     const month = months[d.getMonth()];
     const year = d.getFullYear();
     if (!includeTime) return `${day} ${month} ${year}`;
     const isMidnightUtc = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
-    const hours = isMidnightUtc ? '23' : String(d.getHours()).padStart(2, '0');
-    const minutes = isMidnightUtc ? '59' : String(d.getMinutes()).padStart(2, '0');
-    return `${day} ${month} ${year}, ${hours}:${minutes} IST`;
+    let hoursNum: number;
+    let minutesStr: string;
+    if (isMidnightUtc) {
+      if (defaultMidnightTime === 'startOfDay') {
+        hoursNum = 0;
+        minutesStr = '00';
+      } else {
+        hoursNum = 23;
+        minutesStr = '59';
+      }
+    } else {
+      hoursNum = d.getHours();
+      minutesStr = String(d.getMinutes()).padStart(2, '0');
+    }
+    const ampm = hoursNum >= 12 ? 'PM' : 'AM';
+    let h12 = hoursNum % 12;
+    if (h12 === 0) h12 = 12;
+    const hoursFormatted = String(h12).padStart(2, '0');
+    return `${day} ${month} ${year} , ${hoursFormatted}:${minutesStr} ${ampm}`;
   } catch {
     return String(dateVal);
   }
@@ -311,7 +331,10 @@ function formatPrimitiveValue(val: any, valueKey?: string): string {
     const trimmed = val.trim();
     if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '[object Object]') return 'N/A';
     if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-      const formattedDate = formatDateString(trimmed, trimmed.includes('T') || trimmed.includes(':'));
+      const vk = (valueKey || '').toLowerCase();
+      const isDateOrDeadline = vk.includes('date') || vk.includes('deadline') || vk.includes('schedule') || trimmed.includes('T') || trimmed.includes(':');
+      const isStart = vk.includes('start') || vk.includes('publish');
+      const formattedDate = formatDateString(trimmed, isDateOrDeadline, isStart ? 'startOfDay' : 'endOfDay');
       if (formattedDate) return formattedDate;
     }
     // Format ALL_CAPS_WITH_UNDERSCORE enums to title case (e.g. ON_DELIVERY -> On Delivery)
@@ -416,6 +439,7 @@ function DeadlineCountdown({ targetDate }: { targetDate: Date | string }) {
     <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-2xs">
       <Clock className="h-3 w-3 text-amber-600 animate-pulse" />
       <span className="font-mono">
+        <span className="text-amber-900/80 font-bold">Stage 1 Quote Due: </span>
         {timeLeft.days > 0 ? `${timeLeft.days}d ` : ''}
         {String(timeLeft.hours).padStart(2, '0')}h {String(timeLeft.minutes).padStart(2, '0')}m {String(timeLeft.seconds).padStart(2, '0')}s left
       </span>
@@ -553,14 +577,12 @@ interface BuyerSideContextValue {
   isBuyer: boolean;
   isOpenTender: boolean;
   isLimitedTender: boolean;
-  isRateContract?: boolean;
 }
 
 const BuyerSideContext = React.createContext<BuyerSideContextValue>({
   isBuyer: false,
   isOpenTender: false,
   isLimitedTender: false,
-  isRateContract: false,
 });
 
 function PropertyItem({
@@ -606,9 +628,7 @@ function PropertyItem({
       lower === 'securitydepositpercentage' ||
       lower === 'securitydepositrequired' ||
       lower.includes('retention') ||
-      lower.includes('securitydeposit') ||
-      lower === 'partial' ||
-      lower.includes('partial')
+      lower.includes('securitydeposit')
     ) {
       return null;
     }
@@ -826,8 +846,8 @@ function PolicyRulesMatrix({
               isYes
                 ? 'bg-emerald-50/50 border-emerald-200/80 text-emerald-950'
                 : isNo
-                  ? 'bg-slate-50/60 border-slate-200/80 text-slate-700'
-                  : 'bg-white border-slate-200 text-slate-900'
+                ? 'bg-slate-50/60 border-slate-200/80 text-slate-700'
+                : 'bg-white border-slate-200 text-slate-900'
             )}
           >
             <div className="flex items-center gap-2 min-w-0">
@@ -845,8 +865,8 @@ function PolicyRulesMatrix({
                 isYes
                   ? 'bg-emerald-100 text-emerald-800'
                   : isNo
-                    ? 'bg-slate-200/70 text-slate-600'
-                    : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                  ? 'bg-slate-200/70 text-slate-600'
+                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
               )}
             >
               {valStr}
@@ -969,13 +989,81 @@ function MetricCard({
   );
 }
 
-function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LIST" }: { data: any; title?: string }) {
-  const rawItems = asArray(data).filter(hasDetailData);
+const requiredDocumentsColumns: ColumnDef<any>[] = [
+  {
+    key: 'docName',
+    header: 'DOCUMENT NAME',
+    cell: (item, idx) => {
+      const docName = firstPresent(item.name, item.documentName, item.title, item.label, `Document ${idx + 1}`);
+      return <span className="font-bold text-slate-900">{formatPrimitiveValue(docName)}</span>;
+    },
+  },
+  {
+    key: 'instructions',
+    header: 'INSTRUCTIONS',
+    cell: (item) => {
+      const instructions = firstPresent(item.instructions, item.description, item.guidelines, item.note, '-');
+      return <span className="font-normal text-slate-600 max-w-xs">{formatPrimitiveValue(instructions)}</span>;
+    },
+  },
+  {
+    key: 'fileType',
+    header: 'ALLOWED FILE TYPES',
+    cell: (item) => {
+      const fileType = firstPresent(item.fileType, item.allowedFormat, item.format, item.fileTypes, item.mimeType, 'PDF');
+      return (
+        <span className="inline-block rounded px-1.5 py-0.5 font-mono text-[9.5px] font-bold text-slate-700 uppercase bg-slate-100">
+          {formatPrimitiveValue(fileType)}
+        </span>
+      );
+    },
+  },
+  {
+    key: 'maxSize',
+    header: 'MAX SIZE',
+    cell: (item) => {
+      const rawMaxSize = firstPresent(item.maxSize, item.maxMb, item.size, '5');
+      const maxSize = String(rawMaxSize).replace(/\s*mb/gi, '');
+      return <span className="font-medium text-slate-700">{maxSize !== '-' ? `${maxSize} MB` : '-'}</span>;
+    },
+  },
+  {
+    key: 'status',
+    header: 'STATUS',
+    align: 'center',
+    cell: (item) => {
+      const isRequired = item.required !== false && String(item.required).toLowerCase() !== 'false';
+      return (
+        <span className={cn(
+          'inline-block rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-wider border',
+          isRequired
+            ? 'border-rose-200 bg-rose-50 text-rose-700'
+            : 'border-slate-200 bg-slate-50 text-slate-600'
+        )}>
+          {isRequired ? 'REQUIRED' : 'OPTIONAL'}
+        </span>
+      );
+    },
+  },
+];
+
+function RequiredDocumentsList({
+  data,
+  documents,
+  title = "Required Documents & Checklist",
+  hideIfEmpty = false,
+}: {
+  data?: any;
+  documents?: any;
+  title?: string;
+  hideIfEmpty?: boolean;
+}) {
+  const rawItems = asArray(documents || data).filter(hasDetailData);
+  if (hideIfEmpty && !rawItems.length) return null;
 
   const standardPresets = [
     { name: 'GST Certificate', instructions: 'Upload verified GST registration document.', fileType: 'PDF', maxSize: '5', required: true },
     { name: 'PAN Card', instructions: 'Upload official PAN card.', fileType: 'PDF', maxSize: '2', required: true },
-    { name: 'Bank Details', instructions: 'Cancelled cheque or passbook.', fileType: 'PDF', maxSize: '2', required: true },
     { name: 'Technical Compliance Sheet', instructions: 'Compliance report against specified standards.', fileType: 'PDF, DOCX', maxSize: '10', required: true },
     { name: 'Detailed Price Breakup', instructions: 'Itemized cost schedule.', fileType: 'PDF, XLSX', maxSize: '5', required: true },
   ];
@@ -1023,8 +1111,6 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
     return preset;
   });
 
-  if (!processedItems.length) return null;
-
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">
       <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
@@ -1036,58 +1122,17 @@ function RequiredDocumentsList({ data, title = "REQUIRED SUBMISSION DOCUMENTS LI
           {processedItems.length} {processedItems.length === 1 ? 'Document' : 'Documents'}
         </span>
       </div>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-3.5 py-2">#</th>
-                <th className="px-3.5 py-2">DOCUMENT NAME</th>
-                <th className="px-3.5 py-2">INSTRUCTIONS</th>
-                <th className="px-3.5 py-2">ALLOWED FILE TYPES</th>
-                <th className="px-3.5 py-2">MAX SIZE</th>
-                <th className="px-3.5 py-2 text-center">STATUS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-              {processedItems.map((item: any, idx: number) => {
-                const docName = firstPresent(item.name, item.documentName, item.title, item.label, `Document ${idx + 1}`);
-                const instructions = firstPresent(item.instructions, item.description, item.guidelines, item.note, '-');
-                const fileType = firstPresent(item.fileType, item.allowedFormat, item.format, item.fileTypes, item.mimeType, 'PDF');
-                const rawMaxSize = firstPresent(item.maxSize, item.maxMb, item.size, '5');
-                const maxSize = String(rawMaxSize).replace(/\s*mb/gi, '');
-                const isRequired = item.required !== false && String(item.required).toLowerCase() !== 'false';
-
-                return (
-                  <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="px-3.5 py-2 font-bold text-slate-400">{idx + 1}</td>
-                    <td className="px-3.5 py-2 font-bold text-slate-900">{formatPrimitiveValue(docName)}</td>
-                    <td className="px-3.5 py-2 font-normal text-slate-600 max-w-xs">{formatPrimitiveValue(instructions)}</td>
-                    <td className="px-3.5 py-2">
-                      <span className="inline-block rounded px-1.5 py-0.5 font-mono text-[9.5px] font-bold text-slate-700 uppercase bg-slate-100">
-                        {formatPrimitiveValue(fileType)}
-                      </span>
-                    </td>
-                    <td className="px-3.5 py-2 font-medium text-slate-700">
-                      {maxSize !== '-' ? `${maxSize} MB` : '-'}
-                    </td>
-                    <td className="px-3.5 py-2 text-center">
-                      <span className={cn(
-                        'inline-block rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-wider border',
-                        isRequired
-                          ? 'border-rose-200 bg-rose-50 text-rose-700'
-                          : 'border-slate-200 bg-slate-50 text-slate-600'
-                      )}>
-                        {isRequired ? 'REQUIRED' : 'OPTIONAL'}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable<any>
+        data={processedItems}
+        columns={requiredDocumentsColumns}
+        keyExtractor={(item: any, idx: number) => String(item.id || item.fileAssetId || idx)}
+        showSrNo={true}
+        srNoHeader="#"
+        srNoWidth="w-12"
+        minWidth="min-w-[680px]"
+        emptyTitle="No documents required"
+        emptyDescription="No document checklist specified for this procurement."
+      />
     </div>
   );
 }
@@ -1185,6 +1230,37 @@ function ScopeSummaryCard({
   );
 }
 
+const milestoneColumns: ColumnDef<any>[] = [
+  {
+    key: 'label',
+    header: 'Milestone Label',
+    cell: (m, idx) => {
+      const label = firstPresent(m.label, m.name, m.title, `Milestone ${idx + 1}`);
+      return <span className="font-bold text-slate-900">{formatPrimitiveValue(label)}</span>;
+    },
+  },
+  {
+    key: 'percentage',
+    header: 'Percentage',
+    cell: (m) => {
+      const pct = firstPresent(m.percentage, m.percent, m.share, '-');
+      return (
+        <span className="inline-block rounded bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-700 text-[9.5px]">
+          {pct !== '-' ? `${pct}%` : '-'}
+        </span>
+      );
+    },
+  },
+  {
+    key: 'trigger',
+    header: 'Trigger / Condition',
+    cell: (m) => {
+      const trigger = firstPresent(m.trigger, m.condition, m.description, '-');
+      return <span className="text-slate-600 max-w-xs">{formatPrimitiveValue(trigger)}</span>;
+    },
+  },
+];
+
 function MilestonesTable({ milestones }: { milestones: any }) {
   const list = asArray(milestones).filter(hasDetailData);
   if (!list.length) return null;
@@ -1194,38 +1270,17 @@ function MilestonesTable({ milestones }: { milestones: any }) {
       <h4 className="text-xs font-bold uppercase tracking-wide text-slate-900 flex items-center gap-2">
         <ClipboardCheck className="h-3.5 w-3.5 text-emerald-600" /> Payment &amp; Deliverable Milestones
       </h4>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50/80 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-3 py-2">#</th>
-              <th className="px-3 py-2">Milestone Label</th>
-              <th className="px-3 py-2">Percentage</th>
-              <th className="px-3 py-2">Trigger / Condition</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-            {list.map((m: any, idx: number) => {
-              const label = firstPresent(m.label, m.name, m.title, `Milestone ${idx + 1}`);
-              const pct = firstPresent(m.percentage, m.percent, m.share, '-');
-              const trigger = firstPresent(m.trigger, m.condition, m.description, '-');
-
-              return (
-                <tr key={idx} className="hover:bg-slate-50/60 font-medium text-slate-800">
-                  <td className="px-3 py-2 font-bold text-slate-400">{idx + 1}</td>
-                  <td className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(label)}</td>
-                  <td className="px-3 py-2">
-                    <span className="inline-block rounded bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-700 text-[9.5px]">
-                      {pct !== '-' ? `${pct}%` : '-'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-slate-600 max-w-xs">{formatPrimitiveValue(trigger)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<any>
+        data={list}
+        columns={milestoneColumns}
+        keyExtractor={(m, idx) => String(m.id || idx)}
+        showSrNo={true}
+        srNoHeader="#"
+        srNoWidth="w-12"
+        minWidth="min-w-[550px]"
+        emptyTitle="No milestones"
+        emptyDescription="No payment milestones defined."
+      />
     </div>
   );
 }
@@ -1235,10 +1290,9 @@ function ServiceDetailsSection({ serviceDetails, isRfqType }: { serviceDetails: 
   const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
   const isOpenTender = typeof ctx === 'boolean' ? false : ctx.isOpenTender;
   const isLimitedTender = typeof ctx === 'boolean' ? false : (ctx.isLimitedTender || false);
-  const isRateContract = typeof ctx === 'boolean' ? false : (ctx.isRateContract || false);
 
-  // Strictly hide Service Details & Parameters on RFQ globally, or on buyer side for limited tender, open tender, rate contract, etc.
-  if (isRfqType || (isBuyer && (isLimitedTender || isOpenTender || isRateContract)) || !serviceDetails || !isPlainObject(serviceDetails)) return null;
+  // Strictly hide Service Details & Parameters on RFQ globally, or on buyer side for limited tender, open tender, etc.
+  if (isRfqType || (isBuyer && (isLimitedTender || isOpenTender)) || !serviceDetails || !isPlainObject(serviceDetails)) return null;
 
   const { duration, projectDuration, penaltyClause, slaResponseTime, manpowerRequired, experienceRequired, milestones, warranty, warrantyTerms, warrantyPeriod, paymentTerms, ...rest } = serviceDetails;
 
@@ -1271,368 +1325,6 @@ function ServiceDetailsSection({ serviceDetails, isRfqType }: { serviceDetails: 
             <PropertyItem key={key} label={humanizeKey(key)} value={val} />
           ))}
         </PropertyGrid>
-      </div>
-    </div>
-  );
-}
-
-function formatRcDate(dateVal?: string | Date | null): string {
-  if (!dateVal) return '—';
-  if (dateVal instanceof Date) {
-    if (isNaN(dateVal.getTime())) return '—';
-    return dateVal.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-  }
-  const str = String(dateVal).trim();
-  if (!str) return '—';
-  const d = new Date(str);
-  if (isNaN(d.getTime())) return str;
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function calculateValidityDays(start?: string | Date | null, end?: string | Date | null): string | null {
-  if (!start || !end) return null;
-  try {
-    const s = new Date(start);
-    const e = new Date(end);
-    if (isNaN(s.getTime()) || isNaN(e.getTime())) return null;
-    const diffTime = e.getTime() - s.getTime();
-    if (diffTime <= 0) return null;
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-    return `${diffDays} Day${diffDays === 1 ? '' : 's'} Duration`;
-  } catch {
-    return null;
-  }
-}
-
-function formatRcStrategy(strat?: string | null): string {
-  if (!strat) return '—';
-  switch (strat) {
-    case 'ITEM_WISE_L1':
-      return 'Item-wise L1';
-    case 'SINGLE_SUPPLIER':
-      return 'Single Supplier';
-    case 'MULTI_SUPPLIER':
-      return 'Multiple Suppliers';
-    case 'PANEL_RATE_CONTRACT':
-      return 'Panel Rate Contract';
-    default:
-      return String(strat).replace(/_/g, ' ');
-  }
-}
-
-function formatRcPriceVariation(clause?: string | null): string {
-  if (!clause) return '—';
-  switch (clause) {
-    case 'FIXED_PRICE':
-      return 'Fixed Price';
-    case 'INDEX_BASED_VARIATION':
-      return 'Index-based Variation';
-    case 'MUTUALLY_AGREED_REVISION':
-      return 'Mutually Agreed Revision';
-    default:
-      return String(clause).replace(/_/g, ' ');
-  }
-}
-
-function getRcSuppliersCountText(rateContractConfig: any, payload: any): string {
-  const selected = rateContractConfig?.selectedSuppliers || payload?.rateContractConfig?.selectedSuppliers;
-  if (Array.isArray(selected) && selected.length > 0) {
-    return `${selected.length} Selected Supplier${selected.length === 1 ? '' : 's'}`;
-  }
-  const invited = payload?.vendors?.invitedSellers;
-  if (Array.isArray(invited) && invited.length > 0) {
-    return `${invited.length} Invited Supplier${invited.length === 1 ? '' : 's'}`;
-  }
-  return 'Open to Qualified Suppliers';
-}
-
-function RateContractConfigSection({
-  rateContractConfig,
-  displayId,
-  documents,
-  payload,
-  deliveryTerms,
-  createdAt,
-  publishedDate,
-  deadlineDate,
-  closingDate,
-}: {
-  rateContractConfig: any;
-  displayId?: string;
-  documents?: any[];
-  payload?: any;
-  deliveryTerms?: string;
-  createdAt?: string | Date | null;
-  publishedDate?: string | Date | null;
-  deadlineDate?: string | Date | null;
-  closingDate?: string | Date | null;
-}) {
-  const rcNumber =
-    rateContractConfig?.rateContractNumber ||
-    payload?.rateContractConfig?.rateContractNumber ||
-    payload?.rateContract?.rateContractNumber ||
-    displayId ||
-    '—';
-
-  const rawStart =
-    rateContractConfig?.periodStartDate ||
-    payload?.rateContractConfig?.periodStartDate ||
-    payload?.schedule?.submissionStartDate ||
-    createdAt ||
-    publishedDate;
-
-  const rawEnd =
-    rateContractConfig?.periodEndDate ||
-    payload?.rateContractConfig?.periodEndDate ||
-    payload?.schedule?.submissionDate ||
-    deadlineDate ||
-    closingDate;
-
-  const startDate = formatRcDate(rawStart);
-  const endDate = formatRcDate(rawEnd);
-  const validityDays = calculateValidityDays(rawStart, rawEnd);
-
-  const supplierStrategy = formatRcStrategy(
-    rateContractConfig?.supplierSelectionStrategy ||
-    payload?.rateContractConfig?.supplierSelectionStrategy
-  );
-
-  const selectedSuppliersText = getRcSuppliersCountText(rateContractConfig, payload);
-
-  const priceVariationClause = formatRcPriceVariation(
-    rateContractConfig?.priceVariationClause ||
-    payload?.rateContractConfig?.priceVariationClause
-  );
-
-  const callOffOrderAllowed =
-    rateContractConfig?.callOffOrderAllowed === true ||
-    rateContractConfig?.callOffOrderAllowed === 'true' ||
-    (rateContractConfig?.callOffOrderAllowed !== false && rateContractConfig?.callOffOrderAllowed !== 'false' && (rateContractConfig?.callOffOrderAllowed != null || payload?.rateContractConfig?.callOffOrderAllowed != null));
-
-  const rawMaxQty = rateContractConfig?.maximumOrderQuantityPerCallOff ?? payload?.rateContractConfig?.maximumOrderQuantityPerCallOff;
-  const maxOrderQtyDisplay = rawMaxQty !== undefined && rawMaxQty !== null && rawMaxQty !== '' && Number(rawMaxQty) > 0
-    ? `${Number(rawMaxQty).toLocaleString('en-IN')} Units`
-    : 'No Upper Limit';
-
-  const rawMinQty = rateContractConfig?.minimumOrderQuantity ?? payload?.rateContractConfig?.minimumOrderQuantity;
-  const minOrderQtyDisplay = rawMinQty !== undefined && rawMinQty !== null && rawMinQty !== '' && Number(rawMinQty) > 0
-    ? `${Number(rawMinQty).toLocaleString('en-IN')} Units`
-    : 'No Minimum';
-
-  const deliverySla =
-    rateContractConfig?.deliverySla ||
-    payload?.rateContractConfig?.deliverySla ||
-    payload?.terms?.deliveryTerms ||
-    deliveryTerms ||
-    '—';
-
-  const penaltyClause =
-    rateContractConfig?.penaltyClause ||
-    payload?.rateContractConfig?.penaltyClause ||
-    payload?.terms?.penaltyClause ||
-    '—';
-
-  const contractDoc =
-    rateContractConfig?.contractDocument ||
-    payload?.rateContractConfig?.contractDocument ||
-    payload?.rateContract?.contractDocument ||
-    null;
-
-  const attachedDoc = documents?.find((d: any) =>
-    d.meta === 'RATE_CONTRACT_DOCUMENT' ||
-    d.type === 'RATE_CONTRACT_DOCUMENT' ||
-    (typeof d.name === 'string' && (d.name.toLowerCase().includes('contract') || d.name.toLowerCase().includes('.png') || d.name.toLowerCase().includes('.pdf')))
-  );
-
-  const fileName = contractDoc?.fileName || attachedDoc?.name || (documents && documents.length > 0 ? documents[0].name : null);
-  const fileAssetId = contractDoc?.fileAssetId || attachedDoc?.fileAssetId || (documents && documents.length > 0 ? documents[0].fileAssetId : null);
-  const fileUrl = contractDoc?.fileUrl || attachedDoc?.url || (fileAssetId ? `/api/files/${fileAssetId}/view` : null);
-
-  return (
-    <div className="space-y-4 pt-2">
-      {/* Section Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-200/60">
-            <Layers className="h-4 w-4" />
-          </div>
-          <div>
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
-              Rate Contract Configuration
-            </h3>
-            <p className="text-[11px] font-medium text-slate-500">
-              Recurring purchase rates, validity schedule &amp; call-off controls
-            </p>
-          </div>
-        </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-50 px-3 py-1 text-[11px] font-bold text-teal-800 border border-teal-200">
-          <Tag className="h-3 w-3" />
-          Rate Contract Sourcing
-        </span>
-      </div>
-
-      {/* Top Summary Cards (4 key highlights - completely read-only) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* 1. Contract Reference */}
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Rate Contract Number</p>
-          <p className="mt-1 font-mono text-sm font-bold text-slate-900 truncate">
-            {rcNumber}
-          </p>
-          <p className="mt-1 text-[10px] font-medium text-slate-400">Fixed Rate Reference</p>
-        </div>
-
-        {/* 2. Validity Timeline */}
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Contract Validity</p>
-          <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-slate-900">
-            <Calendar className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-            <span className="truncate">
-              {startDate !== '—' || endDate !== '—' ? `${startDate} to ${endDate}` : '—'}
-            </span>
-          </div>
-          {validityDays ? (
-            <p className="mt-1 text-[10px] font-bold text-teal-700">{validityDays}</p>
-          ) : (
-            <p className="mt-1 text-[10px] font-medium text-slate-400">Effective Validity Window</p>
-          )}
-        </div>
-
-        {/* 3. Selection Strategy */}
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Supplier Strategy</p>
-          <p className="mt-1 text-xs font-bold text-slate-900 truncate">
-            {supplierStrategy}
-          </p>
-          <p className="mt-1 text-[10px] font-medium text-slate-500">{selectedSuppliersText}</p>
-        </div>
-
-        {/* 4. Call-off Orders Facility */}
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Call-off Orders</p>
-          <div className="mt-1">
-            {callOffOrderAllowed ? (
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                Allowed
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                <XCircle className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                Not Allowed
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-[10px] font-medium text-slate-400">
-            {callOffOrderAllowed ? 'Periodic Indents Enabled' : 'Single Delivery Only'}
-          </p>
-        </div>
-      </div>
-
-      {/* Commercial & Order Execution Parameters */}
-      <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3.5">
-        <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
-          <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
-          Order Execution &amp; Pricing Controls
-        </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-lg bg-white p-3 border border-slate-200/80">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Price Variation Clause</span>
-            <p className="mt-1 text-xs font-bold text-slate-900">{priceVariationClause}</p>
-            <p className="mt-0.5 text-[10px] text-slate-400">
-              {priceVariationClause === 'Fixed Price' ? 'Firm rates throughout tenure' : 'Subject to contractual variation'}
-            </p>
-          </div>
-          <div className="rounded-lg bg-white p-3 border border-slate-200/80">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Min Order Quantity (MOQ)</span>
-            <p className="mt-1 text-xs font-bold text-slate-900">{minOrderQtyDisplay}</p>
-            <p className="mt-0.5 text-[10px] text-slate-400">Per individual call-off order</p>
-          </div>
-          <div className="rounded-lg bg-white p-3 border border-slate-200/80">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Max Order Qty (per Call-off)</span>
-            <p className="mt-1 text-xs font-bold text-slate-900">{maxOrderQtyDisplay}</p>
-            <p className="mt-0.5 text-[10px] text-slate-400">Single call-off cap</p>
-          </div>
-        </div>
-
-        {/* Delivery SLA & Penalty Terms */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-          <div className="rounded-lg bg-white p-3 border border-slate-200/80 space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-              <Truck className="h-3 w-3 text-slate-400" />
-              Delivery SLA
-            </span>
-            <p className="text-xs font-semibold text-slate-800 leading-relaxed break-words">
-              {deliverySla}
-            </p>
-          </div>
-          <div className="rounded-lg bg-white p-3 border border-slate-200/80 space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-              <AlertCircle className="h-3 w-3 text-slate-400" />
-              Penalty / Liquidated Damages Clause
-            </span>
-            <p className="text-xs font-semibold text-slate-800 leading-relaxed break-words">
-              {penaltyClause}
-            </p>
-          </div>
-        </div>
-
-        {/* Attached Contract Document */}
-        {fileName && (
-          <div className="pt-2 border-t border-slate-200">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
-              Uploaded Contract Document
-            </span>
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 ring-1 ring-teal-100">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-900 truncate" title={fileName}>
-                    {fileName}
-                  </p>
-                  <p className="text-[11px] font-medium text-emerald-600 flex items-center gap-1.5 mt-0.5" role="status">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    Attached Contract Specification
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {(fileAssetId || fileUrl) && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(fileUrl || `/api/files/${fileAssetId}/view`, '_blank')}
-                      className="h-8 px-3 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
-                    >
-                      <Eye className="h-3.5 w-3.5 mr-1.5" />
-                      View
-                    </Button>
-                    <a
-                      href={fileUrl || `/api/files/${fileAssetId}/view`}
-                      download={fileName}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 px-3 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
-                      >
-                        <Download className="h-3.5 w-3.5 mr-1.5" />
-                        Download
-                      </Button>
-                    </a>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1761,6 +1453,178 @@ function LineItemsTable({
 }) {
   const [viewingItemFiles, setViewingItemFiles] = useState<{ title: string; files: any[] } | null>(null);
   const list = asArray(items).filter(hasDetailData);
+
+  const columns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'type',
+      header: 'Type',
+      width: 'w-24',
+      cell: (item) => {
+        const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
+        const rawType = firstPresent(item.itemType, item.type, item.categoryType, sp.itemType, sp.type, sp.categoryType);
+        const isService = String(rawType || '').toLowerCase().includes('service');
+        const itemType = isService ? 'Service' : 'Product';
+        return (
+          <span className={cn(
+            "inline-flex items-center rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-wider",
+            isService
+              ? "border border-purple-200 bg-purple-50 text-purple-700"
+              : "border border-blue-200 bg-blue-50 text-blue-700"
+          )}>
+            {itemType}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'name',
+      header: 'Item / Service Name',
+      cell: (item, idx) => {
+        const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
+        const rawName = firstPresent(item.name, item.itemName, item.title, item.productName, item.materialName, item.serviceName, sp.itemName, sp.name, sp.title);
+        const isGeneric = !rawName || /^item\s*#?\d+$/i.test(String(rawName).trim()) || String(rawName).trim().toLowerCase() === 'item';
+        const name = !isGeneric
+          ? String(rawName)
+          : (defaultSubject && !/^item\s*#?\d+$/i.test(defaultSubject) ? defaultSubject : `Item #${idx + 1}`);
+        return <div className="font-bold text-slate-900 text-xs">{formatPrimitiveValue(name)}</div>;
+      },
+    },
+    {
+      key: 'spec',
+      header: 'Specifications / Scope',
+      cell: (item) => {
+        const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
+        const rawSpec = firstPresent(
+          item.specification, item.technicalSpecification, item.spec,
+          typeof item.specifications === 'string' ? item.specifications : null,
+          sp.text, sp.description, sp.specification, sp.technicalSpecification,
+          sp.details, sp.scopeOfWork, sp.scope, sp.remarks,
+          item.description, item.desc, item.details, item.scopeOfWork,
+          item.scope, item.remarks, item.requirements, item.particulars, sp.particulars
+        );
+        return (
+          <div className="text-slate-600 font-normal max-w-[240px]">
+            <span className="line-clamp-2 text-[11px]" title={rawSpec ? String(rawSpec) : undefined}>
+              {rawSpec ? formatPrimitiveValue(rawSpec) : <span className="text-slate-400 italic">No description</span>}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'qty',
+      header: 'Qty & UOM',
+      width: 'w-28',
+      align: 'center',
+      cell: (item) => {
+        const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
+        const rawQty = firstPresent(item.quantity, item.qty, item.targetQty, item.requiredQty, item.quantityRequired, item.itemQuantity, item.count, item.unitCount, item.numberOfUnits, sp.quantity, sp.qty);
+        const unit = firstPresent(item.unit, item.uom, item.unitOfMeasure, item.unitType, item.measuringUnit, sp.unit, sp.uom, sp.unitOfMeasure) || 'NOS.';
+        const qtyDisplay = (rawQty !== undefined && rawQty !== null && rawQty !== '' && rawQty !== '-') ? String(rawQty) : (unit ? '1' : '-');
+        return (
+          <div className="whitespace-nowrap">
+            <span className="font-bold text-slate-900">{qtyDisplay}</span>{' '}
+            <span className="text-[9.5px] font-bold text-slate-500 uppercase">{unit}</span>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'rate',
+      header: 'Est. Unit Rate',
+      width: 'w-28',
+      align: 'right',
+      cell: (item) => {
+        const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
+        const rawRate = firstPresent(item.estimatedUnitPrice, item.unitPrice, item.estimatedRate, item.price, item.rate, item.targetRate, sp.estimatedUnitPrice, sp.unitPrice, sp.estimatedRate, sp.price, sp.rate);
+        const rateNumber = (rawRate !== undefined && rawRate !== null && rawRate !== '' && !isNaN(Number(rawRate)) && Number(rawRate) > 0) ? Number(rawRate) : null;
+        return (
+          <div className="font-bold text-slate-900 whitespace-nowrap">
+            {rateNumber !== null ? <span>₹{rateNumber.toLocaleString('en-IN')}</span> : <span className="text-slate-400 font-normal">-</span>}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'hsn',
+      header: 'HSN / SAC',
+      width: 'w-24',
+      align: 'center',
+      cell: (item) => {
+        const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
+        const rawHsn = firstPresent(item.hsn_sac_code, item.hsnSacCode, item.hsnSac, item.hsn, item.hsnCode, item.sac, item.sacCode, sp.hsn_sac_code, sp.hsnSacCode, sp.hsnSac, sp.hsn, sp.hsnCode, sp.sac, sp.sacCode);
+        return <span className="font-mono text-[10.5px] font-medium text-slate-600">{rawHsn ? String(rawHsn) : '-'}</span>;
+      },
+    },
+    {
+      key: 'brand',
+      header: 'Brand & Policy',
+      width: 'w-32',
+      cell: (item) => {
+        const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
+        const itemBrand = firstPresent(item.brand_preference, item.brandPreference, item.preferredBrand, item.brand, item.brandName, item.make, item.manufacturer, item.makeModel, item.model, item.brandRequirement, sp.brand_preference, sp.brandPreference, sp.preferredBrand, sp.brand, sp.brandName, sp.make, sp.manufacturer, sp.brandRequirement);
+        const itemPolicy = firstPresent(item.brand_flexible, item.brandFlexible, item.isBrandFlexible, sp.brand_flexible, sp.brandFlexible, sp.isBrandFlexible, item.brandPolicy, item.policy, item.brandRule, sp.brandPolicy, sp.policy);
+        const isLocked = itemPolicy === 'No' || itemPolicy === false || String(itemPolicy).toLowerCase() === 'no' || String(itemPolicy).toLowerCase() === 'lock' || String(itemPolicy).toLowerCase() === 'locked' || String(itemPolicy).toLowerCase() === 'strict';
+        const brandDisplayName = itemBrand && String(itemBrand).trim() && String(itemBrand).trim() !== '-' ? String(itemBrand).trim() : 'Any Brand';
+        return (
+          <div>
+            <div className="text-slate-800 text-[11px] font-semibold truncate max-w-[130px]" title={brandDisplayName}>{brandDisplayName}</div>
+            <div className="mt-0.5">
+              {isLocked ? (
+                <span className="inline-flex items-center text-[8.5px] font-bold uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">Lock</span>
+              ) : (
+                <span className="inline-flex items-center text-[8.5px] font-bold uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">Flexible</span>
+              )}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'docs',
+      header: 'Documents & Specs',
+      width: 'w-36',
+      cell: (item, idx) => {
+        const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
+        const rawName = firstPresent(item.name, item.itemName, item.title, item.productName, item.materialName, item.serviceName, sp.itemName, sp.name, sp.title);
+        const isGeneric = !rawName || /^item\s*#?\d+$/i.test(String(rawName).trim()) || String(rawName).trim().toLowerCase() === 'item';
+        const name = !isGeneric ? String(rawName) : (defaultSubject && !/^item\s*#?\d+$/i.test(defaultSubject) ? defaultSubject : `Item #${idx + 1}`);
+        const allFiles = getUniqueItemFiles(item, sp, name);
+        const fileCount = allFiles.length;
+        if (fileCount === 0) return <span className="text-slate-400 font-normal">-</span>;
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (allFiles.length === 1) {
+                const f = allFiles[0];
+                const fname = f.fileName || f.name || f.originalName || `${name} Attachment`;
+                openFileAsset(
+                  {
+                    fileAssetId: f.fileAssetId || f.id || (typeof f === 'number' ? f : undefined),
+                    url: f.url || f.fileUrl || (typeof f === 'string' ? f : undefined),
+                    originalName: fname,
+                  },
+                  fname
+                );
+              } else {
+                setViewingItemFiles({ title: name, files: allFiles });
+              }
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 px-2 py-1 text-[10px] font-extrabold transition-colors cursor-pointer shadow-2xs"
+            title="Click to view attachment"
+          >
+            <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
+            <span>{fileCount} file{fileCount === 1 ? '' : 's'}</span>
+            <Eye className="h-3 w-3 text-emerald-700 shrink-0 ml-0.5" />
+          </button>
+        );
+      },
+    },
+  ], [defaultSubject]);
+
   if (!list.length) return null;
 
   return (
@@ -1771,295 +1635,17 @@ function LineItemsTable({
           Line Items ({list.length})
         </h3>
       </div>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-3xs">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1000px] border-collapse text-left text-xs">
-            <thead className="bg-slate-50/90 text-[9.5px] font-bold uppercase text-slate-500 border-b border-slate-200 tracking-wider">
-              <tr>
-                <th className="px-3 py-2 w-12 text-center">#</th>
-                <th className="px-3 py-2 w-24">Type</th>
-                <th className="px-3 py-2 min-w-[160px]">Item / Service Name</th>
-                <th className="px-3 py-2 min-w-[200px]">Specifications / Scope</th>
-                <th className="px-3 py-2 w-28 text-center">Qty &amp; UOM</th>
-                <th className="px-3 py-2 w-28 text-right">Est. Unit Rate</th>
-                <th className="px-3 py-2 w-24 text-center">HSN / SAC</th>
-                <th className="px-3 py-2 w-32">Brand &amp; Policy</th>
-                <th className="px-3 py-2 w-36">Documents &amp; Specs</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {list.map((item: any, idx: number) => {
-                const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
-
-                const rawType = firstPresent(
-                  item.itemType,
-                  item.type,
-                  item.categoryType,
-                  sp.itemType,
-                  sp.type,
-                  sp.categoryType
-                );
-                const isService = String(rawType || '').toLowerCase().includes('service');
-                const itemType = isService ? 'Service' : 'Product';
-
-                const rawName = firstPresent(
-                  item.name,
-                  item.itemName,
-                  item.title,
-                  item.productName,
-                  item.materialName,
-                  item.serviceName,
-                  sp.itemName,
-                  sp.name,
-                  sp.title
-                );
-
-                const isGeneric = !rawName || /^item\s*#?\d+$/i.test(String(rawName).trim()) || String(rawName).trim().toLowerCase() === 'item';
-                const name = !isGeneric
-                  ? String(rawName)
-                  : (defaultSubject && !/^item\s*#?\d+$/i.test(defaultSubject) ? defaultSubject : `Item #${idx + 1}`);
-
-                const rawQty = firstPresent(
-                  item.quantity,
-                  item.qty,
-                  item.targetQty,
-                  item.requiredQty,
-                  item.quantityRequired,
-                  item.itemQuantity,
-                  item.count,
-                  item.unitCount,
-                  item.numberOfUnits,
-                  sp.quantity,
-                  sp.qty
-                );
-
-                const unit = firstPresent(
-                  item.unit,
-                  item.uom,
-                  item.unitOfMeasure,
-                  item.unitType,
-                  item.measuringUnit,
-                  sp.unit,
-                  sp.uom,
-                  sp.unitOfMeasure
-                ) || 'NOS.';
-
-                const qtyDisplay = (rawQty !== undefined && rawQty !== null && rawQty !== '' && rawQty !== '-')
-                  ? String(rawQty)
-                  : (unit ? '1' : '-');
-
-                const rawRate = firstPresent(
-                  item.estimatedUnitPrice,
-                  item.unitPrice,
-                  item.estimatedRate,
-                  item.price,
-                  item.rate,
-                  item.targetRate,
-                  sp.estimatedUnitPrice,
-                  sp.unitPrice,
-                  sp.estimatedRate,
-                  sp.price,
-                  sp.rate
-                );
-                const rateNumber = (rawRate !== undefined && rawRate !== null && rawRate !== '' && !isNaN(Number(rawRate)) && Number(rawRate) > 0)
-                  ? Number(rawRate)
-                  : null;
-
-                const rawHsn = firstPresent(
-                  item.hsn_sac_code,
-                  item.hsnSacCode,
-                  item.hsnSac,
-                  item.hsn,
-                  item.hsnCode,
-                  item.sac,
-                  item.sacCode,
-                  sp.hsn_sac_code,
-                  sp.hsnSacCode,
-                  sp.hsnSac,
-                  sp.hsn,
-                  sp.hsnCode,
-                  sp.sac,
-                  sp.sacCode
-                );
-
-                const rawSpec = firstPresent(
-                  item.specification,
-                  item.technicalSpecification,
-                  item.spec,
-                  typeof item.specifications === 'string' ? item.specifications : null,
-                  sp.text,
-                  sp.description,
-                  sp.specification,
-                  sp.technicalSpecification,
-                  sp.details,
-                  item.description,
-                  item.desc,
-                  item.details,
-                  item.scope,
-                  item.requirements
-                );
-
-                const itemBrand = firstPresent(
-                  item.brand_preference,
-                  item.brandPreference,
-                  item.preferredBrand,
-                  item.brand,
-                  item.brandName,
-                  item.make,
-                  item.manufacturer,
-                  item.makeModel,
-                  item.model,
-                  item.brandRequirement,
-                  sp.brand_preference,
-                  sp.brandPreference,
-                  sp.preferredBrand,
-                  sp.brand,
-                  sp.brandName,
-                  sp.make,
-                  sp.manufacturer,
-                  sp.brandRequirement
-                );
-
-                const itemPolicy = firstPresent(
-                  item.brand_flexible,
-                  item.brandFlexible,
-                  item.isBrandFlexible,
-                  sp.brand_flexible,
-                  sp.brandFlexible,
-                  sp.isBrandFlexible,
-                  item.brandPolicy,
-                  item.policy,
-                  item.brandRule,
-                  sp.brandPolicy,
-                  sp.policy
-                );
-
-                const isLocked = itemPolicy === 'No' ||
-                  itemPolicy === false ||
-                  String(itemPolicy).toLowerCase() === 'no' ||
-                  String(itemPolicy).toLowerCase() === 'lock' ||
-                  String(itemPolicy).toLowerCase() === 'locked' ||
-                  String(itemPolicy).toLowerCase() === 'strict';
-
-                const brandDisplayName = itemBrand && String(itemBrand).trim() && String(itemBrand).trim() !== '-'
-                  ? String(itemBrand).trim()
-                  : 'Any Brand';
-
-                const allFiles = getUniqueItemFiles(item, sp, name);
-                const fileCount = allFiles.length;
-
-                return (
-                  <tr key={idx} className="align-middle hover:bg-slate-50/70 transition-colors">
-                    {/* # Index */}
-                    <td className="px-3 py-2 text-center font-bold text-slate-400">
-                      {idx + 1}
-                    </td>
-
-                    {/* Type */}
-                    <td className="px-3 py-2">
-                      <span className={cn(
-                        "inline-flex items-center rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-wider",
-                        isService
-                          ? "border border-purple-200 bg-purple-50 text-purple-700"
-                          : "border border-blue-200 bg-blue-50 text-blue-700"
-                      )}>
-                        {itemType}
-                      </span>
-                    </td>
-
-                    {/* Name */}
-                    <td className="px-3 py-2">
-                      <div className="font-bold text-slate-900 text-xs">
-                        {formatPrimitiveValue(name)}
-                      </div>
-                    </td>
-
-                    {/* Specification / Scope */}
-                    <td className="px-3 py-2 text-slate-600 font-normal max-w-[240px]">
-                      <span className="line-clamp-2 text-[11px]" title={rawSpec ? String(rawSpec) : undefined}>
-                        {rawSpec ? formatPrimitiveValue(rawSpec) : <span className="text-slate-400 italic">No description</span>}
-                      </span>
-                    </td>
-
-                    {/* Qty & UOM */}
-                    <td className="px-3 py-2 text-center whitespace-nowrap">
-                      <span className="font-bold text-slate-900">{qtyDisplay}</span>{' '}
-                      <span className="text-[9.5px] font-bold text-slate-500 uppercase">{unit}</span>
-                    </td>
-
-                    {/* Est. Unit Rate */}
-                    <td className="px-3 py-2 text-right font-bold text-slate-900 whitespace-nowrap">
-                      {rateNumber !== null ? (
-                        <span>₹{rateNumber.toLocaleString('en-IN')}</span>
-                      ) : (
-                        <span className="text-slate-400 font-normal">-</span>
-                      )}
-                    </td>
-
-                    {/* HSN / SAC */}
-                    <td className="px-3 py-2 text-center font-mono text-[10.5px] font-medium text-slate-600">
-                      {rawHsn ? String(rawHsn) : <span className="text-slate-400">-</span>}
-                    </td>
-
-                    {/* Brand & Policy */}
-                    <td className="px-3 py-2">
-                      <div className="text-slate-800 text-[11px] font-semibold truncate max-w-[130px]" title={brandDisplayName}>
-                        {brandDisplayName}
-                      </div>
-                      <div className="mt-0.5">
-                        {isLocked ? (
-                          <span className="inline-flex items-center text-[8.5px] font-bold uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
-                            Lock
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center text-[8.5px] font-bold uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
-                            Flexible
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Documents & Specs */}
-                    <td className="px-3 py-2">
-                      {fileCount > 0 ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (allFiles.length === 1) {
-                              const f = allFiles[0];
-                              const fname = f.fileName || f.name || f.originalName || `${name} Attachment`;
-                              openFileAsset(
-                                {
-                                  fileAssetId: f.fileAssetId || f.id || (typeof f === 'number' ? f : undefined),
-                                  url: f.url || f.fileUrl || (typeof f === 'string' ? f : undefined),
-                                  originalName: fname,
-                                },
-                                fname
-                              );
-                            } else {
-                              setViewingItemFiles({ title: name, files: allFiles });
-                            }
-                          }}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 px-2 py-1 text-[10px] font-extrabold transition-colors cursor-pointer shadow-2xs"
-                          title="Click to view attachment"
-                        >
-                          <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
-                          <span>{fileCount} file{fileCount === 1 ? '' : 's'}</span>
-                          <Eye className="h-3 w-3 text-emerald-700 shrink-0 ml-0.5" />
-                        </button>
-                      ) : (
-                        <span className="text-slate-400 font-normal">-</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable<any>
+        data={list}
+        columns={columns}
+        keyExtractor={(item, idx) => String(item.id || item.itemId || idx)}
+        showSrNo={true}
+        srNoHeader="#"
+        srNoWidth="w-12"
+        minWidth="min-w-[1000px]"
+        emptyTitle="No line items"
+        emptyDescription="No line items available for this procurement."
+      />
 
       {viewingItemFiles && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
@@ -2129,6 +1715,69 @@ function BoqTableList({
   defaultEstimatedValue?: any;
 }) {
   const list = asArray(data).filter(hasDetailData);
+
+  const columns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'category',
+      header: 'Category',
+      cell: (item) => {
+        const rawCat = firstPresent(item.category, item.itemCategory, item.name, item.itemName, item.title);
+        const isGenericCat = !rawCat || String(rawCat).trim().toLowerCase() === 'general' || /^category\s*#?\d+$/i.test(String(rawCat).trim()) || /^item\s*#?\d+$/i.test(String(rawCat).trim());
+        const category = !isGenericCat
+          ? String(rawCat)
+          : (defaultCategory && defaultCategory !== 'General Procurement' ? defaultCategory : (defaultSubject || 'General'));
+        return <span className="font-bold text-slate-900">{formatPrimitiveValue(category)}</span>;
+      },
+    },
+    {
+      key: 'quantity',
+      header: 'Quantity',
+      cell: (item) => {
+        const qty = firstPresent(item.quantity, item.qty, item.targetQty, item.count, '1');
+        const uom = firstPresent(item.uom, item.unit, item.unitOfMeasure, 'Nos');
+        return <span className="font-medium text-slate-800">{qty} {uom}</span>;
+      },
+    },
+    {
+      key: 'uom',
+      header: 'UOM',
+      cell: (item) => {
+        const uom = firstPresent(item.uom, item.unit, item.unitOfMeasure, 'Nos');
+        return <span className="text-slate-600">{formatPrimitiveValue(uom || '-')}</span>;
+      },
+    },
+    {
+      key: 'estimatedRate',
+      header: 'Est. Rate',
+      cell: (item) => {
+        const rawRate = firstPresent(item.estimatedRate, item.rate, item.unitPrice, item.price, item.estimatedPrice);
+        const rate = (rawRate !== undefined && rawRate !== null && rawRate !== '' && rawRate !== '-')
+          ? rawRate
+          : (defaultEstimatedValue && Number(defaultEstimatedValue) > 0 ? defaultEstimatedValue : '-');
+        return <span className="text-slate-700">{rate !== '-' ? (typeof rate === 'number' ? formatCurrency(rate) : formatPrimitiveValue(rate)) : '-'}</span>;
+      },
+    },
+    {
+      key: 'tax',
+      header: 'Tax %',
+      cell: (item) => {
+        const tax = firstPresent(item.taxPercent, item.tax, item.gstPercent, item.gst, item.gstRate, '18%');
+        return <span className="text-slate-700">{tax !== '-' ? `${String(tax).replace('%', '')}%` : '-'}</span>;
+      },
+    },
+    {
+      key: 'total',
+      header: 'Total',
+      cell: (item) => {
+        const rawTotal = firstPresent(item.total, item.amount, item.totalPrice, item.estimatedTotal);
+        const total = (rawTotal !== undefined && rawTotal !== null && rawTotal !== '' && rawTotal !== '-')
+          ? rawTotal
+          : (defaultEstimatedValue && Number(defaultEstimatedValue) > 0 ? defaultEstimatedValue : '-');
+        return <span className="font-bold text-slate-900">{total !== '-' ? (typeof total === 'number' ? formatCurrency(total) : formatPrimitiveValue(total)) : '-'}</span>;
+      },
+    },
+  ], [defaultCategory, defaultSubject, defaultEstimatedValue]);
+
   if (!list.length) return null;
 
   return (
@@ -2139,63 +1788,96 @@ function BoqTableList({
           BOQ Table ({list.length})
         </h3>
       </div>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Sr #</th>
-                <th className="px-3 py-2">Category</th>
-                <th className="px-3 py-2">Quantity</th>
-                <th className="px-3 py-2">UOM</th>
-                <th className="px-3 py-2">Est. Rate</th>
-                <th className="px-3 py-2">Tax %</th>
-                <th className="px-3 py-2">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-              {list.map((item: any, idx: number) => {
-                const sr = firstPresent(item.srNo, item.sr, item.sr_no, item.id, idx + 1);
-                const rawCat = firstPresent(item.category, item.itemCategory, item.name, item.itemName, item.title);
-                const isGenericCat = !rawCat || String(rawCat).trim().toLowerCase() === 'general' || /^category\s*#?\d+$/i.test(String(rawCat).trim()) || /^item\s*#?\d+$/i.test(String(rawCat).trim());
-                const category = !isGenericCat
-                  ? String(rawCat)
-                  : (defaultCategory && defaultCategory !== 'General Procurement' ? defaultCategory : (defaultSubject || 'General'));
-
-                const qty = firstPresent(item.quantity, item.qty, item.targetQty, item.count, '1');
-                const uom = firstPresent(item.uom, item.unit, item.unitOfMeasure, 'Nos');
-
-                const rawRate = firstPresent(item.estimatedRate, item.rate, item.unitPrice, item.price, item.estimatedPrice);
-                const rate = (rawRate !== undefined && rawRate !== null && rawRate !== '' && rawRate !== '-')
-                  ? rawRate
-                  : (defaultEstimatedValue && Number(defaultEstimatedValue) > 0 ? defaultEstimatedValue : '-');
-
-                const tax = firstPresent(item.taxPercent, item.tax, item.gstPercent, item.gst, item.gstRate, '18%');
-
-                const rawTotal = firstPresent(item.total, item.amount, item.totalPrice, item.estimatedTotal);
-                const total = (rawTotal !== undefined && rawTotal !== null && rawTotal !== '' && rawTotal !== '-')
-                  ? rawTotal
-                  : (defaultEstimatedValue && Number(defaultEstimatedValue) > 0 ? defaultEstimatedValue : '-');
-
-                return (
-                  <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="px-3 py-2 font-bold text-slate-400">{sr}</td>
-                    <td className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(category)}</td>
-                    <td className="px-3 py-2 font-medium text-slate-800">{qty} {uom}</td>
-                    <td className="px-3 py-2 text-slate-600">{formatPrimitiveValue(uom || '-')}</td>
-                    <td className="px-3 py-2 text-slate-700">{rate !== '-' ? (typeof rate === 'number' ? formatCurrency(rate) : formatPrimitiveValue(rate)) : '-'}</td>
-                    <td className="px-3 py-2 text-slate-700">{tax !== '-' ? `${String(tax).replace('%', '')}%` : '-'}</td>
-                    <td className="px-3 py-2 font-bold text-slate-900">{total !== '-' ? (typeof total === 'number' ? formatCurrency(total) : formatPrimitiveValue(total)) : '-'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable<any>
+        data={list}
+        columns={columns}
+        keyExtractor={(item, idx) => String(item.srNo || item.id || idx)}
+        showSrNo={true}
+        srNoHeader="Sr #"
+        srNoWidth="w-12"
+        minWidth="min-w-[650px]"
+        emptyTitle="No BOQ items"
+        emptyDescription="No BOQ items specified."
+      />
     </div>
   );
 }
+
+const technicalCriteriaColumns: ColumnDef<any>[] = [
+  {
+    key: 'name',
+    header: 'Criteria Name',
+    cell: (item, idx) => {
+      if (isPlainObject(item)) {
+        const name = firstPresent(item.name, item.title, item.label, `Criteria ${idx + 1}`);
+        return <span className="font-bold text-slate-900">{formatPrimitiveValue(name)}</span>;
+      }
+      return <span className="font-bold text-slate-900">{formatPrimitiveValue(item)}</span>;
+    },
+  },
+  {
+    key: 'description',
+    header: 'Description',
+    cell: (item) => {
+      if (!isPlainObject(item)) return <span className="text-slate-400">-</span>;
+      const desc = firstPresent(item.description, item.desc, item.details, '-');
+      return <span className="font-normal text-slate-600 max-w-xs">{formatPrimitiveValue(desc)}</span>;
+    },
+  },
+  {
+    key: 'mandatory',
+    header: 'Mandatory',
+    align: 'center',
+    cell: (item) => {
+      if (!isPlainObject(item)) return <span className="text-slate-400">-</span>;
+      const mandatory = item.mandatory !== false && String(item.mandatory).toLowerCase() === 'yes';
+      return (
+        <span className={cn(
+          'inline-block rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-wider border',
+          mandatory
+            ? 'border-rose-200 bg-rose-50 text-rose-700'
+            : 'border-slate-200 bg-slate-50 text-slate-600'
+        )}>
+          {mandatory ? 'Yes' : 'No'}
+        </span>
+      );
+    },
+  },
+  {
+    key: 'minMarks',
+    header: 'Min Marks',
+    align: 'center',
+    cell: (item) => {
+      if (!isPlainObject(item)) return <span className="text-slate-400">-</span>;
+      const minMarks = firstPresent(item.minMarks, item.minScore, item.passingMarks, '-');
+      return <span className="font-semibold text-amber-700">{formatPrimitiveValue(minMarks)}</span>;
+    },
+  },
+  {
+    key: 'maxScore',
+    header: 'Max Score',
+    align: 'center',
+    cell: (item) => {
+      if (!isPlainObject(item)) return <span className="text-slate-400">-</span>;
+      const maxScore = firstPresent(item.maxScore, item.maxMarks, item.score, '-');
+      return <span className="font-bold text-slate-900">{formatPrimitiveValue(maxScore)}</span>;
+    },
+  },
+  {
+    key: 'weightage',
+    header: 'Weightage',
+    align: 'center',
+    cell: (item) => {
+      if (!isPlainObject(item)) return <span className="text-slate-400">-</span>;
+      const weightage = firstPresent(item.weightage, item.weight, '-');
+      return (
+        <span className="font-bold text-indigo-700">
+          {weightage !== '-' ? `${weightage}%` : '-'}
+        </span>
+      );
+    },
+  },
+];
 
 function TechnicalCriteriaTableList({ data }: { data: any }) {
   if (!hasDetailData(data)) return null;
@@ -2218,68 +1900,56 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
           Technical Evaluation Criteria ({list.length})
         </h3>
       </div>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-3 py-2">#</th>
-                <th className="px-3 py-2">Criteria Name</th>
-                <th className="px-3 py-2">Description</th>
-                <th className="px-3 py-2 text-center">Mandatory</th>
-                <th className="px-3 py-2 text-center">Min Marks</th>
-                <th className="px-3 py-2 text-center">Max Score</th>
-                <th className="px-3 py-2 text-center">Weightage</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-              {list.map((item: any, idx: number) => {
-                if (isPlainObject(item)) {
-                  const name = firstPresent(item.name, item.title, item.label, `Criteria ${idx + 1}`);
-                  const desc = firstPresent(item.description, item.desc, item.details, '-');
-                  const mandatory = item.mandatory !== false && String(item.mandatory).toLowerCase() === 'yes';
-                  const minMarks = firstPresent(item.minMarks, item.minScore, item.passingMarks, '-');
-                  const maxScore = firstPresent(item.maxScore, item.maxMarks, item.score, '-');
-                  const weightage = firstPresent(item.weightage, item.weight, '-');
-
-                  return (
-                    <tr key={item.id || idx} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="px-3 py-2 font-bold text-slate-400">{idx + 1}</td>
-                      <td className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(name)}</td>
-                      <td className="px-3 py-2 font-normal text-slate-600 max-w-xs">{formatPrimitiveValue(desc)}</td>
-                      <td className="px-3 py-2 text-center">
-                        <span className={cn(
-                          'inline-block rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-wider border',
-                          mandatory
-                            ? 'border-rose-200 bg-rose-50 text-rose-700'
-                            : 'border-slate-200 bg-slate-50 text-slate-600'
-                        )}>
-                          {mandatory ? 'Yes' : 'No'}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-center font-semibold text-amber-700">{formatPrimitiveValue(minMarks)}</td>
-                      <td className="px-3 py-2 text-center font-bold text-slate-900">{formatPrimitiveValue(maxScore)}</td>
-                      <td className="px-3 py-2 text-center font-bold text-indigo-700">
-                        {weightage !== '-' ? `${weightage}%` : '-'}
-                      </td>
-                    </tr>
-                  );
-                }
-
-                return (
-                  <tr key={idx} className="hover:bg-slate-50/60">
-                    <td className="px-3 py-2 font-bold text-slate-400">{idx + 1}</td>
-                    <td colSpan={6} className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(item)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable<any>
+        data={list}
+        columns={technicalCriteriaColumns}
+        keyExtractor={(item, idx) => String(item.id || idx)}
+        showSrNo={true}
+        srNoHeader="#"
+        srNoWidth="w-12"
+        minWidth="min-w-[700px]"
+        emptyTitle="No evaluation criteria"
+        emptyDescription="No technical evaluation criteria specified."
+      />
     </div>
   );
 }
+
+const consigneeColumns: ColumnDef<any>[] = [
+  {
+    key: 'name',
+    header: 'Consignee Name',
+    cell: (item, idx) => {
+      if (isPlainObject(item)) {
+        const name = firstPresent(item.name, item.consigneeName, item.contactPerson, `Consignee ${idx + 1}`);
+        return <span className="font-bold text-slate-900">{formatPrimitiveValue(name)}</span>;
+      }
+      return <span className="font-bold text-slate-900">{formatPrimitiveValue(item)}</span>;
+    },
+  },
+  {
+    key: 'quantity',
+    header: 'Quantity',
+    cell: (item) => {
+      if (!isPlainObject(item)) return <span className="text-slate-400">-</span>;
+      const qty = firstPresent(item.quantity, item.qty, '-');
+      return (
+        <span className="inline-block rounded-md bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 font-semibold text-indigo-700 text-[10px]">
+          {formatPrimitiveValue(qty)}
+        </span>
+      );
+    },
+  },
+  {
+    key: 'location',
+    header: 'Delivery Location / Address',
+    cell: (item) => {
+      if (!isPlainObject(item)) return <span className="text-slate-400">-</span>;
+      const loc = firstPresent(item.location, item.address, item.deliveryAddress, '-');
+      return <span className="text-slate-700">{formatPrimitiveValue(loc)}</span>;
+    },
+  },
+];
 
 function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq, isBuyerSide, isRfqType, isRfpType, isRateContractType }: { data: any; deliveryLocation?: any; deliveryTerms?: any; isBuyerRfq?: boolean; isBuyerSide?: boolean; isRfqType?: boolean; isRfpType?: boolean; isRateContractType?: boolean }) {
   const ctx = React.useContext(BuyerSideContext);
@@ -2311,49 +1981,17 @@ function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq,
       )}
 
       {items.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/80 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th className="px-3 py-2">#</th>
-                  <th className="px-3 py-2">Consignee Name</th>
-                  <th className="px-3 py-2">Quantity</th>
-                  <th className="px-3 py-2">Delivery Location / Address</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                {items.map((item: any, idx: number) => {
-                  if (isPlainObject(item)) {
-                    const name = firstPresent(item.name, item.consigneeName, item.contactPerson, `Consignee ${idx + 1}`);
-                    const qty = firstPresent(item.quantity, item.qty, '-');
-                    const loc = firstPresent(item.location, item.address, item.deliveryAddress, '-');
-
-                    return (
-                      <tr key={item.id || idx} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="px-3 py-2 font-bold text-slate-400">{idx + 1}</td>
-                        <td className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(name)}</td>
-                        <td className="px-3 py-2">
-                          <span className="inline-block rounded-md bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 font-semibold text-indigo-700 text-[10px]">
-                            {formatPrimitiveValue(qty)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-slate-700">{formatPrimitiveValue(loc)}</td>
-                      </tr>
-                    );
-                  }
-
-                  return (
-                    <tr key={idx} className="hover:bg-slate-50/60">
-                      <td className="px-3 py-2 font-bold text-slate-400">{idx + 1}</td>
-                      <td colSpan={3} className="px-3 py-2 font-bold text-slate-900">{formatPrimitiveValue(item)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable<any>
+          data={items}
+          columns={consigneeColumns}
+          keyExtractor={(item, idx) => String(item.id || idx)}
+          showSrNo={true}
+          srNoHeader="#"
+          srNoWidth="w-12"
+          minWidth="min-w-[600px]"
+          emptyTitle="No consignees"
+          emptyDescription="No consignee delivery destinations listed."
+        />
       )}
     </div>
   );
@@ -2407,7 +2045,6 @@ export interface ProcurementDetailUnifiedViewProps {
   requiredDocuments?: any;
   boqTable?: any;
   serviceDetails?: any;
-  rateContractConfig?: any;
   consigneeDetails?: any;
   evaluationMethod?: string;
   timeSlot?: string;
@@ -2425,6 +2062,8 @@ export interface ProcurementDetailUnifiedViewProps {
   backRouteLabel?: string;
   onBack?: () => void;
   onDiscardClick?: () => void;
+  onCancelClick?: () => void;
+  cancelButtonLabel?: string;
   submitButtonLabel?: string;
   onSubmitClick?: () => void;
   onDownloadClick?: () => void;
@@ -2432,12 +2071,12 @@ export interface ProcurementDetailUnifiedViewProps {
   clarificationKind?: 'quote-request' | 'requirement';
   /** Override the entity ID used for clarifications (defaults to props.id) */
   clarificationEntityId?: string | number;
-
+  
   // Invoice conversion feature
   invoiceStatus?: { exists: boolean; invoiceId?: number; loading?: boolean } | null;
   isConvertingInvoice?: boolean;
   onConvertToInvoiceClick?: () => void;
-
+  
   // Invitations
   invitedCount?: number;
   invitedSellers?: any[];
@@ -2457,12 +2096,104 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
 
   const [nowMs] = useState(() => Date.now());
-  const targetId = String(props.id);
+  const targetId = String(props.displayId && props.displayId !== 'N/A' && props.displayId !== '—' ? props.displayId : props.id);
   const userRoleStr = String(currentUser?.role || '').toLowerCase();
   const isBuyerOrAdmin = userRoleStr === 'buyer' || userRoleStr === 'admin' || userRoleStr === 'master_admin' || (!!currentUser?.id && String(currentUser?.id) === String(props.buyer?.id));
   const isBuyerSide = userRoleStr === 'buyer' || pathname.startsWith('/buyer') || (isBuyerOrAdmin && !pathname.startsWith('/seller') && !pathname.startsWith('/shg'));
 
   const [isStartAuctionModalOpen, setIsStartAuctionModalOpen] = useState(false);
+
+  const quotationListColumns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'supplier',
+      header: 'Supplier Organization',
+      cell: (participation, idx) => {
+        const sellerOrgName = participation.sellerOrgName
+          || participation.sellerOrganization?.organizationName
+          || participation.seller?.sellerProfile?.organizationName
+          || participation.seller?.organization?.organizationName
+          || participation.sellerProfile?.organizationName
+          || participation.companyName
+          || participation.sellerName
+          || participation.seller?.name
+          || participation.sellerUser?.name
+          || (participation.sellerId || participation.sellerUserId || (participation.id && !String(participation.id).startsWith('id-'))
+            ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
+            : `Supplier ${idx + 1}`);
+        const contactName = participation.sellerName || participation.contactPerson || participation.seller?.name || participation.sellerUser?.name || '';
+        return (
+          <div>
+            <p className="font-bold text-slate-950 text-xs">{sellerOrgName}</p>
+            {contactName && contactName !== sellerOrgName && (
+              <p className="text-[10px] font-normal text-slate-400">Contact: {contactName}</p>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'amount',
+      header: 'Quoted Amount (INR)',
+      cell: (participation) => {
+        const amount = Number(participation.totalAmount || participation.quotedAmount || participation.offeredPrice || 0);
+        return (
+          <span className="font-bold text-slate-900 text-xs">
+            {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : 'Sealed / Rates On File'}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'qtyDelivery',
+      header: 'Offered Qty & Delivery',
+      cell: (participation) => {
+        const qty = participation.offeredQuantity || participation.quantity || 'Specified Qty';
+        const delivery = participation.deliveryTimeline || participation.responseData?.deliveryTimeline || 'Standard';
+        return (
+          <div className="text-slate-600">
+            <p className="font-semibold text-xs">{qty}</p>
+            <p className="text-[10px] font-normal text-slate-400">{delivery}</p>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'submittedAt',
+      header: 'Submitted At',
+      cell: (participation) => {
+        const dateStr = formatDateString(participation.submittedAt || participation.updatedAt || participation.createdAt, true);
+        return <span className="text-slate-500 font-normal">{dateStr}</span>;
+      },
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (participation) => {
+        const statusLabel = participation.submissionStatus || participation.status || 'Submitted';
+        return (
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9.5px] font-bold uppercase text-emerald-800">
+            {statusLabel}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      align: 'right',
+      cell: (participation) => (
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => router.push(`/bids/${targetId}/results`)}
+          className="h-7.5 px-2.5 gap-1 text-[11px] font-bold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
+        >
+          <Eye className="h-3 w-3" />
+          Review Quotation
+        </Button>
+      ),
+    },
+  ], [router, targetId]);
 
   const linkedAuctionQuery = useQuery({
     queryKey: ['linked-reverse-auction', targetId],
@@ -2702,74 +2433,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
   const statusLabel = (props.status || 'ACTIVE').toUpperCase();
   const displayIdStr = String(props.displayId || props.id);
-
-  const isLimitedTenderType =
-    props.procurementType === 'LIMITED_TENDER' ||
-    String(props.procurementType || '').toUpperCase().includes('LIMITED_TENDER') ||
-    String(props.procurementType || '').toUpperCase().includes('LIMITED TENDER') ||
-    String(props.procurementLabel || '').toUpperCase().includes('LIMITED TENDER') ||
-    String(props.procurementMethod || '').toUpperCase().includes('LIMITED TENDER') ||
-    String(payload.fullProcurementMethod || '').toUpperCase().includes('LIMITED') ||
-    String(payload.type || '').toUpperCase().includes('LIMITED') ||
-    String(payload.canonicalMethod || '').toUpperCase().includes('LIMITED') ||
-    String(payload.basics?.procurementMethod || '').toUpperCase().includes('LIMITED') ||
-    String(payload.basics?.canonicalMethod || '').toUpperCase().includes('LIMITED') ||
-    pathname.includes('/limited-tender') ||
-    pathname.includes('/limited');
-  const isBuyerLimitedTender = isBuyerSide && isLimitedTenderType;
-
-  const isOpenTenderType = !isLimitedTenderType && (
-    props.procurementType === 'OPEN_TENDER' ||
-    String(props.procurementType || '').toUpperCase().includes('OPEN_TENDER') ||
-    String(props.procurementType || '').toUpperCase().includes('OPEN TENDER') ||
-    String(props.procurementLabel || '').toUpperCase().includes('OPEN TENDER') ||
-    String(props.procurementMethod || '').toUpperCase().includes('OPEN TENDER') ||
-    pathname.includes('/open-tender') ||
-    (pathname.includes('/tender') && !pathname.includes('/limited'))
-  );
-  const isBuyerOpenTender = isBuyerSide && isOpenTenderType;
-
-  const isRfqType =
-    props.procurementType === 'RFQ' ||
-    String(props.procurementType || '').toUpperCase().includes('RFQ') ||
-    String(props.procurementLabel || '').toUpperCase().includes('QUOTATION') ||
-    String(props.procurementLabel || '').toUpperCase().includes('RFQ') ||
-    String(props.procurementMethod || '').toUpperCase().includes('QUOTATION') ||
-    String(props.procurementMethod || '').toUpperCase().includes('RFQ') ||
-    pathname.includes('/rfq');
-  const isBuyerRfq = isBuyerSide && (isRfqType || pathname.includes('/rfq'));
-
-  const isRfpType =
-    props.procurementType === 'RFP' ||
-    String(props.procurementType || '').toUpperCase().includes('RFP') ||
-    String(props.procurementLabel || '').toUpperCase().includes('PROPOSAL') ||
-    String(props.procurementLabel || '').toUpperCase().includes('RFP') ||
-    String(props.procurementMethod || '').toUpperCase().includes('PROPOSAL') ||
-    String(props.procurementMethod || '').toUpperCase().includes('RFP') ||
-    pathname.includes('/rfp');
-  const isBuyerRfp = isBuyerSide && (isRfpType || pathname.includes('/rfp'));
-
-  const isRateContractType =
-    props.procurementType === 'RATE_CONTRACT' ||
-    String(props.procurementType || '').toUpperCase().includes('RATE_CONTRACT') ||
-    String(props.procurementType || '').toUpperCase().includes('RATE CONTRACT') ||
-    String(props.procurementLabel || '').toUpperCase().includes('RATE CONTRACT') ||
-    String(props.procurementMethod || '').toUpperCase().includes('RATE CONTRACT') ||
-    pathname.includes('/rate-contract');
-  const isBuyerRateContract = isBuyerSide && isRateContractType;
-  const resolvedRateContractConfig = props.rateContractConfig || payload.rateContractConfig || payload.rateContract || {};
-
-  const procurementTypeLabel = isLimitedTenderType
-    ? 'Limited Tender'
-    : (isOpenTenderType
-      ? 'Open Tender'
-      : (isRfqType
-        ? 'Request for Quotation'
-        : (isRfpType
-          ? 'Request for Proposal'
-          : (isRateContractType
-            ? 'Rate Contract'
-            : (props.procurementLabel || props.procurementType || 'PROCUREMENT')))));
+  const procurementTypeLabel = props.procurementLabel || props.procurementType || 'PROCUREMENT';
 
   // Title / Procurement Name Resolution
   const isGenericTitle = (val?: string | null) => {
@@ -2847,6 +2511,53 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.id && Number(props.id) > 0 ? `${procurementTypeLabel.toUpperCase().replace(/\s+/g, '_')}-${props.id}` : undefined
   ) || `RFQ-${Math.abs(Number(props.id || 1))}`;
 
+  const isRfqType =
+    props.procurementType === 'RFQ' ||
+    String(props.procurementType || '').toUpperCase().includes('RFQ') ||
+    String(props.procurementLabel || '').toUpperCase().includes('QUOTATION') ||
+    String(props.procurementLabel || '').toUpperCase().includes('RFQ') ||
+    String(props.procurementMethod || '').toUpperCase().includes('QUOTATION') ||
+    String(props.procurementMethod || '').toUpperCase().includes('RFQ') ||
+    pathname.includes('/rfq');
+  const isBuyerRfq = isBuyerSide && (isRfqType || pathname.includes('/rfq'));
+
+  const isRfpType =
+    props.procurementType === 'RFP' ||
+    String(props.procurementType || '').toUpperCase().includes('RFP') ||
+    String(props.procurementLabel || '').toUpperCase().includes('PROPOSAL') ||
+    String(props.procurementLabel || '').toUpperCase().includes('RFP') ||
+    String(props.procurementMethod || '').toUpperCase().includes('PROPOSAL') ||
+    String(props.procurementMethod || '').toUpperCase().includes('RFP') ||
+    pathname.includes('/rfp');
+  const isBuyerRfp = isBuyerSide && (isRfpType || pathname.includes('/rfp'));
+
+  const isOpenTenderType =
+    props.procurementType === 'OPEN_TENDER' ||
+    String(props.procurementType || '').toUpperCase().includes('OPEN_TENDER') ||
+    String(props.procurementType || '').toUpperCase().includes('OPEN TENDER') ||
+    String(props.procurementLabel || '').toUpperCase().includes('OPEN TENDER') ||
+    String(props.procurementMethod || '').toUpperCase().includes('OPEN TENDER') ||
+    pathname.includes('/open-tender') ||
+    (pathname.includes('/tender') && !pathname.includes('/limited'));
+  const isBuyerOpenTender = isBuyerSide && isOpenTenderType;
+
+  const isLimitedTenderType =
+    props.procurementType === 'LIMITED_TENDER' ||
+    String(props.procurementType || '').toUpperCase().includes('LIMITED_TENDER') ||
+    String(props.procurementType || '').toUpperCase().includes('LIMITED TENDER') ||
+    String(props.procurementLabel || '').toUpperCase().includes('LIMITED TENDER') ||
+    String(props.procurementMethod || '').toUpperCase().includes('LIMITED TENDER') ||
+    pathname.includes('/limited-tender') ||
+    pathname.includes('/limited');
+  const isBuyerLimitedTender = isBuyerSide && isLimitedTenderType;
+
+  const isRateContractType =
+    props.procurementType === 'RATE_CONTRACT' ||
+    String(props.procurementType || '').toUpperCase().includes('RATE_CONTRACT') ||
+    String(props.procurementType || '').toUpperCase().includes('RATE CONTRACT') ||
+    String(props.procurementLabel || '').toUpperCase().includes('RATE CONTRACT') ||
+    String(props.procurementMethod || '').toUpperCase().includes('RATE CONTRACT') ||
+    pathname.includes('/rate-contract');
 
   const cleanBuyerTerms = (val: any): any => {
     if (!val) return val;
@@ -2916,8 +2627,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   };
 
   const rawMethod = firstPresent(
-    isLimitedTenderType ? 'Limited Tender' : undefined,
-    isOpenTenderType ? 'Open Tender' : undefined,
     props.procurementMethod,
     payload.fullProcurementMethod,
     payload.type,
@@ -2927,13 +2636,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
   const procurementMethod = isRfqType
     ? 'Request for Quotation'
-    : (rawMethod === 'RFQ'
-      ? 'Request for Quotation'
-      : (isLimitedTenderType || String(rawMethod).toUpperCase() === 'LIMITED_TENDER' || String(rawMethod).toUpperCase() === 'LIMITED TENDER'
-        ? 'Limited Tender'
-        : (isOpenTenderType || String(rawMethod).toUpperCase() === 'OPEN_TENDER' || String(rawMethod).toUpperCase() === 'OPEN TENDER'
-          ? 'Open Tender'
-          : rawMethod)));
+    : (rawMethod === 'RFQ' ? 'Request for Quotation' : rawMethod);
 
   const buyingType = firstPresent(
     props.buyingType,
@@ -3082,19 +2785,19 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const bidValidityDateComputed = bidValidityDateValue
     ? bidValidityDateValue
     : (closingDateValue ? (() => {
-      try {
-        const cDate = new Date(closingDateValue);
-        if (!isNaN(cDate.getTime())) {
-          const daysToAdd = Number(rawValidityDays) || 90;
-          const computed = new Date(cDate.getTime() + daysToAdd * 86_400_000);
-          return computed.toISOString();
-        }
-      } catch { }
-      return undefined;
-    })() : undefined);
+        try {
+          const cDate = new Date(closingDateValue);
+          if (!isNaN(cDate.getTime())) {
+            const daysToAdd = Number(rawValidityDays) || 90;
+            const computed = new Date(cDate.getTime() + daysToAdd * 86_400_000);
+            return computed.toISOString();
+          }
+        } catch {}
+        return undefined;
+      })() : undefined);
 
-  const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue) : (props.publishedDate ? formatDateString(props.publishedDate) : 'N/A');
-  const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue) : (props.closingDate ? formatDateString(props.closingDate) : 'N/A');
+  const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue, true, 'startOfDay') : (props.publishedDate ? formatDateString(props.publishedDate, true, 'startOfDay') : 'N/A');
+  const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue, true, 'endOfDay') : (props.closingDate ? formatDateString(props.closingDate, true, 'endOfDay') : 'N/A');
   const clarificationDateFormatted = clarificationDateValue ? formatDateString(clarificationDateValue, true) : (props.clarificationDate ? formatDateString(props.clarificationDate, true) : 'N/A');
   const clarificationDeadlineFormatted = clarificationDeadlineValue ? formatDateString(clarificationDeadlineValue, true) : (clarificationDateFormatted !== 'N/A' ? clarificationDateFormatted : undefined);
   const technicalDateFormatted = technicalDateValue ? formatDateString(technicalDateValue, true) : (props.technicalDate || props.technicalOpeningDate ? formatDateString(props.technicalDate || props.technicalOpeningDate, true) : 'N/A');
@@ -3288,11 +2991,11 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const requireDemo = payload.requireDemo === true || evaluation.requireDemo === true || String(payload.requireDemo).toLowerCase() === 'true'
     ? 'Yes'
     : firstPresent(
-      payload.requireDemo,
-      evaluation.requireDemo,
-      rules.requireDemo,
-      'No'
-    );
+        payload.requireDemo,
+        evaluation.requireDemo,
+        rules.requireDemo,
+        'No'
+      );
 
   const qcbsRatio = firstPresent(
     evaluation.qcbsRatio,
@@ -3512,7 +3215,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       value: closingDateFormatted || 'N/A',
       icon: Clock,
       tone: 'rose' as Tone,
-      subtext: 'Bidding window closing'
+      subtext: linkedAuction ? 'Stage 1 initial quotation cutoff' : 'Bidding window closing'
     },
     { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' },
     { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactPerson, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: buyerPhoneNum || 'Procurement officer' },
@@ -3596,853 +3299,766 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   };
 
   return (
-    <BuyerSideContext.Provider value={{ isBuyer: isBuyerSide, isOpenTender: isBuyerOpenTender, isLimitedTender: isBuyerLimitedTender, isRateContract: isBuyerRateContract }}>
+    <BuyerSideContext.Provider value={{ isBuyer: isBuyerSide, isOpenTender: isBuyerOpenTender, isLimitedTender: isBuyerLimitedTender }}>
       <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6 lg:px-8">
-          {/* Navigation Breadcrumb & Back Button */}
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
+      <div className="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6 lg:px-8">
+        {/* Navigation Breadcrumb & Back Button */}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (props.onBack) {
+                props.onBack();
+              } else if (typeof window !== 'undefined' && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push(props.backRoute || '/seller/opportunities');
+              }
+            }}
+            className="h-8 gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4 text-slate-500" />
+            <span>Back</span>
+          </Button>
+
+          <nav className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+            <button
               type="button"
-              variant="outline"
-              size="sm"
               onClick={() => {
-                if (props.onBack) {
-                  props.onBack();
-                } else if (typeof window !== 'undefined' && window.history.length > 1) {
-                  router.back();
-                } else {
-                  router.push(props.backRoute || '/seller/opportunities');
-                }
+                if (props.onBack) props.onBack();
+                else router.push(props.backRoute || '/seller/opportunities');
               }}
-              className="h-8 gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors"
+              className="hover:text-slate-900 transition-colors"
             >
-              <ArrowLeft className="h-4 w-4 text-slate-500" />
-              <span>Back</span>
-            </Button>
+              {props.backRouteLabel || `${procurementTypeLabel} Opportunities`}
+            </button>
+          </nav>
+        </div>
 
-            <nav className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-              <button
-                type="button"
-                onClick={() => {
-                  if (props.onBack) props.onBack();
-                  else router.push(props.backRoute || '/seller/opportunities');
-                }}
-                className="hover:text-slate-900 transition-colors"
-              >
-                {props.backRouteLabel || `${procurementTypeLabel} Opportunities`}
-              </button>
-            </nav>
-          </div>
-
-          {!currentUser && (
-            <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-2.5">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                <div>
-                  <p className="text-xs font-black text-amber-950">Login required for participation</p>
-                  <p className="mt-0.5 text-[11px] font-semibold text-amber-800">Sellers can login to submit or view their response.</p>
-                </div>
+        {!currentUser && (
+          <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <div>
+                <p className="text-xs font-black text-amber-950">Login required for participation</p>
+                <p className="mt-0.5 text-[11px] font-semibold text-amber-800">Sellers can login to submit or view their response.</p>
               </div>
-              <Button type="button" size="sm" onClick={() => router.push(`/login?redirect=${encodeURIComponent(pathname)}`)} className="shrink-0 bg-slate-950 text-white hover:bg-slate-800 text-xs">
-                Login
-              </Button>
             </div>
-          )}
+            <Button type="button" size="sm" onClick={() => router.push(`/login?redirect=${encodeURIComponent(pathname)}`)} className="shrink-0 bg-slate-950 text-white hover:bg-slate-800 text-xs">
+              Login
+            </Button>
+          </div>
+        )}
 
-          {/* Live Reverse Auction Banner for Sellers */}
-          {!isBuyerSide && linkedAuction && ['LIVE', 'SCHEDULED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
-            <SellerLiveAuctionBanner
-              auctionId={linkedAuction.id}
-              procurementTitle={resolvedSubject}
-              procurementReference={displayIdStr}
-              onBidSubmitted={() => linkedAuctionQuery.refetch()}
-            />
-          )}
+        {/* Live Reverse Auction Banner for Sellers */}
+        {!isBuyerSide && linkedAuction && ['LIVE', 'SCHEDULED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
+          <SellerLiveAuctionBanner
+            auctionId={linkedAuction.id}
+            procurementTitle={resolvedSubject}
+            procurementReference={displayIdStr}
+            onBidSubmitted={() => linkedAuctionQuery.refetch()}
+          />
+        )}
 
-          {/* Header */}
-          <header className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 sm:px-5 sm:py-3 shadow-2xs">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <StatusBadge status={statusLabel} />
-                  {!isBuyerSide && buyerOrgName !== 'N/A' && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.2 text-[10px] font-black uppercase tracking-wider text-indigo-700">
-                      <Building2 className="h-3 w-3" />
-                      {formatPrimitiveValue(buyerOrgName, 'organization')}
-                    </span>
-                  )}
-                  {props.deadlineDate && <DeadlineCountdown targetDate={props.deadlineDate} />}
-                  {props.hasSubmittedProposal && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.2 text-[10px] font-black uppercase tracking-wider text-emerald-700">
-                      <ShieldCheck className="h-3 w-3" />
-                      {props.procurementType === 'RFQ' ? 'Quotation Submitted' : 'Proposal Submitted'}
-                    </span>
-                  )}
-                </div>
-                <h1
-                  className={cn(
-                    'leading-snug tracking-tight text-slate-900 font-black break-words',
-                    isBuyerSide
-                      ? 'text-base sm:text-lg'
-                      : 'text-lg sm:text-xl'
-                  )}
-                >
-                  {resolvedSubject}
-                </h1>
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  {/* Requisition ID badge - hidden on buyer side */}
-                  {!isBuyerSide && (
-                    <>
-                      <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-slate-700 text-[10px] font-bold">{displayIdStr}</span>
-                      <span>•</span>
-                    </>
-                  )}
-                  <span>{formatPrimitiveValue(procurementMethod, 'procurementMethod')}</span>
-                  {category !== 'N/A' && (
-                    <>
-                      <span>•</span>
-                      <span>{formatPrimitiveValue(category, 'category')}</span>
-                    </>
-                  )}
-                </div>
+        {/* Header */}
+        <header className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status={statusLabel} />
+                {!isBuyerSide && buyerOrgName !== 'N/A' && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                    <Building2 className="h-3 w-3" />
+                    {formatPrimitiveValue(buyerOrgName, 'organization')}
+                  </span>
+                )}
+                {props.deadlineDate && <DeadlineCountdown targetDate={props.deadlineDate} />}
+                {props.hasSubmittedProposal && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                    <ShieldCheck className="h-3 w-3" />
+                    {props.procurementType === 'RFQ' ? 'Quotation Submitted' : 'Proposal Submitted'}
+                  </span>
+                )}
               </div>
+              <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-slate-900 break-words leading-snug">
+                {resolvedSubject}
+              </h1>
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-slate-500 tracking-normal">
+                {/* Requisition ID badge - hidden on buyer side */}
+                {!isBuyerSide && (
+                  <>
+                    <span className="rounded px-1.5 py-0.5 font-mono text-slate-700 text-[10.5px] font-bold bg-slate-100 border border-slate-200/60">{displayIdStr}</span>
+                    <span>•</span>
+                  </>
+                )}
+                <span>{formatPrimitiveValue(procurementMethod, 'procurementMethod')}</span>
+                {category !== 'N/A' && (
+                  <>
+                    <span>•</span>
+                    <span>{formatPrimitiveValue(category, 'category')}</span>
+                  </>
+                )}
+              </div>
+            </div>
 
-              <div className="flex shrink-0 flex-wrap items-center gap-2 lg:self-center">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 lg:self-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (props.onDownloadClick) {
+                    props.onDownloadClick();
+                  } else {
+                    handleDefaultPdfDownload();
+                  }
+                }}
+                className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
+              >
+                <Download className="h-3.5 w-3.5 text-slate-600" />
+                Download
+              </Button>
+              {props.invoiceStatus && props.onConvertToInvoiceClick && (
+                props.invoiceStatus.exists ? (
+                  <Button
+                    type="button"
+                    onClick={() => router.push(`/seller/invoices/${props.invoiceStatus!.invoiceId}`)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 h-8 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-0.5" />
+                    View Invoice
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    disabled={props.isConvertingInvoice || props.invoiceStatus.loading}
+                    onClick={props.onConvertToInvoiceClick}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 h-8 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                  >
+                    {props.isConvertingInvoice ? <Loader2 className="h-3.5 w-3.5 mr-0.5 animate-spin" /> : <FileText className="h-3.5 w-3.5 mr-0.5" />}
+                    {props.isConvertingInvoice ? 'Converting...' : 'Convert to Invoice'}
+                  </Button>
+                )
+              )}
+              {props.onDiscardClick && (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    if (props.onDownloadClick) {
-                      props.onDownloadClick();
-                    } else {
-                      handleDefaultPdfDownload();
-                    }
-                  }}
-                  className="h-8 px-3 text-xs font-bold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
+                  onClick={props.onDiscardClick}
+                  className="h-8 px-3 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-semibold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
                 >
-                  <Download className="h-3.5 w-3.5 text-slate-600" />
-                  Download
+                  <Trash2 className="h-3 w-3 text-rose-600" />
+                  Discard Draft
                 </Button>
-                {props.invoiceStatus && props.onConvertToInvoiceClick && (
-                  props.invoiceStatus.exists ? (
-                    <Button
-                      type="button"
-                      onClick={() => router.push(`/seller/invoices/${props.invoiceStatus!.invoiceId}`)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-3.5 h-8 rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                    >
-                      <Eye className="h-3.5 w-3.5 mr-0.5" />
-                      View Invoice
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      disabled={props.isConvertingInvoice || props.invoiceStatus.loading}
-                      onClick={props.onConvertToInvoiceClick}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-3.5 h-8 rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                    >
-                      {props.isConvertingInvoice ? <Loader2 className="h-3.5 w-3.5 mr-0.5 animate-spin" /> : <FileText className="h-3.5 w-3.5 mr-0.5" />}
-                      {props.isConvertingInvoice ? 'Converting...' : 'Convert to Invoice'}
-                    </Button>
-                  )
-                )}
-                {props.onDiscardClick && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={props.onDiscardClick}
-                    className="h-8 px-3 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1 flex items-center"
-                  >
-                    <Trash2 className="h-3 w-3 text-rose-600" />
-                    Discard Draft
-                  </Button>
-                )}
-                {props.onSubmitClick && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={handleActionSubmit}
-                    className={cn(
-                      'h-8 px-3.5 text-white text-xs font-black rounded-lg bg-[#0b2447] hover:bg-[#12335f] cursor-pointer shadow-2xs active:scale-95 transition-all flex items-center gap-1.5',
-                      isEmdGated ? 'bg-amber-600 hover:bg-amber-700' : ''
-                    )}
-                  >
-                    <span>{isEmdGated ? 'Pay EMD to Submit' : (props.submitButtonLabel || defaultSubmitBtnLabel)}</span>
-                    <ArrowRight className="h-3 w-3" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          </header>
-
-        {/* EMD Section commented out */}
-
-                  {/* Summary Metrics */}
-                  <section className={cn('grid gap-2.5 sm:gap-3', summaryCards.length === 6 ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5')}>
-                    {summaryCards.map(card => (
-                      <MetricCard key={card.label} {...card} isBuyer={isBuyerSide} />
-                    ))}
-                  </section>
-
-                  {/* Tab Navigation Bar */}
-                  <nav className="flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
-                    {tabs.map(tab => {
-                      const Icon = tab.icon;
-                      const isActive = activeTab === tab.id;
-                      return (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          onClick={() => setActiveTab(tab.id as any)}
-                          className={cn(
-                            'flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all',
-                            isActive
-                              ? 'bg-slate-950 text-white shadow-2xs'
-                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                          )}
-                        >
-                          <Icon className="h-3.5 w-3.5" />
-                          <span>{tab.label}</span>
-                          {tab.count !== undefined && tab.count > 0 && (
-                            <span className={cn(
-                              'rounded-full px-1.5 py-0.2 text-[9px] font-bold',
-                              isActive ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'
-                            )}>
-                              {tab.count}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </nav>
-
-                  {/* Tab 1: Overview & Dates */}
-                  {activeTab === 'overview' && (
-                    <div className="space-y-5">
-                      <div className="grid gap-5 lg:grid-cols-2">
-                        <DataCard title={`Buyer ${procurementTypeLabel} Information`} icon={ClipboardList}>
-                          <PropertyGrid columns={2}>
-                            <PropertyItem label="Procurement Method" value={procurementMethod} />
-                            <PropertyItem label="Buying Type" value={buyingType} />
-                            <PropertyItem label="Category" value={category} />
-                            {/* Sub Category - displayed if exists */}
-                            {subCategory && (
-                              <PropertyItem label="Sub Category" value={subCategory} />
-                            )}
-                            <PropertyItem label="Published Date" value={publishedDateFormatted} />
-                            <PropertyItem label="Submission Deadline" value={closingDateFormatted} />
-                            {/* Delivery Location - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
-                            {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
-                              <PropertyItem label="Delivery Location" value={deliveryLocation} />
-                            )}
-                            {/* Project Duration - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
-                            {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
-                              <PropertyItem label="Project Duration" value={projectDuration} />
-                            )}
-                            {/* Payment Terms - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
-                            {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
-                              <PropertyItem label="Payment Terms" value={paymentTerms} />
-                            )}
-                            {/* Procurement Brief - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
-                            {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
-                              <PropertyItem label="Procurement Brief" value={props.description && props.description.length < 160 && !props.description.includes('\n') ? props.description : (basics.description && basics.description.length < 160 ? basics.description : `${resolvedSubject} (${category})`)} fullWidth />
-                            )}
-                          </PropertyGrid>
-                        </DataCard>
-
-                        <BuyerProfileSection
-                          orgName={buyerOrgName}
-                          contactPerson={contactPerson}
-                          email={email}
-                          phone={phone}
-                          address={buyerAddress}
-                          department={department}
-                        />
-                      </div>
-
-                      <TimelineRibbon
-                        dates={[
-                          { label: 'Published', value: publishedDateFormatted, icon: Calendar, tone: 'emerald' },
-                          { label: 'Clarification', value: clarificationDateFormatted, icon: Info, tone: 'sky' },
-                          { label: 'Submission', value: closingDateFormatted, icon: Clock, tone: 'rose' },
-                          { label: 'Technical Opening', value: technicalDateFormatted, icon: ClipboardCheck, tone: 'indigo' },
-                          { label: 'Financial Opening', value: financialDateFormatted, icon: IndianRupee, tone: 'amber' },
-                          { label: 'Award Status', value: awardDateFormatted, icon: ShieldCheck, tone: 'slate' },
-                        ]}
-                      />
-
-            {/* Clarification Threads & Status grid - hidden on buyer side and in RFQ, RFP, and Rate Contract */}
-            {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && !isBuyerOpenTender && !isBuyerLimitedTender && !isBuyerRateContract && (
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
-        <PropertyGrid columns={4}>
-          <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
-          <PropertyItem label={isRfqType ? 'Quotation Status' : 'Proposal Status'} value={proposalStatusDisplay} />
-          <PropertyItem label="Deadline Status" value={props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs ? 'Closed' : 'Open'} />
-          <PropertyItem label="Source Record" value={procurementTypeLabel} />
-        </PropertyGrid>
-      </div>
-    )
-  }
-          </div >
-        )
-}
-
-{/* Tab 2: Scope & Documents */ }
-{
-  activeTab === 'scope_docs' && (
-    <div className="space-y-5">
-      <DataCard title={`${procurementTypeLabel} Scope & Sourcing Summary`} icon={FileText}>
-        <ScopeSummaryCard
-          scopeText={scopeText}
-          procurementTypeLabel={procurementTypeLabel}
-          estimatedValue={props.estimatedValue}
-          urgency={payload.urgency || rules.urgency || 'Normal'}
-          procurementMethod={procurementMethod}
-        />
-
-              {/* Service Details & Parameters - hidden globally on RFQ, and on buyer side for Open Tender, Limited Tender, RFQ, and Rate Contract */}
-              {hasDetailData(serviceDetails) && !isRfqType && !isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && !isBuyerRateContract && (
-      <ServiceDetailsSection serviceDetails={serviceDetails} isRfqType={isRfqType} />
-    )
-  }
-
-  {/* Rate Contract Configuration - strictly on buyer side for Rate Contract */ }
-  {
-    isBuyerRateContract && (
-      <RateContractConfigSection
-        rateContractConfig={resolvedRateContractConfig}
-        displayId={props.displayId}
-        documents={documents}
-        payload={payload}
-        deliveryTerms={props.deliveryTerms}
-        createdAt={props.createdAt}
-        publishedDate={props.publishedDate}
-        deadlineDate={props.deadlineDate}
-        closingDate={props.closingDate}
-      />
-    )
-  }
-
-  {
-    hasDetailData(lineItems) && (
-      <LineItemsTable items={lineItems} defaultSubject={resolvedSubject} isBuyer={isBuyerSide} />
-    )
-  }
-
-  {/* BOQ Table - hidden on buyer side, RFQ, and Rate Contract */ }
-  {
-    hasDetailData(boqTable) && !isBuyerSide && !isRfqType && !isRateContractType && (
-      <BoqTableList data={boqTable} defaultSubject={resolvedSubject} defaultCategory={category} defaultEstimatedValue={props.estimatedValue} />
-    )
-  }
-            </DataCard >
-
-    {(() => {
-      const validDownloadableDocs = documents.filter(doc => doc && (doc.fileAssetId || doc.url));
-
-      return (
-        <div className="space-y-5">
-          {validDownloadableDocs.length > 0 && (
-            <DataCard title={`${procurementTypeLabel} Attached Documents`} icon={FileSpreadsheet}>
-              <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-                {validDownloadableDocs.map((doc, index) => {
-                  const isGenericName = !doc.name || doc.name.toLowerCase().startsWith('attached_doc');
-                  const docDisplayName = isGenericName
-                    ? (doc.meta || `${procurementTypeLabel} Document ${index + 1}`)
-                    : doc.name;
-
-                  return (
-                    <article key={doc.id ? `doc-${doc.id}-${index}` : `doc-idx-${index}`} className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 shadow-xs flex flex-col justify-between hover:bg-slate-50 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">
-                          <FileText className="h-5 w-5" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="break-words text-xs font-bold text-slate-900 leading-snug">{docDisplayName}</p>
-                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                            <span className={cn(
-                              'rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
-                              doc.required ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-600'
-                            )}>
-                              {doc.required ? 'Required' : doc.meta || 'Document'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (doc.fileAssetId || doc.url) {
-                            openFileAsset({ fileAssetId: doc.fileAssetId, url: doc.url, originalName: docDisplayName }, docDisplayName);
-                          }
-                        }}
-                        disabled={!doc.fileAssetId && !doc.url}
-                        className="mt-3.5 w-full text-xs h-8.5 rounded-lg border-slate-250 bg-white hover:bg-slate-100 font-bold"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                        Open Document
-                      </Button>
-                    </article>
-                  );
-                })}
-              </div>
-            </DataCard>
-          )}
-
-          <RequiredDocumentsList data={requiredDocuments} />
-        </div>
-      );
-    })()
-}
-          </div >
-        )}
-
-{/* Tab 3: Terms & Schedule */ }
-{
-  activeTab === 'terms_schedule' && (
-    <div className="space-y-5">
-      <DataCard title={`${procurementTypeLabel} Schedule & Rules`} icon={CalendarDays}>
-        <div className="space-y-5">
-          <div className="space-y-2.5">
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <Calendar className="h-4 w-4 text-indigo-600" />
-              Milestones &amp; Critical Dates
-            </h3>
-            <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
-              <PropertyGrid columns={3}>
-                <PropertyItem label="Publish Date" value={firstPresent(schedule.publishDate, schedule.publishedDate, publishedDateFormatted, props.publishedDate)} />
-                <PropertyItem label="Submission Start Date" value={submissionStartDateFormatted} />
-                <PropertyItem label="Clarification Deadline" value={firstPresent(schedule.clarificationDeadline, schedule.clarificationEndDate, clarificationDeadlineFormatted, props.clarificationDate)} />
-                <PropertyItem label="Submission Deadline" value={firstPresent(schedule.submissionDate, closingDateFormatted, props.closingDate)} highlight />
-                <PropertyItem label="Technical Opening Date" value={firstPresent(schedule.technicalOpeningDate, tender.technicalEvaluationDate, props.technicalOpeningDate, technicalDateFormatted)} />
-                <PropertyItem label="Financial Opening Date" value={firstPresent(schedule.financialOpeningDate, tender.financialEvaluationDate, props.financialOpeningDate, financialDateFormatted)} />
-                <PropertyItem label="Bid Validity Date" value={firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline, bidValidityDateFormatted)} />
-                <PropertyItem label="Validity Days" value={validityDaysDisplay} />
-                {requiredByDateFormatted && (
-                  <PropertyItem label="Required By Date" value={requiredByDateFormatted} />
-                )}
-                {preBidDateFormatted && (
-                  <PropertyItem label="Pre-Bid Meeting Date" value={preBidDateFormatted} />
-                )}
-                {awardDateFormatted && awardDateFormatted !== 'N/A' && (
-                  <PropertyItem label="Expected Award Date" value={awardDateFormatted} />
-                )}
-              </PropertyGrid>
-            </div>
-          </div>
-
-          <div className="space-y-2.5 pt-2">
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              Bidding Rules &amp; Policy Matrix
-            </h3>
-            <PolicyRulesMatrix
-              rules={[
-                { label: 'Auto Close', value: firstPresent(rules.autoClose, schedule.autoClose, 'Yes') },
-                { label: 'Allow Revision', value: firstPresent(rules.allowRevision, schedule.allowRevision, 'Yes') },
-                { label: 'Show Seller Rank', value: firstPresent(rules.showSellerRank, schedule.showSellerRank, 'Yes') },
-                { label: 'Allow Withdrawal', value: firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal, 'Yes') },
-                { label: 'Show Lowest Price', value: firstPresent(rules.showLowestPrice, schedule.showLowestPrice, 'Yes') },
-                { label: 'Clarification Allowed', value: firstPresent(schedule.clarificationAllowed, rules.clarificationAllowed, 'Yes') },
-                { label: 'Minimum Bidders', value: firstPresent(rules.minimumBidders, schedule.minimumBidders, '3') },
-                { label: 'Pre-Bid Meeting', value: firstPresent(schedule.preBidMeeting, schedule.preBidMeetingDate, 'No') },
-              ]}
-            />
-            {(payload.limitedTenderJustification || rules.limitedTenderJustification) && (
-              <div className="rounded-xl border-l-4 border-amber-500 bg-amber-50/60 p-3.5 border border-amber-200/80 text-xs font-semibold text-amber-900">
-                <span className="font-black uppercase tracking-wider block text-[10px] text-amber-700 mb-0.5">Tender Justification:</span>
-                {payload.limitedTenderJustification || rules.limitedTenderJustification}
-              </div>
-            )}
-          </div>
-        </div>
-      </DataCard>
-
-      <DataCard title="Commercial & Payment Terms" icon={IndianRupee}>
-        <PropertyGrid columns={3}>
-          {/* Payment Terms and Delivery Terms commented out as they already appear in Terms & Conditions */}
-          {/* <PropertyItem label="Payment Terms" value={paymentTerms} /> */}
-          {/* <PropertyItem label="Delivery Terms" value={deliveryTerms} /> */}
-          {/* Contract Period commented out / hidden on buyer side and RFQ/RFP/Rate Contract globally */}
-          {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
-            <PropertyItem label="Contract Period" value={firstPresent(terms.contractPeriod, terms.projectDuration, projectDuration)} />
-          )}
-          {/* Retention Amount & Security Deposit commented out / hidden on buyer side */}
-          {/* Warranty Terms strictly commented out / hidden on buyer side in open tender */}
-          <PropertyItem label="Terms & Conditions" value={cleanBuyerTerms(terms.termsAndConditions || terms.terms || payload.terms)} fullWidth />
-          <PropertyItem label="Eligibility Criteria" value={cleanBuyerTerms(terms.eligibilityCriteria || basics.eligibilityCriteria || payload.eligibility)} fullWidth />
-        </PropertyGrid>
-      </DataCard>
-
-      <ConsigneeTableList
-        data={consigneeDetails}
-        deliveryLocation={deliveryLocation}
-        deliveryTerms={deliveryTerms}
-        isBuyerSide={isBuyerSide}
-        isBuyerRfq={isBuyerRfq}
-        isRfqType={isRfqType}
-        isRfpType={isRfpType}
-        isRateContractType={isRateContractType}
-      />
-    </div>
-  )
-}
-
-{/* Tab 4: Evaluation & Controls */ }
-{
-  activeTab === 'evaluation' && (
-    <div className="space-y-5">
-      <DataCard title="Evaluation Overview & Method" icon={ClipboardCheck}>
-        <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
-          <PropertyGrid columns={4}>
-            <PropertyItem label="Evaluation Method" value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')} highlight />
-            {requireDemo && requireDemo !== 'No' && <PropertyItem label="Require Demo" value={formatPrimitiveValue(requireDemo)} />}
-            {hasDetailData(qcbsRatio) && <PropertyItem label="QCBS Ratio" value={qcbsRatio} />}
-            {hasDetailData(passingScore) && <PropertyItem label="Passing Score" value={passingScore} />}
-          </PropertyGrid>
-        </div>
-      </DataCard>
-
-      {hasExplicitTechCriteria && (
-        <TechnicalCriteriaTableList data={technicalCriteria} />
-      )}
-
-      {hasDetailData(questionnaireData) && (
-        <CompactSectionGrid
-          title="Questionnaire & Technical Form"
-          icon={ClipboardList}
-          data={compactObject({ questionnaire: questionnaireData })}
-          defaultOpen={true}
-        />
-      )}
-
-      <DataCard title="Supplier & Approval Controls" icon={Users}>
-        <div className="space-y-5">
-          <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
-            <PropertyGrid columns={3}>
-              <PropertyItem label="Selection Mode" value={vendors.selection || payload.selectionMode || rules.selectionMode || 'Open'} />
-              <PropertyItem label="Invite Count" value={String(effectiveInviteCount)} />
-              <PropertyItem label="Workflow" value={approval.workflow || payload.workflow || 'Finance + Procurement'} />
-            </PropertyGrid>
-          </div>
-
-          <div className="space-y-2.5 pt-1">
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              Vendor Preferences &amp; Eligibility Controls
-            </h3>
-            <PolicyRulesMatrix
-              rules={[
-                { label: 'MSME Preference', value: (vendors.msmePreference !== undefined ? vendors.msmePreference : payload.msmePreference) !== undefined ? ((vendors.msmePreference ?? payload.msmePreference) ? 'Yes' : 'No') : 'Yes' },
-                { label: 'Exclude Blacklisted', value: (vendors.excludeBlacklisted !== undefined ? vendors.excludeBlacklisted : payload.excludeBlacklisted) !== undefined ? ((vendors.excludeBlacklisted ?? payload.excludeBlacklisted) ? 'Yes' : 'No') : 'Yes' },
-                { label: 'Local Vendor Preference', value: (vendors.localVendorPreference !== undefined ? vendors.localVendorPreference : payload.localVendorPreference) !== undefined ? ((vendors.localVendorPreference ?? payload.localVendorPreference) ? 'Yes' : 'No') : 'Yes' },
-              ]}
-            />
-          </div>
-
-          {(approval.notes || payload.approvalNotes) && isBuyerOrAdmin && (
-            <div className="rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Approval Notes:</span>
-              <p className="text-xs font-semibold text-slate-700">{approval.notes || payload.approvalNotes}</p>
-            </div>
-          )}
-        </div>
-      </DataCard>
-    </div>
-  )
-}
-
-{/* Tab 5: Clarifications & Proposals */ }
-{
-  activeTab === 'clarifications' && (
-    <div className="space-y-4">
-      {/* Live Reverse Auction Leaderboard for Buyer */}
-      {isBuyerOrAdmin && linkedAuction && ['LIVE', 'PAUSED', 'CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
-        <LiveAuctionLeaderboard
-          auctionId={linkedAuction.id}
-          onAuctionClosed={() => linkedAuctionQuery.refetch()}
-          onPoGenerated={() => linkedAuctionQuery.refetch()}
-        />
-      )}
-
-      {isBuyerOrAdmin && (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs space-y-3.5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xs sm:text-[13px] font-bold text-slate-900 tracking-tight">{isRfqType ? 'Seller Submitted Quotations' : 'Seller Proposals & Submitted Quotations'}</h3>
-                <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[9.5px] font-bold text-blue-700">
-                  {submittedParticipations.length} {submittedParticipations.length === 1 ? (isRfqType ? 'Quotation' : 'Proposal') : (isRfqType ? 'Quotations' : 'Proposals')} Received
-                </span>
-              </div>
-              <p className="text-[11px] font-normal text-slate-500 mt-0.5">
-                {isRfqType
-                  ? 'Review seller quotation details, financial quotes, line item rates, and attached technical specifications.'
-                  : 'Review seller proposal details, financial quotes, line item rates, and attached technical specifications.'}
-              </p>
-            </div>
-
-            {/* Start Reverse Auction Button */}
-            <div className="flex flex-wrap items-center gap-2">
-              {(!linkedAuction || ['DRAFT', 'CANCELLED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase())) && submittedParticipations.length > 0 && (
+              )}
+              {props.onCancelClick && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={props.onCancelClick}
+                  className="h-9 px-3.5 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
+                >
+                  <Ban className="h-3.5 w-3.5 text-rose-600" />
+                  {props.cancelButtonLabel || 'Cancel Procurement'}
+                </Button>
+              )}
+              {props.onSubmitClick && (
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => setIsStartAuctionModalOpen(true)}
-                  className="h-7.5 gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-2xs rounded-lg px-3"
+                  onClick={handleActionSubmit}
+                  className={cn(
+                    'h-8 px-3.5 text-white text-xs font-bold rounded-lg bg-[#0b2447] hover:bg-[#12335f] cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5',
+                    isEmdGated ? 'bg-amber-600 hover:bg-amber-700' : ''
+                  )}
                 >
-                  <Gavel className="h-3 w-3" />
-                  <span>Start Reverse Auction</span>
+                  <span>{isEmdGated ? 'Pay EMD to Submit' : (props.submitButtonLabel || defaultSubmitBtnLabel)}</span>
+                  <ArrowRight className="h-3 w-3" />
                 </Button>
               )}
             </div>
           </div>
+        </header>
 
-          {submittedParticipations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-7 px-4 text-center">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-2">
-                <Users className="h-4.5 w-4.5" />
-              </div>
-              <h4 className="text-xs font-bold text-slate-700">{isRfqType ? 'No seller quotations submitted yet' : 'No seller proposals submitted yet'}</h4>
-              <p className="text-[11px] font-normal text-slate-400 max-w-sm mt-0.5">
-                {isRfqType
-                  ? 'As soon as suppliers submit their quotations for this RFQ, their responses will appear here for your review.'
-                  : 'As soon as suppliers submit their technical and financial proposals for this procurement, their quotations will appear here for your review.'}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-xs">
-                  <thead className="bg-slate-50/80 border-b border-slate-200">
-                    <tr className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
-                      <th className="px-3 py-2">Supplier Organization</th>
-                      <th className="px-3 py-2">Quoted Amount (INR)</th>
-                      <th className="px-3 py-2">Offered Qty & Delivery</th>
-                      <th className="px-3 py-2">Submitted At</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                    {submittedParticipations.map((participation: any, idx: number) => {
-                      const sellerOrgName = participation.sellerOrgName
-                        || participation.sellerOrganization?.organizationName
-                        || participation.seller?.sellerProfile?.organizationName
-                        || participation.seller?.organization?.organizationName
-                        || participation.sellerProfile?.organizationName
-                        || participation.companyName
-                        || participation.sellerName
-                        || participation.seller?.name
-                        || participation.sellerUser?.name
-                        || (participation.sellerId || participation.sellerUserId || (participation.id && !String(participation.id).startsWith('id-'))
-                          ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
-                          : `Supplier ${idx + 1}`);
-                      const contactName = participation.sellerName || participation.contactPerson || participation.seller?.name || participation.sellerUser?.name || '';
-                      const amount = Number(participation.totalAmount || participation.quotedAmount || participation.offeredPrice || 0);
-                      const qty = participation.offeredQuantity || participation.quantity || 'Specified Qty';
-                      const delivery = participation.deliveryTimeline || participation.responseData?.deliveryTimeline || 'Standard';
-                      const dateStr = formatDateString(participation.submittedAt || participation.updatedAt || participation.createdAt, true);
-                      const statusLabel = participation.submissionStatus || participation.status || 'Submitted';
+        {/* EMD Section commented out */}
 
-                      return (
-                        <tr key={participation.id || participation.sellerId || `quotation-row-${idx}`} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="px-3 py-2">
-                            <p className="font-bold text-slate-950 text-xs">{sellerOrgName}</p>
-                            {contactName && contactName !== sellerOrgName && (
-                              <p className="text-[10px] font-normal text-slate-400">Contact: {contactName}</p>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className="font-bold text-slate-900 text-xs">
-                              {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : 'Sealed / Rates On File'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-slate-600">
-                            <p className="font-semibold text-xs">{qty}</p>
-                            <p className="text-[10px] font-normal text-slate-400">{delivery}</p>
-                          </td>
-                          <td className="px-3 py-2 text-slate-500 font-normal">{dateStr}</td>
-                          <td className="px-3 py-2">
-                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9.5px] font-bold uppercase text-emerald-800">
-                              {statusLabel}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => router.push(`/bids/${targetId}/results`)}
-                              className="h-7.5 px-2.5 gap-1 text-[11px] font-bold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
-                            >
-                              <Eye className="h-3 w-3" />
-                              Review Quotation
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+        {/* Summary Metrics */}
+        <section className={cn('grid gap-2.5 sm:gap-3', summaryCards.length === 6 ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5')}>
+          {summaryCards.map(card => (
+            <MetricCard key={card.label} {...card} isBuyer={isBuyerSide} />
+          ))}
         </section>
-      )}
 
-      {/* Quotation Review Modal Renderer */}
-      {selectedQuotationForReview && (
-        <SellerQuotationReviewModal
-          isOpen={Boolean(selectedQuotationForReview)}
-          onClose={() => setSelectedQuotationForReview(null)}
-          participation={selectedQuotationForReview}
-          procurementTitle={props.subject || props.procurementLabel}
-          targetId={targetId}
-          router={router}
-        />
-      )}
+        {/* Tab Navigation Bar */}
+        <nav className="flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  'flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all',
+                  isActive
+                    ? 'bg-slate-950 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{tab.label}</span>
+                {tab.count !== undefined && tab.count > 0 && (
+                  <span className={cn(
+                    'rounded-full px-1.5 py-0.2 text-[9px] font-bold',
+                    isActive ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'
+                  )}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
 
-      {/* Select Quotations to Compare Modal */}
-      {isCompareChooserOpen && (
-        <SelectQuotationsToCompareModal
-          isOpen={isCompareChooserOpen}
-          onClose={() => setIsCompareChooserOpen(false)}
-          participations={submittedParticipations}
-          onConfirmCompare={(selectedIds) => {
-            setSelectedCompareIds(selectedIds);
-            setIsCompareChooserOpen(false);
-            setIsComparisonModalOpen(true);
-          }}
-        />
-      )}
+        {/* Tab 1: Overview & Dates */}
+        {activeTab === 'overview' && (
+          <div className="space-y-5">
+            <div className="grid gap-5 lg:grid-cols-2">
+              <DataCard title={`Buyer ${procurementTypeLabel} Information`} icon={ClipboardList}>
+                <PropertyGrid columns={2}>
+                  <PropertyItem label="Procurement Method" value={procurementMethod} />
+                  <PropertyItem label="Buying Type" value={buyingType} />
+                  <PropertyItem label="Category" value={category} />
+                  {/* Sub Category - displayed if exists */}
+                  {subCategory && (
+                    <PropertyItem label="Sub Category" value={subCategory} />
+                  )}
+                  <PropertyItem label="Published Date" value={publishedDateFormatted} />
+                  <PropertyItem label="Submission Deadline" value={closingDateFormatted} />
+                  {/* Delivery Location - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
+                  {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
+                    <PropertyItem label="Delivery Location" value={deliveryLocation} />
+                  )}
+                  {/* Project Duration - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
+                  {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
+                    <PropertyItem label="Project Duration" value={projectDuration} />
+                  )}
+                  {/* Payment Terms - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
+                  {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
+                    <PropertyItem label="Payment Terms" value={paymentTerms} />
+                  )}
+                  {/* Procurement Brief - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
+                  {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
+                    <PropertyItem label="Procurement Brief" value={props.description && props.description.length < 160 && !props.description.includes('\n') ? props.description : (basics.description && basics.description.length < 160 ? basics.description : `${resolvedSubject} (${category})`)} fullWidth />
+                  )}
+                </PropertyGrid>
+              </DataCard>
 
-      {/* Quotation Comparison Matrix Modal Renderer */}
-      {isComparisonModalOpen && (
-        <QuotationComparisonModal
-          isOpen={isComparisonModalOpen}
-          onClose={() => setIsComparisonModalOpen(false)}
-          participations={submittedParticipations}
-          initialSelectedSellerIds={selectedCompareIds}
-          procurementTitle={props.subject || props.procurementLabel}
-          targetId={targetId}
-          router={router}
-          onSelectQuotationReview={(p) => setSelectedQuotationForReview(p)}
-        />
-      )}
+              <BuyerProfileSection
+                orgName={buyerOrgName}
+                contactPerson={contactPerson}
+                email={email}
+                phone={phone}
+                address={buyerAddress}
+                department={department}
+              />
+            </div>
 
-      {/* Start Reverse Auction Modal */}
-      {isStartAuctionModalOpen && (
-        <StartReverseAuctionModal
-          isOpen={isStartAuctionModalOpen}
-          onClose={() => setIsStartAuctionModalOpen(false)}
-          procurementId={targetId}
-          procurementTitle={resolvedSubject}
-          initialLowestQuote={
-            submittedParticipations.length
-              ? Math.min(
-                ...submittedParticipations
-                  .map((p: any) => Number(p.totalAmount || p.quotedAmount || p.offeredPrice || Infinity))
-                  .filter((q: number) => q > 0 && q < Infinity)
-              )
-              : undefined
-          }
-          submittedVendors={submittedParticipations.map((p: any, idx: number) => ({
-            sellerOrgId: p.sellerOrgId || p.sellerOrganization?.id || p.seller?.organizationId,
-            sellerUserId: p.sellerUserId || p.sellerId || p.seller?.id,
-            sellerId: p.sellerId || p.sellerUserId,
-            vendorName:
-              p.sellerOrgName ||
-              p.sellerOrganization?.organizationName ||
-              p.seller?.sellerProfile?.organizationName ||
-              p.seller?.name ||
-              `Supplier ${idx + 1}`,
-            quotedAmount: Number(p.totalAmount || p.quotedAmount || p.offeredPrice || 0),
-            offeredQty: p.offeredQuantity || p.quantity,
-            deliveryTimeline: p.deliveryTimeline,
-          }))}
-          onAuctionStarted={() => {
-            linkedAuctionQuery.refetch();
-          }}
-        />
-      )}
-
-      {
-        /* Determine clarification kind: Rate Contract and Limited Tender typically use requirement-based clarifications */
-        (() => {
-          const clarKind = props.clarificationKind
-            ?? (props.procurementType === 'RATE_CONTRACT' || props.procurementType === 'LIMITED_TENDER' ? 'requirement' : 'quote-request');
-          const clarId = props.clarificationEntityId ?? targetId;
-          return (
-            <ClarificationPanel
-              quoteRequestId={clarId}
-              kind={clarKind}
-              role={currentUser?.role === 'buyer' ? 'buyer' : 'seller'}
-              deadlinePassed={Boolean(props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs)}
-              procurementLabel={props.procurementLabel || procurementTypeLabel}
+            <TimelineRibbon
+              dates={[
+                { label: 'Published', value: publishedDateFormatted, icon: Calendar, tone: 'emerald' },
+                { label: 'Clarification', value: clarificationDateFormatted, icon: Info, tone: 'sky' },
+                { label: 'Submission', value: closingDateFormatted, icon: Clock, tone: 'rose' },
+                { label: 'Technical Opening', value: technicalDateFormatted, icon: ClipboardCheck, tone: 'indigo' },
+                { label: 'Financial Opening', value: financialDateFormatted, icon: IndianRupee, tone: 'amber' },
+                { label: 'Award Status', value: awardDateFormatted, icon: ShieldCheck, tone: 'slate' },
+              ]}
             />
-          );
-        })()
-      }
-    </div>
-  )
-}
 
-{/* EMD Payment Modal commented out */ }
-      </div >
-
-  {/* Sticky Bottom Action Dock for B2B Power-Users */ }
-  < div className = "sticky bottom-0 z-40 border-t border-slate-200/80 bg-white/95 p-2.5 sm:p-3 shadow-lg backdrop-blur-md" >
-    <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4">
-      <div className="flex items-center gap-4 text-xs font-semibold text-slate-700">
-        <div>
-          <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Estimated Value</span>
-          <span className="text-xs sm:text-sm font-bold text-slate-900">{formatMoney(props.estimatedValue)}</span>
-        </div>
-        {props.deadlineDate && (
-          <div className="hidden sm:block border-l border-slate-200 pl-4">
-            <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Closing Date</span>
-            <span className="text-xs font-semibold text-slate-800">{formatDateString(props.deadlineDate, false)}</span>
+            {/* Clarification Threads & Status grid - hidden on buyer side, and RFQ, RFP, Rate Contract */}
+            {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && !isBuyerOpenTender && !isBuyerLimitedTender && (
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
+                <PropertyGrid columns={4}>
+                  <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
+                  <PropertyItem label={isRfqType ? 'Quotation Status' : 'Proposal Status'} value={proposalStatusDisplay} />
+                  <PropertyItem label="Deadline Status" value={props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs ? 'Closed' : 'Open'} />
+                  <PropertyItem label="Source Record" value={procurementTypeLabel} />
+                </PropertyGrid>
+              </div>
+            )}
           </div>
         )}
+
+        {/* Tab 2: Scope & Documents */}
+        {activeTab === 'scope_docs' && (
+          <div className="space-y-5">
+            <DataCard title={`${procurementTypeLabel} Scope & Sourcing Summary`} icon={FileText}>
+              <ScopeSummaryCard
+                scopeText={scopeText}
+                procurementTypeLabel={procurementTypeLabel}
+                estimatedValue={props.estimatedValue}
+                urgency={payload.urgency || rules.urgency || 'Normal'}
+                procurementMethod={procurementMethod}
+              />
+
+              {/* Service Details & Parameters - hidden globally on RFQ, and on buyer side for Open & Limited Tender */}
+              {hasDetailData(serviceDetails) && !isRfqType && !isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
+                <ServiceDetailsSection serviceDetails={serviceDetails} isRfqType={isRfqType} />
+              )}
+
+              {hasDetailData(lineItems) && (
+                <LineItemsTable items={lineItems} defaultSubject={resolvedSubject} isBuyer={isBuyerSide} />
+              )}
+
+              {/* BOQ Table - hidden on buyer side, RFQ, and Rate Contract */}
+              {hasDetailData(boqTable) && !isBuyerSide && !isRfqType && !isRateContractType && (
+                <BoqTableList data={boqTable} defaultSubject={resolvedSubject} defaultCategory={category} defaultEstimatedValue={props.estimatedValue} />
+              )}
+            </DataCard>
+
+            {(() => {
+              const validDownloadableDocs = documents.filter(doc => doc && (doc.fileAssetId || doc.url));
+
+              return (
+                <div className="space-y-5">
+                  {validDownloadableDocs.length > 0 && (
+                    <DataCard title={`${procurementTypeLabel} Attached Documents`} icon={FileSpreadsheet}>
+                      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                        {validDownloadableDocs.map((doc, index) => {
+                          const isGenericName = !doc.name || doc.name.toLowerCase().startsWith('attached_doc');
+                          const docDisplayName = isGenericName
+                            ? (doc.meta || `${procurementTypeLabel} Document ${index + 1}`)
+                            : doc.name;
+
+                          return (
+                            <article key={doc.id ? `doc-${doc.id}-${index}` : `doc-idx-${index}`} className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 shadow-xs flex flex-col justify-between hover:bg-slate-50 transition-colors">
+                              <div className="flex items-start gap-3">
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                  <FileText className="h-5 w-5" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="break-words text-xs font-bold text-slate-900 leading-snug">{docDisplayName}</p>
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                    <span className={cn(
+                                      'rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
+                                      doc.required ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-600'
+                                    )}>
+                                      {doc.required ? 'Required' : doc.meta || 'Document'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (doc.fileAssetId || doc.url) {
+                                    openFileAsset({ fileAssetId: doc.fileAssetId, url: doc.url, originalName: docDisplayName }, docDisplayName);
+                                  }
+                                }}
+                                disabled={!doc.fileAssetId && !doc.url}
+                                className="mt-3.5 w-full text-xs h-8.5 rounded-lg border-slate-250 bg-white hover:bg-slate-100 font-bold"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                                Open Document
+                              </Button>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </DataCard>
+                  )}
+
+                  <RequiredDocumentsList data={requiredDocuments} />
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Tab 3: Terms & Schedule */}
+        {activeTab === 'terms_schedule' && (
+          <div className="space-y-5">
+            <DataCard title={`${procurementTypeLabel} Schedule & Rules`} icon={CalendarDays}>
+              <div className="space-y-5">
+                <div className="space-y-2.5">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <Calendar className="h-4 w-4 text-indigo-600" />
+                    Milestones &amp; Critical Dates
+                  </h3>
+                  <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+                    <PropertyGrid columns={3}>
+                      <PropertyItem label="Publish Date" value={publishedDateFormatted} />
+                      <PropertyItem label="Submission Start Date" value={submissionStartDateFormatted} />
+                      <PropertyItem label="Clarification Deadline" value={firstPresent(schedule.clarificationDeadline, schedule.clarificationEndDate, clarificationDeadlineFormatted, props.clarificationDate)} />
+                      <PropertyItem label="Submission Deadline" value={closingDateFormatted} highlight />
+                      <PropertyItem label="Technical Opening Date" value={firstPresent(schedule.technicalOpeningDate, tender.technicalEvaluationDate, props.technicalOpeningDate, technicalDateFormatted)} />
+                      <PropertyItem label="Financial Opening Date" value={firstPresent(schedule.financialOpeningDate, tender.financialEvaluationDate, props.financialOpeningDate, financialDateFormatted)} />
+                      <PropertyItem label="Bid Validity Date" value={firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline, bidValidityDateFormatted)} />
+                      <PropertyItem label="Validity Days" value={validityDaysDisplay} />
+                      {requiredByDateFormatted && (
+                        <PropertyItem label="Required By Date" value={requiredByDateFormatted} />
+                      )}
+                      {preBidDateFormatted && (
+                        <PropertyItem label="Pre-Bid Meeting Date" value={preBidDateFormatted} />
+                      )}
+                      {awardDateFormatted && awardDateFormatted !== 'N/A' && (
+                        <PropertyItem label="Expected Award Date" value={awardDateFormatted} />
+                      )}
+                    </PropertyGrid>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5 pt-2">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                    Bidding Rules &amp; Policy Matrix
+                  </h3>
+                  <PolicyRulesMatrix
+                    rules={[
+                      { label: 'Auto Close', value: firstPresent(rules.autoClose, schedule.autoClose, 'Yes') },
+                      { label: 'Allow Revision', value: firstPresent(rules.allowRevision, schedule.allowRevision, 'Yes') },
+                      { label: 'Show Seller Rank', value: firstPresent(rules.showSellerRank, schedule.showSellerRank, 'Yes') },
+                      { label: 'Allow Withdrawal', value: firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal, 'Yes') },
+                      { label: 'Show Lowest Price', value: firstPresent(rules.showLowestPrice, schedule.showLowestPrice, 'Yes') },
+                      { label: 'Clarification Allowed', value: firstPresent(schedule.clarificationAllowed, rules.clarificationAllowed, 'Yes') },
+                      { label: 'Minimum Bidders', value: firstPresent(rules.minimumBidders, schedule.minimumBidders, '3') },
+                      { label: 'Pre-Bid Meeting', value: firstPresent(schedule.preBidMeeting, schedule.preBidMeetingDate, 'No') },
+                    ]}
+                  />
+                  {(payload.limitedTenderJustification || rules.limitedTenderJustification) && (
+                    <div className="rounded-xl border-l-4 border-amber-500 bg-amber-50/60 p-3.5 border border-amber-200/80 text-xs font-semibold text-amber-900">
+                      <span className="font-black uppercase tracking-wider block text-[10px] text-amber-700 mb-0.5">Tender Justification:</span>
+                      {payload.limitedTenderJustification || rules.limitedTenderJustification}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </DataCard>
+
+            <DataCard title="Commercial & Payment Terms" icon={IndianRupee}>
+              <PropertyGrid columns={3}>
+                {/* Payment Terms and Delivery Terms commented out as they already appear in Terms & Conditions */}
+                {/* <PropertyItem label="Payment Terms" value={paymentTerms} /> */}
+                {/* <PropertyItem label="Delivery Terms" value={deliveryTerms} /> */}
+                {/* Contract Period commented out / hidden on buyer side and RFQ/RFP/Rate Contract globally */}
+                {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
+                  <PropertyItem label="Contract Period" value={firstPresent(terms.contractPeriod, terms.projectDuration, projectDuration)} />
+                )}
+                {/* Retention Amount & Security Deposit commented out / hidden on buyer side */}
+                {/* Warranty Terms strictly commented out / hidden on buyer side in open tender */}
+                <PropertyItem label="Terms & Conditions" value={cleanBuyerTerms(terms.termsAndConditions || terms.terms || payload.terms)} fullWidth />
+                <PropertyItem label="Eligibility Criteria" value={cleanBuyerTerms(terms.eligibilityCriteria || basics.eligibilityCriteria || payload.eligibility)} fullWidth />
+              </PropertyGrid>
+            </DataCard>
+
+            <ConsigneeTableList
+              data={consigneeDetails}
+              deliveryLocation={deliveryLocation}
+              deliveryTerms={deliveryTerms}
+              isBuyerSide={isBuyerSide}
+              isBuyerRfq={isBuyerRfq}
+              isRfqType={isRfqType}
+              isRfpType={isRfpType}
+              isRateContractType={isRateContractType}
+            />
+          </div>
+        )}
+
+        {/* Tab 4: Evaluation & Controls */}
+        {activeTab === 'evaluation' && (
+          <div className="space-y-5">
+            <DataCard title="Evaluation Overview & Method" icon={ClipboardCheck}>
+              <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+                <PropertyGrid columns={4}>
+                  <PropertyItem label="Evaluation Method" value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')} highlight />
+                  {requireDemo && requireDemo !== 'No' && <PropertyItem label="Require Demo" value={formatPrimitiveValue(requireDemo)} />}
+                  {hasDetailData(qcbsRatio) && <PropertyItem label="QCBS Ratio" value={qcbsRatio} />}
+                  {hasDetailData(passingScore) && <PropertyItem label="Passing Score" value={passingScore} />}
+                </PropertyGrid>
+              </div>
+            </DataCard>
+
+            {hasExplicitTechCriteria && (
+              <TechnicalCriteriaTableList data={technicalCriteria} />
+            )}
+
+            {hasDetailData(questionnaireData) && (
+              <CompactSectionGrid
+                title="Questionnaire & Technical Form"
+                icon={ClipboardList}
+                data={compactObject({ questionnaire: questionnaireData })}
+                defaultOpen={true}
+              />
+            )}
+
+            <DataCard title="Supplier & Approval Controls" icon={Users}>
+              <div className="space-y-5">
+                <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+                  <PropertyGrid columns={3}>
+                    <PropertyItem label="Selection Mode" value={vendors.selection || payload.selectionMode || rules.selectionMode || 'Open'} />
+                    <PropertyItem label="Invite Count" value={String(effectiveInviteCount)} />
+                    <PropertyItem label="Workflow" value={approval.workflow || payload.workflow || 'Finance + Procurement'} />
+                  </PropertyGrid>
+                </div>
+
+                <div className="space-y-2.5 pt-1">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                    Vendor Preferences &amp; Eligibility Controls
+                  </h3>
+                  <PolicyRulesMatrix
+                    rules={[
+                      { label: 'MSME Preference', value: (vendors.msmePreference !== undefined ? vendors.msmePreference : payload.msmePreference) !== undefined ? ((vendors.msmePreference ?? payload.msmePreference) ? 'Yes' : 'No') : 'Yes' },
+                      { label: 'Exclude Blacklisted', value: (vendors.excludeBlacklisted !== undefined ? vendors.excludeBlacklisted : payload.excludeBlacklisted) !== undefined ? ((vendors.excludeBlacklisted ?? payload.excludeBlacklisted) ? 'Yes' : 'No') : 'Yes' },
+                      { label: 'Local Vendor Preference', value: (vendors.localVendorPreference !== undefined ? vendors.localVendorPreference : payload.localVendorPreference) !== undefined ? ((vendors.localVendorPreference ?? payload.localVendorPreference) ? 'Yes' : 'No') : 'Yes' },
+                    ]}
+                  />
+                </div>
+
+                {(approval.notes || payload.approvalNotes) && isBuyerOrAdmin && (
+                  <div className="rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Approval Notes:</span>
+                    <p className="text-xs font-semibold text-slate-700">{approval.notes || payload.approvalNotes}</p>
+                  </div>
+                )}
+              </div>
+            </DataCard>
+          </div>
+        )}
+
+        {/* Tab 5: Clarifications & Proposals */}
+        {activeTab === 'clarifications' && (
+          <div className="space-y-4">
+            {/* Live Reverse Auction Leaderboard for Buyer */}
+            {isBuyerOrAdmin && linkedAuction && ['LIVE', 'PAUSED', 'CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
+              <LiveAuctionLeaderboard
+                auctionId={linkedAuction.id}
+                onAuctionClosed={() => linkedAuctionQuery.refetch()}
+                onPoGenerated={() => linkedAuctionQuery.refetch()}
+              />
+            )}
+
+            {isBuyerOrAdmin && (
+              <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs sm:text-[13px] font-bold text-slate-900 tracking-tight">{isRfqType ? 'Seller Submitted Quotations' : 'Seller Proposals & Submitted Quotations'}</h3>
+                      <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[9.5px] font-bold text-blue-700">
+                        {submittedParticipations.length} {submittedParticipations.length === 1 ? (isRfqType ? 'Quotation' : 'Proposal') : (isRfqType ? 'Quotations' : 'Proposals')} Received
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-normal text-slate-500 mt-0.5">
+                      {isRfqType
+                        ? 'Review seller quotation details, financial quotes, line item rates, and attached technical specifications.'
+                        : 'Review seller proposal details, financial quotes, line item rates, and attached technical specifications.'}
+                    </p>
+                  </div>
+
+                  {/* Start Reverse Auction Button */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(!linkedAuction || ['DRAFT', 'CANCELLED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase())) && submittedParticipations.length > 0 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsStartAuctionModalOpen(true)}
+                        className="h-7.5 gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-2xs rounded-lg px-3"
+                      >
+                        <Gavel className="h-3 w-3" />
+                        <span>Start Reverse Auction</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {submittedParticipations.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-7 px-4 text-center">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-2">
+                      <Users className="h-4.5 w-4.5" />
+                    </div>
+                    <h4 className="text-xs font-bold text-slate-700">{isRfqType ? 'No seller quotations submitted yet' : 'No seller proposals submitted yet'}</h4>
+                    <p className="text-[11px] font-normal text-slate-400 max-w-sm mt-0.5">
+                      {isRfqType
+                        ? 'As soon as suppliers submit their quotations for this RFQ, their responses will appear here for your review.'
+                        : 'As soon as suppliers submit their technical and financial proposals for this procurement, their quotations will appear here for your review.'}
+                    </p>
+                  </div>
+                ) : (
+                  <DataTable<any>
+                    data={submittedParticipations}
+                    columns={quotationListColumns}
+                    keyExtractor={(participation, idx) => String(participation.id || participation.sellerId || idx)}
+                    showSrNo={false}
+                    minWidth="min-w-[760px]"
+                    emptyTitle={isRfqType ? 'No seller quotations submitted yet' : 'No seller proposals submitted yet'}
+                    emptyDescription={isRfqType
+                      ? 'As soon as suppliers submit their quotations for this RFQ, their responses will appear here for your review.'
+                      : 'As soon as suppliers submit their technical and financial proposals for this procurement, their quotations will appear here for your review.'}
+                  />
+                )}
+              </section>
+            )}
+
+            {/* Quotation Review Modal Renderer */}
+            {selectedQuotationForReview && (
+              <SellerQuotationReviewModal
+                isOpen={Boolean(selectedQuotationForReview)}
+                onClose={() => setSelectedQuotationForReview(null)}
+                participation={selectedQuotationForReview}
+                procurementTitle={props.subject || props.procurementLabel}
+                targetId={targetId}
+                router={router}
+              />
+            )}
+
+            {/* Select Quotations to Compare Modal */}
+            {isCompareChooserOpen && (
+              <SelectQuotationsToCompareModal
+                isOpen={isCompareChooserOpen}
+                onClose={() => setIsCompareChooserOpen(false)}
+                participations={submittedParticipations}
+                onConfirmCompare={(selectedIds) => {
+                  setSelectedCompareIds(selectedIds);
+                  setIsCompareChooserOpen(false);
+                  setIsComparisonModalOpen(true);
+                }}
+              />
+            )}
+
+            {/* Quotation Comparison Matrix Modal Renderer */}
+            {isComparisonModalOpen && (
+              <QuotationComparisonModal
+                isOpen={isComparisonModalOpen}
+                onClose={() => setIsComparisonModalOpen(false)}
+                participations={submittedParticipations}
+                initialSelectedSellerIds={selectedCompareIds}
+                procurementTitle={props.subject || props.procurementLabel}
+                targetId={targetId}
+                router={router}
+                onSelectQuotationReview={(p) => setSelectedQuotationForReview(p)}
+              />
+            )}
+
+            {/* Start Reverse Auction Modal */}
+            {isStartAuctionModalOpen && (
+              <StartReverseAuctionModal
+                isOpen={isStartAuctionModalOpen}
+                onClose={() => setIsStartAuctionModalOpen(false)}
+                procurementId={targetId}
+                procurementTitle={resolvedSubject}
+                initialLowestQuote={
+                  submittedParticipations.length
+                    ? Math.min(
+                        ...submittedParticipations
+                          .map((p: any) => Number(p.totalAmount || p.quotedAmount || p.offeredPrice || Infinity))
+                          .filter((q: number) => q > 0 && q < Infinity)
+                      )
+                    : undefined
+                }
+                submittedVendors={submittedParticipations.map((p: any, idx: number) => ({
+                  sellerOrgId: p.sellerOrgId || p.sellerOrganization?.id || p.seller?.organizationId,
+                  sellerUserId: p.sellerUserId || p.sellerId || p.seller?.id,
+                  sellerId: p.sellerId || p.sellerUserId,
+                  vendorName:
+                    p.sellerOrgName ||
+                    p.sellerOrganization?.organizationName ||
+                    p.seller?.sellerProfile?.organizationName ||
+                    p.seller?.name ||
+                    `Supplier ${idx + 1}`,
+                  quotedAmount: Number(p.totalAmount || p.quotedAmount || p.offeredPrice || 0),
+                  offeredQty: p.offeredQuantity || p.quantity,
+                  deliveryTimeline: p.deliveryTimeline,
+                  makeBrand: p.makeBrand || p.brand || p.technicalDetails?.brand || p.quotationDetails?.makeBrand,
+                  model: p.model || p.technicalDetails?.model || p.quotationDetails?.model,
+                  technicalStatus: p.technicalStatus || (p.isDisqualified ? 'DISQUALIFIED' : 'QUALIFIED'),
+                  warranty: p.warranty || p.warrantyPeriod,
+                }))}
+                onAuctionStarted={() => {
+                  linkedAuctionQuery.refetch();
+                }}
+              />
+            )}
+
+            {
+              /* Determine clarification kind: Rate Contract and Limited Tender typically use requirement-based clarifications */
+              (() => {
+                const clarKind = props.clarificationKind
+                  ?? (props.procurementType === 'RATE_CONTRACT' || props.procurementType === 'LIMITED_TENDER' ? 'requirement' : 'quote-request');
+                const clarId = props.clarificationEntityId ?? targetId;
+                return (
+                  <ClarificationPanel
+                    quoteRequestId={clarId}
+                    kind={clarKind}
+                    role={currentUser?.role === 'buyer' ? 'buyer' : 'seller'}
+                    deadlinePassed={Boolean(props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs)}
+                    procurementLabel={props.procurementLabel || procurementTypeLabel}
+                  />
+                );
+              })()
+            }
+          </div>
+        )}
+
+        {/* EMD Payment Modal commented out */}
       </div>
 
-      <div className="flex items-center gap-2">
-        {(props.status === 'DRAFT' || props.status === 'Draft') && props.onSubmitClick ? (
-          <Button
-            type="button"
-            className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
-            onClick={props.onSubmitClick}
-          >
-            {props.submitButtonLabel || 'Continue Draft'}
-            <ArrowRight className="h-3 w-3 ml-0.5" />
-          </Button>
-        ) : isBuyerOrAdmin ? (
-          <Button
-            type="button"
-            className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
-            onClick={() => router.push(`/bids/${displayIdStr || targetId}/results`)}
-          >
-            {props.submitButtonLabel && !props.submitButtonLabel.toLowerCase().includes('submit') ? props.submitButtonLabel : 'View Evaluation & Results'}
-            <ArrowRight className="h-3 w-3 ml-0.5" />
-          </Button>
-        ) : props.onSubmitClick ? (
-          <Button
-            type="button"
-            className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
-            onClick={props.onSubmitClick}
-          >
-            {props.submitButtonLabel || 'Submit Proposal'}
-            <ArrowRight className="h-3 w-3 ml-0.5" />
-          </Button>
-        ) : null}
+      {/* Sticky Bottom Action Dock for B2B Power-Users */}
+      <div className="sticky bottom-0 z-40 border-t border-slate-200/80 bg-white/95 p-2.5 sm:p-3 shadow-lg backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4">
+          <div className="flex items-center gap-4 text-xs font-semibold text-slate-700">
+            <div>
+              <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Estimated Value</span>
+              <span className="text-xs sm:text-sm font-bold text-slate-900">{formatMoney(props.estimatedValue)}</span>
+            </div>
+            {props.deadlineDate && (
+              <div className="hidden sm:block border-l border-slate-200 pl-4">
+                <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Closing Date</span>
+                <span className="text-xs font-semibold text-slate-800">{formatDateString(props.deadlineDate, false)}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {(props.status === 'DRAFT' || props.status === 'Draft') && props.onSubmitClick ? (
+              <Button
+                type="button"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                onClick={props.onSubmitClick}
+              >
+                {props.submitButtonLabel || 'Continue Draft'}
+                <ArrowRight className="h-3 w-3 ml-0.5" />
+              </Button>
+            ) : isBuyerOrAdmin ? (
+              <Button
+                type="button"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                onClick={() => router.push(`/bids/${displayIdStr || targetId}/results`)}
+              >
+                {props.submitButtonLabel && !props.submitButtonLabel.toLowerCase().includes('submit') ? props.submitButtonLabel : 'View Evaluation & Results'}
+                <ArrowRight className="h-3 w-3 ml-0.5" />
+              </Button>
+            ) : props.onSubmitClick ? (
+              <Button
+                type="button"
+                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
+                onClick={props.onSubmitClick}
+              >
+                {props.submitButtonLabel || 'Submit Proposal'}
+                <ArrowRight className="h-3 w-3 ml-0.5" />
+              </Button>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
-      </div >
-    </div >
-    </BuyerSideContext.Provider >
+    </BuyerSideContext.Provider>
   );
 }
 
@@ -4454,6 +4070,69 @@ interface SellerQuotationReviewModalProps {
   targetId: string;
   router: any;
 }
+
+const reviewLineItemsColumns: ColumnDef<any>[] = [
+  {
+    key: 'itemName',
+    header: 'Line Item',
+    cell: (item, idx) => (
+      <div>
+        <span className="font-bold text-slate-900">{item.itemName || item.name || item.description || `Item #${idx + 1}`}</span>
+        {item.remarks && <p className="text-[10px] font-normal text-slate-400 mt-0.5">{item.remarks}</p>}
+      </div>
+    ),
+  },
+  {
+    key: 'makeBrand',
+    header: 'Make / Brand',
+    cell: (item) => <span className="text-slate-600">{item.makeBrand || item.brand || '—'}</span>,
+  },
+  {
+    key: 'quantity',
+    header: 'Qty',
+    align: 'right',
+    cell: (item) => {
+      const q = Number(item.quantity ?? item.qty ?? 1);
+      return (
+        <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200">
+          {q} <span className="text-[9px] font-semibold text-slate-500 uppercase">{item.unitOfMeasure || item.unit || 'Nos'}</span>
+        </span>
+      );
+    },
+  },
+  {
+    key: 'unitRate',
+    header: 'Unit Rate (₹)',
+    align: 'right',
+    cell: (item) => {
+      const uPrice = Number(item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0);
+      return <span className="tabular-nums font-bold">₹{uPrice.toLocaleString('en-IN')}</span>;
+    },
+  },
+  {
+    key: 'gst',
+    header: 'GST %',
+    align: 'right',
+    cell: (item) => {
+      const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
+      return <span className="tabular-nums text-slate-600">{gst}%</span>;
+    },
+  },
+  {
+    key: 'lineTotal',
+    header: 'Line Total (₹)',
+    align: 'right',
+    cell: (item) => {
+      const uPrice = Number(item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0);
+      const q = Number(item.quantity ?? item.qty ?? 1);
+      const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
+      const tot = item.lineTotal != null || item.totalAmount != null
+        ? Number(item.lineTotal ?? item.totalAmount)
+        : uPrice * q * (1 + gst / 100);
+      return <span className="font-black text-indigo-700 tabular-nums">₹{tot.toLocaleString('en-IN')}</span>;
+    },
+  },
+];
 
 export function SellerQuotationReviewModal({
   isOpen,
@@ -4499,11 +4178,7 @@ export function SellerQuotationReviewModal({
         : (Array.isArray(participation.acknowledgement?.lineItems)
           ? participation.acknowledgement.lineItems
           : [])));
-  const candidateAttach = participation.attachmentUrl || participation.responseData?.attachmentUrl;
-  const docs: any[] = [
-    ...(Array.isArray(participation.documents) ? participation.documents : (Array.isArray(participation.responseData?.documents) ? participation.responseData.documents : [])),
-    ...(candidateAttach ? [{ name: 'Supporting Document', fileName: candidateAttach.split('/').pop() || 'Supporting Document', fileUrl: candidateAttach }] : [])
-  ];
+  const docs: any[] = Array.isArray(participation.documents) ? participation.documents : (Array.isArray(participation.responseData?.documents) ? participation.responseData.documents : []);
   const message = participation.offeredItemDescription || participation.message || participation.responseData?.message || '';
 
   const handleDownloadQuotationPdf = () => {
@@ -4514,7 +4189,7 @@ export function SellerQuotationReviewModal({
       const doc = engine.generate({
         documentTitle: 'SUPPLIER QUOTATION RESPONSE',
         documentNumber: `QUOTE-${targetId}`,
-        dateStr: submittedAt ? new Date(submittedAt).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN'),
+        dateStr: formatDate(submittedAt || new Date()),
         status: statusStr,
         parties: [
           {
@@ -4529,7 +4204,7 @@ export function SellerQuotationReviewModal({
             phone: phone !== 'N/A' ? phone : undefined,
             details: [
               `Contact Person: ${contactPerson}`,
-              `Submitted Date: ${submittedAt ? new Date(submittedAt).toLocaleString('en-IN') : 'N/A'}`,
+              `Submitted Date: ${formatDateTime(submittedAt)}`,
             ],
           },
         ],
@@ -4671,9 +4346,8 @@ export function SellerQuotationReviewModal({
                 <IndianRupee className="h-4 w-4 text-slate-500" /> Commercial Terms
               </h4>
               <div className="text-xs space-y-1 text-slate-700 font-medium">
-                <p><span className="text-slate-400 font-bold">Terms & Conditions:</span> {participation.terms || participation.responseData?.terms || paymentTerms || 'Standard terms apply'}</p>
                 <p><span className="text-slate-400 font-bold">Payment Terms:</span> {paymentTerms}</p>
-                <p><span className="text-slate-400 font-bold">Submitted At:</span> {submittedAt ? new Date(submittedAt).toLocaleString() : 'N/A'}</p>
+                <p><span className="text-slate-400 font-bold">Submitted At:</span> {submittedAt ? formatDateTime(submittedAt) : '—'}</p>
                 {message && <p className="pt-1"><span className="text-slate-400 font-bold block">Supplier Remarks:</span> "{message}"</p>}
               </div>
             </div>
@@ -4685,59 +4359,25 @@ export function SellerQuotationReviewModal({
               <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
                 <Package className="h-4 w-4 text-slate-500" /> Quoted Line Items Breakdown
               </h4>
-              <div className="overflow-hidden rounded-xl border border-slate-200">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
-                    <tr>
-                      <th className="px-3 py-2">Line Item</th>
-                      <th className="px-3 py-2">Make / Brand</th>
-                      <th className="px-3 py-2 text-right">Qty</th>
-                      <th className="px-3 py-2 text-right">Unit Rate (₹)</th>
-                      <th className="px-3 py-2 text-right">GST %</th>
-                      <th className="px-3 py-2 text-right">Line Total (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {lineItems.map((item: any, idx: number) => {
-                      const uPrice = Number(item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0);
-                      const q = Number(item.quantity ?? item.qty ?? 1);
-                      const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
-                      const tot = item.lineTotal != null || item.totalAmount != null
-                        ? Number(item.lineTotal ?? item.totalAmount)
-                        : uPrice * q * (1 + gst / 100);
-                      return (
-                        <tr key={idx} className="hover:bg-slate-50/50 transition">
-                          <td className="px-3 py-2.5 text-slate-900 font-bold">
-                            {item.itemName || item.name || item.description || `Item #${idx + 1}`}
-                            {item.remarks && <p className="text-[10px] font-normal text-slate-400 mt-0.5">{item.remarks}</p>}
-                          </td>
-                          <td className="px-3 py-2.5 text-slate-600">{item.makeBrand || item.brand || '—'}</td>
-                          <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
-                            <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200">
-                              {q} <span className="text-[9px] font-semibold text-slate-500 uppercase">{item.unitOfMeasure || item.unit || 'Nos'}</span>
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums font-bold">₹{uPrice.toLocaleString('en-IN')}</td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{gst}%</td>
-                          <td className="px-3 py-2.5 text-right font-black text-indigo-700 tabular-nums">
-                            ₹{tot.toLocaleString('en-IN')}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot className="bg-slate-50 border-t border-slate-200">
-                    <tr>
-                      <td colSpan={5} className="px-3 py-2 text-right text-xs font-bold text-slate-600 uppercase tracking-wider">
-                        Total Quoted Value (incl. GST)
-                      </td>
-                      <td className="px-3 py-2 text-right text-sm font-black text-emerald-700 tabular-nums">
-                        {quotedAmount > 0 ? `₹${quotedAmount.toLocaleString('en-IN')}` : '—'}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+              <DataTable<any>
+                data={lineItems}
+                columns={reviewLineItemsColumns}
+                keyExtractor={(item, idx) => String(item.id || idx)}
+                showSrNo={false}
+                minWidth="min-w-[650px]"
+                emptyTitle="No line items"
+                emptyDescription="No line items attached."
+                footer={
+                  <tr>
+                    <td colSpan={5} className="px-3 py-2 text-right text-xs font-bold text-slate-600 uppercase tracking-wider">
+                      Total Quoted Value (incl. GST)
+                    </td>
+                    <td className="px-3 py-2 text-right text-sm font-black text-emerald-700 tabular-nums">
+                      {quotedAmount > 0 ? `₹${quotedAmount.toLocaleString('en-IN')}` : '—'}
+                    </td>
+                  </tr>
+                }
+              />
             </div>
           )}
 
@@ -5065,7 +4705,7 @@ export function QuotationComparisonModal({
                       const dt = r.submittedAt || r.createdAt || r.updatedAt;
                       return (
                         <td key={r.id || i} className="p-3.5 border-r border-slate-200 text-center text-slate-500 font-medium">
-                          {dt ? new Date(dt).toLocaleString() : 'N/A'}
+                          {dt ? formatDateTime(dt) : '—'}
                         </td>
                       );
                     })}
@@ -5283,3 +4923,4 @@ export function SelectQuotationsToCompareModal({
 }
 
 export { ProcurementDetailSkeleton } from '../../../components/ui/skeleton';
+

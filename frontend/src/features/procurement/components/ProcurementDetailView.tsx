@@ -20,6 +20,7 @@ import {
   CalendarDays,
   IndianRupee,
   Layers,
+  Ban,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
@@ -122,6 +123,15 @@ export const formatDisplayValue = (val: string, label?: string) => {
   return val;
 };
 
+export const isProcurementCancellable = (p: any): boolean => {
+  if (!p) return false;
+  const sGroup = String(p.statusGroup || '').toLowerCase();
+  const s = String(p.status || '').toLowerCase();
+  if (['cancelled', 'rejected', 'expired', 'voided', 'abandoned'].includes(sGroup) || ['cancelled', 'rejected'].includes(s)) return false;
+  if (['completed', 'awarded', 'converted_to_order', 'order_placed', 'po_generated', 'delivered', 'grn_completed', 'invoice_submitted', 'payment_completed'].includes(s) || sGroup === 'completed') return false;
+  return true;
+};
+
 /* ── Cart/Checkout Classification (Source of Truth) ── */
 export function isCartCheckoutProcurement(p: any): boolean {
   if (!p) return false;
@@ -182,11 +192,13 @@ export function ProcurementDetailView({
   procurement: p,
   onBack,
   onGoTo,
+  onCancel,
   breadcrumbParent = 'My Procurements',
 }: {
   procurement: any;
   onBack: () => void;
   onGoTo?: () => void;
+  onCancel?: (p: any) => void;
   breadcrumbParent?: string;
 }) {
   /* ── 1. Timeline Calculations (Guaranteed Order) ── */
@@ -320,10 +332,20 @@ export function ProcurementDetailView({
           </div>
 
           <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+            {onCancel && isProcurementCancellable(p) && (
+              <Button
+                type="button"
+                onClick={() => onCancel(p)}
+                className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold border border-rose-500/50 backdrop-blur-sm transition-all shadow-xs active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                {p.statusGroup === 'pending_approval' ? 'Withdraw Request' : 'Cancel Procurement'}
+              </Button>
+            )}
             <Button
               type="button"
               onClick={onBack}
-              className="h-9 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 backdrop-blur-sm transition-all shadow-xs active:scale-95"
+              className="h-9 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 backdrop-blur-sm transition-all shadow-xs active:scale-95 cursor-pointer"
             >
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back to List
             </Button>

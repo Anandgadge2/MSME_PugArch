@@ -235,15 +235,23 @@ export default function MarketplaceSellerStore() {
                 {/* Seller Hero Header */}
                 <section aria-label="Seller Information" className="bg-white border-b border-slate-200 shadow-2xs">
                     {/* Banner Area */}
-                    <div className="w-full h-28 sm:h-36 md:h-40 relative overflow-hidden bg-gradient-to-r from-[#07172e] via-[#0b2447] to-[#173a6b]">
+                    <div className="w-full h-44 sm:h-56 md:h-64 lg:h-72 relative overflow-hidden bg-gradient-to-r from-[#07172e] via-[#0b2447] to-[#173a6b]">
                         {vendor.bannerUrl ? (
-                            <img
-                                src={resolveMediaUrl(vendor.bannerUrl) || ''}
-                                alt={`${name} Store Banner`}
-                                referrerPolicy="no-referrer"
-                                crossOrigin="anonymous"
-                                className="w-full h-full object-cover"
-                            />
+                            <div className="relative w-full h-full overflow-hidden flex items-center justify-center">
+                                {/* Ambient backdrop so any aspect ratio fills wide desktop screens */}
+                                <img
+                                    src={resolveMediaUrl(vendor.bannerUrl) || ''}
+                                    alt=""
+                                    aria-hidden="true"
+                                    className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60 brightness-75 select-none pointer-events-none"
+                                />
+                                {/* Main banner: fully visible, sharp, uncropped */}
+                                <img
+                                    src={resolveMediaUrl(vendor.bannerUrl) || ''}
+                                    alt={`${name} Store Banner`}
+                                    className="relative z-1 max-h-full max-w-full object-contain object-center drop-shadow-md"
+                                />
+                            </div>
                         ) : (
                             <>
                                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_25%,rgba(59,130,246,0.18),transparent_50%)]" />
@@ -251,7 +259,7 @@ export default function MarketplaceSellerStore() {
                                 <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]" />
                             </>
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/20 to-transparent" />
+                        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950/40 to-transparent pointer-events-none" />
 
                         {/* Back Button overlay */}
                         <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-10">

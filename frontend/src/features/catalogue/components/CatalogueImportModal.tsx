@@ -6,6 +6,7 @@ import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
 import { catalogueApi, downloadCatalogueFile, type ImportPreviewResult } from '../api';
+import { DataTable } from '../../../components/ui/data-table';
 
 type ImportKind = 'product' | 'service';
 
@@ -312,25 +313,40 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
                       <Download className="mr-1 h-3 w-3" /> Download Error Report (.xlsx)
                     </Button>
                   </div>
-                  <div className="max-h-36 overflow-y-auto text-[11px] bg-white rounded-lg border border-red-100 p-2">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="text-left text-red-800 font-bold border-b border-red-100 pb-1">
-                          <th className="py-1 pr-2">Row</th>
-                          <th className="py-1 pr-2">Field</th>
-                          <th className="py-1">Error Message</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {preview.rowErrors.slice(0, 25).map((err, i) => (
-                          <tr key={i} className="border-t border-red-50">
-                            <td className="py-1 pr-2 font-mono font-bold text-red-700">{err.rowNumber}</td>
-                            <td className="py-1 pr-2 font-semibold text-slate-700">{err.field || '—'}</td>
-                            <td className="py-1 text-slate-600">{err.message}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="max-h-56 overflow-y-auto bg-white rounded-lg border border-red-100 p-1">
+                    <DataTable
+                      data={preview.rowErrors.slice(0, 25)}
+                      columns={[
+                        {
+                          key: 'rowNumber',
+                          header: 'Row',
+                          width: 'w-16',
+                          headerClassName: 'text-red-800 font-bold text-xs',
+                          cell: (err: any) => (
+                            <span className="font-mono font-bold text-red-700">{err.rowNumber}</span>
+                          )
+                        },
+                        {
+                          key: 'field',
+                          header: 'Field',
+                          width: 'w-32',
+                          headerClassName: 'text-red-800 font-bold text-xs',
+                          cell: (err: any) => (
+                            <span className="font-semibold text-slate-700">{err.field || '—'}</span>
+                          )
+                        },
+                        {
+                          key: 'message',
+                          header: 'Error Message',
+                          headerClassName: 'text-red-800 font-bold text-xs',
+                          cell: (err: any) => (
+                            <span className="text-slate-600">{err.message}</span>
+                          )
+                        }
+                      ]}
+                      keyExtractor={(err: any, idx: number) => `err-${idx}`}
+                      rowClassName="border-t border-red-50 text-[11px]"
+                    />
                   </div>
                 </div>
               )}
@@ -341,50 +357,73 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
                   <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Preview of Valid Rows (Showing first {Math.min(preview.preview.length, 50)})
                   </p>
-                  <div className="max-h-40 overflow-y-auto text-[11px] bg-white rounded-lg border border-emerald-100 p-2">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="text-left text-slate-600 font-bold border-b border-slate-100 pb-1">
-                          <th className="py-1">Name</th>
-                          <th className="py-1">Status</th>
-                          <th className="py-1">Specs</th>
-                          <th className="py-1">Images</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {preview.preview.map((row: any, i) => {
-                          const imageCount = Array.isArray(row.imageIds) ? row.imageIds.length : 0;
-                          const expectedImages = typeof row.expectedImageCount === 'number' ? row.expectedImageCount : 0;
+                  <div className="max-h-56 overflow-y-auto bg-white rounded-lg border border-emerald-100 p-1">
+                    <DataTable
+                      data={preview.preview.slice(0, 50)}
+                      columns={[
+                        {
+                          key: 'name',
+                          header: 'Name',
+                          headerClassName: 'text-slate-600 font-bold text-xs',
+                          cell: (row: any) => (
+                            <span className="font-semibold text-slate-900">{row.name}</span>
+                          )
+                        },
+                        {
+                          key: 'status',
+                          header: 'Status',
+                          width: 'w-24',
+                          headerClassName: 'text-slate-600 font-bold text-xs',
+                          cell: (row: any) => (
+                            <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold">{row.status}</span>
+                          )
+                        },
+                        {
+                          key: 'specs',
+                          header: 'Specs',
+                          width: 'w-32',
+                          headerClassName: 'text-slate-600 font-bold text-xs',
+                          cell: (row: any) => (
+                            <span className="text-slate-500">{row.specifications?.length || 0} attributes</span>
+                          )
+                        },
+                        {
+                          key: 'images',
+                          header: 'Images',
+                          width: 'w-36',
+                          headerClassName: 'text-slate-600 font-bold text-xs',
+                          cell: (row: any) => {
+                            const imageCount = Array.isArray(row.imageIds) ? row.imageIds.length : 0;
+                            const expectedImages = typeof row.expectedImageCount === 'number' ? row.expectedImageCount : 0;
 
-                          return (
-                            <tr key={i} className="border-t border-slate-100">
-                              <td className="py-1 font-semibold text-slate-900">{row.name}</td>
-                              <td className="py-1">
-                                <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold">{row.status}</span>
-                              </td>
-                              <td className="py-1 text-slate-500">{row.specifications?.length || 0} attributes</td>
-                              <td className="py-1">
-                                {expectedImages === 0 ? (
-                                  <span className="text-slate-500 font-medium">0 media</span>
-                                ) : imageCount === expectedImages ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                                    <CheckCircle2 className="h-3 w-3 text-emerald-600" aria-hidden="true" /> {imageCount} media
-                                  </span>
-                                ) : imageCount > 0 ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded" title={`${expectedImages - imageCount} image(s) failed`}>
-                                    <AlertTriangle className="h-3 w-3 text-amber-600" aria-hidden="true" /> {imageCount}/{expectedImages} media
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-red-100 text-red-800 px-1.5 py-0.5 rounded" title={`Failed to download/process ${expectedImages} image(s)`}>
-                                    <AlertTriangle className="h-3 w-3 text-red-600" aria-hidden="true" /> 0/{expectedImages} media
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                            if (expectedImages === 0) {
+                              return <span className="text-slate-500 font-medium">0 media</span>;
+                            }
+                            if (imageCount === expectedImages) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-600" aria-hidden="true" /> {imageCount} media
+                                </span>
+                              );
+                            }
+                            if (imageCount > 0) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded" title={`${expectedImages - imageCount} image(s) failed`}>
+                                  <AlertTriangle className="h-3 w-3 text-amber-600" aria-hidden="true" /> {imageCount}/{expectedImages} media
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-red-100 text-red-800 px-1.5 py-0.5 rounded" title={`Failed to download/process ${expectedImages} image(s)`}>
+                                <AlertTriangle className="h-3 w-3 text-red-600" aria-hidden="true" /> 0/{expectedImages} media
+                              </span>
+                            );
+                          }
+                        }
+                      ]}
+                      keyExtractor={(row: any, idx: number) => `preview-${idx}`}
+                      rowClassName="border-t border-slate-100 text-[11px]"
+                    />
                   </div>
                 </div>
               )}

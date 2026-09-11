@@ -1588,6 +1588,10 @@ export const deliveryService = {
     const buyerEmail = po?.buyer?.email;
     const recipientId = po?.buyerId;
 
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`\n\x1b[33m--- [DEV OTP BYPASS] Channel: delivery | Recipient: ${buyerEmail || recipientId} | OTP: ${rawOtp} | Purpose: delivery_verification ---\x1b[0m\n`);
+    }
+
     if (recipientId) {
       await safeNotify(
         recipientId,

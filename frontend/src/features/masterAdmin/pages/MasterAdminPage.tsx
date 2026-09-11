@@ -53,10 +53,12 @@ import { Loader2 } from '../../../components/ui/loader';
 import { api } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
+import { formatDate } from '../../shared/format';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validateOptionalField, validateOptionalIndianMobile, validatePersonName } from '../../../lib/validation';
 import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useResponsiveViewMode, type ViewMode } from '../../shared/hooks';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { masterAdminApi } from '../masterAdminApi';
 
 type ApiPage<T> = { items: T[]; total: number; page: number; pageSize: number; summary?: Record<string, number> };
@@ -2422,65 +2424,81 @@ export default function MasterAdminPage() {
               )}
 
               {!emailTemplateLoading && emailTemplates.length > 0 && (
-                <div className="overflow-x-auto rounded-lg border border-slate-200">
-                  <table className="w-full text-left text-xs">
-                    <thead className="border-b border-slate-200 bg-slate-50">
-                      <tr>
-                        <th className="px-4 py-2.5 font-bold text-slate-600">Name</th>
-                        <th className="px-4 py-2.5 font-bold text-slate-600">Slug</th>
-                        <th className="px-4 py-2.5 font-bold text-slate-600">Subject</th>
-                        <th className="px-4 py-2.5 font-bold text-slate-600">Status</th>
-                        <th className="px-4 py-2.5 font-bold text-slate-600">Updated</th>
-                        <th className="px-4 py-2.5 font-bold text-slate-600 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {emailTemplates.map(tpl => (
-                        <tr key={tpl.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70 transition-colors">
-                          <td className="px-4 py-2.5 font-semibold text-slate-800">{tpl.name}</td>
-                          <td className="px-4 py-2.5 font-mono text-slate-500">{tpl.slug}</td>
-                          <td title={tpl.subject} className="px-4 py-2.5 text-slate-600 max-w-[200px] truncate">{tpl.subject}</td>
-                          <td className="px-4 py-2.5">
-                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tpl.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
-                              {tpl.isActive ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 text-slate-500">{formatDate(tpl.updatedAt)}</td>
-                          <td className="px-4 py-2.5 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-7 rounded px-2 text-[10px] font-bold"
-                                onClick={() => setEditor({ type: 'emailTemplate', mode: 'edit', record: tpl })}
-                              >
-                                <Pencil className="mr-1 h-3 w-3" /> Edit
-                              </Button>
-                              {tpl.isActive && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="h-7 rounded border-red-200 px-2 text-[10px] font-bold text-red-600 hover:bg-red-50"
-                                  onClick={() => {
-                                    openAction({
-                                      entity: 'emailTemplate',
-                                      action: 'deactivate',
-                                      templateId: tpl.id,
-                                      label: `Email Template: ${tpl.name}`,
-                                      danger: true
-                                    });
-                                  }}
-                                >
-                                  <XCircle className="mr-1 h-3 w-3" /> Deactivate
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable<any>
+                  data={emailTemplates}
+                  columns={[
+                    {
+                      key: 'name',
+                      header: 'Name',
+                      cell: (tpl: any) => <span className="font-semibold text-slate-800">{tpl.name}</span>,
+                    },
+                    {
+                      key: 'slug',
+                      header: 'Slug',
+                      width: 'w-36',
+                      cell: (tpl: any) => <span className="font-mono text-slate-500">{tpl.slug}</span>,
+                    },
+                    {
+                      key: 'subject',
+                      header: 'Subject',
+                      cell: (tpl: any) => <span title={tpl.subject} className="text-slate-600 max-w-[200px] truncate block">{tpl.subject}</span>,
+                    },
+                    {
+                      key: 'status',
+                      header: 'Status',
+                      width: 'w-24',
+                      cell: (tpl: any) => (
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tpl.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                          {tpl.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'updatedAt',
+                      header: 'Updated',
+                      width: 'w-28',
+                      cell: (tpl: any) => <span className="text-slate-500">{formatDate(tpl.updatedAt)}</span>,
+                    },
+                    {
+                      key: 'actions',
+                      header: 'Actions',
+                      width: 'w-44',
+                      align: 'right',
+                      cell: (tpl: any) => (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-7 rounded px-2 text-[10px] font-bold"
+                            onClick={() => setEditor({ type: 'emailTemplate', mode: 'edit', record: tpl })}
+                          >
+                            <Pencil className="mr-1 h-3 w-3" /> Edit
+                          </Button>
+                          {tpl.isActive && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-7 rounded border-red-200 px-2 text-[10px] font-bold text-red-600 hover:bg-red-50"
+                              onClick={() => {
+                                openAction({
+                                  entity: 'emailTemplate',
+                                  action: 'deactivate',
+                                  templateId: tpl.id,
+                                  label: `Email Template: ${tpl.name}`,
+                                  danger: true
+                                });
+                              }}
+                            >
+                              <XCircle className="mr-1 h-3 w-3" /> Deactivate
+                            </Button>
+                          )}
+                        </div>
+                      ),
+                    },
+                  ]}
+                  keyExtractor={(tpl) => tpl.id}
+                  showSrNo={false}
+                />
               )}
             </Panel>
           </section>
@@ -2723,32 +2741,40 @@ function PaginatedTable<T extends Record<string, any>>({
   viewMode: ViewMode;
   actions?: (row: T) => React.ReactNode;
 }) {
-  const tableScrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = tableScrollRef.current;
-    if (!el) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      const hasHorizontalOverflow = el.scrollWidth > el.clientWidth;
-      if (!hasHorizontalOverflow) return;
-
-      if (e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        el.scrollLeft += e.deltaY;
-      } else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-        e.preventDefault();
-        e.stopPropagation();
-        el.scrollLeft += e.deltaX;
+  const dataTableColumns = useMemo<ColumnDef<T>[]>(() => {
+    const cols: ColumnDef<T>[] = columns.map(([field, label, renderer]) => ({
+      key: field,
+      header: label,
+      sortable: true,
+      sortKey: field,
+      cell: (row: T) => {
+        if (renderer) return (renderer as any)(row);
+        const rawVal = valueAt(row, field);
+        const formatted = formatCell(rawVal);
+        const titleText = typeof formatted === 'string' ? formatted : undefined;
+        return (
+          <span className="truncate block max-w-[140px] sm:max-w-[180px] md:max-w-[220px]" title={titleText}>
+            {formatted}
+          </span>
+        );
       }
-    };
+    }));
 
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      el.removeEventListener('wheel', handleWheel);
-    };
-  }, []);
+    if (actions) {
+      cols.push({
+        key: 'actions',
+        header: 'Actions',
+        align: 'right',
+        cellClassName: 'text-right whitespace-nowrap',
+        headerClassName: 'text-right',
+        cell: (row: T) => (
+          <div className="flex justify-end items-center">{actions(row)}</div>
+        )
+      });
+    }
+
+    return cols;
+  }, [columns, actions]);
 
   if (viewMode === 'grid') {
     return (
@@ -2784,47 +2810,23 @@ function PaginatedTable<T extends Record<string, any>>({
         </div>
         {loading && <Loader2 className="h-4 w-4 animate-spin text-[#12335f]" />}
       </div>
-      {error ? <ErrorState message={error} /> : (
-        <div ref={tableScrollRef} className="w-full overflow-x-auto">
-          <table className="w-full text-left text-xs table-auto">
-            <thead className="bg-slate-50 border-b border-slate-200/80">
-              <tr>
-                <th className="w-12 px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider text-slate-500">S.No.</th>
-                {columns.map(([field, label]) => (
-                  <th key={field} className="px-3 py-3">
-                    <SortableHeader label={label} field={field} activeField={sort.field} direction={sort.direction} onSort={onSort} />
-                  </th>
-                ))}
-                {actions && <th className="w-16 px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {rows.map((row, index) => (
-                <tr key={row.id || index} className="transition-colors hover:bg-slate-50/80">
-                  <td className="px-3 py-3 text-center text-xs font-bold text-slate-400">{(page - 1) * pageSize + index + 1}</td>
-                  {columns.map(([field, , renderer]) => {
-                    const rawVal = valueAt(row, field);
-                    const formatted = formatCell(rawVal);
-                    const titleText = typeof formatted === 'string' ? formatted : undefined;
-                    return (
-                      <td key={field} className="px-3 py-3 text-xs font-medium text-slate-700 max-w-[140px] sm:max-w-[180px] md:max-w-[220px] truncate" title={titleText}>
-                        {renderer ? (renderer as any)(row) : formatted}
-                      </td>
-                    );
-                  })}
-                  {actions && (
-                    <td className="px-3 py-3 text-right whitespace-nowrap">
-                      <div className="flex justify-end items-center">{actions(row)}</div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-              {!loading && rows.length === 0 && <tr><td colSpan={columns.length + (actions ? 2 : 1)}><EmptyState /></td></tr>}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <Pagination page={page} pageSize={pageSize} total={total} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} pageSizeOptions={pageSizeOptions} />
+      <DataTable<T>
+        data={rows}
+        columns={dataTableColumns}
+        keyExtractor={(item, index) => item.id ?? index}
+        showSrNo={true}
+        isLoading={loading}
+        error={error}
+        sortKey={sort.field}
+        sortDirection={sort.direction}
+        onSort={onSort}
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        pageSizeOptions={pageSizeOptions}
+      />
     </section>
   );
 }
@@ -3798,7 +3800,7 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
 
                 {/* Uploaded Date */}
                 <p className="text-[10px] font-medium text-slate-400 mt-0.5">
-                  Uploaded: {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '30 Jul 2026'}
+                  Uploaded: {doc.uploadedAt ? formatDate(doc.uploadedAt) : '—'}
                 </p>
               </div>
 
@@ -4087,7 +4089,7 @@ function EntityEditor({
       amount: '4,50,000',
       currency: 'INR',
       dueDate: '15th July 2026',
-      currentDate: new Date().toLocaleDateString(),
+      currentDate: formatDate(new Date()),
       otp: '982741'
     };
 
@@ -4655,13 +4657,6 @@ const formatCell = (value: unknown) => {
     return anyValue.organizationName || anyValue.name || anyValue.email || JSON.stringify(value);
   }
   return String(value).replace(/_/g, ' ');
-};
-
-const formatDate = (value: unknown) => {
-  if (!value) return '-';
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 const labelize = (value: string) => value.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, char => char.toUpperCase());

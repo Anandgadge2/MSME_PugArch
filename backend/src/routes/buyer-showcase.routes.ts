@@ -478,22 +478,46 @@ router.post('/items/upload', authenticate, authorize('buyer'), upload.single('fi
     let headers: string[] = [];
     let startRowIndex = 0;
     const firstRow = rows[0] ? rows[0].map((h: any) => String(h || '').trim().toLowerCase()) : [];
+    const normFirstRow = firstRow.map(h => h.replace(/[^a-z0-9]/g, ''));
 
-    if (firstRow.includes('item description') || firstRow.includes('description') || firstRow.includes('itemdescription')) {
-      headers = firstRow;
+    const hasDescHeader = normFirstRow.some(norm => (
+      norm.includes('description') ||
+      norm.includes('scope') ||
+      norm.includes('specification') ||
+      norm.includes('particulars')
+    ));
+
+    if (hasDescHeader) {
+      headers = normFirstRow;
       startRowIndex = 1;
     }
 
     const getIndex = (names: string[], fallback: number) => {
-      const idx = headers.findIndex(h => names.includes(h));
+      const cleanNames = names.map(n => n.replace(/[^a-z0-9]/g, ''));
+      const idx = headers.findIndex(h => cleanNames.includes(h));
       return idx !== -1 ? idx : fallback;
     };
 
-    const slIdx = getIndex(['sl. no.', 'sl.no.', 'sl no', 'serial no', 'serial number'], 0);
-    const descIdx = getIndex(['item description', 'description', 'item_description'], 1);
+    const slIdx = getIndex(['sl. no.', 'sl.no.', 'sl no', 'serial no', 'serial number', 'sr no', 'sr. no.', 'srno'], 0);
+    const descIdx = getIndex([
+      'item description',
+      'description / scope of work',
+      'description/scope of work',
+      'scope of work',
+      'specifications / scope',
+      'specifications/scope',
+      'description',
+      'item_description',
+      'specification',
+      'specifications',
+      'scope',
+      'item name',
+      'particulars',
+      'details'
+    ], 1);
     const catIdx = getIndex(['category'], 2);
     const reqIdx = getIndex(['estimated monthly requirement', 'monthly requirement', 'requirement', 'estimated monthly qty', 'estimated qty'], 3);
-    const unitIdx = getIndex(['unit'], 4);
+    const unitIdx = getIndex(['unit', 'uom'], 4);
     const remarksIdx = getIndex(['remarks', 'remark'], 5);
 
     const validItems: any[] = [];

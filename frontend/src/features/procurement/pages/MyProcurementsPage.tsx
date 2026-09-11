@@ -49,43 +49,44 @@ import {
   ScrollText,
   Activity,
   GitPullRequest,
- 
   Sparkles,
- 
+  Ban,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Skeleton } from '../../../components/ui/skeleton';
 import { cn } from '../../../lib/utils';
-import { getApi } from '../../shared/apiClient';
+import { getApi, postApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
-import { formatDate } from '../../shared/format';
-import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { formatDate, formatDateTime as formatSharedDateTime } from '../../shared/format';
+import { DataTable, type ColumnDef, type SortDirection } from '../../../components/ui/data-table';
 import { useQuery } from '@tanstack/react-query';
-import { sellerRoutes, buyerRoutes } from '@/lib/routes';
+import { CancelProcurementModal, type CancelTargetProcurement } from '../components/CancelProcurementModal';
 import { ProcurementDetailView } from '../components/ProcurementDetailView';
 export { ProcurementDetailView };
 
+const procurementSkeletonColumns: ColumnDef<any>[] = [
+  { key: 'type', header: 'Type', width: 'w-32', cell: () => null },
+  { key: 'title', header: 'Title & Reference', width: 'w-96', cell: () => null },
+  { key: 'status', header: 'Status', width: 'w-36', cell: () => null },
+  { key: 'estimatedValue', header: 'Est. Value', width: 'w-36', cell: () => null },
+  { key: 'category', header: 'Category & Location', width: 'w-44', cell: () => null },
+  { key: 'updatedAt', header: 'Updated', width: 'w-32', cell: () => null },
+  { key: 'action', header: 'Action', align: 'right', width: 'w-32', cell: () => null }
+];
+
 function ProcurementsTableSkeleton() {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
-      <div className="space-y-2.5 p-2">
-        {Array.from({ length: 6 }).map((_, idx) => (
-          <div key={idx} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200/70 bg-white p-4 shadow-2xs">
-            <Skeleton className="h-6 w-8 rounded-md shrink-0" />
-            <Skeleton className="h-6 w-24 rounded-full shrink-0" />
-            <Skeleton className="h-4 w-24 shrink-0" />
-            <div className="flex-1 min-w-[200px] space-y-1.5">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-3 w-1/2" />
-            </div>
-            <Skeleton className="h-4 w-20 shrink-0" />
-            <Skeleton className="h-6 w-20 rounded-full shrink-0" />
-            <Skeleton className="h-8 w-20 rounded-xl shrink-0" />
-          </div>
-        ))}
-      </div>
-    </div>
+    <DataTable
+      data={[]}
+      columns={procurementSkeletonColumns}
+      isLoading={true}
+      skeletonRows={6}
+      showSrNo={true}
+      srNoHeader="Sr. No."
+      minWidth="min-w-[950px]"
+      keyExtractor={(_, idx) => idx}
+    />
   );
 }
 
@@ -347,6 +348,15 @@ const getConsolidatedType = (p: NormalizedProcurement): string => {
   return 'RFQ';
 };
 
+export const isProcurementCancellable = (p: any): boolean => {
+  if (!p) return false;
+  const sGroup = String(p.statusGroup || '').toLowerCase();
+  const s = String(p.status || '').toLowerCase();
+  if (['cancelled', 'rejected', 'expired', 'voided', 'abandoned'].includes(sGroup) || ['cancelled', 'rejected'].includes(s)) return false;
+  if (['completed', 'awarded', 'converted_to_order', 'order_placed', 'po_generated', 'delivered', 'grn_completed', 'invoice_submitted', 'payment_completed'].includes(s) || sGroup === 'completed') return false;
+  return true;
+};
+
 const TYPE_BADGE_STYLES: Record<string, string> = {
   'RFQ': 'border-blue-200 bg-blue-50 text-blue-800',
   'RFP': 'border-indigo-200 bg-indigo-50 text-indigo-800',
@@ -392,18 +402,7 @@ type SortDir = SortDirection;
 const formatCurrency = (v: number) =>
   v ? `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—';
 
-const formatDateTime = (value?: string) => {
-  if (!value) return '—';
-  try {
-    return new Date(value).toLocaleString('en-IN', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-      hour12: true,
-    });
-  } catch {
-    return value;
-  }
-};
+const formatDateTime = (value?: string) => formatSharedDateTime(value);
 
 
 
@@ -584,6 +583,47 @@ export default function MyProcurementsPage() {
   const procurements = queryData?.procurements || [];
   const isKpisLoading = loading && !queryData?.kpis;
 
+  /* ── Cancellation Modal State & Handlers ── */
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [procurementToCancel, setProcurementToCancel] = useState<CancelTargetProcurement | null>(null);
+
+  const handleOpenCancelModal = useCallback((p: NormalizedProcurement, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setProcurementToCancel({
+      id: p.id,
+      type: p.type,
+      title: p.title,
+      referenceNumber: p.referenceNumber,
+      typeLabel: p.typeLabel,
+      estimatedValue: p.estimatedValue,
+      status: p.status,
+      statusGroup: p.statusGroup,
+    });
+    setCancelModalOpen(true);
+  }, []);
+
+  const handleConfirmCancel = useCallback(async (params: { type: string; id: number; reason: string; remarks?: string }) => {
+    try {
+      await postApi('/api/buyer/procurements/cancel', params);
+      toast.success('Procurement cancelled successfully', {
+        description: `Reference: ${procurementToCancel?.referenceNumber || params.id}`
+      });
+      await loadData();
+      if (selectedProcurement && selectedProcurement.id === params.id) {
+        setSelectedProcurement(prev => prev ? {
+          ...prev,
+          status: 'CANCELLED',
+          statusLabel: 'Cancelled',
+          statusGroup: 'cancelled'
+        } : null);
+      }
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      toast.error(e?.message || 'Failed to cancel procurement');
+      throw err;
+    }
+  }, [loadData, procurementToCancel, selectedProcurement]);
+
   /* ── KPI Click Handler ── */
   const handleKpiClick = (group: string | null) => {
     if (activeKpi === group) {
@@ -705,20 +745,170 @@ export default function MyProcurementsPage() {
   const { page, pageSize, pageItems: pagedProcurements, total, setPage, setPageSize } = usePagination<NormalizedProcurement>(displayData, 10);
   const hasActiveFilters = !!(typeFilter || statusFilter || valueFilter || dateFilter || searchQuery);
 
+  const procurementColumns: ColumnDef<any>[] = useMemo(() => [
+    {
+      key: 'type',
+      header: 'Type',
+      sortable: true,
+      sortKey: 'type',
+      width: 'w-32',
+      cell: (p: any) => {
+        const typeVal = getConsolidatedType(p);
+        const TypeIcon = getTypeIcon(typeVal);
+        return (
+          <span className={cn(
+            "inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border transition-transform group-hover:scale-105",
+            TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
+          )}>
+            <TypeIcon className="h-3.5 w-3.5 shrink-0" />
+            {typeVal}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'title',
+      header: 'Title & Reference',
+      sortable: true,
+      sortKey: 'title',
+      width: 'w-96',
+      cell: (p: any) => (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+              {p.referenceNumber}
+            </span>
+          </div>
+          <p title={p.title} className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+            {p.title}
+          </p>
+          {p.description && (
+            <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">
+              {p.description}
+            </p>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortKey: 'status',
+      width: 'w-36',
+      cell: (p: any) => (
+        <span className={cn(
+          'inline-flex whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
+          p.statusGroup === 'draft' ? 'border-slate-200 bg-slate-50 text-slate-600' :
+            p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+              p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
+                p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                  'border-red-200 bg-red-50 text-red-700'
+        )}>
+          {p.statusLabel}
+        </span>
+      )
+    },
+    {
+      key: 'estimatedValue',
+      header: 'Est. Value',
+      sortable: true,
+      sortKey: 'estimatedValue',
+      width: 'w-36',
+      cell: (p: any) => (
+        <span className="text-xs font-extrabold text-slate-900 block">
+          {formatCurrency(p.estimatedValue)}
+        </span>
+      )
+    },
+    {
+      key: 'category',
+      header: 'Category & Location',
+      sortable: true,
+      sortKey: 'category',
+      width: 'w-44',
+      cell: (p: any) => (
+        <div className="space-y-1">
+          <span title={p.category || '—'} className="text-xs font-bold text-slate-600 line-clamp-1">{p.category || '—'}</span>
+          {p.deliveryLocation && (
+            <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-400">
+              <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
+              {p.deliveryLocation}
+            </span>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'updatedAt',
+      header: 'Updated',
+      sortable: true,
+      sortKey: 'updatedAt',
+      width: 'w-32',
+      cell: (p: any) => (
+        <span className="text-xs font-bold text-slate-500">
+          {formatDateTime(p.updatedAt)}
+        </span>
+      )
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      align: 'right',
+      width: 'w-32',
+      cell: (p: any) => (
+        <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+          {isProcurementCancellable(p) && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={e => handleOpenCancelModal(p, e)}
+              title={p.statusGroup === 'pending_approval' ? 'Withdraw Request' : 'Cancel Procurement'}
+              className="h-8 px-2.5 rounded-lg border-slate-200 text-rose-600 hover:bg-rose-50 hover:border-rose-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <Ban className="h-3.5 w-3.5" />
+              <span className="hidden xl:inline">
+                {p.statusGroup === 'pending_approval' ? 'Withdraw' : 'Cancel'}
+              </span>
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            onClick={e => openDetail(p, e)}
+            className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
+          >
+            View Details
+          </Button>
+        </div>
+      )
+    }
+  ], [sortKey, sortDir]);
+
   /* ═══════════════════════════════════════════════
      RENDER
      ═══════════════════════════════════════════════ */
 
   if (detailOpen && selectedProcurement) {
     return (
-      <ProcurementDetailView
-        procurement={selectedProcurement}
-        onBack={closeDetail}
-        onGoTo={() => {
-          closeDetail();
-          router.push(resolveProcurementActionUrl(selectedProcurement));
-        }}
-      />
+      <>
+        <ProcurementDetailView
+          procurement={selectedProcurement}
+          onBack={closeDetail}
+          onGoTo={() => {
+            closeDetail();
+            router.push(resolveProcurementActionUrl(selectedProcurement));
+          }}
+          onCancel={p => handleOpenCancelModal(p || selectedProcurement)}
+        />
+        <CancelProcurementModal
+          isOpen={cancelModalOpen}
+          onClose={() => setCancelModalOpen(false)}
+          procurement={procurementToCancel}
+          onConfirm={handleConfirmCancel}
+        />
+      </>
     );
   }
 
@@ -876,121 +1066,26 @@ export default function MyProcurementsPage() {
         <div className="space-y-4">
           {/* ═══ LIST VIEW ═══ */}
           {viewMode === 'list' && (
-            <>
-              <div className="overflow-x-auto w-full max-w-full rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
-                <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
-                  <thead>
-                    <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                      <th className="px-4 py-3 text-center w-16 select-none">Sr. No.</th>
-                      <th className="px-4 py-3 w-32"><SortableHeader label="Type" field="type" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 w-96"><SortableHeader label="Title & Reference" field="title" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 w-36"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 w-36"><SortableHeader label="Est. Value" field="estimatedValue" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 w-44"><SortableHeader label="Category & Location" field="category" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 w-32"><SortableHeader label="Updated" field="updatedAt" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 text-right w-32 select-none font-black">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pagedProcurements.map((p: any, idx) => {
-                      const typeVal = getConsolidatedType(p);
-                      const TypeIcon = getTypeIcon(typeVal);
-                      return (
-                        <tr
-                          key={`${p.type}-${p.id}`}
-                          className="group bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 hover:bg-slate-50/70 transition-all duration-300 ease-out align-middle cursor-pointer"
-                          onClick={() => openDetail(p)}
-                        >
-                          {/* Serial Number */}
-                          <td className="rounded-l-xl px-4 py-4 text-xs font-black text-slate-400 text-center">
-                            {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
-                          </td>
-
-                          {/* Type Badge */}
-                          <td className="px-4 py-4">
-                            <span className={cn(
-                              "inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border transition-transform group-hover:scale-105",
-                              TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
-                            )}>
-                              <TypeIcon className="h-3.5 w-3.5 shrink-0" />
-                              {typeVal}
-                            </span>
-                          </td>
-
-                          {/* Title & Reference */}
-                          <td className="px-4 py-4 space-y-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                {p.referenceNumber}
-                              </span>
-                            </div>
-                            <p title={p.title} className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
-                              {p.title}
-                            </p>
-                            {p.description && (
-                              <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">
-                                {p.description}
-                              </p>
-                            )}
-                          </td>
-
-                          {/* Status */}
-                          <td className="px-4 py-4">
-                            <span className={cn(
-                              'inline-flex whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
-                              p.statusGroup === 'draft' ? 'border-slate-200 bg-slate-50 text-slate-600' :
-                                p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                                  p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
-                                    p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                                      'border-red-200 bg-red-50 text-red-700'
-                            )}>
-                              {p.statusLabel}
-                            </span>
-                          </td>
-
-                          {/* Est Value */}
-                          <td className="px-4 py-4">
-                            <span className="text-xs font-extrabold text-slate-900 block">
-                              {formatCurrency(p.estimatedValue)}
-                            </span>
-                          </td>
-
-                          {/* Category & Location */}
-                          <td className="px-4 py-4 space-y-1">
-                            <span title={p.category || '—'} className="text-xs font-bold text-slate-600 line-clamp-1">{p.category || '—'}</span>
-                            {p.deliveryLocation && (
-                              <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-400">
-                                <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
-                                {p.deliveryLocation}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Updated */}
-                          <td className="px-4 py-4 text-xs font-bold text-slate-500">
-                            {formatDateTime(p.updatedAt)}
-                          </td>
-
-                          {/* Action */}
-                          <td className="rounded-r-xl px-4 py-4 text-right">
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={e => openDetail(p, e)}
-                              className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
-                            >
-                              View Details
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-
-            </>
+            <DataTable
+              data={pagedProcurements}
+              columns={procurementColumns}
+              keyExtractor={(p: any) => `${p.type}-${p.id}`}
+              showSrNo={true}
+              srNoHeader="Sr. No."
+              minWidth="min-w-[950px]"
+              sortKey={sortKey}
+              sortDirection={sortDir}
+              onSort={(field) => handleSort(field as SortKey)}
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={[10, 20, 50]}
+              paginationLabel="procurements"
+              onRowClick={(p) => openDetail(p)}
+              rowClassName="group hover:bg-slate-50/70 transition-colors align-middle cursor-pointer"
+            />
           )}
 
           {/* ═══ GRID VIEW ═══ */}
@@ -1057,15 +1152,28 @@ export default function MyProcurementsPage() {
                         </div>
                       </div>
 
-                      {/* Action Button */}
-                      <button
-                        type="button"
-                        onClick={e => openDetail(p, e)}
-                        className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#12335f] px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-[#0b2445] hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
-                      >
-                        View Details
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </button>
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2">
+                        {isProcurementCancellable(p) && (
+                          <button
+                            type="button"
+                            onClick={e => handleOpenCancelModal(p, e)}
+                            title={p.statusGroup === 'pending_approval' ? 'Withdraw Request' : 'Cancel Procurement'}
+                            className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-center text-xs font-bold text-rose-600 shadow-2xs hover:bg-rose-50 hover:border-rose-200 active:scale-95 transition-all duration-200 cursor-pointer"
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                            <span>{p.statusGroup === 'pending_approval' ? 'Withdraw' : 'Cancel'}</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={e => openDetail(p, e)}
+                          className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#12335f] px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-[#0b2445] hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
+                        >
+                          View Details
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1073,17 +1181,19 @@ export default function MyProcurementsPage() {
             </div>
           )}
 
-          {/* ═══ PAGINATION ═══ */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              label="procurements"
-            />
-          </div>
+          {/* ═══ PAGINATION (Grid View) ═══ */}
+          {viewMode === 'grid' && total > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                label="procurements"
+              />
+            </div>
+          )}
         </div>
       ) : (
         /* ── Empty State ── */
@@ -1126,7 +1236,12 @@ export default function MyProcurementsPage() {
         </section>
       )}
 
-
+      <CancelProcurementModal
+        isOpen={cancelModalOpen}
+        onClose={() => setCancelModalOpen(false)}
+        procurement={procurementToCancel}
+        onConfirm={handleConfirmCancel}
+      />
     </div>
   );
 }

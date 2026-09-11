@@ -29,6 +29,7 @@ import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 const pageSize = 10;
 const selectClass = 'h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10';
@@ -215,6 +216,98 @@ export default function BidsListingPage() {
     setPage(1);
   };
 
+  const tableColumns = useMemo<ColumnDef<ProcurementBid>[]>(() => [
+    {
+      key: 'id',
+      header: 'Bid ID',
+      sortable: true,
+      sortKey: 'id',
+      width: 'w-28',
+      cell: (bid) => (
+        <span className="font-mono text-xs font-black text-[#c86413]">{bid.id}</span>
+      )
+    },
+    {
+      key: 'title',
+      header: 'Title',
+      sortable: true,
+      sortKey: 'title',
+      cell: (bid) => (
+        <div>
+          <p className="text-xs font-black text-slate-900 line-clamp-1">{bid.title}</p>
+          <p className="mt-0.5 text-[10px] font-semibold text-slate-500 line-clamp-1">{bid.itemName}</p>
+        </div>
+      )
+    },
+    {
+      key: 'buyer',
+      header: 'Buyer',
+      sortable: true,
+      sortKey: 'buyer',
+      width: 'w-48',
+      cell: (bid) => (
+        <span className="text-xs font-semibold text-slate-600">{bid.buyerName}</span>
+      )
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      sortable: true,
+      sortKey: 'category',
+      width: 'w-36',
+      cell: (bid) => (
+        <span className="text-xs font-semibold text-slate-600">{bid.category}</span>
+      )
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortKey: 'status',
+      width: 'w-28',
+      cell: (bid) => (
+        <StatusBadge label={bid.status} />
+      )
+    },
+    {
+      key: 'value',
+      header: 'Value',
+      sortable: true,
+      sortKey: 'value',
+      align: 'right',
+      width: 'w-32',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (bid) => (
+        <span className="text-xs font-black text-[#0b2447]">{money(bid.estimatedValue)}</span>
+      )
+    },
+    {
+      key: 'endDate',
+      header: 'Closing',
+      sortable: true,
+      sortKey: 'endDate',
+      width: 'w-32',
+      cell: (bid) => (
+        <span className="text-xs font-semibold text-slate-600">{formatDate(bid.endDate)}</span>
+      )
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      width: 'w-36',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (bid) => (
+        <div className="flex justify-end gap-2">
+          <button onClick={() => handleViewDetails(bid.id)} type="button" className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-3 text-[10px] font-black text-slate-700 hover:bg-slate-50 transition">View</button>
+          <Link href={participationHref(bid)} className="inline-flex h-8 items-center rounded-md bg-[#0b2447] px-3 text-[10px] font-black text-white hover:bg-[#07172e] transition">{user ? (bid.participated ? 'View Proposal' : 'Participate') : 'Login'}</Link>
+        </div>
+      )
+    }
+  ], [user]);
+
   const resetFilters = () => {
     setQuery('');
     setStatus('All');
@@ -362,57 +455,35 @@ export default function BidsListingPage() {
               />
             ) : pageRows.length ? (
               viewMode === 'grid' ? (
-                <div className="grid gap-4 xl:grid-cols-2">{pageRows.map(bid => <BidCard key={bid.id} bid={bid} viewHref={viewHref(bid)} participationHref={participationHref(bid)} participationLabel={user ? (bid.participated ? 'View Proposal' : 'Participate') : 'Login to Participate'} onViewClick={() => handleViewDetails(bid.id)} />)}</div>
-              ) : (
-                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1040px] text-left text-sm">
-                      <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-                        <tr>
-                          <th className="w-16 px-4 py-3 font-black">S.No.</th>
-                          <th className="px-4 py-3"><SortableHeader label="Bid ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                          <th className="px-4 py-3"><SortableHeader label="Title" field="title" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                          <th className="px-4 py-3"><SortableHeader label="Buyer" field="buyer" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                          <th className="px-4 py-3"><SortableHeader label="Category" field="category" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                          <th className="px-4 py-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                          <th className="px-4 py-3 text-right"><SortableHeader label="Value" field="value" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
-                          <th className="px-4 py-3"><SortableHeader label="Closing" field="endDate" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                          <th className="px-4 py-3 text-right font-black">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {pageRows.map((bid, index) => (
-                          <tr key={bid.id} className="bg-white transition hover:bg-blue-50/50">
-                            <td className="px-4 py-3 text-xs font-black text-slate-500">{(page - 1) * pageSize + index + 1}</td>
-                            <td className="px-4 py-3 text-xs font-black text-[#c86413]">{bid.id}</td>
-                            <td className="px-4 py-3">
-                              <p className="text-xs font-black text-slate-900">{bid.title}</p>
-                              <p className="mt-1 text-[10px] font-semibold text-slate-500">{bid.itemName}</p>
-                            </td>
-                            <td className="px-4 py-3 text-xs font-semibold text-slate-600">{bid.buyerName}</td>
-                            <td className="px-4 py-3 text-xs font-semibold text-slate-600">{bid.category}</td>
-                            <td className="px-4 py-3"><StatusBadge label={bid.status} /></td>
-                            <td className="px-4 py-3 text-right text-xs font-black text-[#0b2447]">{money(bid.estimatedValue)}</td>
-                            <td className="px-4 py-3 text-xs font-semibold text-slate-600">{formatDate(bid.endDate)}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex justify-end gap-2">
-                                <button onClick={() => handleViewDetails(bid.id)} type="button" className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-3 text-[10px] font-black text-slate-700">View</button>
-                                <Link href={participationHref(bid)} className="inline-flex h-8 items-center rounded-md bg-[#0b2447] px-3 text-[10px] font-black text-white">{user ? (bid.participated ? 'View Proposal' : 'Participate') : 'Login'}</Link>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <div className="space-y-4">
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    {pageRows.map(bid => (
+                      <BidCard key={bid.id} bid={bid} viewHref={viewHref(bid)} participationHref={participationHref(bid)} participationLabel={user ? (bid.participated ? 'View Proposal' : 'Participate') : 'Login to Participate'} onViewClick={() => handleViewDetails(bid.id)} />
+                    ))}
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <Pagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} label="bids" />
                   </div>
                 </div>
+              ) : (
+                <DataTable<ProcurementBid>
+                  data={pageRows}
+                  columns={tableColumns}
+                  keyExtractor={(bid) => bid.id}
+                  showSrNo={true}
+                  page={page}
+                  pageSize={pageSize}
+                  total={filtered.length}
+                  onPageChange={setPage}
+                  sortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onSort={(field) => toggleSort(field as BidSortKey)}
+                  paginationLabel="bids"
+                  minWidth="min-w-[1040px]"
+                />
               )
             ) : (
               <EmptyState onReset={resetFilters} />
-            )}
-
-            {!loading && !error && bids.length > 0 && (
-              <Pagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} label="bids" />
             )}
           </section>
         </div>

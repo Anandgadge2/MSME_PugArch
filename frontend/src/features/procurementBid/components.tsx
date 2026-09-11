@@ -22,6 +22,8 @@ import {
   Gavel,
 } from 'lucide-react';
 import { formatDate, lifecycleLabels, money, type BidResultRow, type ProcurementBid } from './data';
+import { formatDateTime } from '../shared/format';
+import { DataTable, ColumnDef } from '../../components/ui/data-table';
 
 export function StatusBadge({ label }: { label: string }) {
   const normalized = String(label || '').trim().toUpperCase();
@@ -226,33 +228,59 @@ export function LifecycleTracker({ current }: { current: string }) {
   );
 }
 
+const resultColumns: ColumnDef<BidResultRow>[] = [
+  {
+    key: 'sellerName',
+    header: 'Seller name',
+    width: 'w-[25%]',
+    cell: (row) => <span className="font-black text-slate-800">{row.sellerName}</span>
+  },
+  {
+    key: 'sellerType',
+    header: 'Seller type',
+    width: 'w-[15%]',
+    cell: (row) => <span className="text-slate-600">{row.sellerType}</span>
+  },
+  {
+    key: 'offeredItem',
+    header: 'Offered item',
+    width: 'w-[20%]',
+    cell: (row) => <span className="text-slate-700">{row.offeredItem}</span>
+  },
+  {
+    key: 'totalPrice',
+    header: 'Total price',
+    width: 'w-[15%]',
+    cell: (row) => <span className="font-black text-slate-900">{row.totalPrice ? money(row.totalPrice) : 'Pending'}</span>
+  },
+  {
+    key: 'finalRank',
+    header: 'Rank',
+    width: 'w-[12%]',
+    cell: (row) => <StatusBadge label={row.finalRank} />
+  },
+  {
+    key: 'resultStatus',
+    header: 'Status',
+    width: 'w-[13%]',
+    cell: (row) => <StatusBadge label={row.resultStatus} />
+  }
+];
+
 export function ResultsTable({ rows }: { rows: BidResultRow[] }) {
   return (
-    <div className="table-shell">
-      <div className="table-shell-scroller">
-        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[860px] w-full text-xs">
-          <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-            <tr>
-              {['Sr. No.', 'Seller name', 'Seller type', 'Offered item', 'Total price', 'Rank', 'Status'].map(head => <th key={head} className="px-4 py-3 font-black">{head}</th>)}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((row, index) => (
-              <tr key={row.participationId || `${row.sellerName}-${index}`} className="bg-white transition hover:bg-blue-50/50">
-                <td className="px-4 py-3 font-bold text-slate-500">{index + 1}</td>
-                <td className="px-4 py-3 font-black text-slate-800">{row.sellerName}</td>
-                <td className="px-4 py-3">{row.sellerType}</td>
-                <td className="px-4 py-3">{row.offeredItem}</td>
-                <td className="px-4 py-3 font-black text-slate-900">{row.totalPrice ? money(row.totalPrice) : 'Pending'}</td>
-                <td className="px-4 py-3"><StatusBadge label={row.finalRank} /></td>
-                <td className="px-4 py-3"><StatusBadge label={row.resultStatus} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-</div>
-      </div>
+    <div className="mb-6">
+      <DataTable<BidResultRow>
+        columns={resultColumns}
+        data={rows}
+        keyExtractor={(row, index) => row.participationId || `${row.sellerName}-${index}`}
+        showSrNo={true}
+        srNoHeader="Sr. No."
+        srNoWidth="w-[80px]"
+        minWidth="min-w-[860px]"
+        emptyTitle="No results available"
+        emptyDescription="No evaluation results have been recorded for this bid yet."
+      />
     </div>
   );
 }
@@ -365,7 +393,7 @@ export function ProcurementTimelineTracker({ stages }: { stages: TimelineStage[]
               {stage.time && (
                 <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-slate-500">
                   <Clock className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{new Date(stage.time).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                  <span>{formatDateTime(stage.time)}</span>
                 </div>
               )}
 

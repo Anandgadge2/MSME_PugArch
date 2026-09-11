@@ -507,3 +507,56 @@ export const convertCartToBidDraft = async (
 
   return { bidWizardDraftId: draft.id, redirectPath: `/buyer/create-bid?draft=${draft.id}&fromCart=${request.cartId}` };
 };
+
+export const cancelProcurementRequest = async (
+  id: number,
+  organizationId: number,
+  buyerId: number,
+  reason: string
+) => {
+  const request = await getProcurementRequestForOrg(id, organizationId, buyerId);
+  if (request.status === 'CANCELLED') {
+    throw new ApiError(409, 'Procurement request is already cancelled.', 'ALREADY_CANCELLED');
+  }
+  if (request.status === 'CONVERTED_TO_ORDER' || request.status === 'CONVERTED_TO_BID') {
+    throw new ApiError(409, `Cannot cancel procurement request in ${request.status} state.`, 'CANNOT_CANCEL');
+  }
+
+  const existingDeclarations = (request.declarations as Record<string, unknown>) || {};
+  const updated = await prisma.procurementRequest.update({
+    where: { id },
+    data: {
+      status: 'CANCELLED',
+      declarations: {
+        ...existingDeclarations,
+        cancellationReason: reason,
+        cancelledAt: new Date().toISOString(),
+        cancelledBy: buyerId,
+      },
+    },
+  });
+
+  await prisma.procurementApproval.updateMany({
+    where: {
+      entityType: { in: ['direct_purchase', 'cart'] },
+      entityId: id,
+      decision: 'PENDING',
+    },
+    data: {
+      decision: 'REJECTED',
+      remarks: `Cancelled by buyer: ${reason}`,
+      decidedAt: new Date(),
+    },
+  });
+
+  await auditLog({
+    actorUserId: buyerId,
+    action: 'procurement.checkout.cancelled',
+    entityType: 'procurement_request',
+    entityId: id,
+    metadata: { reason },
+  });
+
+  return updated;
+};
+

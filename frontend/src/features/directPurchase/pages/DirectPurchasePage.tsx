@@ -25,7 +25,8 @@ import {
     useAcceptDirectPurchase,
     useRejectDirectPurchase
 } from '../hooks';
-import type { DirectPurchasePartyDto, DirectPurchaseStatus } from '../types';
+import { DataTable, type ColumnDef } from '@/components/ui/data-table';
+import type { DirectPurchaseDto, DirectPurchasePartyDto, DirectPurchaseStatus } from '../types';
 import { useCreateRequirement } from '../../requirements/hooks';
 import { featureFlags } from '../../../lib/featureFlags';
 import Link from 'next/link';
@@ -99,6 +100,141 @@ export default function DirectPurchasePage({ listOnly = false }: { listOnly?: bo
         const ordered = records.filter(r => r.status === 'ORDERED').length;
         return { drafts, approved, ordered };
     }, [records]);
+
+    const directPurchaseColumns = useMemo<ColumnDef<DirectPurchaseDto>[]>(() => [
+        {
+            key: 'purchaseNumber',
+            header: 'Purchase ID',
+            width: 'w-[15%]',
+            cell: (dp) => (
+                <button
+                    type="button"
+                    className="font-mono text-[11px] font-black text-[#12335f] hover:underline text-wrap-anywhere"
+                    onClick={e => {
+                        e.stopPropagation();
+                        setOpenId(dp.id);
+                    }}
+                >
+                    {dp.purchaseNumber}
+                </button>
+            ),
+        },
+        {
+            key: 'buyer',
+            header: 'Buyer',
+            width: 'w-[20%]',
+            cell: (dp) => (
+                <div className="text-xs text-wrap-anywhere">
+                    <p className="font-bold text-slate-900">{dp.buyer?.name || 'Buyer'}</p>
+                    {dp.buyer?.email && <p className="text-[10px] text-slate-500">{dp.buyer.email}</p>}
+                </div>
+            ),
+        },
+        {
+            key: 'seller',
+            header: 'Seller',
+            width: 'w-[20%]',
+            cell: (dp) => (
+                <div className="text-xs text-wrap-anywhere">
+                    <p className="font-bold text-slate-900">{dp.seller?.name || 'Seller'}</p>
+                    {dp.seller?.email && <p className="text-[10px] text-slate-500">{dp.seller.email}</p>}
+                </div>
+            ),
+        },
+        {
+            key: 'totalAmount',
+            header: 'Amount',
+            width: 'w-[12%]',
+            align: 'right',
+            cell: (dp) => (
+                <span className="text-xs font-bold text-slate-900">{formatCurrency(dp.totalAmount)}</span>
+            ),
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            width: 'w-[12%]',
+            cell: (dp) => (
+                <Badge className={cn('rounded-md px-2 py-0.5 text-[10px] font-black uppercase', STATUS_TONE[dp.status as string] || STATUS_TONE.DRAFT)}>
+                    {String(dp.status).replace(/_/g, ' ')}
+                </Badge>
+            ),
+        },
+        {
+            key: 'requestedAt',
+            header: 'Requested',
+            width: 'w-[13%]',
+            cell: (dp) => (
+                <div className="text-xs font-semibold text-slate-700">
+                    <p>{formatDateTime(dp.requestedAt || dp.createdAt)}</p>
+                    <p className="text-[10px] text-slate-400">{formatRelative(dp.requestedAt || dp.createdAt)}</p>
+                </div>
+            ),
+        },
+        {
+            key: 'actions',
+            header: 'Actions',
+            width: 'w-[8%]',
+            align: 'right',
+            cell: (dp) => (
+                <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                    <button
+                        type="button"
+                        onClick={() => setOpenId(dp.id)}
+                        title="View details"
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-[#12335f] hover:bg-slate-50"
+                    >
+                        <Eye className="h-3.5 w-3.5" />
+                    </button>
+                    {isBuyer && (dp.status === 'APPROVED' || dp.status === 'ORDERED') && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (dp.status === 'ORDERED') return;
+                                runWithToast(() => generatePoMut.mutateAsync(dp.id), {
+                                    loading: 'Generating PO...',
+                                    success: 'Purchase Order generated',
+                                    error: 'PO generation failed'
+                                });
+                            }}
+                            disabled={dp.status === 'ORDERED' || generatePoMut.isPending}
+                            title={dp.status === 'ORDERED' ? "Purchase Order Generated" : "Generate Purchase Order"}
+                            className={cn(
+                                "flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+                                dp.status === 'ORDERED'
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 cursor-default"
+                                    : "border-[#12335f] bg-[#12335f] text-white hover:bg-[#0e2a4f]"
+                            )}
+                        >
+                            {generatePoMut.isPending ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                <Truck className="h-3.5 w-3.5" />
+                            )}
+                        </button>
+                    )}
+                    {isBuyer && ['DRAFT', 'REQUESTED', 'REJECTED'].includes(String(dp.status)) && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (!window.confirm(`Cancel direct purchase ${dp.purchaseNumber}?`)) return;
+                                runWithToast(() => deleteMut.mutateAsync(dp.id), {
+                                    loading: 'Cancelling...',
+                                    success: 'Direct purchase cancelled',
+                                    error: 'Cancel failed'
+                                });
+                            }}
+                            disabled={deleteMut.isPending}
+                            title="Cancel direct purchase"
+                            className="flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                            <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                    )}
+                </div>
+            ),
+        },
+    ], [isBuyer, generatePoMut, deleteMut]);
 
     return (
         <div className="space-y-4">
@@ -203,141 +339,26 @@ export default function DirectPurchasePage({ listOnly = false }: { listOnly?: bo
                 />
             )}
 
-            {list.isLoading && !list.data ? (
-                <ListSkeleton rows={4} />
-            ) : records.length === 0 ? (
-                <EmptyState
-                    title="No direct purchases yet"
-                    description={isBuyer ? 'Create your first request from a known vendor.' : 'No requests visible.'}
-                />
-            ) : (
-                <Card>
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[920px] text-sm">
-                                <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                    <tr>
-                                        <th className="px-4 py-2.5 text-left w-20">Sr. No</th>
-                                        <th className="px-4 py-2.5 text-left w-44">Purchase ID</th>
-                                        <th className="px-4 py-2.5 text-left">Buyer</th>
-                                        <th className="px-4 py-2.5 text-left">Seller</th>
-                                        <th className="px-4 py-2.5 text-right w-32">Amount</th>
-                                        <th className="px-4 py-2.5 text-left w-32">Status</th>
-                                        <th className="px-4 py-2.5 text-left w-44">Requested</th>
-                                        <th className="px-4 py-2.5 text-right w-32">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {records.map((dp, idx) => (
-                                        <tr key={dp.id} className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setOpenId(dp.id)}>
-                                            <td className="px-4 py-3 text-xs font-mono text-slate-400">
-                                                {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <button
-                                                    type="button"
-                                                    className="font-mono text-[11px] font-black text-[#12335f] hover:underline text-wrap-anywhere"
-                                                    onClick={e => {
-                                                        e.stopPropagation();
-                                                        setOpenId(dp.id);
-                                                    }}
-                                                >
-                                                    {dp.purchaseNumber}
-                                                </button>
-                                            </td>
-                                            <td className="px-4 py-3 text-xs text-wrap-anywhere">
-                                                <p className="font-bold text-slate-900">{dp.buyer?.name || 'Buyer'}</p>
-                                                {dp.buyer?.email && <p className="text-[10px] text-slate-500">{dp.buyer.email}</p>}
-                                            </td>
-                                            <td className="px-4 py-3 text-xs text-wrap-anywhere">
-                                                <p className="font-bold text-slate-900">{dp.seller?.name || 'Seller'}</p>
-                                                {dp.seller?.email && <p className="text-[10px] text-slate-500">{dp.seller.email}</p>}
-                                            </td>
-                                            <td className="px-4 py-3 text-right text-xs font-bold text-slate-900">{formatCurrency(dp.totalAmount)}</td>
-                                            <td className="px-4 py-3">
-                                                <Badge className={cn('rounded-md px-2 py-0.5 text-[10px] font-black uppercase', STATUS_TONE[dp.status as string] || STATUS_TONE.DRAFT)}>
-                                                    {String(dp.status).replace(/_/g, ' ')}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-4 py-3 text-xs font-semibold text-slate-700">
-                                                <p>{formatDateTime(dp.requestedAt || dp.createdAt)}</p>
-                                                <p className="text-[10px] text-slate-400">{formatRelative(dp.requestedAt || dp.createdAt)}</p>
-                                            </td>
-                                            <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setOpenId(dp.id)}
-                                                        title="View details"
-                                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-[#12335f] hover:bg-slate-50"
-                                                    >
-                                                        <Eye className="h-3.5 w-3.5" />
-                                                    </button>
-                                                    {isBuyer && (dp.status === 'APPROVED' || dp.status === 'ORDERED') && (
-                                                         <button
-                                                             type="button"
-                                                             onClick={() => {
-                                                                 if (dp.status === 'ORDERED') return;
-                                                                 runWithToast(() => generatePoMut.mutateAsync(dp.id), {
-                                                                     loading: 'Generating PO...',
-                                                                     success: 'Purchase Order generated',
-                                                                     error: 'PO generation failed'
-                                                                 });
-                                                             }}
-                                                             disabled={dp.status === 'ORDERED' || generatePoMut.isPending}
-                                                             title={dp.status === 'ORDERED' ? "Purchase Order Generated" : "Generate Purchase Order"}
-                                                             className={cn(
-                                                                 "flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
-                                                                 dp.status === 'ORDERED'
-                                                                     ? "border-emerald-100 bg-emerald-50/50 text-emerald-600 cursor-default"
-                                                                     : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-                                                             )}
-                                                         >
-                                                             {generatePoMut.isPending && generatePoMut.variables === dp.id ? (
-                                                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                             ) : dp.status === 'ORDERED' ? (
-                                                                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                                                             ) : (
-                                                                 <Truck className="h-3.5 w-3.5" />
-                                                             )}
-                                                         </button>
-                                                     )}
-                                                    {isBuyer && ['DRAFT', 'REQUESTED', 'REJECTED'].includes(String(dp.status)) && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                if (!window.confirm(`Cancel direct purchase ${dp.purchaseNumber}?`)) return;
-                                                                runWithToast(() => deleteMut.mutateAsync(dp.id), {
-                                                                    loading: 'Cancelling...',
-                                                                    success: 'Direct purchase cancelled',
-                                                                    error: 'Cancel failed'
-                                                                });
-                                                            }}
-                                                            disabled={deleteMut.isPending}
-                                                            title="Cancel direct purchase"
-                                                            className="flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                                        >
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <Pagination
-                            page={page}
-                            pageSize={pageSize}
-                            total={total}
-                            onPageChange={setPage}
-                            onPageSizeChange={setPageSize}
-                            label="direct purchases"
-                        />
-                    </CardContent>
-                </Card>
-            )}
+            <DataTable<DirectPurchaseDto>
+                data={records}
+                columns={directPurchaseColumns}
+                keyExtractor={(dp) => dp.id}
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                isLoading={list.isLoading && !list.data}
+                error={list.error ? (list.error as Error).message : null}
+                onRetry={() => list.refetch()}
+                emptyTitle="No direct purchases yet"
+                emptyDescription={isBuyer ? 'Create your first request from a known vendor.' : 'No requests visible.'}
+                showSrNo
+                srNoWidth="w-[4%]"
+                onRowClick={(dp) => setOpenId(dp.id)}
+                rowClassName="cursor-pointer"
+                caption="Direct Purchases List"
+            />
 
             {openId !== null && <DirectPurchaseDetail id={openId} onClose={() => setOpenId(null)} />}
             {creating && isBuyer && LEGACY_CREATE_ENABLED && <DirectPurchaseCreator onClose={() => { setCreating(false); setPrefillData(null); }} prefill={prefillData} />}
@@ -567,51 +588,81 @@ function DirectPurchaseDetail({ id, onClose }: { id: number; onClose: () => void
 
                             <Field label="Line Items">
                                 {dp.requirement.items?.length ? (
-                                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                        <table className="w-full text-xs">
-                                            <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                                <tr>
-                                                    <th className="w-16 px-3 py-2 text-left">Sr. No</th>
-                                                    <th className="px-3 py-2 text-left">Product / Service</th>
-                                                    <th className="px-3 py-2 text-left">Specifications</th>
-                                                    <th className="px-3 py-2 text-right w-16">Qty</th>
-                                                    <th className="px-3 py-2 text-left w-16">Unit</th>
-                                                    <th className="px-3 py-2 text-right w-24">Unit Price</th>
-                                                    <th className="px-3 py-2 text-right w-28">Total</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {dp.requirement.items.map((item, index) => {
+                                    <DataTable
+                                        data={dp.requirement.items}
+                                        columns={[
+                                            {
+                                                key: 'itemName',
+                                                header: 'Product / Service',
+                                                cell: (item: any) => (
+                                                    <span className="font-bold text-slate-900 text-wrap-anywhere">
+                                                        {item.itemName}
+                                                    </span>
+                                                )
+                                            },
+                                            {
+                                                key: 'description',
+                                                header: 'Specifications',
+                                                cell: (item: any) => (
+                                                    <span className="font-semibold text-slate-500 text-wrap-anywhere">
+                                                        {item.description || '-'}
+                                                    </span>
+                                                )
+                                            },
+                                            {
+                                                key: 'quantity',
+                                                header: 'Qty',
+                                                width: 'w-16',
+                                                align: 'right',
+                                                cell: (item: any) => (
+                                                    <span className="font-bold text-slate-900">
+                                                        {Number(item.quantity || 0)}
+                                                    </span>
+                                                )
+                                            },
+                                            {
+                                                key: 'unit',
+                                                header: 'Unit',
+                                                width: 'w-16',
+                                                cell: (item: any) => (
+                                                    <span className="font-semibold text-slate-600">
+                                                        {item.unitOfMeasure}
+                                                    </span>
+                                                )
+                                            },
+                                            {
+                                                key: 'price',
+                                                header: 'Unit Price',
+                                                width: 'w-24',
+                                                align: 'right',
+                                                cell: (item: any) => (
+                                                    <span className="font-bold text-slate-900">
+                                                        {formatCurrency(Number(item.estimatedUnitPrice || 0))}
+                                                    </span>
+                                                )
+                                            },
+                                            {
+                                                key: 'total',
+                                                header: 'Total',
+                                                width: 'w-28',
+                                                align: 'right',
+                                                cell: (item: any) => {
                                                     const price = Number(item.estimatedUnitPrice || 0);
                                                     const qty = Number(item.quantity || 0);
-                                                    const lineTotal = price * qty;
                                                     return (
-                                                        <tr key={item.id} className="hover:bg-slate-50/50">
-                                                            <td className="px-3 py-2 text-xs font-black text-slate-500">{String(index + 1).padStart(2, '0')}</td>
-                                                            <td className="px-3 py-2 font-bold text-slate-900 text-wrap-anywhere">
-                                                                {item.itemName}
-                                                            </td>
-                                                            <td className="px-3 py-2 font-semibold text-slate-500 text-wrap-anywhere">
-                                                                {item.description || '-'}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-right font-bold text-slate-900">
-                                                                {qty}
-                                                            </td>
-                                                            <td className="px-3 py-2 font-semibold text-slate-600">
-                                                                {item.unitOfMeasure}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-right font-bold text-slate-900">
-                                                                {formatCurrency(price)}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-right font-black text-slate-950">
-                                                                {formatCurrency(lineTotal)}
-                                                            </td>
-                                                        </tr>
+                                                        <span className="font-black text-slate-950">
+                                                            {formatCurrency(price * qty)}
+                                                        </span>
                                                     );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                                }
+                                            }
+                                        ]}
+                                        keyExtractor={(item: any) => item.id}
+                                        showSrNo={true}
+                                        srNoHeader="Sr. No"
+                                        srNoWidth="w-16"
+                                        rowClassName="hover:bg-slate-50/50 text-xs"
+                                    />
                                 ) : (
                                     <p className="text-xs font-semibold text-slate-500 bg-white p-3 rounded-lg border border-slate-100">
                                         No line items recorded.

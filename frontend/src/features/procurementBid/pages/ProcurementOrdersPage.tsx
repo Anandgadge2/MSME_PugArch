@@ -16,10 +16,12 @@ import { PageTableSkeleton } from '../../../components/ui/skeleton';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import ProcurementLifecycleTracker from '../../procurementLifecycle/components/ProcurementLifecycleTracker';
 import { inferCurrentLifecycleStage, mapProcurementOrderToLifecycle } from '../../procurementLifecycle/statusMapper';
+import { formatDate } from '../../shared/format';
 
-const fmt = (value?: string) => value ? new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Pending';
+const fmt = (value?: string) => value ? formatDate(value) : 'Pending';
 const roleTitle = (role?: string) => role === 'seller' ? 'Seller Awarded Bids' : role === 'admin' ? 'Admin Procurement Orders' : 'Buyer Awarded Orders';
 type OrderSortKey = 'poNumber' | 'title' | 'buyer' | 'seller' | 'status' | 'amount' | 'createdAt';
 
@@ -277,17 +279,28 @@ export default function ProcurementOrdersPage() {
                   </div>
                 )}
                 {viewMode === 'grid' ? (
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {orders.map(item => <OrderCard key={item.id} order={item} />)}
+                  <div className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {orders.map(item => <OrderCard key={item.id} order={item} />)}
+                    </div>
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                      <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={handlePageSizeChange} label="orders" />
+                    </div>
                   </div>
                 ) : (
-                  <OrderTable orders={orders} sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+                  <OrderTable
+                    orders={orders}
+                    sortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={toggleSort}
+                    page={page}
+                    pageSize={pageSize}
+                    total={total}
+                    onPageChange={setPage}
+                    onPageSizeChange={handlePageSizeChange}
+                  />
                 )}
               </div>
-            )}
-            
-            {orders.length > 0 && (
-              <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={handlePageSizeChange} label="orders" />
             )}
           </section>
         )}
@@ -301,55 +314,126 @@ function OrderTable({
   sortKey,
   sortDirection,
   onSort,
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  onPageSizeChange,
 }: {
   orders: any[];
   sortKey: OrderSortKey;
   sortDirection: SortDirection;
   onSort: (field: OrderSortKey) => void;
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
 }) {
+  const columns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'poNumber',
+      header: 'PO number',
+      sortable: true,
+      sortKey: 'poNumber',
+      width: 'w-32',
+      cell: (order) => (
+        <span className="font-mono text-xs font-black text-[#c86413]">{order.poNumber}</span>
+      )
+    },
+    {
+      key: 'title',
+      header: 'Title',
+      sortable: true,
+      sortKey: 'title',
+      cell: (order) => (
+        <span className="text-xs font-black text-slate-900 line-clamp-1">{order.title}</span>
+      )
+    },
+    {
+      key: 'buyer',
+      header: 'Buyer',
+      sortable: true,
+      sortKey: 'buyer',
+      cell: (order) => (
+        <span className="text-xs font-semibold text-slate-600">{order.buyer?.name || '-'}</span>
+      )
+    },
+    {
+      key: 'seller',
+      header: 'Seller',
+      sortable: true,
+      sortKey: 'seller',
+      cell: (order) => (
+        <span className="text-xs font-semibold text-slate-600">{order.seller?.name || '-'}</span>
+      )
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      sortable: true,
+      sortKey: 'amount',
+      align: 'right',
+      width: 'w-32',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (order) => (
+        <span className="text-xs font-black text-[#0b2447]">{money(Number(order.amount || 0))}</span>
+      )
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortKey: 'status',
+      width: 'w-28',
+      cell: (order) => (
+        <StatusBadge label={order.status || 'issued'} />
+      )
+    },
+    {
+      key: 'lifecycle',
+      header: 'Lifecycle',
+      cell: (order) => {
+        const delivery = order.deliveryTrackings?.[0];
+        const invoice = order.invoices?.[0];
+        return (
+          <span className="text-[10px] font-semibold text-slate-500">
+            Delivery {delivery?.status || 'CREATED'} / Invoice {invoice?.status || 'PENDING'}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'actions',
+      header: 'Action',
+      align: 'right',
+      width: 'w-24',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (order) => (
+        <Link href={`/procurement-orders/${order.id}`} className="inline-flex h-8 items-center rounded-md bg-[#0b2447] px-3 text-[10px] font-black text-white hover:bg-[#07172e] transition">Open</Link>
+      )
+    }
+  ], []);
+
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="overflow-x-auto">
-        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[980px] text-left text-sm">
-          <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-4 py-3"><SortableHeader label="PO number" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={onSort} /></th>
-              <th className="px-4 py-3"><SortableHeader label="Title" field="title" activeField={sortKey} direction={sortDirection} onSort={onSort} /></th>
-              <th className="px-4 py-3"><SortableHeader label="Buyer" field="buyer" activeField={sortKey} direction={sortDirection} onSort={onSort} /></th>
-              <th className="px-4 py-3"><SortableHeader label="Seller" field="seller" activeField={sortKey} direction={sortDirection} onSort={onSort} /></th>
-              <th className="px-4 py-3 text-right"><SortableHeader label="Amount" field="amount" activeField={sortKey} direction={sortDirection} onSort={onSort} className="justify-end" /></th>
-              <th className="px-4 py-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={onSort} /></th>
-              <th className="px-4 py-3">Lifecycle</th>
-              <th className="px-4 py-3 text-right font-black">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {orders.map(order => {
-              const delivery = order.deliveryTrackings?.[0];
-              const invoice = order.invoices?.[0];
-              return (
-                <tr key={order.id} className="bg-white transition hover:bg-blue-50/50">
-                  <td className="px-4 py-3 text-xs font-black text-[#c86413]">{order.poNumber}</td>
-                  <td className="px-4 py-3 text-xs font-black text-slate-900">{order.title}</td>
-                  <td className="px-4 py-3 text-xs font-semibold text-slate-600">{order.buyer?.name || '-'}</td>
-                  <td className="px-4 py-3 text-xs font-semibold text-slate-600">{order.seller?.name || '-'}</td>
-                  <td className="px-4 py-3 text-right text-xs font-black text-[#0b2447]">{money(Number(order.amount || 0))}</td>
-                  <td className="px-4 py-3"><StatusBadge label={order.status || 'issued'} /></td>
-                  <td className="px-4 py-3 text-[10px] font-semibold text-slate-500">
-                    Delivery {delivery?.status || 'CREATED'} / Invoice {invoice?.status || 'PENDING'}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/procurement-orders/${order.id}`} className="inline-flex h-8 items-center rounded-md bg-[#0b2447] px-3 text-[10px] font-black text-white">Open</Link>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-</div>
-      </div>
-    </div>
+    <DataTable<any>
+      data={orders}
+      columns={columns}
+      keyExtractor={(order) => order.id}
+      showSrNo={true}
+      page={page}
+      pageSize={pageSize}
+      total={total}
+      onPageChange={onPageChange}
+      onPageSizeChange={onPageSizeChange}
+      sortKey={sortKey}
+      sortDirection={sortDirection}
+      onSort={(field) => onSort(field as OrderSortKey)}
+      paginationLabel="orders"
+      minWidth="min-w-[980px]"
+    />
   );
 }
 

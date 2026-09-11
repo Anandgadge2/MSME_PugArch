@@ -2,6 +2,7 @@
 import React from 'react';
 import { Bell, Calendar, AlertCircle, Info, Megaphone } from 'lucide-react';
 import type { MarketplaceNotice } from '../api';
+import { formatDate } from '../../shared/format';
 
 const TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string }> = {
     general: { icon: <Info className="h-4 w-4" />, color: 'text-blue-600 bg-blue-50' },
@@ -26,7 +27,7 @@ export function NoticeBoard({ notices }: Props) {
                     </div>
                     <span className="text-[10px] font-bold text-slate-400 inline-flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {formatDate(new Date())}
                     </span>
                 </div>
 
@@ -42,7 +43,7 @@ export function NoticeBoard({ notices }: Props) {
                                     <h3 className="text-xs font-semibold text-slate-800">{notice.title}</h3>
                                     {notice.description && <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{notice.description}</p>}
                                     <p className="text-[9px] text-slate-400 mt-1">
-                                        {new Date(notice.publishedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                        {formatDate(notice.publishedAt)}
                                     </p>
                                 </div>
                                 <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">

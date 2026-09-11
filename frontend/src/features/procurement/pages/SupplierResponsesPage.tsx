@@ -44,6 +44,7 @@ import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
 import { EmptyState } from '../../shared/FeatureStates';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { getApi } from '../../shared/apiClient';
@@ -764,6 +765,132 @@ export default function SupplierResponsesPage() {
     );
   };
 
+  const tableColumns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'type',
+      header: 'Type',
+      sortable: true,
+      sortKey: 'type',
+      width: 'w-32',
+      cell: (bid) => {
+        const typeVal = getConsolidatedType(bid);
+        const TypeIcon = getTypeIcon(typeVal);
+        return (
+          <span className={cn(
+            "inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border transition-transform group-hover:scale-105",
+            TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
+          )}>
+            <TypeIcon className="h-3.5 w-3.5 shrink-0" />
+            {typeVal}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'title',
+      header: 'Title & Reference',
+      sortable: true,
+      sortKey: 'title',
+      width: 'w-96',
+      cell: (bid) => (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {bid.referenceNumber && (
+              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                {bid.referenceNumber}
+              </span>
+            )}
+            {bid.location && (
+              <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-400">
+                <MapPin className="h-3 w-3 shrink-0" />
+                {bid.location}
+              </span>
+            )}
+          </div>
+          <p className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+            {bid.title}
+          </p>
+          {bid.category && (
+            <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">
+              Category: {bid.category}
+            </p>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortKey: 'status',
+      width: 'w-36',
+      cell: (bid) => (
+        <span className={cn('inline-flex whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border', statusColor(bid.status))}>
+          {bid.status}
+        </span>
+      )
+    },
+    {
+      key: 'estimatedValue',
+      header: 'Est. Value',
+      sortable: true,
+      sortKey: 'estimatedValue',
+      width: 'w-36',
+      cell: (bid) => (
+        <span className="text-xs font-extrabold text-slate-900 block">
+          {formatCurrency(bid.estimatedValue)}
+        </span>
+      )
+    },
+    {
+      key: 'responses',
+      header: 'Responses',
+      sortable: true,
+      sortKey: 'responses',
+      width: 'w-40',
+      cell: (bid) => {
+        const count = getBidResponseCount(bid);
+        return (
+          <span className={cn(
+            'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-black border transition-colors',
+            count > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-500'
+          )}>
+            <Users className="h-3.5 w-3.5 shrink-0" />
+            {count} {count === 1 ? 'response' : 'responses'}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'closingDate',
+      header: 'Closing Date',
+      sortable: true,
+      sortKey: 'closingDate',
+      width: 'w-36',
+      cell: (bid) => (
+        <span className="text-xs font-bold text-slate-600 whitespace-nowrap">
+          {formatDate(bid.endDate)}
+        </span>
+      )
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      align: 'right',
+      width: 'w-28',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (bid) => (
+        <Button
+          onClick={(e) => { e.stopPropagation(); handleViewResponses(bid); }}
+          className="inline-flex h-8 min-w-[80px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all duration-200 border-none cursor-pointer"
+        >
+          View
+        </Button>
+      )
+    }
+  ], []);
+
   if (selectedCartProcurement) {
     return (
       <div className="mx-auto max-w-[1600px] px-2.5 sm:px-4 pt-2">
@@ -1023,128 +1150,27 @@ export default function SupplierResponsesPage() {
         <div className="space-y-4">
           {/* ═══ LIST VIEW ═══ */}
           {viewMode === 'list' && (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm">
-              <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
-                <thead>
-                  <tr className="bg-slate-100/70 rounded-xl overflow-hidden">
-                    {renderSortableHeader('Sr. No.', 'index', 'center', 'w-16 rounded-l-xl')}
-                    {renderSortableHeader('Type', 'type', 'left', 'w-32')}
-                    {renderSortableHeader('Title & Reference', 'title', 'left', 'w-96')}
-                    {renderSortableHeader('Status', 'status', 'left', 'w-36')}
-                    {renderSortableHeader('Est. Value', 'estimatedValue', 'left', 'w-36')}
-                    {renderSortableHeader('Responses', 'responses', 'left', 'w-40')}
-                    {renderSortableHeader('Closing Date', 'closingDate', 'left', 'w-36')}
-                    <th className="px-4 py-3 text-right text-[10px] font-extrabold uppercase tracking-wider text-slate-500 w-28 rounded-r-xl">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedBids.map((bid, idx) => {
-                    const typeVal = getConsolidatedType(bid);
-                    const TypeIcon = getTypeIcon(typeVal);
-                    return (
-                      <tr
-                        key={bid.id}
-                        className="group bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:bg-slate-50/80 align-middle cursor-pointer"
-                        onClick={() => handleViewResponses(bid)}
-                      >
-                        {/* Serial Number */}
-                        <td className="rounded-l-xl px-4 py-4 text-xs font-black text-slate-400 text-center">
-                          {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
-                        </td>
-
-                        {/* Type Badge */}
-                        <td className="px-4 py-4">
-                          <span className={cn(
-                            "inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border transition-transform group-hover:scale-105",
-                            TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
-                          )}>
-                            <TypeIcon className="h-3.5 w-3.5 shrink-0" />
-                            {typeVal}
-                          </span>
-                        </td>
-
-                        {/* Title & Reference */}
-                        <td className="px-4 py-4 space-y-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {bid.referenceNumber && (
-                              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                {bid.referenceNumber}
-                              </span>
-                            )}
-                            {bid.location && (
-                              <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-400">
-                                <MapPin className="h-3 w-3 shrink-0" />
-                                {bid.location}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
-                            {bid.title}
-                          </p>
-                          {bid.category && (
-                            <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">
-                              Category: {bid.category}
-                            </p>
-                          )}
-                        </td>
-
-                        {/* Status / Stage */}
-                        <td className="px-4 py-4 space-y-1">
-                          <span className={cn('inline-flex whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border', statusColor(bid.status))}>
-                            {bid.status}
-                          </span>
-                          {/* {bid.currentStage && bid.currentStage !== 'Pending' && (
-                            <span className={cn('block text-[8px] font-bold uppercase text-slate-400 mt-1', stageColor(bid.currentStage))}>
-                              {bid.currentStage}
-                            </span>
-                          )} */}
-                        </td>
-
-                        {/* Est Value */}
-                        <td className="px-4 py-4">
-                          <span className="text-xs font-extrabold text-slate-900 block">
-                            {formatCurrency(bid.estimatedValue)}
-                          </span>
-                        </td>
-
-                        {/* Responses */}
-                        <td className="px-4 py-4">
-                          {(() => {
-                            const count = getBidResponseCount(bid);
-                            return (
-                              <span className={cn(
-                                'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-black border transition-colors',
-                                count > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-500'
-                              )}>
-                                <Users className="h-3.5 w-3.5 shrink-0" />
-                                {count} {count === 1 ? 'response' : 'responses'}
-                              </span>
-                            );
-                          })()}
-                        </td>
-
-                        {/* Closing Date */}
-                        <td className="px-4 py-4 text-xs font-bold text-slate-600 whitespace-nowrap">
-                          {formatDate(bid.endDate)}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="rounded-r-xl px-4 py-4 text-right">
-                          <Button
-                            onClick={(e) => { e.stopPropagation(); handleViewResponses(bid); }}
-                            className="inline-flex h-8 min-w-[80px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all duration-200 border-none cursor-pointer"
-                          >
-                            View
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <DataTable<any>
+              data={pagedBids}
+              columns={tableColumns}
+              keyExtractor={(bid) => bid.id}
+              showSrNo={true}
+              srNoHeader="Sr. No."
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              sortKey={sortKey}
+              sortDirection={sortDir}
+              onSort={(field) => handleSort(field as SortKey)}
+              onRowClick={(bid) => handleViewResponses(bid)}
+              paginationLabel="procurements"
+              emptyTitle="No Supplier Responses Found"
+              emptyDescription={hasActiveFilters
+                ? 'No procurements match the current filters. Try resetting the filters.'
+                : 'Your published procurements will appear here once suppliers start responding.'}
+            />
           )}
 
           {/* ═══ GRID VIEW ═══ */}
@@ -1242,17 +1268,19 @@ export default function SupplierResponsesPage() {
             </div>
           )}
 
-          {/* ═══ PAGINATION ═══ */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              label="procurements"
-            />
-          </div>
+          {/* ═══ GRID PAGINATION ═══ */}
+          {viewMode === 'grid' && (
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                label="procurements"
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

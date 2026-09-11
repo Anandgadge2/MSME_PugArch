@@ -45,18 +45,15 @@ import {
   Tag,
   HelpCircle,
   CheckCircle2,
-  ArrowUpRight,
-  Image as ImageIcon
+  ArrowUpRight
 } from 'lucide-react';
-import ExcelJS from 'exceljs';
-import { useOrgRole } from '../../../hooks/useOrgRole';
-import { getResolvedOrgName } from '../../../components/layout/Navbar';
 
-import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
-import { getFileAssetPreview, openFileAsset, type DocumentPreview } from '../../../lib/files';
 import { Button } from '../../../components/ui/button';
+import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
+import { useOrgRole } from '../../../hooks/useOrgRole';
+import { getResolvedOrgName } from '../../../utils/organizationUtils';
 import { marketplaceApi } from '../../marketplace/api';
 import { DELIVERY_TYPES, PAYMENT_TERMS, QUANTITY_UNITS } from '../../../constants/dropdowns';
 import { formatRefId } from '../../../utils/refIdUtils';
@@ -68,7 +65,8 @@ import {
 } from '../api';
 import { api, BASE_URL, readJsonResponse, unwrapApiData } from '../../../lib/api';
 import { authHeaders, unwrap } from '../../shared/apiClient';
-import { downloadBlob, downloadCsv } from '../../shared/exportUtils';
+import { downloadCsv } from '../../shared/exportUtils';
+import ExcelJS from 'exceljs';
 import { fetchDeliveryAddresses, createDeliveryAddress, type DeliveryAddressDto } from '../../directPurchase/api';
 import { useActiveCart } from '../../cart/hooks';
 import type { CartItemDto } from '../../cart/api';
@@ -111,14 +109,12 @@ type StepKind = 'selection' | 'basics' | 'internal' | 'items' | 'vendors' | 'sch
 
 type ItemAttachment = {
   id: string;
-  name?: string;
-  fileAssetId?: number;
+  name: string;
+  fileAssetId: number;
   fileName: string;
   fileSize?: number;
   mimeType?: string;
   uploadedAt?: string;
-  url?: string;
-  signedUrl?: string;
 };
 
 type ItemRow = {
@@ -138,8 +134,6 @@ type ItemRow = {
   hsn_sac_code?: string;
   brand_preference?: string;
   brand_flexible?: string;
-  imageUrl?: string;
-  documentUrl?: string;
   attachments?: ItemAttachment[];
 };
 
@@ -386,17 +380,16 @@ const isReverseAuctionMethod = (method: ProcurementMethodId) => method === 'REVE
 const isRateContractMethod = (method: ProcurementMethodId) => method === 'RATE_CONTRACT';
 const itemTemplateHeaders = [
   'Item Type',
-  'Item / Service Name',
+  'Item Name',
   'Description / Scope of Work',
   'Quantity',
-  'Unit of Measure (UOM)',
-  'Estimated Unit Rate (INR)',
-  'GST Rate (%)',
-  'HSN / SAC Code',
-  'Preferred Brand / Make',
-  'Brand Flexible (Yes/No)',
-  'Product Image URL',
-  'Specification Document URL'
+  'Unit',
+  'Unit Price',
+  'GST %',
+  'HSN/SAC',
+  'Preferred Brand',
+  'Brand Flexible',
+  'Delivery Date'
 ];
 
 const parseCsvText = (text: string): string[][] => {
@@ -443,72 +436,213 @@ const parseCsvText = (text: string): string[][] => {
   return rows;
 };
 
+const readSpreadsheetRows = async (file: File): Promise<string[][]> => {
+  const lowerName = file.name.toLowerCase();
+  const isExcel = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
+
+  if (isExcel) {
+    const workbook = new ExcelJS.Workbook();
+    const arrayBuffer = await file.arrayBuffer();
+    await workbook.xlsx.load(arrayBuffer);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) return [];
+
+    const rows: string[][] = [];
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      const rowValues: string[] = [];
+      const values = row.values;
+      if (Array.isArray(values)) {
+        for (let i = 1; i < values.length; i++) {
+          const val = values[i];
+          if (val === null || val === undefined) {
+            rowValues.push('');
+          } else if (typeof val === 'object' && 'result' in val) {
+            rowValues.push(String((val as any).result ?? '').trim());
+          } else if (typeof val === 'object' && 'text' in val) {
+            rowValues.push(String((val as any).text ?? '').trim());
+          } else {
+            rowValues.push(String(val).trim());
+          }
+        }
+      }
+      if (rowValues.some(c => c.length > 0)) {
+        rows.push(rowValues);
+      }
+    });
+    return rows;
+  }
+
+  return parseCsvText(await file.text());
+};
+
 const normalizeImportHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+const DESCRIPTION_SCOPE_ALIASES = [
+  'descriptionscopeofwork',
+  'descriptionscope',
+  'scopeofwork',
+  'scopeofworkdeliverables',
+  'scopeofworkanddeliverables',
+  'scopeofworkdeliverablesdetails',
+  'scopeofworkdetails',
+  'scopedeliverables',
+  'specificationsscope',
+  'specificationsscopeofwork',
+  'specificationscope',
+  'specificationscopeofwork',
+  'scopespecifications',
+  'scopespecification',
+  'technicalspecification',
+  'technicalspecifications',
+  'technicalspecs',
+  'detailedtechnicalspecifications',
+  'detailedtechnicalspecification',
+  'technicaldetails',
+  'itemdescription',
+  'productdescription',
+  'servicedescription',
+  'workdescription',
+  'detailedscopeofwork',
+  'detailedscope',
+  'description',
+  'specification',
+  'specifications',
+  'scope',
+  'sow',
+  'details',
+  'desc',
+  'remarks',
+  'technicalnote',
+  'technicalnotes',
+  'requirements',
+  'requirement',
+  'specificationname',
+  'specificationvalue'
+];
+
+const ITEM_NAME_ALIASES = [
+  'itemname',
+  'name',
+  'itemservicename',
+  'productservicename',
+  'productname',
+  'servicename',
+  'itemservice',
+  'item',
+  'product',
+  'service',
+  'title',
+  'itemtitle',
+  'particulars',
+  'itemparticulars',
+  'materialname',
+  'equipmentname',
+  'productservice'
+];
+
 const importedCsvRowToItem = (headers: string[], row: string[], index: number): ItemRow | null => {
-  const get = (...names: string[]) => {
-    const headerIndex = headers.findIndex(header => names.includes(normalizeImportHeader(header)));
-    return headerIndex >= 0 ? String(row[headerIndex] || '').trim() : '';
+  const normHeaders = headers.map(normalizeImportHeader);
+
+  const getByAliases = (...aliases: string[]) => {
+    const idx = normHeaders.findIndex(h => aliases.includes(h));
+    return idx >= 0 ? String(row[idx] || '').trim() : '';
   };
 
-  const name = get('itemname', 'name', 'productservice', 'itemservicename', 'servicename', 'title');
+  let name = getByAliases(...ITEM_NAME_ALIASES);
+  let nameColIdx = normHeaders.findIndex(h => ITEM_NAME_ALIASES.includes(h));
+
+  // 1. Direct alias match for Description / Scope of Work
+  let specification = '';
+  for (const alias of DESCRIPTION_SCOPE_ALIASES) {
+    const idx = normHeaders.indexOf(alias);
+    if (idx >= 0 && idx !== nameColIdx && String(row[idx] || '').trim()) {
+      specification = String(row[idx] || '').trim();
+      break;
+    }
+  }
+
+  // 2. Fallback: match any column containing scope, spec, desc, sow, detail (excluding name col)
+  if (!specification) {
+    const candidateIdx = normHeaders.findIndex((h, i) => {
+      if (i === nameColIdx) return false;
+      return (
+        (h.includes('scope') || h.includes('spec') || h.includes('desc') || h.includes('sow') || h.includes('detail')) &&
+        !h.includes('file') && !h.includes('doc') && !h.includes('attach')
+      );
+    });
+    if (candidateIdx >= 0 && String(row[candidateIdx] || '').trim()) {
+      specification = String(row[candidateIdx] || '').trim();
+    }
+  }
+
+  // If name wasn't found, check if a descriptive column exists to use as name
+  if (!name) {
+    const descColIdx = normHeaders.findIndex(h => h.includes('itemdescription') || h === 'particulars' || h === 'description');
+    if (descColIdx >= 0 && String(row[descColIdx] || '').trim()) {
+      name = String(row[descColIdx] || '').trim();
+      nameColIdx = descColIdx;
+      const remColIdx = normHeaders.findIndex(h => h.includes('remark') || h.includes('spec') || h.includes('scope'));
+      if (remColIdx >= 0 && remColIdx !== descColIdx && String(row[remColIdx] || '').trim()) {
+        specification = String(row[remColIdx] || '').trim();
+      } else {
+        specification = name;
+      }
+    }
+  }
+
   if (!name) return null;
 
-  const rawType = get('itemtype', 'type', 'kind', 'category').toLowerCase();
+  const rawType = getByAliases('itemtype', 'type', 'category', 'kind', 'itemkind', 'productservice', 'classification').toLowerCase();
   const itemType: 'Product' | 'Service' = rawType.includes('service') ? 'Service' : 'Product';
-  const quantity = Math.max(1, Math.round(Number(get('quantity', 'qty', 'count', 'units')) || 1));
-  const rawDeliveryDate = get('requireddeliverydate', 'deliverydate', 'requireddate', 'targetdate');
-  const deliveryDate = rawDeliveryDate || nextFortnight;
+  const quantity = Math.max(1, Math.round(Number(getByAliases('quantity', 'qty', 'count', 'units', 'numberofunits', 'targetqty', 'requiredqty', 'monthlyrequirement', 'estimatedmonthlyrequirement', 'estimatedquantity')) || 1));
 
-  const imageUrl = get('productimageurl', 'imageurl', 'image', 'photo', 'photourl', 'picture', 'picurl', 'productimage');
-  const documentUrl = get('specificationdocumenturl', 'documentspecificationurl', 'documenturl', 'specurl', 'docurl', 'specificationurl', 'attachmenturl', 'pdfurl', 'catalogurl');
-
-  const attachments: ItemAttachment[] = [];
-  let specificationFileName = '';
-
-  if (documentUrl) {
-    try {
-      const urlObj = new URL(documentUrl);
-      const pathname = urlObj.pathname;
-      specificationFileName = pathname.split('/').pop() || `${name.replace(/\s+/g, '_')}_Specification.pdf`;
-    } catch {
-      specificationFileName = documentUrl.split('/').pop()?.split('?')[0] || `${name.replace(/\s+/g, '_')}_Specification.pdf`;
-    }
-    attachments.push({
-      id: `doc:import:${Date.now()}:${index}:${makeId()}`,
-      name: 'Technical Specification Document',
-      fileName: specificationFileName,
-      url: documentUrl,
-      signedUrl: documentUrl,
-      uploadedAt: new Date().toISOString()
-    });
-  }
+  const uom = getByAliases('unit', 'uom', 'unitofmeasure', 'measuringunit', 'unittype', 'measurementunit') || (itemType === 'Service' ? 'Set' : 'Nos');
+  const unitPrice = Number(getByAliases('unitprice', 'rate', 'estimatedunitprice', 'estimatedrate', 'price', 'baseprice', 'cost', 'unitrate', 'estimatedrateinr', 'targetprice')) || 0;
+  const gst = Number(getByAliases('gst', 'gstpercent', 'gstpercentage', 'gstrate', 'tax', 'taxpercent', 'taxpercentage')) || 18;
+  const deliveryDate = getByAliases('deliverydate', 'requireddate', 'expecteddate', 'deliverytimeline', 'date') || nextFortnight;
+  const hsn_sac_code = getByAliases('hsnsac', 'hsn', 'sac', 'hsncode', 'saccode', 'hsnsaccode');
+  const brand_preference = getByAliases('preferredbrand', 'brandpreference', 'brand', 'make', 'brandname', 'manufacturer', 'makemodel');
+  const brand_flexible = getByAliases('brandflexible', 'alternatebrandsallowed', 'brandflexibility') || 'Yes';
 
   return {
     id: `import:${Date.now()}:${index}:${makeId()}`,
     itemType,
     name,
-    specification: get('description', 'specification', 'specifications', 'scopeofwork', 'scope', 'details'),
+    specification,
     quantity,
-    unit: get('unit', 'uom', 'unitofmeasure', 'measuringunit') || (itemType === 'Service' ? 'Set' : 'Nos'),
-    unitPrice: Number(get('unitprice', 'rate', 'estimatedunitprice', 'estimatedunitrate', 'price', 'estimatedunitrateinr', 'estunitrateinr')) || 0,
-    gst: Number(get('gst', 'gstrate', 'gstpercent', 'gstpercentage')) || 18,
+    unit: uom,
+    unitPrice,
+    gst,
     deliveryDate,
     brandPolicy: 'Equivalent allowed',
-    technicalSpecification: get('description', 'specification', 'specifications', 'scopeofwork', 'scope', 'details'),
-    specificationFileName,
-    hsn_sac_code: get('hsnsac', 'hsn', 'sac', 'hsncode', 'saccode', 'hsnsaccode'),
-    brand_preference: get('preferredbrand', 'brandpreference', 'preferredbrandmake', 'brand', 'make'),
-    brand_flexible: get('brandflexible', 'brandflexibleyesno', 'alternatebrandsallowed', 'equivalentallowed') || 'Yes',
-    imageUrl: imageUrl || undefined,
-    documentUrl: documentUrl || undefined,
+    technicalSpecification: specification,
+    specificationFileName: '',
+    hsn_sac_code,
+    brand_preference,
+    brand_flexible,
     fileAssetId: null,
-    attachments,
+    attachments: [],
+  };
+};
+
+const normalizeDraftItem = (it: any, idx: number): ItemRow => {
+  const sp = (typeof it.specifications === 'object' && it.specifications) ? it.specifications : {};
+  const specText = it.specification || it.technicalSpecification || sp.specification || sp.technicalSpecification || sp.scopeOfWork || sp.description || it.description || it.scopeOfWork || '';
+  return {
+    ...it,
+    id: it.id || `item:${Date.now()}:${idx}:${makeId()}`,
+    itemType: (it.itemType || sp.itemType || 'Product').toLowerCase().includes('service') ? 'Service' : 'Product',
+    name: it.name || it.itemName || sp.name || sp.itemName || `Item #${idx + 1}`,
+    specification: specText,
+    technicalSpecification: it.technicalSpecification || specText,
+    unit: it.unit || it.unitOfMeasure || sp.unit || 'Nos',
+    unitPrice: Number(it.unitPrice || it.estimatedUnitPrice || 0),
+    gst: Number(it.gst || sp.gst || 18),
   };
 };
 
 const defaultAuctionConfig = (method: ProcurementMethodId): AuctionConfig => ({
-  auctionNumber: `REQ-${Math.floor(10000 + Math.random() * 90000)}`,
+  auctionNumber: `RA-${Math.floor(10000 + Math.random() * 90000)}`,
   auctionTitle: '',
   auctionDescription: '',
   procurementMethod: 'REVERSE_AUCTION',
@@ -554,12 +688,6 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
   }
 
   const base = draft.auctionConfig || defaultAuctionConfig(method);
-  const reqNo = draft.id
-    ? formatRefId('REQ', draft.id)
-    : (base.auctionNumber && !base.auctionNumber.startsWith('RA-')
-        ? base.auctionNumber
-        : `REQ-${Math.floor(10000 + Math.random() * 90000)}`);
-
   return {
     ...draft,
     type: method,
@@ -576,11 +704,10 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
     auctionConfig: {
       ...base,
       procurementMethod: 'REVERSE_AUCTION',
-      auctionNumber: reqNo,
-      auctionTitle: draft.basics.title || base.auctionTitle || '',
-      auctionDescription: draft.basics.justification || base.auctionDescription || '',
-      auctionCategory: draft.basics.category || base.auctionCategory || '',
-      auctionSubCategory: draft.basics.subCategory || base.auctionSubCategory || '',
+      auctionTitle: base.auctionTitle || draft.basics.title,
+      auctionDescription: base.auctionDescription || draft.basics.justification,
+      auctionCategory: base.auctionCategory || draft.basics.category,
+      auctionSubCategory: base.auctionSubCategory || draft.basics.subCategory,
       buyerOrganization: base.buyerOrganization || draft.internal.orgName,
       department: base.department || draft.internal.department || draft.basics.department,
       startingBidPrice: base.startingBidPrice || draft.basics.estimatedValue || 0,
@@ -666,7 +793,7 @@ const getTotalProcurementQty = (draft: Draft): number => {
 const cartItemToProcurementItem = (item: CartItemDto): ItemRow => {
   const product = item.product;
   const service = item.service;
-  const description = product?.description || service?.description || item.technicalNote || item.itemName;
+  const description = product?.description || service?.description || (service as any)?.scopeOfWork || item.technicalNote || item.itemName;
   const unitPrice = Number(item.unitPrice || product?.price || service?.basePrice || 0);
 
   return {
@@ -785,7 +912,7 @@ const stepLibrary = {
   items: { id: 'items', label: 'Item / Service / BOQ', description: 'Quantities, specs and BOQ items', icon: Package },
   vendors: { id: 'vendors', label: 'Suppliers', description: 'MSME reach, invite selection pool', icon: Users },
   schedule: { id: 'schedule', label: 'Timeline & Rules', description: 'Envelope bids & deadline schedules', icon: CalendarClock },
-  terms: { id: 'terms', label: 'Commercial Terms', description: 'Payment & delivery', icon: BadgeCheck },
+  terms: { id: 'terms', label: 'Commercial Terms', description: 'Payment, delivery and EM/PBG fees', icon: BadgeCheck },
   documents: { id: 'documents', label: 'Required Documents', description: 'Checklists and validation requests', icon: Upload },
   evaluation: { id: 'evaluation', label: 'Evaluation Basis', description: 'QCBS weights and technical scores', icon: BarChart3 },
   publish: { id: 'publish', label: 'Approval & Publish', description: 'Summary review & workflow release', icon: BadgeCheck },
@@ -909,7 +1036,7 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     rebidsAllowed: true,
   },
   terms: {
-    paymentTerms: '100% after delivery and acceptance',
+    paymentTerms: 'ON_DELIVERY',
     deliveryTerms: 'Door delivery to site',
     freightIncluded: true,
     gstIncluded: false,
@@ -968,24 +1095,31 @@ export default function CreateProcurementPage() {
 
   // Determine initial buyer type from profile (Government Buyer option removed, defaulting to PRIVATE_BUYER)
   const initialBuyerType = useMemo<BuyerType>(() => {
-    // const u = user as any;
-    // const orgType = u?.buyerProfile?.organizationType || u?.organization?.organizationType || u?.organizationType || '';
-    // const isGov = String(orgType).toUpperCase().includes('GOVT') ||
-    //   String(orgType).toUpperCase().includes('GOVERNMENT') ||
-    //   String(orgType).toUpperCase().includes('MINISTRY') ||
-    //   String(orgType).toUpperCase().includes('DEPT') ||
-    //   String(orgType).toUpperCase().includes('PSU');
-    // return isGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER';
     return 'PRIVATE_BUYER';
   }, []);
 
   const [draft, setDraft] = useState<Draft>(() => {
+    let cachedOrg = '';
     if (typeof window !== 'undefined') {
+      try {
+        const rawUser = localStorage.getItem('msme_user_cache');
+        if (rawUser) {
+          cachedOrg = getResolvedOrgName(JSON.parse(rawUser));
+        }
+      } catch {
+        // ignore
+      }
       try {
         const raw = localStorage.getItem('msme:guided-procurement-create:v2');
         if (raw) {
           const saved = JSON.parse(raw);
           if (saved && typeof saved === 'object') {
+            if (Array.isArray(saved.items)) {
+              saved.items = saved.items.map((it: any, idx: number) => normalizeDraftItem(it, idx));
+            }
+            if (saved.internal && !saved.internal.orgName && cachedOrg) {
+              saved.internal.orgName = cachedOrg;
+            }
             return saved;
           }
         }
@@ -993,7 +1127,11 @@ export default function CreateProcurementPage() {
         console.error('Failed to load local draft from localStorage', e);
       }
     }
-    return defaultDraft(initialMethod, initialBuyerType);
+    const def = defaultDraft(initialMethod, initialBuyerType);
+    if (cachedOrg) {
+      def.internal.orgName = cachedOrg;
+    }
+    return def;
   });
   const draftIdRef = React.useRef<number | undefined>(draft?.id);
   useEffect(() => {
@@ -1061,32 +1199,6 @@ export default function CreateProcurementPage() {
   const [selectedItemForEdit, setSelectedItemForEdit] = useState<ItemRow | null>(null);
   const [hasAutofilled, setHasAutofilled] = useState(false);
   const [isMobileStepperOpen, setIsMobileStepperOpen] = useState(false);
-  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-
-  const handlePreviewDocument = async (fileAssetOrId: any, label?: string) => {
-    if (!fileAssetOrId) {
-      toast.error('No document attached to view');
-      return;
-    }
-    setPreviewLoading(true);
-    try {
-      const preview = await getFileAssetPreview(
-        fileAssetOrId,
-        label || fileAssetOrId?.fileName || fileAssetOrId?.name || 'Specification Document'
-      );
-      setPreviewDocument(preview);
-    } catch (err: any) {
-      console.error('Failed to preview document:', err);
-      try {
-        await openFileAsset(fileAssetOrId, label || 'Specification Document');
-      } catch {
-        toast.error(err?.message || 'Failed to open document preview');
-      }
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
 
   // A cart-to-RFQ launch is a new procurement intent. Prefer the live cart over
   // any draft left in localStorage, force RFQ, and populate the same normalized
@@ -1131,33 +1243,22 @@ export default function CreateProcurementPage() {
     };
   }, [showItemDrawer]);
 
-  // Auto-fill buyer details and organization from database whenever user or orgStatus resolves
+  // Auto-fill and reactively keep buyer details & organization in sync from authenticated profile
   useEffect(() => {
-    if (!user) return;
+    if (!user && !orgStatus) return;
     const u = user as any;
-    const reg = (u.registrationDetails || {}) as Record<string, any>;
-    const orgName = (
-      resolvedOrgName ||
-      orgStatus?.organization?.organizationName ||
-      u.organization?.organizationName ||
-      u.buyerProfile?.organizationName ||
-      reg.businessName ||
-      reg.organizationName ||
-      ''
-    ).trim();
-
-    const department = u.buyerProfile?.department || u.department || '';
-    const contactPerson = u.buyerProfile?.representativeName || u.name || reg.contactPerson || '';
-    const email = u.buyerProfile?.email || u.email || reg.email || '';
-    const mobile = u.buyerProfile?.mobile || u.mobile || reg.mobile || '';
+    const org = resolvedOrgName || u?.organization?.organizationName || u?.buyerProfile?.organizationName || '';
+    const department = u?.buyerProfile?.department || '';
+    const contactPerson = u?.buyerProfile?.representativeName || u?.name || '';
+    const email = u?.buyerProfile?.email || u?.email || '';
+    const mobile = u?.buyerProfile?.mobile || u?.mobile || '';
 
     setDraft(current => {
       let changed = false;
       const nextInternal = { ...current.internal };
-      const nextAuction = { ...current.auctionConfig };
 
-      if (!nextInternal.orgName?.trim() && orgName) {
-        nextInternal.orgName = orgName;
+      if (!nextInternal.orgName?.trim() && org) {
+        nextInternal.orgName = org;
         changed = true;
       }
       if (!nextInternal.department?.trim() && department) {
@@ -1176,23 +1277,21 @@ export default function CreateProcurementPage() {
         nextInternal.mobile = mobile;
         changed = true;
       }
-      if (orgName && !nextAuction.buyerOrganization?.trim()) {
-        nextAuction.buyerOrganization = orgName;
-        changed = true;
-      }
-      if (orgName && !nextAuction.purchaseOrganization?.trim()) {
-        nextAuction.purchaseOrganization = orgName;
-        changed = true;
-      }
 
       if (!changed) return current;
-      return {
-        ...current,
-        internal: nextInternal,
-        auctionConfig: nextAuction,
-      };
+
+      const nextDraft = { ...current, internal: nextInternal };
+      if (!draftIdParam && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(nextDraft));
+        } catch {
+          // ignore
+        }
+      }
+      return nextDraft;
     });
-  }, [user, resolvedOrgName, orgStatus]);
+    setHasAutofilled(true);
+  }, [user, orgStatus, resolvedOrgName, draftIdParam]);
 
   // Auto-fill buyer type on load
   useEffect(() => {
@@ -1235,7 +1334,7 @@ export default function CreateProcurementPage() {
         const base = defaultDraft(payload.type || 'RFQ', payload.basics?.buyerType || initialBuyerType);
 
         const u = userRef.current as any;
-        const orgName = u?.organization?.organizationName || u?.buyerProfile?.organizationName || '';
+        const orgName = resolvedOrgName || u?.organization?.organizationName || u?.buyerProfile?.organizationName || '';
         const department = u?.buyerProfile?.department || '';
         const contactPerson = u?.buyerProfile?.representativeName || u?.name || '';
         const email = u?.buyerProfile?.email || u?.email || '';
@@ -1257,7 +1356,7 @@ export default function CreateProcurementPage() {
           internal: {
             ...base.internal,
             ...internalPayload,
-            orgName: internalPayload.orgName || orgName,
+            orgName: (internalPayload.orgName || '').trim() || orgName,
             department: internalPayload.department || department,
             contactPerson: internalPayload.contactPerson || contactPerson,
             email: internalPayload.email || email,
@@ -1294,7 +1393,7 @@ export default function CreateProcurementPage() {
             ...base.rateContractConfig,
             ...(payload.rateContractConfig || payload.rateContract || {}),
           },
-          items: Array.isArray(payload.items) ? payload.items : base.items,
+          items: Array.isArray(payload.items) ? payload.items.map((it: any, idx: number) => normalizeDraftItem(it, idx)) : base.items,
           boqTable: Array.isArray(payload.boqTable) ? payload.boqTable : base.boqTable,
           requiredDocs: Array.isArray(payload.requiredDocs) ? payload.requiredDocs : base.requiredDocs,
         });
@@ -1412,11 +1511,7 @@ export default function CreateProcurementPage() {
     }
     const hasReverseAuction = isReverseAuctionMethod(d.type) || Boolean(d.basics.isReverseAuctionNeeded);
     if (hasReverseAuction) {
-      const effectiveCategory = d.auctionConfig.auctionCategory.trim() || d.basics.category.trim();
-      list.push({ label: 'Procurement category is required', ok: Boolean(effectiveCategory) && effectiveCategory !== 'Other', severity: 'error', stepIdx: 1 });
-      list.push({ label: 'Auction currency is required', ok: Boolean(d.auctionConfig.currency.trim()) && d.auctionConfig.currency !== 'Other', severity: 'error', stepIdx: 5 });
-      list.push({ label: 'Starting bid price must be greater than 0', ok: d.auctionConfig.startingBidPrice > 0, severity: 'error', stepIdx: 5 });
-      list.push({ label: 'Minimum bid decrement must be greater than 0', ok: d.auctionConfig.minimumBidDecrement > 0, severity: 'error', stepIdx: 8 });
+      list.push({ label: 'Reverse auction minimum bid decrement must be greater than 0', ok: d.auctionConfig.minimumBidDecrement > 0, severity: 'error', stepIdx: 8 });
       if (d.auctionConfig.reservePrice !== null && d.auctionConfig.startingBidPrice > 0) {
         list.push({ label: 'Reserve price cannot exceed starting price', ok: d.auctionConfig.reservePrice <= d.auctionConfig.startingBidPrice, severity: 'error', stepIdx: 8 });
       }
@@ -1555,10 +1650,8 @@ export default function CreateProcurementPage() {
         const auction = d.auctionConfig;
         const start = new Date(auction.startDateTime).getTime();
         const end = new Date(auction.endDateTime).getTime();
-        const effectiveTitle = auction.auctionTitle.trim() || d.basics.title.trim();
-        const effectiveCategory = auction.auctionCategory.trim() || d.basics.category.trim();
-        if (!effectiveTitle) return false;
-        if (!effectiveCategory || effectiveCategory === 'Other') return false;
+        if (!auction.auctionTitle.trim()) return false;
+        if (!auction.auctionCategory.trim() || auction.auctionCategory === 'Other') return false;
         if (!auction.currency.trim() || auction.currency === 'Other') return false;
         if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
         if (auction.durationMinutes <= 0) return false;
@@ -1575,24 +1668,17 @@ export default function CreateProcurementPage() {
         const contract = d.rateContractConfig;
         const start = new Date(contract.periodStartDate).getTime();
         const end = new Date(contract.periodEndDate).getTime();
-        // Contract title commented out on buyer side, auto-fill default if blank
-        if (!contract.contractTitle || !contract.contractTitle.trim()) {
-          contract.contractTitle = d.basics.title || 'Rate Contract';
-        }
         if (!contract.contractTitle.trim()) return false;
         if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
-        // Rate validity period commented out on buyer side
-        if (contract.rateValidityPeriod && !contract.rateValidityPeriod.trim()) contract.rateValidityPeriod = 'Contract period';
-        // Item / Rate Schedule validation commented out as requested
-        // if (contract.itemRateSchedule.length === 0) return false;
-        // if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) return false;
-        // if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) return false;
+        if (!contract.rateValidityPeriod.trim()) return false;
+        if (contract.itemRateSchedule.length === 0) return false;
+        if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) return false;
+        if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) return false;
         if (contract.callOffOrderAllowed && contract.maximumOrderQuantityPerCallOff > 0 && contract.maximumOrderQuantityPerCallOff < contract.minimumOrderQuantity) return false;
         if (!contract.deliverySla.trim()) return false;
         if (!contract.penaltyClause.trim()) return false;
-        // Security Deposit & PBG checks commented out as requested
-        // if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) return false;
-        // if (contract.pbgRequired && contract.pbgAmount <= 0) return false;
+        if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) return false;
+        if (contract.pbgRequired && contract.pbgAmount <= 0) return false;
       }
     } else if (stepIdx === 6) {
       if (!d.terms.paymentTerms) return false;
@@ -1827,14 +1913,12 @@ export default function CreateProcurementPage() {
         const auction = d.auctionConfig;
         const start = new Date(auction.startDateTime).getTime();
         const end = new Date(auction.endDateTime).getTime();
-        const effectiveTitle = auction.auctionTitle.trim() || d.basics.title.trim();
-        const effectiveCategory = auction.auctionCategory.trim() || d.basics.category.trim();
-        if (!effectiveTitle) {
-          toast.error('Procurement title is required.');
+        if (!auction.auctionTitle.trim()) {
+          toast.error('Auction title is required.');
           return false;
         }
-        if (!effectiveCategory || effectiveCategory === 'Other') {
-          toast.error('Procurement category is required.');
+        if (!auction.auctionCategory.trim() || auction.auctionCategory === 'Other') {
+          toast.error('Auction category is required.');
           return false;
         }
         if (!auction.currency.trim() || auction.currency === 'Other') {
@@ -1874,10 +1958,6 @@ export default function CreateProcurementPage() {
         const contract = d.rateContractConfig;
         const start = new Date(contract.periodStartDate).getTime();
         const end = new Date(contract.periodEndDate).getTime();
-        // Contract title commented out on buyer side, auto-fill default if blank
-        if (!contract.contractTitle || !contract.contractTitle.trim()) {
-          contract.contractTitle = d.basics.title || 'Rate Contract';
-        }
         if (!contract.contractTitle.trim()) {
           toast.error('Contract title is required.');
           return false;
@@ -1886,23 +1966,22 @@ export default function CreateProcurementPage() {
           toast.error('Rate Contract start date must be before end date.');
           return false;
         }
-        // Rate validity period commented out on buyer side, auto-fill default if blank
-        if (!contract.rateValidityPeriod || !contract.rateValidityPeriod.trim()) {
-          contract.rateValidityPeriod = 'Contract period';
+        if (!contract.rateValidityPeriod.trim()) {
+          toast.error('Rate validity period is required.');
+          return false;
         }
-        // Item / Rate Schedule validation commented out as requested
-        // if (contract.itemRateSchedule.length === 0) {
-        //   toast.error('Rate Contract requires at least one item in the rate schedule.');
-        //   return false;
-        // }
-        // if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) {
-        //   toast.error('Every rate schedule item must have item name, UOM, annual quantity, and base rate.');
-        //   return false;
-        // }
-        // if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) {
-        //   toast.error('Slab pricing rows must have valid quantity ranges and positive rates.');
-        //   return false;
-        // }
+        if (contract.itemRateSchedule.length === 0) {
+          toast.error('Rate Contract requires at least one item in the rate schedule.');
+          return false;
+        }
+        if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) {
+          toast.error('Every rate schedule item must have item name, UOM, annual quantity, and base rate.');
+          return false;
+        }
+        if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) {
+          toast.error('Slab pricing rows must have valid quantity ranges and positive rates.');
+          return false;
+        }
         if (contract.callOffOrderAllowed && contract.maximumOrderQuantityPerCallOff > 0 && contract.maximumOrderQuantityPerCallOff < contract.minimumOrderQuantity) {
           toast.error('Maximum call-off quantity cannot be lower than minimum order quantity.');
           return false;
@@ -1915,15 +1994,14 @@ export default function CreateProcurementPage() {
           toast.error('Penalty clause is required.');
           return false;
         }
-        // Security Deposit & PBG checks commented out as requested
-        // if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) {
-        //   toast.error('Security deposit amount is required.');
-        //   return false;
-        // }
-        // if (contract.pbgRequired && contract.pbgAmount <= 0) {
-        //   toast.error('PBG amount is required.');
-        //   return false;
-        // }
+        if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) {
+          toast.error('Security deposit amount is required.');
+          return false;
+        }
+        if (contract.pbgRequired && contract.pbgAmount <= 0) {
+          toast.error('PBG amount is required.');
+          return false;
+        }
       }
     } else if (stepIdx === 6) {
       // Step 6 Terms
@@ -2215,7 +2293,6 @@ export default function CreateProcurementPage() {
                   setShowItemDrawer={setShowItemDrawer}
                   selectedItemForEdit={selectedItemForEdit}
                   setSelectedItemForEdit={setSelectedItemForEdit}
-                  onPreviewDocument={handlePreviewDocument}
                 />
               </SectionCard>
             )}
@@ -2237,7 +2314,6 @@ export default function CreateProcurementPage() {
                   draft={draft}
                   updateDraft={updateDraft}
                   showErrors={triedNext}
-                  onPreviewDocument={handlePreviewDocument}
                 />
               </SectionCard>
             )}
@@ -2303,12 +2379,6 @@ export default function CreateProcurementPage() {
         </div>
 
       </div>
-
-      {/* Global In-App Document Preview Modal */}
-      <DocumentPreviewModal
-        previewDocument={previewDocument}
-        onClose={() => setPreviewDocument(null)}
-      />
     </div>
   );
 }
@@ -2528,8 +2598,8 @@ function BasicsStepForm({
     <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
 
-        {['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION'].includes(draft.type) && (
-          <Field label={`${draft.type === 'REVERSE_AUCTION' ? 'Requirement' : draft.type.includes('TENDER') ? 'Tender' : draft.type} Number`}>
+        {['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER'].includes(draft.type) && (
+          <Field label={`${draft.type.includes('TENDER') ? 'Tender' : draft.type} Number`}>
             <input
               type="text"
               value={
@@ -3093,52 +3163,49 @@ function InternalDetailsForm({
   updateDraft: (updater: (current: Draft) => Draft) => void;
   resolvedOrgName?: string;
 }) {
-  const { user } = useAuth();
-  const { orgStatus } = useOrgRole();
-  const orgNameFromDb = (resolvedOrgName || getResolvedOrgName(user, orgStatus) || '').trim();
-
   // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   const updateInternal = (key: keyof Draft['internal'], val: string | boolean) => {
     updateDraft(c => ({ ...c, internal: { ...c.internal, [key]: val } }));
   };
 
-  const isAutoMatched = Boolean(
-    draft.internal.orgName &&
-    orgNameFromDb &&
-    draft.internal.orgName.trim().toLowerCase() === orgNameFromDb.toLowerCase()
-  );
+  useEffect(() => {
+    if (!draft.internal.orgName?.trim() && resolvedOrgName) {
+      updateInternal('orgName', resolvedOrgName);
+    }
+  }, [draft.internal.orgName, resolvedOrgName]);
+
+  const isAutoFetched = Boolean(resolvedOrgName && draft.internal.orgName?.trim().toLowerCase() === resolvedOrgName.trim().toLowerCase());
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Organization name" required>
-          <div className="relative">
-            <input
-              value={draft.internal.orgName}
-              onChange={e => updateInternal('orgName', e.target.value)}
-              className={cn(inputClass, isAutoMatched && "border-emerald-300 bg-emerald-50/20 pr-24")}
-              placeholder="Enter organization title"
-            />
-            {isAutoMatched ? (
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 rounded-md bg-emerald-100/90 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800 tracking-wider">
-                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                Verified
-              </span>
-            ) : orgNameFromDb && !draft.internal.orgName ? (
-              <button
-                type="button"
-                onClick={() => updateInternal('orgName', orgNameFromDb)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-[#12335f] px-2.5 py-1 text-[10px] font-bold text-white hover:bg-[#0b2445] transition-colors cursor-pointer shadow-3xs"
-              >
-                Auto-fill
-              </button>
-            ) : null}
+          <div className="space-y-1.5">
+            <div className="relative flex items-center">
+              <input
+                value={draft.internal.orgName}
+                onChange={e => updateInternal('orgName', e.target.value)}
+                className={inputClass}
+                placeholder="Enter organization title"
+              />
+              {resolvedOrgName && !isAutoFetched && (
+                <button
+                  type="button"
+                  onClick={() => updateInternal('orgName', resolvedOrgName)}
+                  className="absolute right-2 text-[11px] font-bold text-[#12335f] hover:text-[#0d2342] bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition"
+                  title={`Use verified organization: ${resolvedOrgName}`}
+                >
+                  Auto-fill from profile
+                </button>
+              )}
+            </div>
+            {isAutoFetched && (
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>Auto-fetched from verified organization profile</span>
+              </p>
+            )}
           </div>
-          {orgNameFromDb && isAutoMatched && (
-            <p className="text-[10px] font-semibold text-emerald-700 mt-1 flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" /> Auto-fetched from your registered organization profile ({orgNameFromDb})
-            </p>
-          )}
         </Field>
 
         {/* Buying Department field commented out as requested */}
@@ -3320,7 +3387,6 @@ function EnterpriseDocumentDropzone({
   isUploading,
   attachments,
   onRemoveAttachment,
-  onPreviewAttachment,
   token,
   defaultCategory = 'Technical Specification',
 }: {
@@ -3328,7 +3394,6 @@ function EnterpriseDocumentDropzone({
   isUploading: boolean;
   attachments: ItemAttachment[];
   onRemoveAttachment: (attachmentId: string) => void;
-  onPreviewAttachment?: (att: ItemAttachment) => void;
   token: string | null;
   defaultCategory?: string;
 }) {
@@ -3356,18 +3421,15 @@ function EnterpriseDocumentDropzone({
           <label className="block text-[10px] font-bold uppercase text-slate-500 tracking-wider mb-1">
             Document Type
           </label>
-          <div className="relative">
-            <select
-              value={selectedCategory}
-              onChange={e => setSelectedCategory(e.target.value)}
-              className="w-full h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 pr-8 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition-all appearance-none cursor-pointer"
-            >
-              {DOCUMENT_CATEGORIES.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.label}</option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-          </div>
+          <select
+            value={selectedCategory}
+            onChange={e => setSelectedCategory(e.target.value)}
+            className="w-full h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition-all"
+          >
+            {DOCUMENT_CATEGORIES.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.label}</option>
+            ))}
+          </select>
         </div>
         <div>
           <input
@@ -3452,34 +3514,20 @@ function EnterpriseDocumentDropzone({
           <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
             {attachments.map(att => {
               const fileType = getFileTypeDetails(att.fileName);
-              const viewUrl = att.url || (att.fileAssetId
-                ? `${BASE_URL}/api/files/${att.fileAssetId}/view?token=${encodeURIComponent(token || (typeof window !== 'undefined' ? localStorage.getItem('token') || '' : ''))}`
-                : '#');
+              const viewUrl = `/api/files/${att.fileAssetId}/view?token=${encodeURIComponent(token || (typeof window !== 'undefined' ? localStorage.getItem('token') || '' : ''))}`;
 
               return (
                 <div
                   key={att.id}
                   className="flex items-center justify-between rounded-lg border border-slate-200/90 bg-white p-2 shadow-2xs transition-all hover:border-slate-300 group"
                 >
-                  <div
-                    onClick={() => {
-                      if (onPreviewAttachment) {
-                        onPreviewAttachment(att);
-                      } else if (att.url && !att.fileAssetId) {
-                        window.open(att.url, '_blank');
-                      } else {
-                        openFileAsset(att, att.fileName);
-                      }
-                    }}
-                    className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer"
-                    title={`Click to preview ${att.fileName}`}
-                  >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded text-[9px] font-black border", fileType.bg)}>
                       {fileType.ext}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] font-bold text-slate-900 group-hover:text-[#12335f] transition-colors truncate" title={att.fileName}>
+                        <span className="text-[11px] font-bold text-slate-900 truncate" title={att.fileName}>
                           {att.fileName}
                         </span>
                       </div>
@@ -3491,42 +3539,23 @@ function EnterpriseDocumentDropzone({
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0 ml-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (onPreviewAttachment) {
-                          onPreviewAttachment(att);
-                        } else if (att.url && !att.fileAssetId) {
-                          window.open(att.url, '_blank');
-                        } else {
-                          openFileAsset(att, att.fileName);
-                        }
-                      }}
-                      className="inline-flex h-6.5 items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 text-[10px] font-bold text-slate-700 hover:bg-[#12335f] hover:text-white transition-all cursor-pointer"
-                      title="Preview Document"
-                      aria-label={`Preview document ${att.fileName}`}
-                    >
-                      <Eye className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span>View</span>
-                    </button>
                     <a
                       href={viewUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex h-6.5 w-6.5 items-center justify-center rounded border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-[#12335f] transition-colors"
-                      title="Open original document in new window"
-                      aria-label={`Open ${att.fileName} in new window`}
+                      className="inline-flex h-6.5 items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-bold text-slate-700 hover:bg-slate-100 hover:text-[#12335f]"
+                      title="Preview Document"
                     >
-                      <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                      <Eye className="h-3 w-3 text-slate-500" />
+                      <span>View</span>
                     </a>
                     <button
                       type="button"
                       onClick={() => onRemoveAttachment(att.id)}
-                      className="inline-flex h-6.5 w-6.5 items-center justify-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
+                      className="inline-flex h-6.5 w-6.5 items-center justify-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
                       title="Remove attachment"
-                      aria-label={`Remove attachment ${att.fileName}`}
                     >
-                      <Trash2 className="h-3 w-3" aria-hidden="true" />
+                      <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
@@ -3539,48 +3568,19 @@ function EnterpriseDocumentDropzone({
   );
 }
 
-function getItemAllDocs(it: ItemRow): ItemAttachment[] {
-  const list: ItemAttachment[] = [...(it.attachments || [])];
-  if (it.documentUrl && !list.some(a => a.url === it.documentUrl || a.signedUrl === it.documentUrl)) {
-    list.push({
-      id: `doc:url:${it.id || 'primary'}`,
-      name: 'Specification Document URL',
-      fileName: it.specificationFileName || it.documentUrl.split('/').pop()?.split('?')[0] || 'Specification_Document.pdf',
-      url: it.documentUrl,
-      signedUrl: it.documentUrl,
-      uploadedAt: new Date().toISOString(),
-    });
-  } else if (list.length === 0 && (it.fileAssetId || it.specificationFileName)) {
-    list.push({
-      id: `doc:asset:${it.id || 'primary'}`,
-      name: 'Technical Specification',
-      fileAssetId: Number(it.fileAssetId || 0),
-      fileName: it.specificationFileName || 'Technical Specification.pdf',
-      uploadedAt: new Date().toISOString(),
-    });
-  }
-  return list;
-}
-
 /** Quick Document Manager Modal for In-Table Trigger */
 function QuickDocumentModal({
   item,
   onClose,
   onSaveAttachments,
-  onPreviewAttachment,
   token,
 }: {
   item: ItemRow;
   onClose: () => void;
   onSaveAttachments: (updatedAttachments: ItemAttachment[]) => void;
-  onPreviewAttachment?: (att: ItemAttachment) => void;
   token: string | null;
 }) {
-  const initialAttachments = useMemo(() => {
-    return getItemAllDocs(item);
-  }, [item]);
-
-  const [attachments, setAttachments] = useState<ItemAttachment[]>(initialAttachments);
+  const [attachments, setAttachments] = useState<ItemAttachment[]>(() => item.attachments || []);
   const [isUploading, setIsUploading] = useState(false);
 
   const handleUpload = async (file: File, category: string) => {
@@ -3610,8 +3610,6 @@ function QuickDocumentModal({
         fileSize: asset.size || file.size,
         mimeType: asset.mimeType || file.type,
         uploadedAt: new Date().toISOString(),
-        url: resData.url || asset.url,
-        signedUrl: resData.signedUrl || asset.signedUrl,
       };
       const nextList = [...attachments, newAtt];
       setAttachments(nextList);
@@ -3669,7 +3667,6 @@ function QuickDocumentModal({
             isUploading={isUploading}
             attachments={attachments}
             onRemoveAttachment={handleRemove}
-            onPreviewAttachment={onPreviewAttachment}
             token={token}
             defaultCategory="Technical Specification"
           />
@@ -3700,7 +3697,6 @@ function ItemDrawerOrModal({
   onClose,
   onSave,
   onSaveAndAddAnother,
-  onPreviewAttachment,
   token,
 }: {
   isOpen: boolean;
@@ -3708,7 +3704,6 @@ function ItemDrawerOrModal({
   onClose: () => void;
   onSave: (item: ItemRow) => void;
   onSaveAndAddAnother: (item: ItemRow) => void;
-  onPreviewAttachment?: (att: ItemAttachment) => void;
   token: string | null;
 }) {
   const [formData, setFormData] = useState<ItemRow | null>(item);
@@ -3791,8 +3786,6 @@ function ItemDrawerOrModal({
         fileSize: asset.size || file.size,
         mimeType: asset.mimeType || file.type,
         uploadedAt: new Date().toISOString(),
-        url: resData.url || asset.url,
-        signedUrl: resData.signedUrl || asset.signedUrl,
       };
       const nextAtts = [...(formData.attachments || []), newAtt];
       setFormData({
@@ -3837,42 +3830,42 @@ function ItemDrawerOrModal({
       className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-[999999] p-3 sm:p-6 animate-in fade-in duration-150"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-5xl xl:max-w-6xl bg-white rounded-2xl shadow-2xl border border-slate-200/90 flex flex-col max-h-[94vh] overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200/90 flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
             <div className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-bold transition-colors shadow-2xs",
+              "flex h-10 w-10 items-center justify-center rounded-xl font-bold transition-colors shadow-2xs",
               isService ? "bg-purple-100 text-purple-700" : "bg-[#12335f] text-white"
             )}>
               {isService ? <Wrench className="h-5 w-5" /> : <Package className="h-5 w-5" />}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                <h3 className="text-sm sm:text-base font-black text-slate-900 tracking-tight truncate max-w-[200px] sm:max-w-md md:max-w-lg" title={formData.name || (isService ? 'Add Service Line Item' : 'Add Product Line Item')}>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-black text-slate-900 tracking-tight">
                   {formData.name ? `Edit: ${formData.name}` : (isService ? 'Add Service Line Item' : 'Add Product Line Item')}
                 </h3>
                 <span className={cn(
-                  "rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider shrink-0",
+                  "rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
                   isService ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"
                 )}>
                   {formData.itemType || 'Product'}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium truncate">
+              <p className="text-[11px] text-slate-500 font-medium">
                 {isService ? 'Configure service scope, rates, deliverables, and SOW attachments' : 'Configure technical specs, quantity, commercial pricing, and drawings'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-3">
             {/* Streamlined Category Switcher Pill */}
             <div className="flex items-center bg-slate-200/70 p-0.5 rounded-lg">
               <button
                 type="button"
                 onClick={() => setFormData({ ...formData, itemType: 'Product', unit: formData.unit === 'Set' ? 'Nos' : formData.unit })}
                 className={cn(
-                  "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-bold transition-all",
+                  "flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all",
                   !isService
                     ? "bg-white text-[#12335f] shadow-xs"
                     : "text-slate-600 hover:text-slate-900"
@@ -3885,7 +3878,7 @@ function ItemDrawerOrModal({
                 type="button"
                 onClick={() => setFormData({ ...formData, itemType: 'Service', unit: formData.unit === 'Nos' ? 'Set' : formData.unit })}
                 className={cn(
-                  "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-bold transition-all",
+                  "flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all",
                   isService
                     ? "bg-white text-purple-700 shadow-xs"
                     : "text-slate-600 hover:text-slate-900"
@@ -3908,7 +3901,7 @@ function ItemDrawerOrModal({
         </div>
 
         {/* 2-Column Horizontal Body */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 custom-scrollbar overscroll-contain">
+        <div className="min-h-0 flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 custom-scrollbar overscroll-contain">
           {/* Left Column (7 of 12 cols): Line Specs & Pricing */}
           <div className="lg:col-span-7 space-y-4">
             {/* Row 1: Name & HSN */}
@@ -4030,22 +4023,17 @@ function ItemDrawerOrModal({
             </div>
 
             {/* Row 4: Commercials (Qty, UOM, Rate, GST) */}
-            <div className="pt-3 border-t border-slate-100 space-y-3.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {/* Quantity */}
-                <Field label="Quantity" required error={validationErrors.quantity}>
-                  <div className={cn(
-                    "flex items-center h-[40px] sm:h-11 w-full rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-1 shadow-3xs transition focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/15",
-                    validationErrors.quantity && "border-rose-500 focus-within:border-rose-500 focus-within:ring-rose-500/15"
-                  )}>
+            <div className="pt-2 border-t border-slate-100">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Field label="Quantity" required>
+                  <div className="relative flex items-center">
                     <button
                       type="button"
                       onClick={() => {
                         const current = Number(formData.quantity || 1);
                         if (current > 1) setFormData({ ...formData, quantity: current - 1 });
                       }}
-                      className="h-full w-8 sm:w-9 rounded-lg sm:rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-bold flex items-center justify-center transition-colors shrink-0 text-sm select-none"
-                      aria-label="Decrease quantity"
+                      className="absolute left-1 h-7 w-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center transition-colors"
                     >
                       -
                     </button>
@@ -4058,9 +4046,7 @@ function ItemDrawerOrModal({
                         setFormData({ ...formData, quantity: val });
                         if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
                       }}
-                      className="h-full w-full min-w-0 bg-transparent text-center font-extrabold text-slate-900 outline-none border-0 focus:ring-0 text-xs sm:text-sm px-2"
-                      aria-label="Quantity value"
-                      aria-invalid={!!validationErrors.quantity}
+                      className={cn(inputClass, "text-center px-7 font-bold", validationErrors.quantity && "border-rose-500")}
                     />
                     <button
                       type="button"
@@ -4068,270 +4054,119 @@ function ItemDrawerOrModal({
                         const current = Number(formData.quantity || 1);
                         setFormData({ ...formData, quantity: current + 1 });
                       }}
-                      className="h-full w-8 sm:w-9 rounded-lg sm:rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-bold flex items-center justify-center transition-colors shrink-0 text-sm select-none"
-                      aria-label="Increase quantity"
+                      className="absolute right-1 h-7 w-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center transition-colors"
                     >
                       +
                     </button>
                   </div>
+                  {validationErrors.quantity && (
+                    <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.quantity}</p>
+                  )}
                 </Field>
 
-                {/* UOM */}
-                <Field label="Unit of Measure (UOM)" required error={validationErrors.unit}>
-                  <div className="relative">
-                    <select
-                      value={formData.unit}
-                      onChange={e => {
-                        setFormData({ ...formData, unit: e.target.value });
-                        if (validationErrors.unit) setValidationErrors(prev => ({ ...prev, unit: '' }));
-                      }}
-                      className={cn(
-                        inputClass,
-                        "font-semibold appearance-none pr-9 cursor-pointer",
-                        validationErrors.unit && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15"
-                      )}
-                      aria-label="Unit of measure"
-                      aria-invalid={!!validationErrors.unit}
-                    >
-                      {QUANTITY_UNITS.map((u: any) => (
-                        <option key={u.value} value={u.value}>{u.label}</option>
-                      ))}
-                    </select>
-                    <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                      <ChevronDown className="h-4 w-4" />
-                    </div>
-                  </div>
+                <Field label="UOM" required>
+                  <select
+                    value={formData.unit}
+                    onChange={e => {
+                      setFormData({ ...formData, unit: e.target.value });
+                      if (validationErrors.unit) setValidationErrors(prev => ({ ...prev, unit: '' }));
+                    }}
+                    className={cn(inputClass, "font-semibold", validationErrors.unit && "border-rose-500")}
+                  >
+                    {QUANTITY_UNITS.map((u: any) => (
+                      <option key={u.value} value={u.value}>{u.label}</option>
+                    ))}
+                  </select>
+                  {validationErrors.unit && (
+                    <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.unit}</p>
+                  )}
                 </Field>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {/* Est. Unit Rate */}
                 <Field label="Est. Unit Rate (₹)">
-                  <div className={cn(
-                    "flex items-center h-[40px] sm:h-11 w-full rounded-xl sm:rounded-2xl border border-slate-200 bg-white shadow-3xs transition",
-                    "focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/15"
-                  )}>
-                    <div className="flex items-center justify-center pl-3.5 pr-1.5 text-xs sm:text-sm font-black text-slate-400 select-none shrink-0">
-                      ₹
-                    </div>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
                     <input
                       type="number"
                       min={0}
-                      step="any"
-                      value={formData.unitPrice || ''}
+                      value={formData.unitPrice}
                       onChange={e => setFormData({ ...formData, unitPrice: Math.max(0, parseFloat(e.target.value) || 0) })}
                       onWheel={e => (e.target as HTMLElement).blur()}
-                      className="h-full w-full min-w-0 bg-transparent pr-3 py-0 text-xs sm:text-sm font-bold text-slate-900 outline-none border-0 focus:ring-0 placeholder:text-slate-400"
-                      placeholder="0.00"
-                      aria-label="Estimated unit rate in Rupees"
+                      className={cn(inputClass, "pl-6 font-bold")}
+                      placeholder="0"
                     />
                   </div>
                 </Field>
 
-                {/* GST Rate */}
                 <Field label="GST Rate">
-                  <div className="relative">
-                    <select
-                      value={formData.gst}
-                      onChange={e => setFormData({ ...formData, gst: parseFloat(e.target.value) || 0 })}
-                      className={cn(inputClass, "font-semibold appearance-none pr-9 cursor-pointer")}
-                      aria-label="Applicable GST rate"
-                    >
-                      <option value={0}>0% (Exempt)</option>
-                      <option value={5}>5%</option>
-                      <option value={12}>12%</option>
-                      <option value={18}>18% (Standard Rate)</option>
-                      <option value={28}>28%</option>
-                    </select>
-                    <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                      <ChevronDown className="h-4 w-4" />
-                    </div>
-                  </div>
+                  <select
+                    value={formData.gst}
+                    onChange={e => setFormData({ ...formData, gst: parseFloat(e.target.value) || 0 })}
+                    className={cn(inputClass, "font-semibold")}
+                  >
+                    <option value={0}>0% (Exempt)</option>
+                    <option value={5}>5%</option>
+                    <option value={12}>12%</option>
+                    <option value={18}>18% (Standard)</option>
+                    <option value={28}>28%</option>
+                  </select>
                 </Field>
               </div>
 
               {/* Clean Live Commercial Strip */}
-              <div className="mt-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 rounded-xl bg-slate-50/90 border border-slate-200 px-4 py-2.5 text-xs">
-                <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-slate-600">
+              <div className="mt-3 flex flex-wrap items-center justify-between rounded-xl bg-slate-50 border border-slate-200/90 px-4 py-2.5 text-xs">
+                <div className="flex items-center gap-4 text-slate-600">
                   <span className="text-[11px] font-semibold">
-                    Subtotal: <strong className="text-slate-900 font-black">₹{baseSubtotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong>
+                    Subtotal: <strong className="text-slate-900 font-extrabold">₹{baseSubtotal.toLocaleString('en-IN')}</strong>
                   </span>
                   {gstPct > 0 && (
                     <span className="text-[11px] font-semibold text-slate-500">
-                      GST ({gstPct}%): <strong className="text-slate-800 font-black">+₹{gstAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong>
+                      GST ({gstPct}%): <strong className="text-slate-800 font-extrabold">+₹{gstAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong>
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Line Total:</span>
                   <span className="text-sm font-black text-[#12335f]">
-                    ₹{totalLineValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                    ₹{totalLineValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                   </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column (5 of 12 cols): Visuals, URLs & Attachments */}
-          <div className="lg:col-span-5 border-t lg:border-t-0 lg:border-l border-slate-100 lg:pl-6 space-y-4">
-            {/* Product Image URL */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <ImageIcon className="h-3.5 w-3.5 text-[#12335f]" />
-                  Product Image URL (Optional)
-                </span>
-                {formData.imageUrl && (
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, imageUrl: '' })}
-                    className="text-[9px] font-bold text-rose-500 hover:underline cursor-pointer"
-                  >
-                    Clear URL
-                  </button>
-                )}
-              </label>
-              <input
-                type="url"
-                value={formData.imageUrl || ''}
-                onChange={e => setFormData({ ...formData, imageUrl: e.target.value })}
-                className={cn(inputClass, "text-xs")}
-                placeholder="https://example.com/products/item-image.jpg"
-              />
-              {formData.imageUrl && (
-                <div className="mt-1.5 flex items-center gap-3 p-2 rounded-xl border border-slate-200 bg-slate-50/80">
-                  <div className="relative h-12 w-12 shrink-0 rounded-lg overflow-hidden border border-slate-200 bg-white shadow-2xs">
-                    <img
-                      src={formData.imageUrl}
-                      alt="Product preview"
-                      className="h-full w-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-bold text-slate-800 truncate">Image URL linked</p>
-                    <a
-                      href={formData.imageUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:underline mt-0.5"
-                    >
-                      <span>Preview in new tab</span>
-                      <ExternalLink className="h-2.5 w-2.5" />
-                    </a>
-                  </div>
-                </div>
-              )}
+          {/* Right Column (5 of 12 cols): Documents & Attachments */}
+          <div className="lg:col-span-5 border-t lg:border-t-0 lg:border-l border-slate-100 lg:pl-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-black uppercase text-slate-800 tracking-wide flex items-center gap-1.5">
+                <FileText className="h-4 w-4 text-[#12335f]" />
+                Specs & Drawings
+              </h4>
+              <span className="text-[10px] font-bold text-slate-400">
+                {(formData.attachments || []).length} attached
+              </span>
             </div>
 
-            {/* Specification Document URL */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <FileText className="h-3.5 w-3.5 text-[#12335f]" />
-                  Specification Document URL (Optional)
-                </span>
-                {formData.documentUrl && (
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, documentUrl: '' })}
-                    className="text-[9px] font-bold text-rose-500 hover:underline cursor-pointer"
-                  >
-                    Clear URL
-                  </button>
-                )}
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  value={formData.documentUrl || ''}
-                  onChange={e => {
-                    const docUrl = e.target.value;
-                    const nextAtts = [...(formData.attachments || [])];
-                    const existingIdx = nextAtts.findIndex(a => a.id.startsWith('doc:url:'));
-                    if (docUrl) {
-                      const docFileName = docUrl.split('/').pop()?.split('?')[0] || 'Specification_Document.pdf';
-                      const urlAtt: ItemAttachment = {
-                        id: existingIdx >= 0 ? nextAtts[existingIdx].id : `doc:url:${Date.now()}`,
-                        name: 'Technical Specification URL',
-                        fileName: docFileName,
-                        url: docUrl,
-                        signedUrl: docUrl,
-                        uploadedAt: new Date().toISOString()
-                      };
-                      if (existingIdx >= 0) {
-                        nextAtts[existingIdx] = urlAtt;
-                      } else {
-                        nextAtts.push(urlAtt);
-                      }
-                      setFormData({
-                        ...formData,
-                        documentUrl: docUrl,
-                        attachments: nextAtts,
-                        specificationFileName: formData.specificationFileName || docFileName
-                      });
-                    } else {
-                      const filtered = nextAtts.filter(a => !a.id.startsWith('doc:url:'));
-                      setFormData({
-                        ...formData,
-                        documentUrl: '',
-                        attachments: filtered
-                      });
-                    }
-                  }}
-                  className={cn(inputClass, "text-xs flex-1")}
-                  placeholder="https://example.com/specs/spec-sheet.pdf"
-                />
-                {formData.documentUrl && (
-                  <a
-                    href={formData.documentUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="h-10 px-3 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors shrink-0"
-                    title="Test specification document link"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                )}
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-100">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-black uppercase text-slate-800 tracking-wide flex items-center gap-1.5">
-                  <FolderUp className="h-4 w-4 text-[#12335f]" />
-                  Uploaded Attachments
-                </h4>
-                <span className="text-[10px] font-bold text-slate-400">
-                  {(formData.attachments || []).length} attached
-                </span>
-              </div>
-
-              <EnterpriseDocumentDropzone
-                onUploadFile={handleUploadFile}
-                isUploading={isUploading}
-                attachments={formData.attachments || []}
-                onRemoveAttachment={handleRemoveAttachment}
-                onPreviewAttachment={onPreviewAttachment}
-                token={token}
-                defaultCategory="Technical Specification"
-              />
-            </div>
+            <EnterpriseDocumentDropzone
+              onUploadFile={handleUploadFile}
+              isUploading={isUploading}
+              attachments={formData.attachments || []}
+              onRemoveAttachment={handleRemoveAttachment}
+              token={token}
+              defaultCategory="Technical Specification"
+            />
           </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="px-4 sm:px-6 py-3.5 border-t border-slate-100 bg-slate-50/80 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+        <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/80 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           <div className="text-xs font-bold text-slate-600 text-left w-full sm:w-auto">
             <span className="text-slate-400 font-semibold">Line Total: </span>
-            <span className="text-base sm:text-lg font-black text-[#12335f]">
-              ₹{totalLineValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            <span className="text-base font-black text-[#12335f]">
+              ₹{totalLineValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </span>
           </div>
 
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-2.5 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
             <Button
               type="button"
               variant="outline"
@@ -4344,7 +4179,7 @@ function ItemDrawerOrModal({
               type="button"
               variant="outline"
               onClick={handleSaveAndAddClick}
-              className="h-9 px-3.5 sm:px-4 text-xs font-bold border-[#12335f]/40 text-[#12335f] hover:bg-[#12335f]/5"
+              className="h-9 px-4 text-xs font-bold border-[#12335f]/40 text-[#12335f] hover:bg-[#12335f]/5"
             >
               <Plus className="h-3.5 w-3.5 mr-1" />
               Save & Add Another
@@ -4352,7 +4187,7 @@ function ItemDrawerOrModal({
             <Button
               type="button"
               onClick={handleSaveClick}
-              className="h-9 px-5 sm:px-6 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-md transition-all"
+              className="h-9 px-6 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-md transition-all"
             >
               {formData.name ? 'Update Line Item' : 'Save Line Item'}
             </Button>
@@ -4370,8 +4205,7 @@ function ItemsDetailsForm({
   showItemDrawer,
   setShowItemDrawer,
   selectedItemForEdit,
-  setSelectedItemForEdit,
-  onPreviewDocument,
+  setSelectedItemForEdit
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
@@ -4379,7 +4213,6 @@ function ItemsDetailsForm({
   setShowItemDrawer: (open: boolean) => void;
   selectedItemForEdit: ItemRow | null;
   setSelectedItemForEdit: (item: ItemRow | null) => void;
-  onPreviewDocument: (fileAssetOrId: any, label?: string) => void;
 }) {
   const whatBuying = draft.basics.whatAreYouBuying;
   const { token } = useAuth();
@@ -4531,174 +4364,55 @@ function ItemsDetailsForm({
   const handleDownloadItemTemplate = async () => {
     try {
       const workbook = new ExcelJS.Workbook();
-      workbook.creator = 'MSME Sourcing Portal';
+      workbook.creator = 'MSME Procurement Portal';
       workbook.created = new Date();
+      const sheet = workbook.addWorksheet('Schedule Items', { views: [{ showGridLines: true }] });
 
-      // Sheet 1: Line Items Schedule
-      const sheet = workbook.addWorksheet('Line Items Schedule', {
-        views: [{ showGridLines: true }]
-      });
+      sheet.addRow(itemTemplateHeaders);
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF12335F' }
+      };
+      headerRow.height = 24;
+
+      sheet.addRow(['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness, heavy duty traffic rated', 1000, 'Nos', 45, 18, '6810', 'UltraTech / Equivalent', 'Yes', nextFortnight]);
+      sheet.addRow(['Service', 'Annual Maintenance Contract', 'Comprehensive preventive maintenance with quarterly visits, emergency breakdown support, and calibration', 1, 'Set', 25000, 18, '9987', '', 'Yes', nextFortnight]);
 
       sheet.columns = [
-        { header: 'Item Type', key: 'itemType', width: 16 },
-        { header: 'Item / Service Name', key: 'name', width: 32 },
-        { header: 'Description / Scope of Work', key: 'description', width: 44 },
-        { header: 'Quantity', key: 'quantity', width: 14 },
-        { header: 'Unit of Measure (UOM)', key: 'unit', width: 24 },
-        { header: 'Estimated Unit Rate (INR)', key: 'unitPrice', width: 25 },
-        { header: 'GST Rate (%)', key: 'gst', width: 16 },
-        { header: 'HSN / SAC Code', key: 'hsnSac', width: 18 },
-        { header: 'Preferred Brand / Make', key: 'preferredBrand', width: 26 },
-        { header: 'Brand Flexible (Yes/No)', key: 'brandFlexible', width: 24 },
-        { header: 'Product Image URL', key: 'imageUrl', width: 38 },
-        { header: 'Specification Document URL', key: 'documentUrl', width: 40 },
+        { width: 14 },
+        { width: 30 },
+        { width: 50 },
+        { width: 12 },
+        { width: 10 },
+        { width: 16 },
+        { width: 10 },
+        { width: 14 },
+        { width: 24 },
+        { width: 16 },
+        { width: 16 },
       ];
-
-      // Format Header Row
-      const headerRow = sheet.getRow(1);
-      headerRow.height = 32;
-      headerRow.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-      headerRow.eachCell(cell => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FF12335F' }
-        };
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          bottom: { style: 'medium', color: { argb: 'FF0F172A' } },
-          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        };
-      });
-
-      // Sample Data Rows (Product + Service with sample image & doc URLs)
-      const sampleRows = [
-        {
-          itemType: 'Product',
-          name: 'M30 Concrete Paver Block',
-          description: 'ISI marked heavy-duty concrete paver blocks, 60mm thickness with compressive strength >= 30 N/mm2.',
-          quantity: 1000,
-          unit: 'Nos',
-          unitPrice: 45.00,
-          gst: 18,
-          hsnSac: '681019',
-          preferredBrand: 'UltraTech / PaverCo',
-          brandFlexible: 'Yes',
-          imageUrl: 'https://images.unsplash.com/photo-1588872657578-7efd1f1555ed?auto=format&fit=crop&w=600&q=80',
-          documentUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'
-        },
-        {
-          itemType: 'Service',
-          name: 'Comprehensive Annual Maintenance Contract (AMC)',
-          description: 'Full comprehensive maintenance service covering quarterly preventive maintenance visits and 24x7 callout support.',
-          quantity: 1,
-          unit: 'Set',
-          unitPrice: 25000.00,
-          gst: 18,
-          hsnSac: '998713',
-          preferredBrand: 'OEM Certified Partner',
-          brandFlexible: 'Yes',
-          imageUrl: '',
-          documentUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'
-        }
-      ];
-
-      sampleRows.forEach((rowData, idx) => {
-        const row = sheet.addRow(rowData);
-        row.height = 24;
-        row.alignment = { vertical: 'middle', wrapText: false };
-        row.font = { name: 'Calibri', size: 10 };
-        const isAlt = idx % 2 === 1;
-        row.eachCell((cell, colNumber) => {
-          if (isAlt) {
-            cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFF8FAFC' }
-            };
-          }
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          };
-          if ([1, 4, 5, 7, 8, 10].includes(colNumber)) {
-            cell.alignment = { vertical: 'middle', horizontal: 'center' };
-          }
-          if (colNumber === 6) {
-            cell.numFmt = '₹#,##0.00';
-            cell.alignment = { vertical: 'middle', horizontal: 'right' };
-          }
-        });
-      });
-
-      // Sheet 2: Instructions & Guide
-      const guideSheet = workbook.addWorksheet('Instructions & Field Guide', {
-        views: [{ showGridLines: true }]
-      });
-
-      guideSheet.columns = [
-        { header: 'Field Name', key: 'field', width: 28 },
-        { header: 'Required?', key: 'required', width: 14 },
-        { header: 'Supported Formats / Examples', key: 'format', width: 42 },
-        { header: 'Instructions & Field Details', key: 'notes', width: 60 },
-      ];
-
-      const guideHeader = guideSheet.getRow(1);
-      guideHeader.height = 30;
-      guideHeader.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
-      guideHeader.eachCell(cell => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      });
-
-      const guideData = [
-        { field: 'Item Type', required: 'Optional', format: 'Product or Service', notes: 'Defaults to Product if not specified. Specify "Service" for works/AMC.' },
-        { field: 'Item / Service Name', required: 'Mandatory', format: 'Text (max 150 chars)', notes: 'Primary name or description of the product or service required.' },
-        { field: 'Description / Scope of Work', required: 'Optional', format: 'Text', notes: 'Technical specifications, dimensions, scope of deliverables, or SLAs.' },
-        { field: 'Quantity', required: 'Mandatory', format: 'Positive Integer', notes: 'Number of units required (e.g. 1, 10, 500).' },
-        { field: 'Unit of Measure (UOM)', required: 'Optional', format: 'Nos, Set, Kg, Mtr, Box, etc.', notes: 'Standard unit of measure. Defaults to "Nos" for Product or "Set" for Service.' },
-        { field: 'Estimated Unit Rate (INR)', required: 'Optional', format: 'Decimal / Number', notes: 'Base estimated price per unit excluding GST in Indian Rupees.' },
-        { field: 'GST Rate (%)', required: 'Optional', format: '0, 5, 12, 18, 28', notes: 'Applicable GST percentage rate (defaults to 18%).' },
-        { field: 'HSN / SAC Code', required: 'Optional', format: 'Numeric string (e.g. 681019, 9987)', notes: 'Harmonized System of Nomenclature (HSN) or Service Accounting Code (SAC).' },
-        { field: 'Preferred Brand / Make', required: 'Optional', format: 'Text (e.g. Dell, HP, Tata)', notes: 'Brand or manufacturer preference if applicable.' },
-        { field: 'Brand Flexible (Yes/No)', required: 'Optional', format: 'Yes or No', notes: 'Indicate whether equivalent substitute brands are accepted (default: Yes).' },
-        { field: 'Product Image URL', required: 'Optional', format: 'Valid HTTP/HTTPS image URL', notes: 'Direct link to an image file (PNG, JPG, WebP) displaying the product. Automatically displays a preview thumbnail.' },
-        { field: 'Specification Document URL', required: 'Optional', format: 'Valid HTTP/HTTPS PDF or doc link', notes: 'Direct link to a specification sheet, CAD drawing, or PDF. Automatically attached and previewable in portal.' },
-      ];
-
-      guideData.forEach((item, idx) => {
-        const r = guideSheet.addRow(item);
-        r.height = 22;
-        r.alignment = { vertical: 'middle', wrapText: true };
-        const isAlt = idx % 2 === 1;
-        r.eachCell(cell => {
-          if (isAlt) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-          }
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          };
-        });
-      });
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      downloadBlob(blob, 'procurement_line_items_template.xlsx');
-      toast.success('Excel line items template downloaded');
-    } catch (err: any) {
-      console.error('Failed to generate Excel template:', err);
-      downloadCsv('procurement_line_items_template.csv', [
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'procurement_items_services_template.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success('Downloaded Excel template (.xlsx)');
+    } catch {
+      downloadCsv('procurement-items-services-template.csv', [
         itemTemplateHeaders,
-        ['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness', 1000, 'Nos', 45, 18, '6810', '', 'Yes', '', ''],
-        ['Service', 'Annual Maintenance Contract', 'Preventive maintenance with quarterly visits', 1, 'Set', 25000, 18, '9987', '', 'Yes', '', ''],
+        ['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness, heavy duty traffic rated', 1000, 'Nos', 45, 18, '6810', 'UltraTech / Equivalent', 'Yes', nextFortnight],
+        ['Service', 'Annual Maintenance Contract', 'Comprehensive preventive maintenance with quarterly visits, emergency breakdown support, and calibration', 1, 'Set', 25000, 18, '9987', '', 'Yes', nextFortnight],
       ]);
+      toast.success('Downloaded CSV template');
     }
   };
 
@@ -4707,59 +4421,19 @@ function ItemsDetailsForm({
     e.target.value = '';
     if (!file) return;
 
-    const fileNameLower = file.name.toLowerCase();
-    const isExcel = fileNameLower.endsWith('.xlsx') || fileNameLower.endsWith('.xls');
-    const isCsv = fileNameLower.endsWith('.csv') || fileNameLower.endsWith('.txt');
+    const lowerName = file.name.toLowerCase();
+    const isCsv = lowerName.endsWith('.csv') || lowerName.endsWith('.txt');
+    const isExcel = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
 
-    if (!isExcel && !isCsv) {
-      toast.error('Please upload an Excel (.xlsx, .xls) or CSV template file.');
+    if (!isCsv && !isExcel) {
+      toast.error('Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.');
       return;
     }
 
     try {
-      let rows: string[][] = [];
-
-      if (isExcel) {
-        const buffer = await file.arrayBuffer();
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(buffer);
-        const worksheet = workbook.getWorksheet('Line Items Schedule') || workbook.worksheets[0];
-        if (!worksheet) {
-          toast.error('No worksheets found in Excel workbook.');
-          return;
-        }
-
-        worksheet.eachRow((row, _rowNumber) => {
-          const values: string[] = [];
-          const rowVals = Array.isArray(row.values) ? row.values.slice(1) : [];
-          for (let colIdx = 0; colIdx < worksheet.columnCount; colIdx++) {
-            const rawVal = rowVals[colIdx];
-            if (rawVal === null || rawVal === undefined) {
-              values.push('');
-            } else if (typeof rawVal === 'object') {
-              if ('text' in rawVal && typeof (rawVal as any).text === 'string') {
-                values.push((rawVal as any).text);
-              } else if ('result' in rawVal && (rawVal as any).result !== undefined) {
-                values.push(String((rawVal as any).result));
-              } else if ('hyperlink' in rawVal && typeof (rawVal as any).hyperlink === 'string') {
-                values.push((rawVal as any).hyperlink);
-              } else {
-                values.push(String((rawVal as any).richText?.map((rt: any) => rt.text).join('') || ''));
-              }
-            } else {
-              values.push(String(rawVal).trim());
-            }
-          }
-          if (values.some(v => v.length > 0)) {
-            rows.push(values);
-          }
-        });
-      } else {
-        rows = parseCsvText(await file.text());
-      }
-
+      const rows = await readSpreadsheetRows(file);
       if (rows.length < 2) {
-        toast.error('Template has no data rows to import.');
+        toast.error('Template has no item rows to import.');
         return;
       }
 
@@ -4769,7 +4443,7 @@ function ItemsDetailsForm({
         .filter((item): item is ItemRow => Boolean(item));
 
       if (importedItems.length === 0) {
-        toast.error('No valid line items found. Item / Service Name is required.');
+        toast.error('No valid item rows found. Item Name is required.');
         return;
       }
 
@@ -4785,9 +4459,9 @@ function ItemsDetailsForm({
           items: nextItems,
         };
       });
-      toast.success(`Imported ${importedItems.length} item/service row${importedItems.length === 1 ? '' : 's'} successfully`);
+      toast.success(`Imported ${importedItems.length} item/service row${importedItems.length === 1 ? '' : 's'}`);
     } catch (err: any) {
-      console.error('Import error:', err);
+      console.error(err);
       toast.error(err.message || 'Failed to import template');
     }
   };
@@ -4847,12 +4521,66 @@ function ItemsDetailsForm({
       const asset = resData.file || resData;
       const fileId = Number(resData.fileId || asset.id || 0);
 
-      updateDraft(c => ({
-        ...c,
-        boqFileAssetId: fileId,
-        boqFileName: asset.originalName || file.name
-      }));
-      toast.success('BOQ file uploaded successfully');
+      // Parse spreadsheet rows if it's an Excel or CSV file
+      let parsedBoqRows: BOQRow[] = [];
+      try {
+        const lowerName = file.name.toLowerCase();
+        if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.csv') || lowerName.endsWith('.txt')) {
+          const rows = await readSpreadsheetRows(file);
+          if (rows.length >= 2) {
+            const [headers, ...dataRows] = rows;
+            const normH = headers.map(normalizeImportHeader);
+            const findCol = (...aliases: string[]) => normH.findIndex(h => aliases.includes(h));
+            const descIdx = findCol('itemdescription', 'description', 'descriptionscopeofwork', 'descriptionscope', 'scopeofwork', 'itemname', 'name', 'particulars', 'details');
+            const catIdx = findCol('category', 'itemcategory');
+            const qtyIdx = findCol('quantity', 'qty', 'units');
+            const uomIdx = findCol('uom', 'unit', 'unitofmeasure');
+            const rateIdx = findCol('estimatedrateinr', 'estimatedrate', 'rate', 'estimatedunitprice', 'unitprice', 'price');
+            const taxIdx = findCol('tax', 'taxpercent', 'taxpercentage', 'gst', 'gstpercent');
+            const remIdx = findCol('remarks', 'remark', 'specification', 'specifications', 'scopeofwork', 'scope', 'notes');
+
+            dataRows.forEach((r, idx) => {
+              const desc = descIdx >= 0 ? String(r[descIdx] || '').trim() : '';
+              if (desc) {
+                const qty = Math.max(1, Number(qtyIdx >= 0 ? r[qtyIdx] : 1) || 1);
+                const rate = Math.max(0, Number(rateIdx >= 0 ? r[rateIdx] : 0) || 0);
+                const tax = Number(taxIdx >= 0 ? r[taxIdx] : 18) || 18;
+                parsedBoqRows.push({
+                  srNo: idx + 1,
+                  description: desc,
+                  category: catIdx >= 0 && r[catIdx] ? String(r[catIdx]).trim() : 'General',
+                  quantity: qty,
+                  uom: uomIdx >= 0 && r[uomIdx] ? String(r[uomIdx]).trim() : 'Nos',
+                  estimatedRate: rate,
+                  taxPercent: tax,
+                  total: qty * rate,
+                  remarks: remIdx >= 0 && r[remIdx] ? String(r[remIdx]).trim() : '',
+                });
+              }
+            });
+          }
+        }
+      } catch (parseErr) {
+        console.warn('Could not parse BOQ spreadsheet rows:', parseErr);
+      }
+
+      updateDraft(c => {
+        const nextTable = parsedBoqRows.length > 0 ? parsedBoqRows : c.boqTable;
+        const totalSum = nextTable.reduce((acc, row) => acc + (Number(row.total) || (Number(row.quantity || 0) * Number(row.estimatedRate || 0))), 0);
+        return {
+          ...c,
+          boqFileAssetId: fileId,
+          boqFileName: asset.originalName || file.name,
+          boqTable: nextTable,
+          basics: {
+            ...c.basics,
+            estimatedValue: parsedBoqRows.length > 0 ? totalSum : c.basics.estimatedValue
+          }
+        };
+      });
+      toast.success(parsedBoqRows.length > 0
+        ? `BOQ file uploaded & ${parsedBoqRows.length} item row${parsedBoqRows.length === 1 ? '' : 's'} imported`
+        : 'BOQ file uploaded successfully');
     } catch (err: any) {
       toast.error(err.message || 'Failed to upload BOQ');
     } finally {
@@ -4917,6 +4645,185 @@ function ItemsDetailsForm({
     });
   };
 
+  const procurementItemColumns: ColumnDef<any>[] = useMemo(() => [
+    {
+      key: 'type',
+      header: 'Type',
+      width: 'w-24',
+      cell: (item: any) => (
+        <span className={cn(
+          "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
+          item.itemType === 'Service'
+            ? "border border-purple-200 bg-purple-50 text-purple-700"
+            : "border border-blue-200 bg-blue-50 text-blue-700"
+        )}>
+          {item.itemType || 'Product'}
+        </span>
+      )
+    },
+    {
+      key: 'name',
+      header: 'Item / Service Name',
+      width: 'w-56',
+      cell: (item: any) => (
+        <div className="font-black text-slate-900 text-xs">
+          {item.name || <span className="text-rose-500 italic">Unnamed Item</span>}
+        </div>
+      )
+    },
+    {
+      key: 'specifications',
+      header: 'Specifications / Scope',
+      cellClassName: 'text-slate-600 font-medium max-w-[240px]',
+      cell: (item: any) => {
+        const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
+        return (
+          <span className="line-clamp-2" title={descText || undefined}>
+            {descText ? descText : <span className="text-slate-400 italic">No description</span>}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'quantity',
+      header: 'Qty & UOM',
+      width: 'w-28',
+      align: 'center',
+      cell: (item: any) => (
+        <div>
+          <span className="font-extrabold text-slate-900">{item.quantity}</span>{' '}
+          <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit}</span>
+        </div>
+      )
+    },
+    {
+      key: 'rate',
+      header: 'Est. Unit Rate',
+      width: 'w-28',
+      align: 'right',
+      cellClassName: 'font-extrabold text-slate-900',
+      cell: (item: any) => (
+        Number(item.unitPrice || 0) > 0 ? (
+          <span>₹{Number(item.unitPrice).toLocaleString('en-IN')}</span>
+        ) : (
+          <span className="text-slate-400 font-normal">-</span>
+        )
+      )
+    },
+    {
+      key: 'hsn',
+      header: 'HSN / SAC',
+      width: 'w-24',
+      align: 'center',
+      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600',
+      cell: (item: any) => item.hsn_sac_code || <span className="text-slate-400">-</span>
+    },
+    {
+      key: 'brand',
+      header: 'Brand & Policy',
+      width: 'w-32',
+      cell: (item: any) => (
+        <div>
+          <div className="text-slate-800 text-[11px] font-bold truncate max-w-[120px]">
+            {item.brand_preference || 'Any Brand'}
+          </div>
+          <div className="mt-0.5">
+            {item.brand_flexible === 'No' ? (
+              <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
+                Lock
+              </span>
+            ) : (
+              <span className="inline-flex items-center text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                Flexible
+              </span>
+            )}
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'documents',
+      header: 'Documents & Specs',
+      width: 'w-40',
+      cell: (item: any) => {
+        const attachmentsList = item.attachments || [];
+        const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
+        const docCount = attachmentsList.length || (item.specificationFileName ? 1 : 0);
+
+        return hasDocs ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setQuickDocItem(item)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2 py-1 text-[10px] font-extrabold text-emerald-800 hover:bg-emerald-100 transition-colors"
+              title="Click to view or manage attachments"
+            >
+              <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
+              <span className="truncate max-w-[90px]">
+                {docCount} file{docCount === 1 ? '' : 's'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickDocItem(item)}
+              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+              title="Add more documents"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setQuickDocItem(item)}
+            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all"
+            title="Attach specification or drawing"
+          >
+            <FilePlus className="h-3 w-3 text-slate-400" />
+            <span>+ Attach Doc</span>
+          </button>
+        );
+      }
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-28',
+      align: 'right',
+      cell: (item: any) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedItemForEdit(item);
+              setShowItemDrawer(true);
+            }}
+            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors"
+            title="Edit specifications"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDuplicateItem(item)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            title="Duplicate line item"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleRemoveItem(item.id)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+            title="Delete line item"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )
+    }
+  ], [handleDuplicateItem, handleRemoveItem]);
+
   // 1. BOQ Table Mode
   if (whatBuying === 'BOQ') {
     return (
@@ -4975,19 +4882,7 @@ function ItemsDetailsForm({
         {draft.boqFileName && (
           <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl max-w-md animate-fadeIn">
             <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />
-            <span className="truncate flex-1 min-w-0">Uploaded BOQ: <strong>{draft.boqFileName}</strong></span>
-            {draft.boqFileAssetId && (
-              <button
-                type="button"
-                onClick={() => onPreviewDocument(draft.boqFileAssetId, draft.boqFileName)}
-                className="inline-flex items-center gap-1 text-[11px] font-extrabold text-[#12335f] hover:underline px-1.5 py-0.5 rounded hover:bg-emerald-100 transition-colors cursor-pointer"
-                title="Preview BOQ File"
-                aria-label={`Preview BOQ File ${draft.boqFileName}`}
-              >
-                <Eye className="h-3 w-3" aria-hidden="true" />
-                <span>View</span>
-              </button>
-            )}
+            <span className="truncate">Uploaded BOQ: <strong>{draft.boqFileName}</strong></span>
             <button
               type="button"
               onClick={() => updateDraft(c => ({ ...c, boqFileName: '', boqFileAssetId: null }))}
@@ -5131,10 +5026,10 @@ function ItemsDetailsForm({
             size="sm"
             variant="outline"
             onClick={handleDownloadItemTemplate}
-            className="h-8.5 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
-            title="Download Excel spreadsheet template for bulk line items (.xlsx)"
+            className="h-8.5 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            title="Download Excel template (.xlsx) for bulk items"
           >
-            <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Download Excel Template
+            <Download className="h-3.5 w-3.5 mr-1 text-slate-500" /> Template
           </Button>
 
           <div className="relative">
@@ -5148,9 +5043,9 @@ function ItemsDetailsForm({
             <label
               htmlFor="item-template-import"
               className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50"
-              title="Import line items from Excel (.xlsx, .xls) or CSV spreadsheet"
+              title="Import items from Excel (.xlsx) or CSV spreadsheet"
             >
-              <Upload className="h-3.5 w-3.5 mr-1 text-blue-600" /> Import Excel / CSV
+              <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Import Excel / CSV
             </label>
           </div>
 
@@ -5205,304 +5100,42 @@ function ItemsDetailsForm({
       </div>
 
       {/* Modern Schedule Table */}
-      <div className="overflow-hidden border border-slate-200 rounded-xl bg-white shadow-3xs">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] border-collapse text-left text-xs">
-            <thead className="bg-slate-50/90 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200 tracking-wider">
-              <tr>
-                <th className="px-3.5 py-3 w-24">Type</th>
-                <th className="px-3.5 py-3 w-56">Item / Service Name</th>
-                <th className="px-3.5 py-3">Specifications / Scope</th>
-                <th className="px-3.5 py-3 w-28 text-center">Qty & UOM</th>
-                <th className="px-3.5 py-3 w-28 text-right">Est. Unit Rate</th>
-                <th className="px-3.5 py-3 w-24 text-center">HSN / SAC</th>
-                <th className="px-3.5 py-3 w-32">Brand & Policy</th>
-                <th className="px-3.5 py-3 w-40">Documents & Specs</th>
-                <th className="px-3.5 py-3 w-28 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {draft.items.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
-                    <div className="flex flex-col items-center justify-center space-y-3 max-w-md mx-auto">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                        <Package className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-extrabold text-slate-700">No items or services added yet</p>
-                        <p className="text-[11px] text-slate-500 font-medium mt-1">
-                          Add line items individually, upload a CSV schedule, or import from your marketplace cart.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => handleAddNewItem('Product')}
-                          className="h-8 px-3.5 text-xs font-bold bg-[#12335f] text-white hover:bg-[#0b2445]"
-                        >
-                          <Plus className="h-3.5 w-3.5 mr-1" /> Add Product
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleAddNewItem('Service')}
-                          className="h-8 px-3.5 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
-                        >
-                          <Plus className="h-3.5 w-3.5 mr-1" /> Add Service
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={handleImportCartItems}
-                          className="h-8 px-3.5 text-xs font-bold text-slate-700"
-                        >
-                          <ShoppingCart className="h-3.5 w-3.5 mr-1" /> Import Cart
-                        </Button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                draft.items.map((item, index) => {
-                  const allDocs = getItemAllDocs(item);
-                  const hasDocs = allDocs.length > 0;
-                  const firstDoc = allDocs[0];
-                  const docCount = allDocs.length;
-
-                  return (
-                    <tr key={item.id || index} className="align-middle hover:bg-slate-50/70 transition-colors group">
-                      {/* Type */}
-                      <td className="px-3.5 py-3.5">
-                        <span className={cn(
-                          "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
-                          item.itemType === 'Service'
-                            ? "border border-purple-200 bg-purple-50 text-purple-700"
-                            : "border border-blue-200 bg-blue-50 text-blue-700"
-                        )}>
-                          {item.itemType || 'Product'}
-                        </span>
-                      </td>
-
-                      {/* Name */}
-                      <td className="px-3.5 py-3.5">
-                        <div className="flex items-center gap-2.5">
-                          {item.imageUrl ? (
-                            <div className="relative h-9 w-9 shrink-0 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shadow-2xs">
-                              <img
-                                src={item.imageUrl}
-                                alt={item.name}
-                                className="h-full w-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLElement).style.display = 'none';
-                                }}
-                              />
-                            </div>
-                          ) : null}
-                          <div className="min-w-0">
-                            <div className="font-black text-slate-900 text-xs truncate max-w-[200px]" title={item.name}>
-                              {item.name || <span className="text-rose-500 italic">Unnamed Item</span>}
-                            </div>
-                            {item.imageUrl && (
-                              <a
-                                href={item.imageUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-0.5 text-[9px] font-bold text-blue-600 hover:text-blue-800 transition-colors mt-0.5"
-                              >
-                                <span>Image Link</span>
-                                <ExternalLink className="h-2.5 w-2.5" />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Description */}
-                      <td className="px-3.5 py-3.5 text-slate-600 font-medium max-w-[240px]">
-                        <span className="line-clamp-2" title={item.specification}>
-                          {item.specification || <span className="text-slate-400 italic">No description</span>}
-                        </span>
-                      </td>
-
-                      {/* Quantity & Unit */}
-                      <td className="px-3.5 py-3.5 text-center">
-                        <span className="font-extrabold text-slate-900">{item.quantity}</span>{' '}
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit}</span>
-                      </td>
-
-                      {/* Rate */}
-                      <td className="px-3.5 py-3.5 text-right font-extrabold text-slate-900">
-                        {Number(item.unitPrice || 0) > 0 ? (
-                          <span>₹{Number(item.unitPrice).toLocaleString('en-IN')}</span>
-                        ) : (
-                          <span className="text-slate-400 font-normal">-</span>
-                        )}
-                      </td>
-
-                      {/* HSN/SAC */}
-                      <td className="px-3.5 py-3.5 text-center font-mono text-[11px] font-semibold text-slate-600">
-                        {item.hsn_sac_code || <span className="text-slate-400">-</span>}
-                      </td>
-
-                      {/* Brand & Policy */}
-                      <td className="px-3.5 py-3.5">
-                        <div className="text-slate-800 text-[11px] font-bold truncate max-w-[120px]">
-                          {item.brand_preference || 'Any Brand'}
-                        </div>
-                        <div className="mt-0.5">
-                          {item.brand_flexible === 'No' ? (
-                            <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
-                              Lock
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
-                              Flexible
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Documents / Attachments */}
-                      <td className="px-3.5 py-3.5">
-                        {hasDocs ? (
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (allDocs.length === 1 && allDocs[0]) {
-                                  if (allDocs[0].url && !allDocs[0].fileAssetId) {
-                                    window.open(allDocs[0].url, '_blank');
-                                  } else {
-                                    onPreviewDocument(allDocs[0], allDocs[0].fileName || item.name);
-                                  }
-                                } else {
-                                  setQuickDocItem(item);
-                                }
-                              }}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2 py-1 text-[10px] font-extrabold text-emerald-800 hover:bg-emerald-100 hover:border-emerald-300 transition-colors cursor-pointer active:scale-95"
-                              title={docCount === 1 ? `Click to preview ${firstDoc?.fileName || item.specificationFileName || 'document'}` : "Click to view or manage attachments"}
-                              aria-label={`Preview attached document for ${item.name || 'item'}, currently ${docCount} file${docCount === 1 ? '' : 's'}`}
-                            >
-                              <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" aria-hidden="true" />
-                              <span className="truncate max-w-[90px]">
-                                {docCount} file{docCount === 1 ? '' : 's'}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (allDocs.length > 1) {
-                                  setQuickDocItem(item);
-                                } else if (allDocs.length === 1 && allDocs[0]) {
-                                  if (allDocs[0].url && !allDocs[0].fileAssetId) {
-                                    window.open(allDocs[0].url, '_blank');
-                                  } else {
-                                    onPreviewDocument(allDocs[0], allDocs[0].fileName || item.name);
-                                  }
-                                } else if (item.documentUrl) {
-                                  window.open(item.documentUrl, '_blank');
-                                }
-                              }}
-                              className="flex h-6 w-6 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer"
-                              title={docCount > 1 ? `View all ${docCount} documents` : "Open specification document in new tab"}
-                              aria-label={docCount > 1 ? `View all ${docCount} documents for ${item.name || 'item'}` : "Open specification document in new tab"}
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setQuickDocItem(item)}
-                              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer"
-                              title="Add more documents or manage files"
-                              aria-label={`Manage documents for ${item.name || 'item'}`}
-                            >
-                              <Plus className="h-3 w-3" aria-hidden="true" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setQuickDocItem(item)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all cursor-pointer"
-                            title="Attach specification or drawing"
-                            aria-label={`Attach specification or drawing for ${item.name || 'item'}`}
-                          >
-                            <FilePlus className="h-3 w-3 text-slate-400" aria-hidden="true" />
-                            <span>+ Attach Doc</span>
-                          </button>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-3.5 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedItemForEdit(item);
-                              setShowItemDrawer(true);
-                            }}
-                            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors"
-                            title="Edit specifications"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDuplicateItem(item)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-                            title="Duplicate line item"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                            title="Delete line item"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Bottom Table Quick Add Bar */}
-        <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => handleAddNewItem('Product')}
-              className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445]"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add Product Line
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => handleAddNewItem('Service')}
-              className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add Service Line
-            </Button>
+      <DataTable
+        data={draft.items}
+        columns={procurementItemColumns}
+        keyExtractor={(item: any, idx) => item.id || idx}
+        showSrNo={false}
+        minWidth="min-w-[1100px]"
+        rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
+        emptyTitle="No items or services added yet"
+        emptyDescription="Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
+        footer={
+          <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleAddNewItem('Product')}
+                className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445]"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add Product Line
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => handleAddNewItem('Service')}
+                className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add Service Line
+              </Button>
+            </div>
+            <span className="text-[11px] font-semibold text-slate-500">
+              {draft.items.length} line item{draft.items.length === 1 ? '' : 's'} scheduled
+            </span>
           </div>
-          <span className="text-[11px] font-semibold text-slate-500">
-            {draft.items.length} line item{draft.items.length === 1 ? '' : 's'} scheduled
-          </span>
-        </div>
-      </div>
+        }
+      />
 
       {/* Summary Metrics Bar */}
       {(() => {
@@ -5553,7 +5186,6 @@ function ItemsDetailsForm({
         }}
         onSave={handleSaveItem}
         onSaveAndAddAnother={handleSaveAndAddAnother}
-        onPreviewAttachment={att => onPreviewDocument(att, att.fileName || att.name)}
         token={token}
       />
 
@@ -5565,7 +5197,6 @@ function ItemsDetailsForm({
           onSaveAttachments={updatedAtts => {
             handleSaveItemQuickAttachments(quickDocItem.id, updatedAtts);
           }}
-          onPreviewAttachment={att => onPreviewDocument(att, att.fileName || att.name)}
           token={token}
         />
       )}
@@ -5590,43 +5221,22 @@ function VendorsStepForm({
 
   const fetchSellersList = () => {
     setLoading(true);
-    const params: Record<string, string | number> = { pageSize: 100 };
+    const params: Record<string, string | number> = { pageSize: 50 };
     if (search) params.q = search;
-    if (draft.vendors.selection === 'Category' && draft.basics.category) {
-      params.category = draft.basics.category;
-    }
     marketplaceApi.getSellers(params)
       .then(res => {
         // Map API response to Supplier interface
-        const items: Supplier[] = (res?.sellers || []).map((s: any) => ({
+        const items = (res?.sellers || []).map((s: any) => ({
           id: s.id || s.sellerUserId,
           organizationName: s.organizationName || s.name || 'Vendor',
           msmeCategory: s.msmeCategory || 'General',
           officeCity: s.officeCity || s.city || 'N/A',
-          state: s.state,
-          district: s.district,
           rating: s.rating || '4.0',
           pastOrdersCount: s.pastOrdersCount || 0,
           onTimeDeliveryRate: s.onTimeDeliveryRate || 95,
-          gstVerified: true,
-          categories: s.categories || []
+          gstVerified: true
         }));
         setSellers(items);
-
-        // If category mode is chosen and no suppliers have been invited yet, auto-invite all matched sellers
-        if (draft.vendors.selection === 'Category' && items.length > 0 && (!draft.vendors.invitedSellers || draft.vendors.invitedSellers.length === 0)) {
-          const allIds = items.map(i => i.id);
-          updateDraft(c => ({
-            ...c,
-            vendors: {
-              ...c.vendors,
-              invitedSellers: allIds,
-              inviteCount: allIds.length,
-              selectedSellerId: allIds[0] || null,
-              selectedSellerName: items[0]?.organizationName || ''
-            }
-          }));
-        }
       })
       .catch(err => console.error(err))
       .finally(() => setLoading(false));
@@ -5636,7 +5246,7 @@ function VendorsStepForm({
     queueMicrotask(() => {
       fetchSellersList();
     });
-  }, [search, draft.vendors.selection, draft.basics.category]);
+  }, [search]);
 
   const toggleInviteSeller = (id: number, name: string) => {
     updateDraft(current => {
@@ -5661,33 +5271,6 @@ function VendorsStepForm({
     });
   };
 
-  const handleSelectAllSellers = () => {
-    const allIds = sellers.map(s => s.id);
-    updateDraft(c => ({
-      ...c,
-      vendors: {
-        ...c.vendors,
-        invitedSellers: allIds,
-        inviteCount: allIds.length,
-        selectedSellerId: allIds[0] || null,
-        selectedSellerName: sellers[0]?.organizationName || ''
-      }
-    }));
-  };
-
-  const handleDeselectAllSellers = () => {
-    updateDraft(c => ({
-      ...c,
-      vendors: {
-        ...c.vendors,
-        invitedSellers: [],
-        inviteCount: 0,
-        selectedSellerId: null,
-        selectedSellerName: ''
-      }
-    }));
-  };
-
   useEffect(() => {
     const isLimited = draft.type === 'LIMITED_TENDER' || (draft.type === 'RFQ' && draft.rfqType === 'LIMITED');
     if (isLimited && draft.vendors.selection !== 'Selected') {
@@ -5700,12 +5283,7 @@ function VendorsStepForm({
   const handleSelectionModeChange = (mode: 'Open' | 'Selected' | 'Category' | 'Past') => {
     updateDraft(c => ({
       ...c,
-      vendors: {
-        ...c.vendors,
-        selection: mode,
-        invitedSellers: mode === 'Open' ? [] : c.vendors.invitedSellers,
-        inviteCount: mode === 'Open' ? 0 : c.vendors.inviteCount
-      }
+      vendors: { ...c.vendors, selection: mode }
     }));
   };
 
@@ -5725,7 +5303,7 @@ function VendorsStepForm({
             >
               <option value="Open">Open Advertised / Public Sourcing</option>
               <option value="Selected">Invite selected verified suppliers pool</option>
-              <option value="Category">Invite category-matched registered Suppliers</option>
+              <option value="Category">Invite category-matched registered vendors</option>
               {/* <option value="Past">Invite prior order vendors</option> */}
             </select>
           )}
@@ -5775,50 +5353,6 @@ function VendorsStepForm({
           </label>
         </div>
       </div>
-
-      {draft.vendors.selection === 'Category' && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-base">🏷️</span>
-              <span className="text-xs font-black text-blue-900 uppercase tracking-wide">
-                Category-Matched Sourcing Active
-              </span>
-              {draft.basics.category ? (
-                <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-800 border border-blue-200">
-                  {draft.basics.category}
-                </span>
-              ) : (
-                <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 border border-amber-200">
-                  No Category Selected in Step 2
-                </span>
-              )}
-            </div>
-            {draft.basics.category && sellers.length > 0 && (
-              <span className="text-xs font-bold text-blue-800">
-                {draft.vendors.invitedSellers.length} of {sellers.length} suppliers invited
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-blue-700 leading-relaxed">
-            {draft.basics.category
-              ? `Only registered verified suppliers matching "${draft.basics.category}" are listed. When published, only these invited suppliers will receive notifications and be granted exclusive permission to view and bid on this procurement.`
-              : 'Please go back to Step 2 (Basics) and select a Procurement Category so the system can match registered suppliers.'}
-          </p>
-        </div>
-      )}
-
-      {draft.vendors.selection === 'Selected' && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-1 text-xs">
-          <div className="flex items-center gap-2 font-black text-slate-800 uppercase tracking-wide">
-            <span className="text-base">👥</span>
-            <span>Selected Verified Suppliers Pool</span>
-          </div>
-          <p className="text-slate-600 leading-relaxed">
-            Handpick specific verified suppliers from the platform directory. When published, only your selected suppliers will receive invitations and be permitted to view and participate.
-          </p>
-        </div>
-      )}
 
       {isReverseAuctionMethod(draft.type) && (
         <div className={`p-4 rounded-xl text-xs font-semibold flex items-start gap-2.5 shadow-2xs border ${
@@ -5876,9 +5410,6 @@ function VendorsStepForm({
           onSearchChange={setSearch}
           msmeOnly={msmeOnly}
           onMsmeOnlyChange={setMsmeOnly}
-          onSelectAll={handleSelectAllSellers}
-          onDeselectAll={handleDeselectAllSellers}
-          categoryTitle={draft.vendors.selection === 'Category' ? draft.basics.category : undefined}
         />
       )}
     </div>
@@ -5891,13 +5422,11 @@ function VendorsStepForm({
 function ScheduleStepForm({
   draft,
   updateDraft,
-  showErrors = false,
-  onPreviewDocument,
+  showErrors = false
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
   showErrors?: boolean;
-  onPreviewDocument?: (fileAssetOrId: any, label?: string) => void;
 }) {
   // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   const isTwoPacket = draft.schedule.packetType === 'Two';
@@ -5979,54 +5508,32 @@ function ScheduleStepForm({
   const updateRateContract = <K extends keyof RateContractConfig>(key: K, val: RateContractConfig[K]) => {
     updateDraft(c => ({ ...c, rateContractConfig: { ...c.rateContractConfig, [key]: val } }));
   };
-
-  useEffect(() => {
-    if (!isAuction) return;
-    const reqNo = draft.id
-      ? formatRefId('REQ', draft.id)
-      : (draft.auctionConfig.auctionNumber && !draft.auctionConfig.auctionNumber.startsWith('RA-')
-          ? draft.auctionConfig.auctionNumber
-          : `REQ-${Math.floor(10000 + Math.random() * 90000)}`);
-
-    const updates: Partial<AuctionConfig> = {};
-    if (draft.auctionConfig.auctionNumber !== reqNo) {
-      updates.auctionNumber = reqNo;
-    }
-    if (draft.basics.title && draft.auctionConfig.auctionTitle !== draft.basics.title) {
-      updates.auctionTitle = draft.basics.title;
-    }
-    if (draft.basics.justification && draft.auctionConfig.auctionDescription !== draft.basics.justification) {
-      updates.auctionDescription = draft.basics.justification;
-    }
-    if (draft.basics.category && draft.auctionConfig.auctionCategory !== draft.basics.category) {
-      updates.auctionCategory = draft.basics.category;
-    }
-    if (draft.basics.subCategory && draft.auctionConfig.auctionSubCategory !== draft.basics.subCategory) {
-      updates.auctionSubCategory = draft.basics.subCategory;
-    }
-    if (draft.basics.estimatedValue && (!draft.auctionConfig.startingBidPrice || draft.auctionConfig.startingBidPrice === 0)) {
-      updates.startingBidPrice = draft.basics.estimatedValue;
-    }
-    if (Object.keys(updates).length > 0) {
-      updateDraft(c => ({
-        ...c,
-        auctionConfig: { ...c.auctionConfig, ...updates }
-      }));
-    }
-  }, [
-    isAuction,
-    draft.id,
-    draft.auctionConfig.auctionNumber,
-    draft.basics.title,
-    draft.basics.justification,
-    draft.basics.category,
-    draft.basics.subCategory,
-    draft.basics.estimatedValue,
-    updateDraft
-  ]);
-
+  const auctionCategoryOptions = [
+    'IT Hardware',
+    'Office Equipment',
+    'Electrical',
+    'Mechanical',
+    'Civil Works',
+    'Facility Management',
+    'Professional Services',
+    'Other'
+  ];
+  const auctionSubCategoryOptions = [
+    'Laptops',
+    'Desktops',
+    'Networking',
+    'Printers',
+    'Furniture',
+    'Spares',
+    'AMC',
+    'Other'
+  ];
   const currencyOptions = ['INR', 'USD', 'EUR', 'GBP', 'JPY', 'AED', 'SGD', 'Other'];
+  const isOtherAuctionCategory = draft.auctionConfig.auctionCategory === 'Other' || Boolean(draft.auctionConfig.auctionCategory && !auctionCategoryOptions.includes(draft.auctionConfig.auctionCategory));
+  const isOtherAuctionSubCategory = draft.auctionConfig.auctionSubCategory === 'Other' || Boolean(draft.auctionConfig.auctionSubCategory && !auctionSubCategoryOptions.includes(draft.auctionConfig.auctionSubCategory));
   const isOtherCurrency = draft.auctionConfig.currency === 'Other' || Boolean(draft.auctionConfig.currency && !currencyOptions.includes(draft.auctionConfig.currency));
+  const auctionCategoryMissing = !draft.auctionConfig.auctionCategory.trim() || draft.auctionConfig.auctionCategory === 'Other';
+  const auctionSubCategoryMissing = false;
   const currencyMissing = !draft.auctionConfig.currency.trim() || draft.auctionConfig.currency === 'Other';
   const missing = (value: unknown) => showErrors && !String(value ?? '').trim();
   const fieldError = (condition: boolean, message: string) => condition ? message : undefined;
@@ -6130,69 +5637,6 @@ function ScheduleStepForm({
     toast.success('Auction terms document removed');
   };
 
-  const [uploadingContractDoc, setUploadingContractDoc] = useState(false);
-  const contractDocInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  const handleContractDocumentUpload = async (file: File) => {
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File size exceeds maximum limit of 10MB.');
-      return;
-    }
-    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.jpg', '.jpeg', '.png'];
-    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
-    if (!allowedExtensions.includes(ext)) {
-      toast.error('Unsupported file format. Please upload PDF, DOC, DOCX, XLS, XLSX, CSV, JPG, or PNG.');
-      return;
-    }
-
-    setUploadingContractDoc(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('entityType', 'procurement_draft');
-
-      const response = await api.fetch('/api/files/upload', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: formData,
-      });
-      const resData = await unwrap<any>(response);
-      const asset = resData.file || resData.fileAsset || resData;
-      const fileId = Number(resData.fileId || asset.id || asset.fileAssetId || 0);
-
-      updateDraft(c => ({
-        ...c,
-        rateContractConfig: {
-          ...c.rateContractConfig,
-          contractDocument: {
-            fileAssetId: fileId || null,
-            fileName: asset.originalName || asset.fileName || file.name,
-          },
-        },
-      }));
-      toast.success('Contract document uploaded successfully');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to upload contract document');
-    } finally {
-      setUploadingContractDoc(false);
-      if (contractDocInputRef.current) contractDocInputRef.current.value = '';
-    }
-  };
-
-  const handleRemoveContractDocument = () => {
-    updateDraft(c => ({
-      ...c,
-      rateContractConfig: {
-        ...c.rateContractConfig,
-        contractDocument: {
-          fileAssetId: null,
-          fileName: '',
-        },
-      },
-    }));
-    toast.success('Contract document removed');
-  };
-
   // Warnings collection
   const warnings: string[] = [];
   if (draft.schedule.submissionDate && draft.schedule.submissionStartDate) {
@@ -6239,29 +5683,93 @@ function ScheduleStepForm({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            {/* Currency selection commented out as requested */}
-            {/*
-            <div className="sm:col-span-2 sm:max-w-xs">
-              <Field label="Currency" required error={fieldError(showErrors && currencyMissing, 'Currency is required.')}>
-                <select
-                  value={isOtherCurrency ? 'Other' : draft.auctionConfig.currency}
-                  onChange={e => updateAuction('currency', e.target.value)}
+            <Field label="Auction Number">
+              <input value={draft.auctionConfig.auctionNumber} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
+            </Field>
+            <Field label="Procurement Method">
+              <input value={draft.auctionConfig.procurementMethod} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
+            </Field>
+            <Field label="Auction Title" required error={fieldError(missing(draft.auctionConfig.auctionTitle), 'Auction title is required.')}>
+              <input value={draft.auctionConfig.auctionTitle} onChange={e => updateAuction('auctionTitle', e.target.value)} className={controlClass(fieldError(missing(draft.auctionConfig.auctionTitle), 'Auction title is required.'))} />
+            </Field>
+            <Field label="Auction Description">
+              <textarea value={draft.auctionConfig.auctionDescription} onChange={e => updateAuction('auctionDescription', e.target.value)} className={cn(inputClass, 'min-h-[76px]')} />
+            </Field>
+            <Field label="Auction Category" required error={fieldError(showErrors && auctionCategoryMissing, 'Auction category is required.')}>
+              <select
+                value={isOtherAuctionCategory ? 'Other' : draft.auctionConfig.auctionCategory}
+                onChange={e => updateAuction('auctionCategory', e.target.value)}
+                className={controlClass(fieldError(showErrors && auctionCategoryMissing, 'Auction category is required.'))}
+              >
+                <option value="">Select category</option>
+                {auctionCategoryOptions.map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
+              {isOtherAuctionCategory && (
+                <input
+                  value={draft.auctionConfig.auctionCategory === 'Other' ? '' : draft.auctionConfig.auctionCategory}
+                  onChange={e => updateAuction('auctionCategory', e.target.value)}
+                  className={controlClass(fieldError(showErrors && auctionCategoryMissing, 'Auction category is required.'))}
+                  placeholder="Enter auction category"
+                />
+              )}
+            </Field>
+            <Field label="Auction Subcategory (Optional)">
+              <select
+                value={isOtherAuctionSubCategory ? 'Other' : draft.auctionConfig.auctionSubCategory}
+                onChange={e => updateAuction('auctionSubCategory', e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Select subcategory (Optional)</option>
+                {auctionSubCategoryOptions.map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
+              {isOtherAuctionSubCategory && (
+                <input
+                  value={draft.auctionConfig.auctionSubCategory === 'Other' ? '' : draft.auctionConfig.auctionSubCategory}
+                  onChange={e => updateAuction('auctionSubCategory', e.target.value)}
+                  className={cn(inputClass, 'mt-2')}
+                  placeholder="Enter auction subcategory (Optional)"
+                />
+              )}
+            </Field>
+            <Field label="Currency" required error={fieldError(showErrors && currencyMissing, 'Currency is required.')}>
+              <select
+                value={isOtherCurrency ? 'Other' : draft.auctionConfig.currency}
+                onChange={e => updateAuction('currency', e.target.value)}
+                className={controlClass(fieldError(showErrors && currencyMissing, 'Currency is required.'))}
+              >
+                <option value="">Select currency</option>
+                {currencyOptions.map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
+              {isOtherCurrency && (
+                <input
+                  value={draft.auctionConfig.currency === 'Other' ? '' : draft.auctionConfig.currency}
+                  onChange={e => updateAuction('currency', e.target.value.toUpperCase().slice(0, 3))}
                   className={controlClass(fieldError(showErrors && currencyMissing, 'Currency is required.'))}
-                >
-                  <option value="">Select currency</option>
-                  {currencyOptions.map(option => <option key={option} value={option}>{option}</option>)}
-                </select>
-                {isOtherCurrency && (
-                  <input
-                    value={draft.auctionConfig.currency === 'Other' ? '' : draft.auctionConfig.currency}
-                    onChange={e => updateAuction('currency', e.target.value.toUpperCase().slice(0, 3))}
-                    className={controlClass(fieldError(showErrors && currencyMissing, 'Currency is required.'))}
-                    placeholder="Enter 3-letter currency code"
-                  />
-                )}
-              </Field>
-            </div>
-            */}
+                  placeholder="Enter 3-letter currency code"
+                />
+              )}
+            </Field>
+            <Field label="Estimated Value">
+              <input value={draft.basics.estimatedValue || 0} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
+            </Field>
+            <Field label="Auction Status">
+              <input value={draft.auctionConfig.auctionStatus} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
+            </Field>
+            <Field label="Buyer Organization">
+              <input value={draft.auctionConfig.buyerOrganization || draft.internal.orgName} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
+              <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                Pulled from Internal Details. Purchase organization uses this buyer organization for this portal workflow.
+              </p>
+            </Field>
+            <Field label="Auction Type" required>
+              <select value={draft.auctionConfig.auctionType} onChange={e => updateAuction('auctionType', e.target.value as AuctionConfig['auctionType'])} className={inputClass}>
+                <option value="ENGLISH_REVERSE">English Reverse</option>
+                <option value="RANK_BASED_REVERSE">Rank Based Reverse</option>
+              </select>
+            </Field>
+            <Field label="Auction Mode" required>
+              <input value={draft.auctionConfig.auctionMode} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
+            </Field>
             <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
               <input type="datetime-local" value={draft.auctionConfig.startDateTime} onChange={e => updateAuction('startDateTime', e.target.value)} className={controlClass(fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.'))} />
             </Field>
@@ -6327,21 +5835,13 @@ function ScheduleStepForm({
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            if (onPreviewDocument) {
-                              onPreviewDocument(draft.auctionConfig.termsDocumentFileId, draft.auctionConfig.termsDocumentName);
-                            } else {
-                              window.open(`${BASE_URL}/api/files/${draft.auctionConfig.termsDocumentFileId}/view`, '_blank');
-                            }
-                          }}
-                          className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
-                          aria-label={`Preview ${draft.auctionConfig.termsDocumentName}`}
+                          onClick={() => window.open(`/api/files/${draft.auctionConfig.termsDocumentFileId}/view`, '_blank')}
+                          className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
                         >
-                          <Eye className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
                           View
                         </Button>
                         <a
-                          href={`${BASE_URL}/api/files/${draft.auctionConfig.termsDocumentFileId}/view`}
+                          href={`/api/files/${draft.auctionConfig.termsDocumentFileId}/view`}
                           download={draft.auctionConfig.termsDocumentName}
                           target="_blank"
                           rel="noreferrer"
@@ -6350,10 +5850,8 @@ function ScheduleStepForm({
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
-                            aria-label={`Download ${draft.auctionConfig.termsDocumentName}`}
+                            className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
                           >
-                            <Download className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
                             Download
                           </Button>
                         </a>
@@ -6485,37 +5983,32 @@ function ScheduleStepForm({
             <Field label="Rate Contract Number">
               <input value={draft.rateContractConfig.rateContractNumber} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
             </Field>
-            {/* Contract Title - commented out on buyer side */}
-            {/* <Field label="Contract Title" required>
+            <Field label="Contract Title" required>
               <input value={draft.rateContractConfig.contractTitle} onChange={e => updateRateContract('contractTitle', e.target.value)} className={inputClass} />
-            </Field> */}
-            {/* Contract Description and Contract Category - commented out on buyer side */}
-            {/* <Field label="Contract Description">
+            </Field>
+            <Field label="Contract Description">
               <textarea value={draft.rateContractConfig.contractDescription} onChange={e => updateRateContract('contractDescription', e.target.value)} className={cn(inputClass, 'min-h-[76px]')} />
             </Field>
             <Field label="Contract Category">
               <input value={draft.rateContractConfig.contractCategory} onChange={e => updateRateContract('contractCategory', e.target.value)} className={inputClass} />
-            </Field> */}
-            {/* Contract Subcategory - commented out on buyer side */}
-            {/* <Field label="Contract Subcategory">
-              <input value={draft.rateContractConfig.contractSubCategory} onChange={e => updateRateContract('contractSubCategory', e.target.value)} className={inputClass} />
-            </Field> */}
+            </Field>
+            <Field label="Contract Subcategory (Optional)">
+              <input value={draft.rateContractConfig.contractSubCategory} onChange={e => updateRateContract('contractSubCategory', e.target.value)} className={inputClass} placeholder="Enter contract subcategory (Optional)" />
+            </Field>
             <Field label="Contract Start Date" required>
               <input type="date" value={draft.rateContractConfig.periodStartDate} onChange={e => updateRateContract('periodStartDate', e.target.value)} className={inputClass} />
             </Field>
             <Field label="Contract End Date" required>
               <input type="date" value={draft.rateContractConfig.periodEndDate} onChange={e => updateRateContract('periodEndDate', e.target.value)} className={inputClass} />
             </Field>
-            {/* Rate Validity Period - commented out on buyer side */}
-            {/* <Field label="Rate Validity Period" required>
+            <Field label="Rate Validity Period" required>
               <input value={draft.rateContractConfig.rateValidityPeriod} onChange={e => updateRateContract('rateValidityPeriod', e.target.value)} className={inputClass} />
-            </Field> */}
+            </Field>
             <Field label="Supplier Selection Strategy" required>
               <select value={draft.rateContractConfig.supplierSelectionStrategy} onChange={e => updateRateContract('supplierSelectionStrategy', e.target.value as RateContractConfig['supplierSelectionStrategy'])} className={inputClass}>
                 <option value="SINGLE_SUPPLIER">Single Supplier</option>
                 <option value="MULTI_SUPPLIER">Multiple Suppliers</option>
-                {/* <option value="PANEL_RATE_CONTRACT">Panel Rate Contract</option> */}
-                <option value="ITEM_WISE_L1">Item-wise L1</option>
+                <option value="PANEL_RATE_CONTRACT">Panel Rate Contract</option>
               </select>
             </Field>
             <Field label="Selected Supplier(s)" required>
@@ -6527,8 +6020,7 @@ function ScheduleStepForm({
             </Field>
           </div>
 
-          {/* Item / Rate Schedule commented out as requested */}
-          {/* <div className="rounded-lg border border-teal-100 bg-white p-3 space-y-3">
+          <div className="rounded-lg border border-teal-100 bg-white p-3 space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-[11px] font-black uppercase tracking-wide text-slate-800">Item / Rate Schedule</h4>
               <Button type="button" variant="outline" size="sm" onClick={addRateItem} className="h-8 text-[10px] font-black">
@@ -6578,7 +6070,7 @@ function ScheduleStepForm({
                 </p>
               )}
             </div>
-          </div> */}
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Price Variation Clause" required>
@@ -6608,8 +6100,7 @@ function ScheduleStepForm({
             <Field label="Penalty Clause" required>
               <input value={draft.rateContractConfig.penaltyClause} onChange={e => updateRateContract('penaltyClause', e.target.value)} className={inputClass} />
             </Field>
-            {/* Security Deposit & Performance Bank Guarantee commented out as requested */}
-            {/* <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
+            <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
               <input type="checkbox" checked={draft.rateContractConfig.securityDepositRequired} onChange={e => updateRateContract('securityDepositRequired', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
               <span>Security Deposit Required?</span>
             </label>
@@ -6626,153 +6117,12 @@ function ScheduleStepForm({
               <Field label="PBG Amount" required>
                 <input type="number" min={0} value={draft.rateContractConfig.pbgAmount || ''} onChange={e => updateRateContract('pbgAmount', Number(e.target.value || 0))} className={inputClass} />
               </Field>
-            )} */}
-            {/* Approval Workflow commented out as requested */}
-            {/* <Field label="Approval Workflow" required>
+            )}
+            <Field label="Approval Workflow" required>
               <input value={draft.rateContractConfig.approvalWorkflow} onChange={e => updateRateContract('approvalWorkflow', e.target.value)} className={inputClass} />
-            </Field> */}
-            <Field label="Contract Document Upload (Optional)" className="sm:col-span-2">
-              {draft.rateContractConfig.contractDocument?.fileName ? (
-                <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-[#12335f] ring-1 ring-indigo-100">
-                      <FileText className="h-4.5 w-4.5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-800 truncate" title={draft.rateContractConfig.contractDocument.fileName}>
-                        {draft.rateContractConfig.contractDocument.fileName}
-                      </p>
-                      <p className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1 mt-0.5" role="status">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        Uploaded &amp; Attached
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {draft.rateContractConfig.contractDocument.fileAssetId && (
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (onPreviewDocument) {
-                              onPreviewDocument(draft.rateContractConfig.contractDocument.fileAssetId, draft.rateContractConfig.contractDocument.fileName);
-                            } else {
-                              window.open(`${BASE_URL}/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`, '_blank');
-                            }
-                          }}
-                          className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
-                          aria-label={`Preview ${draft.rateContractConfig.contractDocument.fileName}`}
-                        >
-                          <Eye className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
-                          View
-                        </Button>
-                        <a
-                          href={`${BASE_URL}/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`}
-                          download={draft.rateContractConfig.contractDocument.fileName}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
-                            aria-label={`Download ${draft.rateContractConfig.contractDocument.fileName}`}
-                          >
-                            <Download className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
-                            Download
-                          </Button>
-                        </a>
-                      </>
-                    )}
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png"
-                        className="hidden"
-                        aria-label="Replace contract document file"
-                        onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) handleContractDocumentUpload(file);
-                        }}
-                        disabled={uploadingContractDoc}
-                      />
-                      <span className="inline-flex h-8 items-center px-2.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200">
-                        {uploadingContractDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                        Replace
-                      </span>
-                    </label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRemoveContractDocument}
-                      className="h-8 px-2.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 rounded-lg"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 mr-1" />
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="relative">
-                  <label
-                    tabIndex={0}
-                    role="button"
-                    aria-label="Upload contract document file"
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        contractDocInputRef.current?.click();
-                      }
-                    }}
-                    onDragOver={e => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onDrop={e => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const file = e.dataTransfer.files?.[0];
-                      if (file) handleContractDocumentUpload(file);
-                    }}
-                    className={cn(
-                      "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#12335f] hover:bg-indigo-50/20 focus:outline-hidden focus:ring-2 focus:ring-[#12335f]/20 group",
-                      uploadingContractDoc && "opacity-50 pointer-events-none"
-                    )}
-                  >
-                    <input
-                      ref={contractDocInputRef}
-                      type="file"
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png"
-                      className="hidden"
-                      aria-label="Upload contract document file"
-                      onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (file) handleContractDocumentUpload(file);
-                      }}
-                      disabled={uploadingContractDoc}
-                    />
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-xs ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#12335f] group-hover:ring-[#12335f]/30 transition-all duration-200">
-                      {uploadingContractDoc ? (
-                        <Loader2 className="h-5 w-5 animate-spin text-[#12335f]" />
-                      ) : (
-                        <Upload className="h-5 w-5" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-800">
-                        {uploadingContractDoc ? 'Uploading contract document...' : 'Click to browse or drag & drop contract detail file'}
-                      </p>
-                      <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
-                        Supported formats: PDF, DOC, DOCX, XLS, XLSX, CSV, JPG, PNG (Max 10MB)
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              )}
+            </Field>
+            <Field label="Contract Document Upload">
+              <input value={draft.rateContractConfig.contractDocument.fileName} onChange={e => updateRateContract('contractDocument', { ...draft.rateContractConfig.contractDocument, fileName: e.target.value })} className={inputClass} placeholder="Document name or uploaded file reference" />
             </Field>
           </div>
         </div>
@@ -6910,15 +6260,25 @@ function CommercialTermsForm({
 
           <Field label="Payment terms" required error={fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.')}>
             <select
-              value={draft.terms.paymentTerms}
-              onChange={e => updateTerms('paymentTerms', e.target.value)}
+              value={draft.terms.paymentTerms === 'ADVANCE_PAYMENT' ? 'ADVANCE_PAYMENT' : 'ON_DELIVERY'}
+              onChange={e => {
+                const val = e.target.value;
+                updateDraft(c => ({
+                  ...c,
+                  terms: {
+                    ...c.terms,
+                    paymentTerms: val,
+                    advanceAllowed: val === 'ADVANCE_PAYMENT',
+                  }
+                }));
+              }}
               className={controlClass(fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.'))}
             >
               {PAYMENT_TERMS.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </Field>
 
-          <Field label="Delivery terms" required error={fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms location is required.')}>
+          <Field label="Delivery terms location" required error={fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms location is required.')}>
             <select
               value={draft.terms.deliveryTerms}
               onChange={e => updateTerms('deliveryTerms', e.target.value)}
@@ -7116,45 +6476,15 @@ function EvaluationBasisForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Evaluation Method basis" required>
           <select
-            value={draft.evaluation.method}
-            onChange={e => {
-              const val = e.target.value;
-              updateEval('method', val);
-              if (val === 'Two-stage bid with Reverse Auction (e-RA)' || val === 'Reverse auction final rank') {
-                updateDraft(c => ({
-                  ...c,
-                  basics: { ...c.basics, isReverseAuctionNeeded: true },
-                  auctionConfig: {
-                    ...c.auctionConfig,
-                    procurementMethod: 'BID_WITH_REVERSE_AUCTION',
-                    auctionTitle: c.auctionConfig.auctionTitle || c.basics.title || 'Live Reverse Auction',
-                    auctionCategory: c.auctionConfig.auctionCategory || c.basics.category,
-                    auctionSubCategory: c.auctionConfig.auctionSubCategory || c.basics.subCategory,
-                    startingBidPrice: c.auctionConfig.startingBidPrice || c.basics.estimatedValue || 0,
-                    minimumBidDecrement: c.auctionConfig.minimumBidDecrement > 0 ? c.auctionConfig.minimumBidDecrement : Math.max(500, Math.round((c.basics.estimatedValue || 100000) * 0.01)),
-                    autoExtensionEnabled: true,
-                    extensionTriggerMinutes: 5,
-                    extensionDurationMinutes: 5,
-                    maximumExtensions: 3,
-                    rankVisibility: 'SHOW_RANK_ONLY',
-                  }
-                }));
-              }
-            }}
+            value={draft.evaluation.method === 'QCBS / weighted technical-commercial score' ? 'QCBS / weighted technical-commercial score' : 'L1 total value'}
+            onChange={e => updateEval('method', e.target.value)}
             className={inputClass}
           >
-            <>
-              <option value="L1 total value">L1 Total Value basis</option>
-              <option value="Package-wise L1">Package-wise L1 rates basis</option>
-              <option value="Technical qualification then L1">Technical Qualification then L1 Sourcing</option>
-              <option value="Two-stage bid with Reverse Auction (e-RA)">Two-Stage Bid with Live Reverse Auction (e-RA)</option>
-              <option value="QCBS / weighted technical-commercial score">Quality and Cost Based Selection (QCBS)</option>
-              <option value="Reverse auction final rank">Reverse Auction Final Bid Rank</option>
-              <option value="Lowest landed cost">Lowest Landed Cost</option>
-            </>
+            <option value="L1 total value">L1 Total Value Basis (Lowest Landed Cost)</option>
+            <option value="QCBS / weighted technical-commercial score">Quality and Cost Based Selection (QCBS)</option>
           </select>
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            Choose how vendor proposals are evaluated. Enable Reverse Auction below to conduct real-time price compression among qualified bidders.
+            Choose how vendor proposals are evaluated. Use the Live Reverse Auction card below if dynamic downward price bidding is required.
           </p>
         </Field>
 
@@ -7617,33 +6947,44 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   const mappedItems = draft.basics.whatAreYouBuying === 'BOQ'
     ? draft.boqTable.map(item => ({
         itemName: item.description,
-        description: item.remarks || '',
+        description: item.remarks || item.description || '',
         quantity: item.quantity,
         unitOfMeasure: item.uom,
         estimatedUnitPrice: item.estimatedRate,
-      }))
-    : draft.items.map(item => ({
-        itemType: item.itemType || 'Product',
-        itemName: item.name,
-        description: item.specification || '',
-        quantity: item.quantity,
-        unitOfMeasure: item.unit,
-        estimatedUnitPrice: Number(item.unitPrice || 0),
-        imageUrl: item.imageUrl || '',
-        documentUrl: item.documentUrl || '',
         specifications: {
-          itemType: item.itemType || 'Product',
-          hsn_sac_code: item.hsn_sac_code || '',
-          brand_preference: item.brand_preference || '',
-          brand_flexible: item.brand_flexible || 'Yes',
-          gst: Number(item.gst || 0),
-          imageUrl: item.imageUrl || '',
-          documentUrl: item.documentUrl || '',
-          fileAssetId: item.fileAssetId || null,
-          specificationFileName: item.specificationFileName || '',
-          attachments: item.attachments || [],
+          itemType: 'Product',
+          description: item.remarks || item.description || '',
+          specification: item.remarks || item.description || '',
+          scopeOfWork: item.remarks || item.description || '',
+          category: item.category || 'General',
+          taxPercent: item.taxPercent || 18,
         }
-      }));
+      }))
+    : draft.items.map(item => {
+        const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || '';
+        return {
+          itemType: item.itemType || 'Product',
+          itemName: item.name,
+          description: descText,
+          quantity: item.quantity,
+          unitOfMeasure: item.unit,
+          estimatedUnitPrice: Number(item.unitPrice || 0),
+          specifications: {
+            itemType: item.itemType || 'Product',
+            specification: descText,
+            scopeOfWork: descText,
+            technicalSpecification: item.technicalSpecification || descText,
+            description: descText,
+            hsn_sac_code: item.hsn_sac_code || '',
+            brand_preference: item.brand_preference || '',
+            brand_flexible: item.brand_flexible || 'Yes',
+            gst: Number(item.gst || 0),
+            fileAssetId: item.fileAssetId || null,
+            specificationFileName: item.specificationFileName || '',
+            attachments: item.attachments || [],
+          }
+        };
+      });
 
   // Build default consignee matching total quantity.
   // IMPORTANT: derive the total from `mappedItems` (the exact lines sent to the backend as
@@ -7716,17 +7057,10 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   const auctionConfigPayload = hasReverseAuction ? {
     ...draft.auctionConfig,
     procurementMethod: isReverseAuctionMethod(draft.type) ? 'REVERSE_AUCTION' : 'BID_WITH_REVERSE_AUCTION',
-    auctionNumber: draft.id
-      ? formatRefId('REQ', draft.id)
-      : (draft.auctionConfig.auctionNumber && !draft.auctionConfig.auctionNumber.startsWith('RA-')
-          ? draft.auctionConfig.auctionNumber
-          : `REQ-${Math.floor(10000 + Math.random() * 90000)}`),
-    auctionTitle: draft.auctionConfig.auctionTitle || draft.basics.title || title,
+    auctionTitle: draft.auctionConfig.auctionTitle || title,
     auctionDescription: draft.auctionConfig.auctionDescription || draft.basics.justification || basics.description,
     auctionCategory: draft.auctionConfig.auctionCategory || draft.basics.category,
     auctionSubCategory: draft.auctionConfig.auctionSubCategory || draft.basics.subCategory,
-    auctionType: draft.auctionConfig.auctionType || 'ENGLISH_REVERSE',
-    auctionMode: draft.auctionConfig.auctionMode || 'ONLINE',
     buyerOrganization: draft.auctionConfig.buyerOrganization || draft.internal.orgName,
     department: draft.auctionConfig.department || draft.internal.department || draft.basics.department,
     purchaseOrganization: draft.auctionConfig.purchaseOrganization || draft.auctionConfig.buyerOrganization || draft.internal.orgName,
@@ -7762,7 +7096,6 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     contractDescription: draft.rateContractConfig.contractDescription || draft.basics.justification || basics.description,
     contractCategory: draft.rateContractConfig.contractCategory || draft.basics.category,
     contractSubCategory: draft.rateContractConfig.contractSubCategory || draft.basics.subCategory,
-    rateValidityPeriod: draft.rateContractConfig.rateValidityPeriod || 'Contract period',
     contractDocument: draft.rateContractConfig.contractDocument?.fileName ? {
       fileAssetId: draft.rateContractConfig.contractDocument.fileAssetId || null,
       fileName: cleanDocName(draft.rateContractConfig.contractDocument.fileName, '')

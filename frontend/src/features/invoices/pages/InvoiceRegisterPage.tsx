@@ -17,6 +17,7 @@ import { postApi, getApi } from '../../shared/apiClient';
 import { Pagination } from '../../shared/Pagination';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { GST_STANDARD_RATES, formatTaxRate } from '../../shared/gstTax';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../../payments/components/PaymentReceiptUploadModal';
@@ -350,6 +351,221 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     });
     return items;
   }, [pagedInvoices, sortField, sortOrder, role]);
+
+  const invoiceColumns = useMemo<ColumnDef<InvoiceRow>[]>(() => [
+    {
+      key: 'invoiceNumber',
+      header: 'Invoice',
+      width: 'w-[14%]',
+      sortable: true,
+      cell: (invoice) => (
+        <div>
+          <EntityIdLink label={invoice.invoiceNumber || `INV-${invoice.id}`} id={invoice.id} size="sm" onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }} />
+          <p className="mt-1 text-[10px] font-semibold text-slate-500">{formatDate(invoice.createdAt)}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'poNumber',
+      header: 'PO',
+      width: 'w-[14%]',
+      sortable: true,
+      cell: (invoice) => (
+        <div>
+          <p className="text-xs font-black text-slate-900">{invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p>
+          <p className="text-[10px] font-semibold text-slate-500">{invoice.purchaseOrder?.title || '-'}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'party',
+      header: 'Party',
+      width: 'w-[13%]',
+      sortable: true,
+      cell: (invoice) => (
+        <span className="text-xs font-bold text-slate-600">
+          {role === 'seller' ? invoice.buyer?.name || `Buyer #${invoice.buyerId || '-'}` : invoice.seller?.name || `Seller #${invoice.sellerId || '-'}`}
+        </span>
+      ),
+    },
+    {
+      key: 'taxableAmount',
+      header: 'Taxable',
+      width: 'w-[9%]',
+      align: 'right',
+      sortable: true,
+      cell: (invoice) => (
+        <span className="text-xs font-bold text-slate-600 whitespace-nowrap">{formatCurrency(invoice.taxableAmount || 0)}</span>
+      ),
+    },
+    {
+      key: 'totalTaxAmount',
+      header: 'GST',
+      width: 'w-[8%]',
+      align: 'right',
+      sortable: true,
+      cell: (invoice) => (
+        <span className="text-xs font-bold text-slate-600 whitespace-nowrap">{formatCurrency(invoice.totalTaxAmount || 0)}</span>
+      ),
+    },
+    {
+      key: 'tdsAmount',
+      header: 'TDS',
+      width: 'w-[8%]',
+      align: 'right',
+      sortable: true,
+      cell: (invoice) => (
+        <span className="text-xs font-bold text-slate-600 whitespace-nowrap">{formatCurrency(invoice.tdsAmount || 0)}</span>
+      ),
+    },
+    {
+      key: 'totalAmount',
+      header: 'Total',
+      width: 'w-[10%]',
+      align: 'right',
+      sortable: true,
+      cell: (invoice) => (
+        <span className="text-xs font-black text-slate-950 whitespace-nowrap">{formatCurrency(invoice.amount || invoice.totalAmount)}</span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-[10%]',
+      sortable: true,
+      cell: (invoice) => {
+        const state = statusOf(invoice);
+        return (
+          <span className={`rounded-lg border px-2.5 py-0.5 text-[9px] font-black uppercase whitespace-nowrap ${state === 'paid'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            : state === 'approved'
+              ? 'border-blue-200 bg-slate-50 text-[#12335f]'
+              : state === 'submitted'
+                ? 'border-amber-200 bg-amber-50 text-amber-700'
+                : 'border-slate-200 bg-slate-50 text-slate-600'
+            }`}>
+            {state.replace(/_/g, ' ')}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-[8%]',
+      align: 'right',
+      cell: (invoice, index) => {
+        const state = statusOf(invoice);
+        const isSubmitted = state === 'submitted';
+        const isPayable = state === 'approved' || state === 'payment_initiated';
+        return (
+          <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenKebabId(openKebabId === invoice.id ? null : invoice.id);
+              }}
+              className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+              title="Actions"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+
+            {openKebabId === invoice.id && (
+              <div className={cn(
+                "absolute right-0 z-50 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100",
+                pagedInvoices.length > 2 && index >= pagedInvoices.length - 2 ? "bottom-full mb-1.5 origin-bottom-right" : "top-full mt-1.5 origin-top-right"
+              )}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenKebabId(null);
+                    setSelectedInvoice(invoice);
+                    setInvoiceModalMode('view');
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                >
+                  <Eye className="h-3.5 w-3.5 text-slate-500" />
+                  <span>View</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenKebabId(null);
+                    setSelectedInvoice(invoice);
+                    setInvoiceModalMode('track');
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                >
+                  <Clock className="h-3.5 w-3.5 text-slate-500" />
+                  <span>Track</span>
+                </button>
+
+                {(state === 'paid' || state === 'payment_initiated') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenKebabId(null);
+                      setViewProofInvoiceId(invoice.id);
+                    }}
+                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Receipt</span>
+                  </button>
+                )}
+
+                {role === 'buyer' && isSubmitted && (
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => {
+                      setOpenKebabId(null);
+                      handleApproveInvoice(invoice.id);
+                    }}
+                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-white bg-[#12335f] hover:bg-slate-800 transition-colors text-left"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Approve</span>
+                  </button>
+                )}
+
+                {role === 'buyer' && isPayable && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenKebabId(null);
+                        setUploadProofInvoice(invoice);
+                      }}
+                      className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left"
+                    >
+                      <Upload className="h-3.5 w-3.5 text-blue-600" />
+                      <span>Upload Slip</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenKebabId(null);
+                        handleOpenCheckout(invoice);
+                      }}
+                      className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left"
+                    >
+                      <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Pay Now</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+  ], [role, openKebabId, pagedInvoices, submitting]);
 
   const SortHeader = ({ label, field, className = '' }: { label: string; field: 'invoiceNumber' | 'poNumber' | 'party' | 'taxableAmount' | 'totalTaxAmount' | 'tdsAmount' | 'totalAmount' | 'dueDate' | 'status'; className?: string }) => {
     const isActive = sortField === field;
@@ -1106,173 +1322,22 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           }
         />
       ) : viewMode === 'list' ? (
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm flex flex-col">
-          <div className="overflow-x-auto w-full min-h-[260px]">
-            <table data-ux-wrapped="true" className="w-full min-w-[1140px] border-collapse text-left text-xs mb-6">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-                  <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-12">Sr. No</th>
-                  <th scope="col" aria-sort={sortField === 'invoiceNumber' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('invoiceNumber')} className="p-3 w-40 cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="Invoice" field="invoiceNumber" /></th>
-                  <th scope="col" aria-sort={sortField === 'poNumber' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('poNumber')} className="p-3 w-40 cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="PO" field="poNumber" /></th>
-                  <th scope="col" aria-sort={sortField === 'party' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('party')} className="p-3 w-40 cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="Party" field="party" /></th>
-                  <th scope="col" aria-sort={sortField === 'taxableAmount' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('taxableAmount')} className="p-3 w-32 whitespace-nowrap cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="Taxable" field="taxableAmount" /></th>
-                  <th scope="col" aria-sort={sortField === 'totalTaxAmount' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('totalTaxAmount')} className="p-3 w-32 whitespace-nowrap cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="GST" field="totalTaxAmount" /></th>
-                  <th scope="col" aria-sort={sortField === 'tdsAmount' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('tdsAmount')} className="p-3 w-32 whitespace-nowrap cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="TDS" field="tdsAmount" /></th>
-                  <th scope="col" aria-sort={sortField === 'totalAmount' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('totalAmount')} className="p-3 w-36 whitespace-nowrap cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="Total" field="totalAmount" /></th>
-                  <th scope="col" aria-sort={sortField === 'status' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort('status')} className="p-3 w-32 whitespace-nowrap cursor-pointer select-none hover:bg-slate-100/70 transition-colors group"><SortHeader label="Status" field="status" /></th>
-                  <th className="p-3 text-right w-16 whitespace-nowrap text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                {sortedInvoices.map((invoice, index) => {
-                  const state = statusOf(invoice);
-                  const isSubmitted = state === 'submitted';
-                  const isPayable = state === 'approved' || state === 'payment_initiated';
-                  const rowIndex = (page - 1) * pageSize + index + 1;
-
-                  return (
-                    <tr key={invoice.id} className={cn("hover:bg-slate-50", openKebabId === invoice.id ? "relative z-50" : "relative z-0 hover:z-10")}>
-                      <td className="p-3 text-xs font-black text-slate-600">{rowIndex}</td>
-                      <td className="p-3">
-                        <EntityIdLink label={invoice.invoiceNumber || `INV-${invoice.id}`} id={invoice.id} size="sm" onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }} />
-                        <p className="mt-1 text-[10px] font-semibold text-slate-500">{formatDate(invoice.createdAt)}</p>
-                      </td>
-                      <td className="p-3">
-                        <p className="text-xs font-black text-slate-900">{invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p>
-                        <p className="text-[10px] font-semibold text-slate-500">{invoice.purchaseOrder?.title || '-'}</p>
-                      </td>
-                      <td className="p-3 text-xs font-bold text-slate-600">
-                        {role === 'seller' ? invoice.buyer?.name || `Buyer #${invoice.buyerId || '-'}` : invoice.seller?.name || `Seller #${invoice.sellerId || '-'}`}
-                      </td>
-                      <td className="p-3 text-xs font-bold text-slate-600 whitespace-nowrap">{formatCurrency(invoice.taxableAmount || 0)}</td>
-                      <td className="p-3 text-xs font-bold text-slate-600 whitespace-nowrap">{formatCurrency(invoice.totalTaxAmount || 0)}</td>
-                      <td className="p-3 text-xs font-bold text-slate-600 whitespace-nowrap">{formatCurrency(invoice.tdsAmount || 0)}</td>
-                      <td className="p-3 text-xs font-black text-slate-950 whitespace-nowrap">{formatCurrency(invoice.amount || invoice.totalAmount)}</td>
-                      <td className="p-3 whitespace-nowrap">
-                        <span className={`rounded-lg border px-2.5 py-0.5 text-[9px] font-black uppercase ${state === 'paid'
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                          : state === 'approved'
-                            ? 'border-blue-200 bg-slate-50 text-[#12335f]'
-                            : state === 'submitted'
-                              ? 'border-amber-200 bg-amber-50 text-amber-700'
-                              : 'border-slate-200 bg-slate-50 text-slate-600'
-                          }`}>
-                          {state.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        <div className="relative inline-flex items-center justify-end">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenKebabId(openKebabId === invoice.id ? null : invoice.id);
-                            }}
-                            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
-                            title="Actions"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-
-                          {openKebabId === invoice.id && (
-                            <div className={cn(
-                              "absolute right-0 z-50 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100",
-                              pagedInvoices.length > 2 && index >= pagedInvoices.length - 2 ? "bottom-full mb-1.5 origin-bottom-right" : "top-full mt-1.5 origin-top-right"
-                            )}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenKebabId(null);
-                                  setSelectedInvoice(invoice);
-                                  setInvoiceModalMode('view');
-                                }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                              >
-                                <Eye className="h-3.5 w-3.5 text-slate-500" />
-                                <span>View</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenKebabId(null);
-                                  setSelectedInvoice(invoice);
-                                  setInvoiceModalMode('track');
-                                }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                              >
-                                <Clock className="h-3.5 w-3.5 text-slate-500" />
-                                <span>Track</span>
-                              </button>
-
-                              {(state === 'paid' || state === 'payment_initiated') && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenKebabId(null);
-                                    setViewProofInvoiceId(invoice.id);
-                                  }}
-                                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
-                                >
-                                  <FileText className="h-3.5 w-3.5 text-blue-600" />
-                                  <span>Receipt</span>
-                                </button>
-                              )}
-
-                              {role === 'buyer' && isSubmitted && (
-                                <button
-                                  type="button"
-                                  disabled={submitting}
-                                  onClick={() => {
-                                    setOpenKebabId(null);
-                                    handleApproveInvoice(invoice.id);
-                                  }}
-                                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-white bg-[#12335f] hover:bg-slate-800 transition-colors text-left"
-                                >
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                  <span>Approve</span>
-                                </button>
-                              )}
-
-                              {role === 'buyer' && isPayable && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenKebabId(null);
-                                      setUploadProofInvoice(invoice);
-                                    }}
-                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left"
-                                  >
-                                    <Upload className="h-3.5 w-3.5 text-blue-600" />
-                                    <span>Upload Slip</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenKebabId(null);
-                                      handleOpenCheckout(invoice);
-                                    }}
-                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left"
-                                  >
-                                    <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
-                                    <span>Pay Now</span>
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="invoices" />
-        </div>
+        <DataTable<InvoiceRow>
+          data={sortedInvoices}
+          columns={invoiceColumns}
+          keyExtractor={(invoice) => invoice.id}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          sortKey={sortField}
+          sortDirection={sortOrder}
+          onSort={(field) => toggleSort(field as any)}
+          showSrNo
+          srNoWidth="w-[4%]"
+          caption="Invoices Register"
+        />
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

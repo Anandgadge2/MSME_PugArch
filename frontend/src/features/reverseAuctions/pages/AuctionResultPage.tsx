@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Award, RefreshCw } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
-import { Card, CardContent } from '../../../components/ui/card';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency } from '../../shared/format';
 import { reverseAuctionApi } from '../api';
@@ -19,6 +19,59 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
 
   const ranking = query.data?.ranking || [];
 
+  const columns: ColumnDef<any>[] = [
+    {
+      key: 'rank',
+      header: 'Rank',
+      width: 'w-24',
+      cell: (row, index) => (
+        <span className="text-base font-black text-slate-950">
+          L{row.currentRank || index + 1}
+        </span>
+      ),
+    },
+    {
+      key: 'seller',
+      header: 'Seller Org',
+      width: 'w-64',
+      cell: (row) => (
+        <span className="font-bold text-slate-800">
+          {row.sellerOrgName || `Organization #${row.sellerOrgId}`}
+        </span>
+      ),
+    },
+    {
+      key: 'lastBid',
+      header: 'Last Bid',
+      width: 'w-36',
+      cell: (row) => (
+        <span className="font-black text-slate-950">
+          {row.lastBidAmount ? formatCurrency(row.lastBidAmount) : '-'}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-32',
+      cell: (row) => (
+        <span className="text-xs font-bold uppercase text-slate-500">{row.status}</span>
+      ),
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      width: 'w-36',
+      align: 'right',
+      cellClassName: 'text-right',
+      cell: (row) => (
+        <Button size="sm" onClick={() => award.mutate(row.id)} disabled={award.isPending}>
+          <Award className="mr-1 h-3.5 w-3.5" />Recommend
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
@@ -33,40 +86,12 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
       {ranking.length === 0 ? (
         <EmptyState title="No ranked bids yet" />
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[720px] text-left text-sm">
-                <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                  <tr>
-                    <th className="p-3">Rank</th>
-                    <th className="p-3">Seller Org</th>
-                    <th className="p-3">Last Bid</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {ranking.map((row: any, index: number) => (
-                    <tr key={row.id}>
-                      <td className="p-3 text-lg font-black text-slate-950">L{row.currentRank || index + 1}</td>
-                      <td className="p-3 font-bold text-slate-800">{row.sellerOrgName || `Organization #${row.sellerOrgId}`}</td>
-                      <td className="p-3 font-black text-slate-950">{row.lastBidAmount ? formatCurrency(row.lastBidAmount) : '-'}</td>
-                      <td className="p-3 text-xs font-bold uppercase text-slate-500">{row.status}</td>
-                      <td className="p-3 text-right">
-                        <Button size="sm" onClick={() => award.mutate(row.id)} disabled={award.isPending}>
-                          <Award className="mr-1 h-3.5 w-3.5" />Recommend
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-</div>
-            </div>
-          </CardContent>
-        </Card>
+        <DataTable<any>
+          data={ranking}
+          columns={columns}
+          keyExtractor={(row) => row.id}
+          minWidth="min-w-[720px]"
+        />
       )}
     </div>
   );

@@ -45,6 +45,8 @@ import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
 import { EmptyState, LoadingState } from '../../shared/FeatureStates';
 import { Skeleton, KpiSkeleton } from '../../../components/ui/skeleton';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
+import { type SortDirection } from '../../shared/SortableHeader';
 
 export function SellerBidsSkeleton() {
   return (
@@ -779,6 +781,172 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     }
   };
 
+  const currentSortKey = useMemo(() => {
+    if (sortBy.startsWith('value')) return 'value';
+    if (sortBy.startsWith('title')) return 'title';
+    if (sortBy.startsWith('id')) return 'id';
+    if (sortBy.startsWith('buyer')) return 'buyer';
+    if (sortBy.startsWith('budget')) return 'budget';
+    if (sortBy.startsWith('closing')) return 'closing';
+    if (sortBy.startsWith('part')) return 'part';
+    if (sortBy.startsWith('stage')) return 'stage';
+    return '';
+  }, [sortBy]);
+
+  const currentSortDirection = useMemo<SortDirection>(() => {
+    if (sortBy.endsWith('_desc') || sortBy === 'budget_high' || sortBy === 'value_high') return 'desc';
+    return 'asc';
+  }, [sortBy]);
+
+  const tableColumns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'id',
+      header: 'Bid ID',
+      sortable: true,
+      sortKey: 'id',
+      width: 'w-28',
+      cell: (item: any) => (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-black tracking-wide bg-slate-100 text-slate-800 border border-slate-200/80">
+          {formatBidDisplayId(item)}
+        </span>
+      )
+    },
+    {
+      key: 'title',
+      header: 'Title & Details',
+      sortable: true,
+      sortKey: 'title',
+      cell: (item: any) => {
+        const bid = item.bid || {};
+        const pType = getParticipationType(item);
+        return (
+          <div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="font-bold text-slate-900 line-clamp-1 max-w-[220px]">{bid.title || 'Untitled Bid'}</p>
+              <span className="inline-block rounded px-1.5 py-0.2 text-[9px] font-bold uppercase bg-[#12335f]/10 text-[#12335f] shrink-0">
+                {pType}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-0.5">{bid.category}</p>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'buyer',
+      header: 'Buyer',
+      sortable: true,
+      sortKey: 'buyer',
+      cell: (item: any) => (
+        <span className="text-slate-700">{item.bid?.buyerName || 'Private Buyer'}</span>
+      )
+    },
+    {
+      key: 'value',
+      header: 'Your Quote',
+      sortable: true,
+      sortKey: 'value',
+      cell: (item: any) => (
+        <span className="font-bold text-slate-900 whitespace-nowrap">
+          {item.quotedAmount ? formatCurrency(item.quotedAmount) : 'Pending'}
+        </span>
+      )
+    },
+    {
+      key: 'budget',
+      header: 'Est. Budget',
+      sortable: true,
+      sortKey: 'budget',
+      width: 'w-32',
+      cell: (item: any) => (
+        <span className="font-bold text-slate-700 whitespace-nowrap">
+          {formatCurrency(item.bid?.estimatedValue)}
+        </span>
+      )
+    },
+    {
+      key: 'closing',
+      header: 'Closing Date',
+      sortable: true,
+      sortKey: 'closing',
+      width: 'w-32',
+      cell: (item: any) => (
+        <span className="text-slate-500 whitespace-nowrap">
+          {formatDate(item.bid?.endDate)}
+        </span>
+      )
+    },
+    {
+      key: 'part',
+      header: 'Participation',
+      sortable: true,
+      sortKey: 'part',
+      width: 'w-32',
+      cell: (item: any) => (
+        <span className={cn('inline-flex rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide whitespace-nowrap', participationStatusColor(item.status))}>
+          {item.status}
+        </span>
+      )
+    },
+    {
+      key: 'stage',
+      header: 'Bid Stage',
+      sortable: true,
+      sortKey: 'stage',
+      width: 'w-32',
+      cell: (item: any) => (
+        <span className={cn('inline-block rounded px-2 py-0.5 text-[9px] font-black uppercase whitespace-nowrap', bidStatusColor(item.bid?.status || 'OPEN'))}>
+          {String(item.bid?.status || 'OPEN').replace(/_/g, ' ')}
+        </span>
+      )
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      width: 'w-28',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (item: any) => {
+        const pType = getParticipationType(item);
+        return (
+          <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
+            {isAwarded(item) && (
+              <Button 
+                onClick={(e) => handleConvertToInvoice(e, item)}
+                disabled={convertingInvoiceId === item.id}
+                className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-3 flex items-center gap-1.5 shadow-sm"
+                title="Convert to Invoice"
+              >
+                {convertingInvoiceId === item.id ? (
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                ) : (
+                  <FileText className="h-3 w-3" />
+                )}
+                Invoice
+              </Button>
+            )}
+            {(pType === 'Reverse Auction' || String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE')) ? (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  router.push(`/seller/procurement/reverse-auction/${item.bid?.id || item.bidId}/live`);
+                }}
+                className="h-8 bg-gradient-to-r from-red-600 to-rose-600 text-[10px] font-black uppercase text-white hover:from-red-500 hover:to-rose-500 rounded-lg px-3 flex items-center gap-1 shadow-xs"
+              >
+                <Gavel className="h-3 w-3" /> Live Auction
+              </Button>
+            ) : (
+              <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3">
+                {isDraft(item) ? 'Resume' : 'View'}
+              </Button>
+            )}
+          </div>
+        );
+      }
+    }
+  ], [convertingInvoiceId, router]);
+
   if (loading) {
     return <SellerBidsSkeleton />;
   }
@@ -1353,7 +1521,8 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       ) : (
         <div className="space-y-4">
           {viewMode === 'grid' ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {pagedItems.map((item, index) => {
                 const bid = item.bid || {};
                 const rowIndex = (page - 1) * pageSize + index + 1;
@@ -1421,119 +1590,37 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                   </div>
                 );
               })}
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[920px] border-collapse text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-                      <th className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500 w-16">Sr. No</th>
-                      <th className="p-3 w-28"><SortHeader label="Bid ID" columnKey="id" /></th>
-                      <th className="p-3"><SortHeader label="Title & Details" columnKey="title" /></th>
-                      <th className="p-3"><SortHeader label="Buyer" columnKey="buyer" /></th>
-                      <th className="p-3"><SortHeader label="Your Quote" columnKey="value" /></th>
-                      <th className="p-3 w-32"><SortHeader label="Est. Budget" columnKey="budget" /></th>
-                      <th className="p-3 w-32"><SortHeader label="Closing Date" columnKey="closing" /></th>
-                      <th className="p-3 w-32"><SortHeader label="Participation" columnKey="part" /></th>
-                      <th className="p-3 w-32"><SortHeader label="Bid Stage" columnKey="stage" /></th>
-                      <th className="p-3 text-right w-24">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {pagedItems.map((item, index) => {
-                      const bid = item.bid || {};
-                      const rowIndex = (page - 1) * pageSize + index + 1;
-                      const displayId = formatBidDisplayId(item);
-                      const pType = getParticipationType(item);
-
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50/50 transition cursor-pointer" onClick={() => handleAction(item)}>
-                          <td className="p-3 font-mono text-xs text-slate-500">
-                            {String(rowIndex).padStart(2, '0')}
-                          </td>
-                          <td className="p-3 whitespace-nowrap">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-black tracking-wide bg-slate-100 text-slate-800 border border-slate-200/80">
-                              {displayId}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className="font-bold text-slate-900 line-clamp-1 max-w-[220px]">{bid.title || 'Untitled Bid'}</p>
-                              <span className="inline-block rounded px-1.5 py-0.2 text-[9px] font-bold uppercase bg-[#12335f]/10 text-[#12335f] shrink-0">
-                                {pType}
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-slate-500 mt-0.5">{bid.category}</p>
-                          </td>
-                          <td className="p-3 text-slate-700">{bid.buyerName || 'Private Buyer'}</td>
-                          <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{item.quotedAmount ? formatCurrency(item.quotedAmount) : 'Pending'}</td>
-                          <td className="p-3 font-bold text-slate-700 whitespace-nowrap">{formatCurrency(bid.estimatedValue)}</td>
-                          <td className="p-3 text-slate-500 whitespace-nowrap">{formatDate(bid.endDate)}</td>
-                          <td className="p-3">
-                            <span className={cn('inline-flex rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide whitespace-nowrap', participationStatusColor(item.status))}>
-                              {item.status}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <span className={cn('inline-block rounded px-2 py-0.5 text-[9px] font-black uppercase whitespace-nowrap', bidStatusColor(bid.status || 'OPEN'))}>
-                              {String(bid.status || 'OPEN').replace(/_/g, ' ')}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right" onClick={e => e.stopPropagation()}>
-                            <div className="flex justify-end gap-2">
-                              {isAwarded(item) && (
-                                <Button 
-                                  onClick={(e) => handleConvertToInvoice(e, item)}
-                                  disabled={convertingInvoiceId === item.id}
-                                  className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-3 flex items-center gap-1.5 shadow-sm"
-                                  title="Convert to Invoice"
-                                >
-                                  {convertingInvoiceId === item.id ? (
-                                    <RefreshCw className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <FileText className="h-3 w-3" />
-                                  )}
-                                  Invoice
-                                </Button>
-                              )}
-                              {(pType === 'Reverse Auction' || String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE')) ? (
-                                <Button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    router.push(`/seller/procurement/reverse-auction/${item.bid?.id || item.bidId}/live`);
-                                  }}
-                                  className="h-8 bg-gradient-to-r from-red-600 to-rose-600 text-[10px] font-black uppercase text-white hover:from-red-500 hover:to-rose-500 rounded-lg px-3 flex items-center gap-1 shadow-xs"
-                                >
-                                  <Gavel className="h-3 w-3" /> Live Auction
-                                </Button>
-                              ) : (
-                                <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3">
-                                  {isDraft(item) ? 'Resume' : 'View'}
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={total}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  label="bids"
+                />
               </div>
             </div>
-          )}
-
-          {/* ═══ PAGINATION ═══ */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <Pagination
+          ) : (
+            <DataTable<any>
+              data={pagedItems}
+              columns={tableColumns}
+              keyExtractor={(item) => item.id}
+              showSrNo={true}
               page={page}
               pageSize={pageSize}
               total={total}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
-              label="bids"
+              sortKey={currentSortKey}
+              sortDirection={currentSortDirection}
+              onSort={toggleSort}
+              onRowClick={(item) => handleAction(item)}
+              paginationLabel="bids"
+              minWidth="min-w-[920px]"
             />
-          </div>
+          )}
         </div>
       )}
     </div>
