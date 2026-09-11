@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { isValidElement, useMemo } from 'react';
 import { SortableHeader, type SortDirection } from '../../../features/shared/SortableHeader';
 export type { SortDirection };
 import { Pagination } from '../../../features/shared/Pagination';
@@ -60,6 +60,7 @@ export interface DataTableProps<T> {
   tableClassName?: string;
   caption?: string;
   footer?: React.ReactNode;
+  containerFooter?: React.ReactNode;
 }
 
 export function DataTable<T>({
@@ -93,11 +94,31 @@ export function DataTable<T>({
   tableClassName,
   caption,
   footer,
+  containerFooter,
 }: DataTableProps<T>) {
   const safePageSize = Math.max(1, pageSize || 10);
   const safePage = Math.max(1, page || 1);
   const startIndex = (safePage - 1) * safePageSize;
   const resolvedTotal = total !== undefined ? total : data.length;
+
+  // Check whether footer should be rendered inside <tfoot> (as <tr> elements)
+  // or outside <table> as a container-level footer (e.g. action buttons, summary cards).
+  // HTML strictly requires direct children of <tfoot> to be <tr> elements.
+  const isTableRowFooter = useMemo(() => {
+    if (!footer) return false;
+    if (isValidElement(footer)) {
+      const type = footer.type;
+      if (typeof type === 'string' && (type.toLowerCase() === 'tr' || type.toLowerCase() === 'tfoot')) {
+        return true;
+      }
+    }
+    if (Array.isArray(footer) && footer.length > 0) {
+      return footer.every(
+        (child) => isValidElement(child) && typeof child.type === 'string' && child.type.toLowerCase() === 'tr'
+      );
+    }
+    return false;
+  }, [footer]);
 
   if (isLoading) {
     const colsCount = columns.length + (showSrNo ? 1 : 0);
@@ -246,13 +267,21 @@ export function DataTable<T>({
               );
             })}
           </tbody>
-          {footer && (
+          {isTableRowFooter && (
             <tfoot className="border-t-2 border-slate-200 bg-slate-50/80 font-bold">
               {footer}
             </tfoot>
           )}
         </table>
       </div>
+
+      {/* Non-table-row footer or container footer (e.g. action buttons, summary cards) */}
+      {((!isTableRowFooter && footer) || containerFooter) && (
+        <div className="w-full">
+          {!isTableRowFooter && footer}
+          {containerFooter}
+        </div>
+      )}
 
       {/* Integrated Responsive Pagination Bar */}
       {onPageChange && resolvedTotal > 0 && (

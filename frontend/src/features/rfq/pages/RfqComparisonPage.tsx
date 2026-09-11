@@ -656,10 +656,14 @@ export default function RfqComparisonPage({ id: propId }: { id?: number }) {
                                     columns={breakdownColumns}
                                     keyExtractor={(item, idx) => String(item.id || idx)}
                                     footer={
-                                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/80 border-t border-slate-200">
-                                            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Total Quotation Amount (incl. GST)</span>
-                                            <span className="text-sm font-black text-emerald-700 tabular-nums">{money(r.totalAmount)}</span>
-                                        </div>
+                                        <tr>
+                                            <td colSpan={6} className="px-4 py-2.5 text-right text-xs font-bold text-slate-600 uppercase tracking-wider">
+                                                Total Quotation Amount (incl. GST)
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right text-sm font-black text-emerald-700 tabular-nums">
+                                                {money(r.totalAmount)}
+                                            </td>
+                                        </tr>
                                     }
                                     emptyTitle="No line items"
                                     emptyDescription="No quotation line items available."

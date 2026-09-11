@@ -474,7 +474,17 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     let [auction, participant] = await Promise.all([
       db.auction.findUnique({ where: { id } }),
-      req.user?.role === 'seller' ? db.auctionParticipant.findFirst({ where: { auctionId: id, sellerOrgId: req.user.organizationId || -1 } }) : Promise.resolve(null)
+      req.user?.role === 'seller'
+        ? db.auctionParticipant.findFirst({
+            where: {
+              auctionId: id,
+              OR: [
+                ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+                ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
+              ]
+            }
+          })
+        : Promise.resolve(null)
     ]);
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     auction = await withEffectiveStatus(auction);
@@ -718,9 +728,12 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
           auctionId: auction.id,
           sellerOrgId,
           sellerUserId,
-          status: 'ACCEPTED',
+          status: 'TECHNICALLY_QUALIFIED',
+          qualificationStatus: 'APPROVED',
+          qualifiedAt: new Date(),
           currentRank: rank,
-          lastBidAmount: amount
+          lastBidAmount: amount,
+          initialQuoteTotal: amount
         }
       });
       participantRecords.push(part);
@@ -867,7 +880,12 @@ router.patch('/reverse-auctions/:id', requirePermission('reverse_auction.update'
 // Before an auction can go LIVE, enough sellers must have cleared the pre-bid
 // qualification stage — otherwise the auction opens with no eligible bidders.
 const assertEnoughQualifiedBidders = async (auction: any) => {
-  const qualified = await db.auctionParticipant.count({ where: { auctionId: auction.id, status: 'TECHNICALLY_QUALIFIED' } });
+  const qualified = await db.auctionParticipant.count({
+    where: {
+      auctionId: auction.id,
+      status: { in: ['TECHNICALLY_QUALIFIED', 'ACCEPTED'] }
+    }
+  });
   const minimum = Math.max(1, Number(auction.minimumQualifiedBidders) || 1);
   if (qualified < minimum) {
     throw new ApiError(400, `At least ${minimum} technically qualified bidder(s) are required before the auction can go live (currently ${qualified}).`, 'AUCTION_INSUFFICIENT_QUALIFIED');
@@ -1409,8 +1427,11 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
         const participant = await tx.auctionParticipant.findFirst({
           where: {
             auctionId,
-            sellerOrgId: req.user?.organizationId || -1,
-            status: 'TECHNICALLY_QUALIFIED'
+            OR: [
+              ...(req.user?.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+              ...(req.user?.id ? [{ sellerUserId: req.user.id }] : [])
+            ],
+            status: { in: ['TECHNICALLY_QUALIFIED', 'ACCEPTED'] }
           }
         });
         if (!participant) throw new ApiError(403, 'Only technically qualified sellers can bid. Complete the qualification stage first.', 'AUCTION_SELLER_NOT_QUALIFIED');

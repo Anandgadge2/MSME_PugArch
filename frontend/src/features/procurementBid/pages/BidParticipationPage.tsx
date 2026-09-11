@@ -1801,10 +1801,14 @@ function ReviewStep({ bid, participation, technicalDocs, financialDocs, technica
             columns={summaryColumns}
             keyExtractor={(item) => String(item.id)}
             footer={
-              <div className="flex items-center justify-between px-4 py-3 bg-slate-50 font-bold text-slate-800 text-sm border-t border-slate-200">
-                <span>Grand Total</span>
-                <span className="text-[var(--bid-primary)]">₹{parseFloat(quote?.totalAmount || '0').toFixed(2)}</span>
-              </div>
+              <tr>
+                <td colSpan={5} className="p-3 text-right font-bold text-slate-800">
+                  Grand Total
+                </td>
+                <td className="p-3 text-right font-bold text-[var(--bid-primary)]">
+                  ₹{parseFloat(quote?.totalAmount || '0').toFixed(2)}
+                </td>
+              </tr>
             }
             emptyTitle="No financial quote items"
             emptyDescription="No BOQ items were quoted."
