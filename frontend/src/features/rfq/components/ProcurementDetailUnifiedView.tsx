@@ -3840,8 +3840,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               ]}
             />
 
-            {/* Clarification Threads & Status grid - hidden in RFQ globally, and Open/Limited Tender/Rate Contract on buyer side */}
-            {!isRfqType && !isBuyerOpenTender && !isBuyerLimitedTender && !isBuyerRateContract && (
+            {/* Clarification Threads & Status grid - commented out on buyer side */}
+            {!isBuyerSide && !isRfqType && !isBuyerOpenTender && !isBuyerLimitedTender && !isBuyerRateContract && (
               <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
                 <PropertyGrid columns={4}>
                   <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
