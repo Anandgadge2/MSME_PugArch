@@ -386,30 +386,6 @@ function SellerBackedShgPage({ section }: { section: string }) {
     };
   }, []);
 
-  if (loading) {
-    return (
-      <div className="space-y-4 animate-pulse" aria-label="Loading SHG workspace">
-        <div className="h-28 rounded-[22px] bg-slate-200/70" />
-        <div className="h-64 rounded-[22px] bg-slate-200/60" />
-      </div>
-    );
-  }
-
-  const currentUser = snapshot?.user || user || {};
-  const profile = snapshot?.profile || currentUser?.sellerProfile || {};
-  const organization = currentUser?.organization || {};
-  const registration = currentUser?.registrationDetails || {};
-  const documents = Array.isArray(profile?.sellerDocuments) ? profile.sellerDocuments : [];
-  const bankAccounts = Array.isArray(profile?.bankAccounts) ? profile.bankAccounts : [];
-  const memberDocuments = documents.filter((document: any) =>
-    ['member_list', 'formation_resolution', 'authorization_letter'].includes(String(document?.documentType || '').toLowerCase())
-  );
-  const meetings = Array.isArray(profile?.meetings)
-    ? profile.meetings
-    : Array.isArray(registration?.meetings)
-      ? registration.meetings
-      : [];
-
   const memberDocColumns = useMemo<ColumnDef<any>[]>(() => [
     {
       key: 'documentType',
@@ -455,6 +431,30 @@ function SellerBackedShgPage({ section }: { section: string }) {
       cell: (meeting) => <span>{meeting.decisions || meeting.resolution || '—'}</span>,
     },
   ], []);
+
+  if (loading) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-label="Loading SHG workspace">
+        <div className="h-28 rounded-[22px] bg-slate-200/70" />
+        <div className="h-64 rounded-[22px] bg-slate-200/60" />
+      </div>
+    );
+  }
+
+  const currentUser = snapshot?.user || user || {};
+  const profile = snapshot?.profile || currentUser?.sellerProfile || {};
+  const organization = currentUser?.organization || {};
+  const registration = currentUser?.registrationDetails || {};
+  const documents = Array.isArray(profile?.sellerDocuments) ? profile.sellerDocuments : [];
+  const bankAccounts = Array.isArray(profile?.bankAccounts) ? profile.bankAccounts : [];
+  const memberDocuments = documents.filter((document: any) =>
+    ['member_list', 'formation_resolution', 'authorization_letter'].includes(String(document?.documentType || '').toLowerCase())
+  );
+  const meetings = Array.isArray(profile?.meetings)
+    ? profile.meetings
+    : Array.isArray(registration?.meetings)
+      ? registration.meetings
+      : [];
 
   if (section === 'members') {
     return (

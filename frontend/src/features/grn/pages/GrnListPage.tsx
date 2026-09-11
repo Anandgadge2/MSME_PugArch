@@ -236,12 +236,6 @@ export default function GrnListPage() {
         });
     }, [grns, search, sortDirection, sortKey, filter, filterPo, filterSeller, filterItems, filterReceivedFrom, filterReceivedTo, filterUpdatedFrom, filterUpdatedTo]);
 
-    const { page, pageSize, pageItems, total, setPage, setPageSize } = usePagination(visibleGrns, 10);
-
-    if (!canViewGrns) {
-        return <InlineError message="You do not have permission to view goods receipt notes." />;
-    }
-
     const toggleSort = (field: GrnSortKey) => {
         setSortDirection(prev => sortKey === field && prev === 'asc' ? 'desc' : 'asc');
         setSortKey(field);
@@ -346,6 +340,12 @@ export default function GrnListPage() {
             ),
         },
     ], [router]);
+
+    const { page, pageSize, pageItems, total, setPage, setPageSize } = usePagination(visibleGrns, 10);
+
+    if (!canViewGrns) {
+        return <InlineError message="You do not have permission to view goods receipt notes." />;
+    }
 
     return (
         <div className="space-y-6">

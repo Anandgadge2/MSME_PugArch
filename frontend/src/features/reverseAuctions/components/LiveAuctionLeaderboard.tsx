@@ -147,34 +147,7 @@ export default function LiveAuctionLeaderboard({
     }
   };
 
-  if (loading && !auction) {
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs flex items-center justify-center gap-3 text-slate-500">
-        <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-        <span className="text-xs font-bold">Synchronizing Reverse Auction Leaderboard…</span>
-      </div>
-    );
-  }
-
-  if (!auction) return null;
-
-  const status = String(auction.statusEnum || auction.status || 'DRAFT').toUpperCase();
-  const isLive = status === 'LIVE';
-  const isCompleted = ['CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(status);
-  const startPrice = Number(auction.startPrice || 0);
-  const currentLowest = Number(auction.currentLowestAmount || auction.currentLowestBid || auction.currentBid || startPrice);
-  const savings = startPrice > 0 && currentLowest > 0 && currentLowest < startPrice ? startPrice - currentLowest : 0;
-  const savingsPercent = startPrice > 0 && savings > 0 ? (savings / startPrice) * 100 : 0;
-
-  // Sorted participants
-  const sortedParticipants = [...participants].sort((a, b) => {
-    const rankA = Number(a.currentRank || 999);
-    const rankB = Number(b.currentRank || 999);
-    if (rankA !== rankB) return rankA - rankB;
-    return Number(a.lastBidAmount || 0) - Number(b.lastBidAmount || 0);
-  });
-
-  const l1Winner = sortedParticipants[0];
+  const startPrice = Number(auction?.startPrice || 0);
 
   const leaderboardColumns = React.useMemo<ColumnDef<ReverseAuctionParticipant>[]>(() => [
     {
@@ -263,6 +236,34 @@ export default function LiveAuctionLeaderboard({
       }
     }
   ], [startPrice]);
+
+  if (loading && !auction) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs flex items-center justify-center gap-3 text-slate-500">
+        <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+        <span className="text-xs font-bold">Synchronizing Reverse Auction Leaderboard…</span>
+      </div>
+    );
+  }
+
+  if (!auction) return null;
+
+  const status = String(auction.statusEnum || auction.status || 'DRAFT').toUpperCase();
+  const isLive = status === 'LIVE';
+  const isCompleted = ['CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(status);
+  const currentLowest = Number(auction.currentLowestAmount || auction.currentLowestBid || auction.currentBid || startPrice);
+  const savings = startPrice > 0 && currentLowest > 0 && currentLowest < startPrice ? startPrice - currentLowest : 0;
+  const savingsPercent = startPrice > 0 && savings > 0 ? (savings / startPrice) * 100 : 0;
+
+  // Sorted participants
+  const sortedParticipants = [...participants].sort((a, b) => {
+    const rankA = Number(a.currentRank || 999);
+    const rankB = Number(b.currentRank || 999);
+    if (rankA !== rankB) return rankA - rankB;
+    return Number(a.lastBidAmount || 0) - Number(b.lastBidAmount || 0);
+  });
+
+  const l1Winner = sortedParticipants[0];
 
   return (
     <section className="rounded-3xl border border-slate-200/80 bg-white shadow-md overflow-hidden space-y-6 p-6">

@@ -309,35 +309,6 @@ const BuyerRequirementDetailsPage = () => {
     }
   }, [requirement, redirecting, isSeller]);
 
-  if (loading || redirecting) {
-    return (
-      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
-        <BuyerRequirementDetailSkeleton />
-      </div>
-    );
-  }
-
-  if (error || !requirement) {
-    return (
-      <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
-        <AlertCircle className="h-12 w-12 text-red-400" />
-        <h2 className="text-lg font-black text-slate-800">{error || 'Requirement not found'}</h2>
-        <button onClick={() => window.history.back()} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-slate-100 px-4 text-xs font-bold text-slate-700 hover:bg-slate-200 transition">
-          <ArrowLeft className="h-4 w-4" /> Go Back
-        </button>
-      </div>
-    );
-  }
-
-  const remaining = daysLeft(requirement.lastDate);
-  const isClosed = requirement.status === 'CLOSED' || requirement.status === 'AWARDED' || requirement.status === 'CANCELLED' || requirement.status === 'REJECTED' || (remaining !== null && remaining <= 0);
-  const statusColor = requirement.status === 'OPEN' || requirement.status === 'PUBLISHED'
-    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    : requirement.status === 'CLOSED' || requirement.status === 'AWARDED'
-      ? 'bg-amber-50 text-amber-700 border-amber-200'
-      : 'bg-slate-100 text-slate-500 border-slate-200';
-
-  const items = Array.isArray(requirement.items) ? requirement.items : [];
   const itemColumns = useMemo<ColumnDef<any>[]>(() => [
     {
       key: 'itemName',
@@ -374,6 +345,36 @@ const BuyerRequirementDetailsPage = () => {
       ),
     },
   ], [isBuyer]);
+
+  if (loading || redirecting) {
+    return (
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
+        <BuyerRequirementDetailSkeleton />
+      </div>
+    );
+  }
+
+  if (error || !requirement) {
+    return (
+      <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
+        <AlertCircle className="h-12 w-12 text-red-400" />
+        <h2 className="text-lg font-black text-slate-800">{error || 'Requirement not found'}</h2>
+        <button onClick={() => window.history.back()} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-slate-100 px-4 text-xs font-bold text-slate-700 hover:bg-slate-200 transition">
+          <ArrowLeft className="h-4 w-4" /> Go Back
+        </button>
+      </div>
+    );
+  }
+
+  const remaining = daysLeft(requirement.lastDate);
+  const isClosed = requirement.status === 'CLOSED' || requirement.status === 'AWARDED' || requirement.status === 'CANCELLED' || requirement.status === 'REJECTED' || (remaining !== null && remaining <= 0);
+  const statusColor = requirement.status === 'OPEN' || requirement.status === 'PUBLISHED'
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : requirement.status === 'CLOSED' || requirement.status === 'AWARDED'
+      ? 'bg-amber-50 text-amber-700 border-amber-200'
+      : 'bg-slate-100 text-slate-500 border-slate-200';
+
+  const items = Array.isArray(requirement.items) ? requirement.items : [];
   const reqDesc = String(requirement?.description || '').toUpperCase();
   const reqTitle = String(requirement?.title || '').toUpperCase();
   const reqPayload = requirement?.payload && typeof requirement.payload === 'object' ? requirement.payload : {};

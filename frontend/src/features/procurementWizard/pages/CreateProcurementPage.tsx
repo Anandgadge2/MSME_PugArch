@@ -4645,183 +4645,6 @@ function ItemsDetailsForm({
     });
   };
 
-  // 1. BOQ Table Mode
-  if (whatBuying === 'BOQ') {
-    return (
-      <div className="space-y-4 w-full min-w-0 max-w-full">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-2.5 gap-2">
-          <div>
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Structured Bill of Quantities (BOQ)</h3>
-            <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Invite quotes using an itemized spreadsheet schedule</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                toast.info('Downloading BOQ Excel Template...');
-                window.open(`${BASE_URL}/api/buyer-showcase/boq/template`, '_blank');
-              }}
-              className="h-8.5 text-xs font-bold text-slate-700"
-            >
-              <Download className="h-4 w-4 mr-1" /> Template
-            </Button>
-            
-            <div className="relative">
-              <input
-                type="file"
-                id="boq-upload"
-                accept=".xls,.xlsx,.csv"
-                onChange={handleBOQUpload}
-                className="hidden"
-                disabled={uploadingFile}
-              />
-              <label
-                htmlFor="boq-upload"
-                className={cn(
-                  "cursor-pointer inline-flex items-center justify-center h-8.5 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-3xs",
-                  uploadingFile && "opacity-50 pointer-events-none"
-                )}
-              >
-                {uploadingFile ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-1 text-slate-500" />
-                    <span>Uploading...</span>
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4 mr-1 text-slate-500" />
-                    <span>Upload BOQ File</span>
-                  </>
-                )}
-              </label>
-            </div>
-          </div>
-        </div>
-
-        {draft.boqFileName && (
-          <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl max-w-md animate-fadeIn">
-            <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />
-            <span className="truncate">Uploaded BOQ: <strong>{draft.boqFileName}</strong></span>
-            <button
-              type="button"
-              onClick={() => updateDraft(c => ({ ...c, boqFileName: '', boqFileAssetId: null }))}
-              className="text-rose-500 hover:text-rose-700 font-bold ml-auto shrink-0"
-            >
-              Remove
-            </button>
-          </div>
-        )}
-
-        <BOQTable
-          rows={draft.boqTable}
-          onChange={handleBOQCellChange}
-          onAddRow={handleAddBOQRow}
-          onDuplicateRow={handleBOQDuplicateRow}
-          onDeleteRow={handleRemoveBOQRow}
-          estimatedTotal={draft.basics.estimatedValue}
-        />
-      </div>
-    );
-  }
-
-  // Service Details Panel (when Service is selected)
-  const serviceDetailsPanel = whatBuying === 'Service' ? (
-    <div className="space-y-4 rounded-2xl p-3 sm:p-5 border border-purple-200/80 bg-gradient-to-br from-purple-50/60 via-white to-purple-50/30 w-full min-w-0 max-w-full">
-      <div className="flex items-center justify-between border-b border-purple-100 pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8.5 w-8.5 items-center justify-center rounded-lg bg-purple-100 text-purple-700">
-            <Wrench className="h-4 w-4" />
-          </div>
-          <div>
-            <h4 className="text-xs font-black text-purple-950 uppercase tracking-wide">Master Service Contract Terms</h4>
-            <p className="text-[10px] text-purple-700 font-medium">Define overall SLA, deliverables scope, duration, and penalty terms</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
-        <Field label="Service Contract Title" required className="sm:col-span-2">
-          <input
-            value={draft.serviceDetails.serviceTitle || draft.basics.title || ''}
-            onChange={e => updateService('serviceTitle', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. Master Service Agreement for Facility Management, Annual Maintenance Contract..."
-          />
-        </Field>
-
-        <Field label="Scope of Work (SOW)" required className="sm:col-span-2">
-          <textarea
-            value={draft.serviceDetails.scopeOfWork}
-            onChange={e => updateService('scopeOfWork', e.target.value)}
-            rows={3}
-            className={textareaClass}
-            placeholder="Detailed description of the service scope, technical responsibilities, and coverage..."
-          />
-        </Field>
-
-        <Field label="Key Deliverables & Milestones" required>
-          <textarea
-            value={draft.serviceDetails.deliverables}
-            onChange={e => updateService('deliverables', e.target.value)}
-            rows={3}
-            className={textareaClass}
-            placeholder="e.g. Monthly uptime reports, quarterly preventive maintenance, SLA log..."
-          />
-        </Field>
-
-        <Field label="Exclusions / Boundaries">
-          <textarea
-            value={draft.serviceDetails.exclusions}
-            onChange={e => updateService('exclusions', e.target.value)}
-            rows={3}
-            className={textareaClass}
-            placeholder="Consumables or equipment outside service contract scope..."
-          />
-        </Field>
-
-        <Field label="SLA Response & Resolution Time">
-          <input
-            value={draft.serviceDetails.slaResponseTime}
-            onChange={e => updateService('slaResponseTime', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. 2 hrs response, 8 hrs resolution"
-          />
-        </Field>
-
-        <Field label="Contract Duration" required>
-          <input
-            value={draft.serviceDetails.duration}
-            onChange={e => updateService('duration', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. 1 Year (12 Months), 6 Months"
-          />
-        </Field>
-
-        <Field label="Required Manpower Count">
-          <input
-            type="number"
-            min={0}
-            value={draft.serviceDetails.manpowerRequired}
-            onChange={e => updateService('manpowerRequired', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. 3"
-          />
-        </Field>
-
-        <Field label="Late Delivery / Downtime Penalty Terms">
-          <input
-            value={draft.serviceDetails.penaltyClause}
-            onChange={e => updateService('penaltyClause', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. 0.5% per week of delay up to max 10%"
-          />
-        </Field>
-      </div>
-    </div>
-  ) : null;
-
   const procurementItemColumns: ColumnDef<any>[] = useMemo(() => [
     {
       key: 'type',
@@ -5000,6 +4823,183 @@ function ItemsDetailsForm({
       )
     }
   ], [handleDuplicateItem, handleRemoveItem]);
+
+  // 1. BOQ Table Mode
+  if (whatBuying === 'BOQ') {
+    return (
+      <div className="space-y-4 w-full min-w-0 max-w-full">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-2.5 gap-2">
+          <div>
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Structured Bill of Quantities (BOQ)</h3>
+            <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Invite quotes using an itemized spreadsheet schedule</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                toast.info('Downloading BOQ Excel Template...');
+                window.open(`${BASE_URL}/api/buyer-showcase/boq/template`, '_blank');
+              }}
+              className="h-8.5 text-xs font-bold text-slate-700"
+            >
+              <Download className="h-4 w-4 mr-1" /> Template
+            </Button>
+            
+            <div className="relative">
+              <input
+                type="file"
+                id="boq-upload"
+                accept=".xls,.xlsx,.csv"
+                onChange={handleBOQUpload}
+                className="hidden"
+                disabled={uploadingFile}
+              />
+              <label
+                htmlFor="boq-upload"
+                className={cn(
+                  "cursor-pointer inline-flex items-center justify-center h-8.5 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-3xs",
+                  uploadingFile && "opacity-50 pointer-events-none"
+                )}
+              >
+                {uploadingFile ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-1 text-slate-500" />
+                    <span>Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-1 text-slate-500" />
+                    <span>Upload BOQ File</span>
+                  </>
+                )}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {draft.boqFileName && (
+          <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl max-w-md animate-fadeIn">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span className="truncate">Uploaded BOQ: <strong>{draft.boqFileName}</strong></span>
+            <button
+              type="button"
+              onClick={() => updateDraft(c => ({ ...c, boqFileName: '', boqFileAssetId: null }))}
+              className="text-rose-500 hover:text-rose-700 font-bold ml-auto shrink-0"
+            >
+              Remove
+            </button>
+          </div>
+        )}
+
+        <BOQTable
+          rows={draft.boqTable}
+          onChange={handleBOQCellChange}
+          onAddRow={handleAddBOQRow}
+          onDuplicateRow={handleBOQDuplicateRow}
+          onDeleteRow={handleRemoveBOQRow}
+          estimatedTotal={draft.basics.estimatedValue}
+        />
+      </div>
+    );
+  }
+
+  // Service Details Panel (when Service is selected)
+  const serviceDetailsPanel = whatBuying === 'Service' ? (
+    <div className="space-y-4 rounded-2xl p-3 sm:p-5 border border-purple-200/80 bg-gradient-to-br from-purple-50/60 via-white to-purple-50/30 w-full min-w-0 max-w-full">
+      <div className="flex items-center justify-between border-b border-purple-100 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8.5 w-8.5 items-center justify-center rounded-lg bg-purple-100 text-purple-700">
+            <Wrench className="h-4 w-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-black text-purple-950 uppercase tracking-wide">Master Service Contract Terms</h4>
+            <p className="text-[10px] text-purple-700 font-medium">Define overall SLA, deliverables scope, duration, and penalty terms</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+        <Field label="Service Contract Title" required className="sm:col-span-2">
+          <input
+            value={draft.serviceDetails.serviceTitle || draft.basics.title || ''}
+            onChange={e => updateService('serviceTitle', e.target.value)}
+            className={inputClass}
+            placeholder="e.g. Master Service Agreement for Facility Management, Annual Maintenance Contract..."
+          />
+        </Field>
+
+        <Field label="Scope of Work (SOW)" required className="sm:col-span-2">
+          <textarea
+            value={draft.serviceDetails.scopeOfWork}
+            onChange={e => updateService('scopeOfWork', e.target.value)}
+            rows={3}
+            className={textareaClass}
+            placeholder="Detailed description of the service scope, technical responsibilities, and coverage..."
+          />
+        </Field>
+
+        <Field label="Key Deliverables & Milestones" required>
+          <textarea
+            value={draft.serviceDetails.deliverables}
+            onChange={e => updateService('deliverables', e.target.value)}
+            rows={3}
+            className={textareaClass}
+            placeholder="e.g. Monthly uptime reports, quarterly preventive maintenance, SLA log..."
+          />
+        </Field>
+
+        <Field label="Exclusions / Boundaries">
+          <textarea
+            value={draft.serviceDetails.exclusions}
+            onChange={e => updateService('exclusions', e.target.value)}
+            rows={3}
+            className={textareaClass}
+            placeholder="Consumables or equipment outside service contract scope..."
+          />
+        </Field>
+
+        <Field label="SLA Response & Resolution Time">
+          <input
+            value={draft.serviceDetails.slaResponseTime}
+            onChange={e => updateService('slaResponseTime', e.target.value)}
+            className={inputClass}
+            placeholder="e.g. 2 hrs response, 8 hrs resolution"
+          />
+        </Field>
+
+        <Field label="Contract Duration" required>
+          <input
+            value={draft.serviceDetails.duration}
+            onChange={e => updateService('duration', e.target.value)}
+            className={inputClass}
+            placeholder="e.g. 1 Year (12 Months), 6 Months"
+          />
+        </Field>
+
+        <Field label="Required Manpower Count">
+          <input
+            type="number"
+            min={0}
+            value={draft.serviceDetails.manpowerRequired}
+            onChange={e => updateService('manpowerRequired', e.target.value)}
+            className={inputClass}
+            placeholder="e.g. 3"
+          />
+        </Field>
+
+        <Field label="Late Delivery / Downtime Penalty Terms">
+          <input
+            value={draft.serviceDetails.penaltyClause}
+            onChange={e => updateService('penaltyClause', e.target.value)}
+            className={inputClass}
+            placeholder="e.g. 0.5% per week of delay up to max 10%"
+          />
+        </Field>
+      </div>
+    </div>
+  ) : null;
 
   // 2. Item / Service Schedule Mode
   return (

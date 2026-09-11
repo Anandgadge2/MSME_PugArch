@@ -214,9 +214,6 @@ export default function CartPage() {
         setQuoteModalState(null);
         router.push(`/buyer/messages?conversationId=${id}`);
     };
-    if (permissionsLoading && !canViewCart) {
-        return <LoadingState label="Loading cart..." />;
-    }
 
     const handleSort = (field: SortField) => {
         if (sortField === field) {
@@ -247,10 +244,6 @@ export default function CartPage() {
             </button>
         </th>
     );
-
-    if (!canViewCart) {
-        return <InlineError message="You do not have permission to view organisation carts." />;
-    }
 
     const handleRemove = (item: CartItemDto) => {
         removeMut.mutate(item.id, {
@@ -438,6 +431,14 @@ export default function CartPage() {
             )
         }
     ], [isAllSelected, isSomeSelected, toggleSelectAll, selectedItemIds, toggleSelectItem, cart?.status, canTransact, handleUpdate, handleRemove, removeMut.isPending]);
+ 
+    if (permissionsLoading && !canViewCart) {
+        return <LoadingState label="Loading cart..." />;
+    }
+
+    if (!canViewCart) {
+        return <InlineError message="You do not have permission to view organisation carts." />;
+    }
 
     if (cartQuery.isLoading) return <LoadingState label="Loading cart..." />;
     if (cartQuery.error) {

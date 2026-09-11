@@ -181,64 +181,6 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
     return () => clearInterval(interval);
   }, [live, auction?.endTime]);
 
-  if (loading) return <LoadingState label="Loading live auction..." />;
-  if (summary.error) return <InlineError message={(summary.error as Error).message} onRetry={() => summary.refetch()} />;
-  if (!auction) return <EmptyState title="Auction not found" />;
-
-  const participant = (summary.data?.participant || liveSummaryCache.get(id)?.participant) as ReverseAuctionParticipant | null | undefined;
-  const participantRows = participants.data?.participants || [];
-  const bidRows = (bids.data?.bids || []).slice().sort((a, b) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime());
-  const currentLowest = getCurrentLowest(auction);
-  const startPrice = numberValue(auction.startPrice);
-  const savings = startPrice > currentLowest && currentLowest > 0 ? startPrice - currentLowest : 0;
-  const savingsPercent = startPrice > 0 && savings > 0 ? (savings / startPrice) * 100 : 0;
-  const minNextBid = numberValue(summary.data?.minimumNextBid || liveSummaryCache.get(id)?.minimumNextBid, currentLowest);
-  const decrement = numberValue(auction.minDecrementAmount ?? auction.minDecrement, 0);
-  const latestBid = bidRows[0];
-  const myBestBid = bidRows.reduce((best, row) => {
-    const value = getBidAmount(row);
-    return value > 0 && (!best || value < best) ? value : best;
-  }, 0);
-  const extensionCount = numberValue(auction.extensionCount, 0);
-  const maxExtensions = auction.maxAutoExtensions ?? 0;
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const nextAmount = Number(amount);
-    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
-      setLocalError('Please enter a valid positive number');
-      return;
-    }
-    if (minNextBid > 0 && nextAmount > minNextBid) {
-      setLocalError(`Bid amount cannot exceed ${formatCurrency(minNextBid)}`);
-      return;
-    }
-    if (!acceptedTerms) {
-      setLocalError('Please accept the auction terms and rules first');
-      return;
-    }
-    setLocalError('');
-    setShowConfirmModal(true);
-  };
-
-  const confirmSubmit = () => {
-    const nextAmount = Number(amount);
-    setShowConfirmModal(false);
-    bid.mutate(nextAmount);
-  };
-
-  // Process data for the real-time bid chart
-  // Group bids chronologically to show pricing drops
-  const chartData = bidRows
-    .slice()
-    .reverse()
-    .map((b, idx) => ({
-      index: idx + 1,
-      amount: getBidAmount(b),
-      time: formatTime(b.submittedAt || 0),
-      label: b.sellerOrgName || `Bid #${idx + 1}`
-    }));
-
   const liveBidColumns = useMemo<ColumnDef<ReverseAuctionBid>[]>(() => [
     {
       key: 'rank',
@@ -297,6 +239,64 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
       )
     }
   ], [isBuyerOrAdmin]);
+
+  if (loading) return <LoadingState label="Loading live auction..." />;
+  if (summary.error) return <InlineError message={(summary.error as Error).message} onRetry={() => summary.refetch()} />;
+  if (!auction) return <EmptyState title="Auction not found" />;
+
+  const participant = (summary.data?.participant || liveSummaryCache.get(id)?.participant) as ReverseAuctionParticipant | null | undefined;
+  const participantRows = participants.data?.participants || [];
+  const bidRows = (bids.data?.bids || []).slice().sort((a, b) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime());
+  const currentLowest = getCurrentLowest(auction);
+  const startPrice = numberValue(auction.startPrice);
+  const savings = startPrice > currentLowest && currentLowest > 0 ? startPrice - currentLowest : 0;
+  const savingsPercent = startPrice > 0 && savings > 0 ? (savings / startPrice) * 100 : 0;
+  const minNextBid = numberValue(summary.data?.minimumNextBid || liveSummaryCache.get(id)?.minimumNextBid, currentLowest);
+  const decrement = numberValue(auction.minDecrementAmount ?? auction.minDecrement, 0);
+  const latestBid = bidRows[0];
+  const myBestBid = bidRows.reduce((best, row) => {
+    const value = getBidAmount(row);
+    return value > 0 && (!best || value < best) ? value : best;
+  }, 0);
+  const extensionCount = numberValue(auction.extensionCount, 0);
+  const maxExtensions = auction.maxAutoExtensions ?? 0;
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextAmount = Number(amount);
+    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+      setLocalError('Please enter a valid positive number');
+      return;
+    }
+    if (minNextBid > 0 && nextAmount > minNextBid) {
+      setLocalError(`Bid amount cannot exceed ${formatCurrency(minNextBid)}`);
+      return;
+    }
+    if (!acceptedTerms) {
+      setLocalError('Please accept the auction terms and rules first');
+      return;
+    }
+    setLocalError('');
+    setShowConfirmModal(true);
+  };
+
+  const confirmSubmit = () => {
+    const nextAmount = Number(amount);
+    setShowConfirmModal(false);
+    bid.mutate(nextAmount);
+  };
+
+  // Process data for the real-time bid chart
+  // Group bids chronologically to show pricing drops
+  const chartData = bidRows
+    .slice()
+    .reverse()
+    .map((b, idx) => ({
+      index: idx + 1,
+      amount: getBidAmount(b),
+      time: formatTime(b.submittedAt || 0),
+      label: b.sellerOrgName || `Bid #${idx + 1}`
+    }));
 
   return (
     <div className="space-y-6 pb-8 bg-white text-zinc-900 p-6 rounded-3xl border border-zinc-200 shadow-xl animate-in fade-in duration-500">

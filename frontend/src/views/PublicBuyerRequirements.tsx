@@ -181,40 +181,6 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
     return palette[Math.abs(hash) % palette.length];
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-indigo-50/30 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
-          <div className="h-12 w-12 rounded-full border-4 border-blue-100 border-t-[#0f3460] animate-spin" />
-          <p className="text-xs font-black uppercase tracking-widest text-[#0f3460]">Loading Verified Organization...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!profile) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white p-8 md:p-10 rounded-3xl shadow-xl border border-slate-200/80 flex flex-col items-center max-w-md text-center">
-          <div className="w-20 h-20 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mb-5">
-            <Building2 className="h-10 w-10" />
-          </div>
-          <h2 className="text-xl font-black text-slate-800 uppercase tracking-wide">Showcase Not Available</h2>
-          <p className="text-sm text-slate-500 mt-2 font-medium">
-            The requested buyer profile is not verified, not active, or does not exist.
-          </p>
-          <Button
-            onClick={() => window.location.href = '/'}
-            className="mt-6 bg-[#0f3460] hover:bg-[#16213e] text-white font-black uppercase text-[11px] tracking-widest h-11 px-6 rounded-2xl shadow-lg transition-all"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Portal
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   const requirementColumns: ColumnDef<any>[] = useMemo(() => [
     {
       key: 'itemDescription',
@@ -273,6 +239,40 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
       cell: (item: any) => <span title={item.remarks}>{item.remarks || '-'}</span>
     }
   ], []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-indigo-50/30 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
+          <div className="h-12 w-12 rounded-full border-4 border-blue-100 border-t-[#0f3460] animate-spin" />
+          <p className="text-xs font-black uppercase tracking-widest text-[#0f3460]">Loading Verified Organization...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-8 md:p-10 rounded-3xl shadow-xl border border-slate-200/80 flex flex-col items-center max-w-md text-center">
+          <div className="w-20 h-20 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mb-5">
+            <Building2 className="h-10 w-10" />
+          </div>
+          <h2 className="text-xl font-black text-slate-800 uppercase tracking-wide">Showcase Not Available</h2>
+          <p className="text-sm text-slate-500 mt-2 font-medium">
+            The requested buyer profile is not verified, not active, or does not exist.
+          </p>
+          <Button
+            onClick={() => window.location.href = '/'}
+            className="mt-6 bg-[#0f3460] hover:bg-[#16213e] text-white font-black uppercase text-[11px] tracking-widest h-11 px-6 rounded-2xl shadow-lg transition-all"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Portal
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-100/60 to-blue-50/20 text-slate-900 pb-24 relative selection:bg-blue-500 selection:text-white">
