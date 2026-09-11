@@ -53,6 +53,7 @@ import { Loader2 } from '../../../components/ui/loader';
 import { api } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
+import { formatDate } from '../../shared/format';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validateOptionalField, validateOptionalIndianMobile, validatePersonName } from '../../../lib/validation';
 import { Pagination } from '../../shared/Pagination';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
@@ -3798,7 +3799,7 @@ function OrganizationDocumentManager({ organizationId }: { organizationId: numbe
 
                 {/* Uploaded Date */}
                 <p className="text-[10px] font-medium text-slate-400 mt-0.5">
-                  Uploaded: {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '30 Jul 2026'}
+                  Uploaded: {doc.uploadedAt ? formatDate(doc.uploadedAt) : '—'}
                 </p>
               </div>
 
@@ -4087,7 +4088,7 @@ function EntityEditor({
       amount: '4,50,000',
       currency: 'INR',
       dueDate: '15th July 2026',
-      currentDate: new Date().toLocaleDateString(),
+      currentDate: formatDate(new Date()),
       otp: '982741'
     };
 
@@ -4655,13 +4656,6 @@ const formatCell = (value: unknown) => {
     return anyValue.organizationName || anyValue.name || anyValue.email || JSON.stringify(value);
   }
   return String(value).replace(/_/g, ' ');
-};
-
-const formatDate = (value: unknown) => {
-  if (!value) return '-';
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 const labelize = (value: string) => value.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, char => char.toUpperCase());

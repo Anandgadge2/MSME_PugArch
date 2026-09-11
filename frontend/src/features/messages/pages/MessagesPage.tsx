@@ -40,7 +40,7 @@ import { Badge, Card, CardContent } from '../../../components/ui/card';
 import { Input, Select } from '../../../components/ui/input';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
-import { formatDateTime, formatRelative } from '../../shared/format';
+import { formatDate, formatDateTime, formatRelative, formatTime } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import { compressImage } from '../../../lib/compress';
 import { postApi } from '../../shared/apiClient';
@@ -98,12 +98,11 @@ const formatChatDateHeader = (dateStr: string) => {
 
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    return formatDate(d);
 };
 
 const formatChatTime = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return formatTime(dateStr);
 };
 
 const formatLastSeen = (user?: MessageUserDto | null) => {
@@ -120,9 +119,9 @@ const formatLastSeen = (user?: MessageUserDto | null) => {
     const now = new Date();
     const isToday = now.toDateString() === d.toDateString();
     if (isToday) {
-        return `Last seen today at ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+        return `Last seen today at ${formatTime(d)}`;
     }
-    return `Last seen on ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
+    return `Last seen on ${formatDate(d)}`;
 };
 
 /** Beautiful conversation list skeleton */

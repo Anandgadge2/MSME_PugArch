@@ -45,7 +45,7 @@ import {
   Star,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getApi } from '../../shared/apiClient';
+import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
@@ -54,6 +54,7 @@ import { procurementBidApi } from '../../procurementBid/api';
 import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
 
 /* ─── Helper Utilities ─────────────────────────────────── */
 
@@ -102,6 +103,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const { user } = useAuth();
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
   const [expandedDocs, setExpandedDocs] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
   const pathTokens = (pathname || '').split('/').filter(Boolean);
   const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
@@ -629,67 +631,93 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     || Number(rcData.quantity || 0) || null;
 
   /* ─────────────────────────────── RENDER (UNIFIED REFERENCE UI) ─────────────────────────────── */
+  const statusUpper = String(rcData.status || 'OPEN').toUpperCase();
+  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
+
   return (
-    <ProcurementDetailUnifiedView
-      procurementType="RATE_CONTRACT"
-      procurementLabel="Rate Contract"
-      id={rcData.id || requirementId || requestId || 'RC'}
-      displayId={contractNumber || String(rcData.id)}
-      subject={subject}
-      status={rcData.status || 'OPEN'}
-      buyerName={contactName}
-      orgName={orgName}
-      buyer={{ name: contactName, email: buyerEmail, mobile: buyerMobile, buyerProfile: rcData.buyerOrganization || rcData.buyer?.buyerProfile }}
-      estimatedValue={rcData.estimatedValue}
-      deadlineDate={periodEnd || rcData.deadlineDate}
-      createdAt={periodStart || rcData.createdAt}
-      publishedDate={periodStart ? (formatDateString(periodStart) || undefined) : undefined}
-      closingDate={periodEnd ? (formatDateString(periodEnd, true) || undefined) : undefined}
-      clarificationDate={schedule.clarificationDeadline ? (formatDateString(schedule.clarificationDeadline, true) || undefined) : undefined}
-      technicalDate={schedule.technicalOpeningDate ? (formatDateString(schedule.technicalOpeningDate, true) || undefined) : undefined}
-      category={rcData.categoryName}
-      procurementMethod="Rate Contract"
-      buyingType={basics.buyingType || 'Product'}
-      deliveryLocation={locationText}
-      paymentTerms={rcData.paymentTerms}
-      deliveryTerms={rcData.deliveryTerms || deliverySla}
-      description={rcData.description}
-      payload={payload}
-      documents={uploadedDocuments.map((d, index) => ({
-        id: d.fileAssetId ? String(d.fileAssetId) : `rc-doc-${index}`,
-        name: d.fileName,
-        meta: d.documentType,
-        fileAssetId: d.fileAssetId || undefined,
-        url: d.fileUrl || undefined,
-        required: true,
-      }))}
-      requiredDocuments={reqDocsList.length ? reqDocsList : defaultRcReqDocs}
-      items={itemsList}
-      evaluationMethod={
-        [
-          payload.evaluation?.method,
-          payload.evaluation?.evaluationMethod,
-          payload.evaluationMethod,
-          payload.rules?.evaluationMethod,
-          reqObj?.payload?.evaluation?.method,
-          rcData.evaluationMethod,
-        ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
-        rcData.evaluationMethod ||
-        'Rate Contract L1'
-      }
-      participations={bid?.participations || []}
-      participantsCount={bid?.participations?.length || 0}
-      hasSubmittedProposal={isRateQuotationSubmitted}
-      ownParticipation={ownParticipation}
-      ownResponse={ownResponse}
-      emdAmount={rcData.emdAmount}
-      isEmdRequired={rcData.isEmdRequired}
-      backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rate-contracts"}
-      backRouteLabel={isBuyerOrAdmin ? "My Procurements" : "Rate Contract Opportunities"}
-      submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (isRateQuotationSubmitted ? 'View Rate Proposal' : 'Submit Rate Quote')}
-      onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : handleSubmitQuotation}
-      clarificationKind={requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'quote-request'}
-      clarificationEntityId={rcData?.id || requirementId || bidData?.sourceId || requestId}
-    />
+    <>
+      <ProcurementDetailUnifiedView
+        procurementType="RATE_CONTRACT"
+        procurementLabel="Rate Contract"
+        id={rcData.id || requirementId || requestId || 'RC'}
+        displayId={contractNumber || String(rcData.id)}
+        subject={subject}
+        status={rcData.status || 'OPEN'}
+        buyerName={contactName}
+        orgName={orgName}
+        buyer={{ name: contactName, email: buyerEmail, mobile: buyerMobile, buyerProfile: rcData.buyerOrganization || rcData.buyer?.buyerProfile }}
+        estimatedValue={rcData.estimatedValue}
+        deadlineDate={periodEnd || rcData.deadlineDate}
+        createdAt={periodStart || rcData.createdAt}
+        publishedDate={periodStart ? (formatDateString(periodStart) || undefined) : undefined}
+        closingDate={periodEnd ? (formatDateString(periodEnd, true) || undefined) : undefined}
+        clarificationDate={schedule.clarificationDeadline ? (formatDateString(schedule.clarificationDeadline, true) || undefined) : undefined}
+        technicalDate={schedule.technicalOpeningDate ? (formatDateString(schedule.technicalOpeningDate, true) || undefined) : undefined}
+        category={rcData.categoryName}
+        procurementMethod="Rate Contract"
+        buyingType={basics.buyingType || 'Product'}
+        deliveryLocation={locationText}
+        paymentTerms={rcData.paymentTerms}
+        deliveryTerms={rcData.deliveryTerms || deliverySla}
+        description={rcData.description}
+        payload={payload}
+        documents={uploadedDocuments.map((d, index) => ({
+          id: d.fileAssetId ? String(d.fileAssetId) : `rc-doc-${index}`,
+          name: d.fileName,
+          meta: d.documentType,
+          fileAssetId: d.fileAssetId || undefined,
+          url: d.fileUrl || undefined,
+          required: true,
+        }))}
+        requiredDocuments={reqDocsList.length ? reqDocsList : defaultRcReqDocs}
+        items={itemsList}
+        evaluationMethod={
+          [
+            payload.evaluation?.method,
+            payload.evaluation?.evaluationMethod,
+            payload.evaluationMethod,
+            payload.rules?.evaluationMethod,
+            reqObj?.payload?.evaluation?.method,
+            rcData.evaluationMethod,
+          ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
+          rcData.evaluationMethod ||
+          'Rate Contract L1'
+        }
+        participations={bid?.participations || []}
+        participantsCount={bid?.participations?.length || 0}
+        hasSubmittedProposal={isRateQuotationSubmitted}
+        ownParticipation={ownParticipation}
+        ownResponse={ownResponse}
+        emdAmount={rcData.emdAmount}
+        isEmdRequired={rcData.isEmdRequired}
+        backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rate-contracts"}
+        backRouteLabel={isBuyerOrAdmin ? "My Procurements" : "Rate Contract Opportunities"}
+        submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (isRateQuotationSubmitted ? 'View Rate Proposal' : 'Submit Rate Quote')}
+        onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : handleSubmitQuotation}
+        onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
+        cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Rate Contract' : 'Cancel Rate Contract'}
+        clarificationKind={requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'quote-request'}
+        clarificationEntityId={rcData?.id || requirementId || bidData?.sourceId || requestId}
+      />
+      {canCancel && (
+        <CancelProcurementModal
+          isOpen={cancelModalOpen}
+          onClose={() => setCancelModalOpen(false)}
+          procurement={{
+            id: Number(rcData.id || requirementId || requestId),
+            type: requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'bid_tender',
+            title: subject,
+            referenceNumber: contractNumber || String(rcData.id),
+            typeLabel: 'Rate Contract',
+            status: statusUpper,
+          }}
+          onConfirm={async (params) => {
+            await postApi('/api/buyer/procurements/cancel', params);
+            toast.success('Rate Contract cancelled successfully');
+            router.push('/buyer/my-procurements');
+          }}
+        />
+      )}
+    </>
   );
 }

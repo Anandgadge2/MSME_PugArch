@@ -43,6 +43,7 @@ import {
   AlertCircle,
   HelpCircle,
   Gavel,
+  Ban,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -61,6 +62,7 @@ import StartReverseAuctionModal, { SubmittedVendorItem } from '../../reverseAuct
 import LiveAuctionLeaderboard from '../../reverseAuctions/components/LiveAuctionLeaderboard';
 import SellerLiveAuctionBanner from '../../reverseAuctions/components/SellerLiveAuctionBanner';
 import { reverseAuctionApi } from '../../reverseAuctions/api';
+import { formatDate, formatDateTime } from '../../shared/format';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
 type Tone = 'slate' | 'emerald' | 'rose' | 'amber' | 'sky' | 'indigo' | 'violet';
@@ -250,20 +252,40 @@ function asArray(val: any): any[] {
   return [val];
 }
 
-function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
+function formatDateString(
+  dateVal?: string | Date | null,
+  includeTime: boolean = false,
+  defaultMidnightTime: 'endOfDay' | 'startOfDay' = 'endOfDay'
+) {
   if (!dateVal) return null;
   try {
     const d = new Date(dateVal);
     if (isNaN(d.getTime())) return String(dateVal);
     const day = String(d.getDate()).padStart(2, '0');
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
     const month = months[d.getMonth()];
     const year = d.getFullYear();
     if (!includeTime) return `${day} ${month} ${year}`;
     const isMidnightUtc = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
-    const hours = isMidnightUtc ? '23' : String(d.getHours()).padStart(2, '0');
-    const minutes = isMidnightUtc ? '59' : String(d.getMinutes()).padStart(2, '0');
-    return `${day} ${month} ${year}, ${hours}:${minutes} IST`;
+    let hoursNum: number;
+    let minutesStr: string;
+    if (isMidnightUtc) {
+      if (defaultMidnightTime === 'startOfDay') {
+        hoursNum = 0;
+        minutesStr = '00';
+      } else {
+        hoursNum = 23;
+        minutesStr = '59';
+      }
+    } else {
+      hoursNum = d.getHours();
+      minutesStr = String(d.getMinutes()).padStart(2, '0');
+    }
+    const ampm = hoursNum >= 12 ? 'PM' : 'AM';
+    let h12 = hoursNum % 12;
+    if (h12 === 0) h12 = 12;
+    const hoursFormatted = String(h12).padStart(2, '0');
+    return `${day} ${month} ${year} , ${hoursFormatted}:${minutesStr} ${ampm}`;
   } catch {
     return String(dateVal);
   }
@@ -308,7 +330,10 @@ function formatPrimitiveValue(val: any, valueKey?: string): string {
     const trimmed = val.trim();
     if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '[object Object]') return 'N/A';
     if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-      const formattedDate = formatDateString(trimmed, trimmed.includes('T') || trimmed.includes(':'));
+      const vk = (valueKey || '').toLowerCase();
+      const isDateOrDeadline = vk.includes('date') || vk.includes('deadline') || vk.includes('schedule') || trimmed.includes('T') || trimmed.includes(':');
+      const isStart = vk.includes('start') || vk.includes('publish');
+      const formattedDate = formatDateString(trimmed, isDateOrDeadline, isStart ? 'startOfDay' : 'endOfDay');
       if (formattedDate) return formattedDate;
     }
     // Format ALL_CAPS_WITH_UNDERSCORE enums to title case (e.g. ON_DELIVERY -> On Delivery)
@@ -413,6 +438,7 @@ function DeadlineCountdown({ targetDate }: { targetDate: Date | string }) {
     <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-amber-800 shadow-2xs">
       <Clock className="h-3.5 w-3.5 text-amber-600 animate-pulse" />
       <span className="font-mono">
+        <span className="text-amber-900/80 font-bold">Stage 1 Quote Due: </span>
         {timeLeft.days > 0 ? `${timeLeft.days}d ` : ''}
         {String(timeLeft.hours).padStart(2, '0')}h {String(timeLeft.minutes).padStart(2, '0')}m {String(timeLeft.seconds).padStart(2, '0')}s left
       </span>
@@ -2065,6 +2091,8 @@ export interface ProcurementDetailUnifiedViewProps {
   backRouteLabel?: string;
   onBack?: () => void;
   onDiscardClick?: () => void;
+  onCancelClick?: () => void;
+  cancelButtonLabel?: string;
   submitButtonLabel?: string;
   onSubmitClick?: () => void;
   onDownloadClick?: () => void;
@@ -2097,7 +2125,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
 
   const [nowMs] = useState(() => Date.now());
-  const targetId = String(props.id);
+  const targetId = String(props.displayId && props.displayId !== 'N/A' && props.displayId !== '—' ? props.displayId : props.id);
   const userRoleStr = String(currentUser?.role || '').toLowerCase();
   const isBuyerOrAdmin = userRoleStr === 'buyer' || userRoleStr === 'admin' || userRoleStr === 'master_admin' || (!!currentUser?.id && String(currentUser?.id) === String(props.buyer?.id));
   const isBuyerSide = userRoleStr === 'buyer' || pathname.startsWith('/buyer') || (isBuyerOrAdmin && !pathname.startsWith('/seller') && !pathname.startsWith('/shg'));
@@ -2660,8 +2688,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         return undefined;
       })() : undefined);
 
-  const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue) : (props.publishedDate ? formatDateString(props.publishedDate) : 'N/A');
-  const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue) : (props.closingDate ? formatDateString(props.closingDate) : 'N/A');
+  const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue, true, 'startOfDay') : (props.publishedDate ? formatDateString(props.publishedDate, true, 'startOfDay') : 'N/A');
+  const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue, true, 'endOfDay') : (props.closingDate ? formatDateString(props.closingDate, true, 'endOfDay') : 'N/A');
   const clarificationDateFormatted = clarificationDateValue ? formatDateString(clarificationDateValue, true) : (props.clarificationDate ? formatDateString(props.clarificationDate, true) : 'N/A');
   const clarificationDeadlineFormatted = clarificationDeadlineValue ? formatDateString(clarificationDeadlineValue, true) : (clarificationDateFormatted !== 'N/A' ? clarificationDateFormatted : undefined);
   const technicalDateFormatted = technicalDateValue ? formatDateString(technicalDateValue, true) : (props.technicalDate || props.technicalOpeningDate ? formatDateString(props.technicalDate || props.technicalOpeningDate, true) : 'N/A');
@@ -3079,7 +3107,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       value: closingDateFormatted || 'N/A',
       icon: Clock,
       tone: 'rose' as Tone,
-      subtext: 'Bidding window closing'
+      subtext: linkedAuction ? 'Stage 1 initial quotation cutoff' : 'Bidding window closing'
     },
     { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' },
     { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactPerson, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: buyerPhoneNum || 'Procurement officer' },
@@ -3325,6 +3353,18 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   Discard Draft
                 </Button>
               )}
+              {props.onCancelClick && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={props.onCancelClick}
+                  className="h-9 px-3.5 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
+                >
+                  <Ban className="h-3.5 w-3.5 text-rose-600" />
+                  {props.cancelButtonLabel || 'Cancel Procurement'}
+                </Button>
+              )}
               {props.onSubmitClick && (
                 <Button
                   type="button"
@@ -3553,10 +3593,10 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   </h3>
                   <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
                     <PropertyGrid columns={3}>
-                      <PropertyItem label="Publish Date" value={firstPresent(schedule.publishDate, schedule.publishedDate, publishedDateFormatted, props.publishedDate)} />
+                      <PropertyItem label="Publish Date" value={publishedDateFormatted} />
                       <PropertyItem label="Submission Start Date" value={submissionStartDateFormatted} />
                       <PropertyItem label="Clarification Deadline" value={firstPresent(schedule.clarificationDeadline, schedule.clarificationEndDate, clarificationDeadlineFormatted, props.clarificationDate)} />
-                      <PropertyItem label="Submission Deadline" value={firstPresent(schedule.submissionDate, closingDateFormatted, props.closingDate)} highlight />
+                      <PropertyItem label="Submission Deadline" value={closingDateFormatted} highlight />
                       <PropertyItem label="Technical Opening Date" value={firstPresent(schedule.technicalOpeningDate, tender.technicalEvaluationDate, props.technicalOpeningDate, technicalDateFormatted)} />
                       <PropertyItem label="Financial Opening Date" value={firstPresent(schedule.financialOpeningDate, tender.financialEvaluationDate, props.financialOpeningDate, financialDateFormatted)} />
                       <PropertyItem label="Bid Validity Date" value={firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline, bidValidityDateFormatted)} />
@@ -3896,6 +3936,10 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   quotedAmount: Number(p.totalAmount || p.quotedAmount || p.offeredPrice || 0),
                   offeredQty: p.offeredQuantity || p.quantity,
                   deliveryTimeline: p.deliveryTimeline,
+                  makeBrand: p.makeBrand || p.brand || p.technicalDetails?.brand || p.quotationDetails?.makeBrand,
+                  model: p.model || p.technicalDetails?.model || p.quotationDetails?.model,
+                  technicalStatus: p.technicalStatus || (p.isDisqualified ? 'DISQUALIFIED' : 'QUALIFIED'),
+                  warranty: p.warranty || p.warrantyPeriod,
                 }))}
                 onAuctionStarted={() => {
                   linkedAuctionQuery.refetch();
@@ -4043,7 +4087,7 @@ export function SellerQuotationReviewModal({
       const doc = engine.generate({
         documentTitle: 'SUPPLIER QUOTATION RESPONSE',
         documentNumber: `QUOTE-${targetId}`,
-        dateStr: submittedAt ? new Date(submittedAt).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN'),
+        dateStr: formatDate(submittedAt || new Date()),
         status: statusStr,
         parties: [
           {
@@ -4058,7 +4102,7 @@ export function SellerQuotationReviewModal({
             phone: phone !== 'N/A' ? phone : undefined,
             details: [
               `Contact Person: ${contactPerson}`,
-              `Submitted Date: ${submittedAt ? new Date(submittedAt).toLocaleString('en-IN') : 'N/A'}`,
+              `Submitted Date: ${formatDateTime(submittedAt)}`,
             ],
           },
         ],
@@ -4201,7 +4245,7 @@ export function SellerQuotationReviewModal({
               </h4>
               <div className="text-xs space-y-1 text-slate-700 font-medium">
                 <p><span className="text-slate-400 font-bold">Payment Terms:</span> {paymentTerms}</p>
-                <p><span className="text-slate-400 font-bold">Submitted At:</span> {submittedAt ? new Date(submittedAt).toLocaleString() : 'N/A'}</p>
+                <p><span className="text-slate-400 font-bold">Submitted At:</span> {submittedAt ? formatDateTime(submittedAt) : '—'}</p>
                 {message && <p className="pt-1"><span className="text-slate-400 font-bold block">Supplier Remarks:</span> "{message}"</p>}
               </div>
             </div>
@@ -4593,7 +4637,7 @@ export function QuotationComparisonModal({
                       const dt = r.submittedAt || r.createdAt || r.updatedAt;
                       return (
                         <td key={r.id || i} className="p-3.5 border-r border-slate-200 text-center text-slate-500 font-medium">
-                          {dt ? new Date(dt).toLocaleString() : 'N/A'}
+                          {dt ? formatDateTime(dt) : '—'}
                         </td>
                       );
                     })}

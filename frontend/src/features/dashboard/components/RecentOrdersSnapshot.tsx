@@ -19,6 +19,7 @@ import { Button } from '../../../components/ui/button';
 import { useAuth } from '../../../hooks/useAuth';
 import { isShgUser } from '../../../lib/shg';
 import { procurementOrderApi } from '../../procurementBid/orderApi';
+import { formatDate } from '../../shared/format';
 
 interface OrderItem {
   id: string;
@@ -75,7 +76,7 @@ export function RecentOrdersSnapshot() {
         return {
           id: String(o.id || idx),
           poNumber: o.poNumber || `PO-${o.id || 9000 + idx}`,
-          date: o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recent',
+          date: formatDate(o.createdAt),
           partyName,
           itemName: o.title || o.items?.[0]?.name || o.description || 'Procurement Order',
           quantity: o.quantity || (o.items?.length ? `${o.items.length} items` : '1 Lot'),

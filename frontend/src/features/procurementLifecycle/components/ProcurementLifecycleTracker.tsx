@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { CheckCircle2, Circle, Clock, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { LIFECYCLE_LABELS, LIFECYCLE_STAGES, type ProcurementLifecycleEvent, type ProcurementLifecycleStage } from '../statusMapper';
+import { formatDate as formatSharedDate } from '../../shared/format';
 
 const formatDate = (value?: string) => {
   if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const formatted = formatSharedDate(value);
+  return formatted === '—' ? '' : formatted;
 };
 
 export default function ProcurementLifecycleTracker({

@@ -33,8 +33,10 @@ import {
   Sparkles,
   Info,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Ban
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
@@ -46,6 +48,8 @@ import { marketplaceApi, type MarketplaceSeller } from '../../marketplace/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
 import { KpiCard } from '../../shared/KpiCard';
+import { postApi } from '../../shared/apiClient';
+import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
 
 function formatEnumLabel(val?: string | null): string {
   if (!val) return 'N/A';
@@ -70,6 +74,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
   const isSeller = user?.role === 'seller';
   const [message, setMessage] = useState('');
   const [selectedSeller, setSelectedSeller] = useState<MarketplaceSeller | null>(null);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
   // Return to the page the seller came from; fall back to their opportunities list on a cold open.
   const goBack = () => {
@@ -490,6 +495,16 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
               <Square className="mr-2 h-4 w-4" /> Close
             </Button>
           )}
+          {!['CANCELLED', 'CLOSED', 'AWARDED', 'COMPLETED'].includes(status) && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCancelModalOpen(true)}
+              className="rounded-xl font-bold text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+            >
+              <Ban className="mr-2 h-4 w-4" /> {status === 'DRAFT' ? 'Withdraw Auction' : 'Cancel Auction'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -600,6 +615,24 @@ export default function ReverseAuctionDetailPage({ id }: { id: number }) {
           </Card>
         </div>
       </div>
+      <CancelProcurementModal
+        isOpen={cancelModalOpen}
+        onClose={() => setCancelModalOpen(false)}
+        procurement={{
+          id: Number(id),
+          type: 'reverse_auction',
+          title: auction.data?.title || 'Reverse Auction Sourcing',
+          referenceNumber: auction.data?.auctionCode || `RA-${id}`,
+          typeLabel: 'Reverse Auction',
+          status: status,
+        }}
+        onConfirm={async (params) => {
+          await postApi('/api/buyer/procurements/cancel', params);
+          toast.success('Reverse auction cancelled successfully');
+          invalidate();
+          router.push('/buyer/my-procurements');
+        }}
+      />
     </div>
   );
 }

@@ -35,6 +35,7 @@ import { SortableHeader } from '../features/shared/SortableHeader';
 import { Pagination } from '../features/shared/Pagination';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
 import { useResponsiveViewMode } from '../features/shared/hooks';
+import { formatDateTime } from '../features/shared/format';
 import { cn } from '../lib/utils';
 
 interface Organization {
@@ -1061,7 +1062,7 @@ export default function OrganizationManagement() {
                     </div>
                     <div>
                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Verified At</p>
-                      <p className="mt-0.5 text-xs font-bold text-slate-700">{detailOrg.aadhaarKyc.verifiedAt ? new Date(detailOrg.aadhaarKyc.verifiedAt).toLocaleDateString('en-IN') : 'Not available'}</p>
+                      <p className="mt-0.5 text-xs font-bold text-slate-700">{detailOrg.aadhaarKyc.verifiedAt ? formatDateTime(detailOrg.aadhaarKyc.verifiedAt) : 'Not available'}</p>
                     </div>
                     <div>
                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Reference / Subject</p>

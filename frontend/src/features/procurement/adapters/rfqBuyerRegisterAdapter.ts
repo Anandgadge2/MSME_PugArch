@@ -32,6 +32,8 @@ export const rfqBuyerRegisterAdapter = {
       case 'accepted':
       case 'po_generated':
         return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+      case 'cancelled':
+        return 'border-rose-200 bg-rose-50 text-rose-700';
       case 'closed':
       default:
         return 'border-slate-200 bg-slate-100 text-slate-600';
@@ -45,6 +47,7 @@ export const rfqBuyerRegisterAdapter = {
       case 'quotes_received': return 'Quotations Received';
       case 'accepted': return 'Quote Accepted';
       case 'po_generated': return 'PO Issued';
+      case 'cancelled': return 'RFQ Cancelled';
       default: return status.toUpperCase();
     }
   },
@@ -55,6 +58,7 @@ export const rfqBuyerRegisterAdapter = {
       canEdit: s === 'draft' || s === 'pending',
       canCompareQuotes: (item.quotationCount || 0) > 0,
       canAcceptQuote: s === 'quotes_received',
+      canCancel: !['accepted', 'po_generated', 'completed', 'cancelled'].includes(s),
       primaryActionLabel: (item.quotationCount || 0) > 0 ? 'Compare Quotations' : 'View RFQ Details'
     };
   }

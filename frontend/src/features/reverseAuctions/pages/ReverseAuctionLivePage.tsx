@@ -33,7 +33,7 @@ import {
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
-import { formatCurrency, formatDateTime, formatNumber } from '../../shared/format';
+import { formatCurrency, formatDateTime, formatNumber, formatTime } from '../../shared/format';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
 import { reverseAuctionApi, type ReverseAuction, type ReverseAuctionBid, type ReverseAuctionParticipant } from '../api';
@@ -164,10 +164,15 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
       if (diff <= 0) {
         setTimeLeft('00:00:00');
       } else {
-        const hrs = String(Math.floor(diff / 3600000)).padStart(2, '0');
+        const days = Math.floor(diff / 86400000);
+        const hrs = String(Math.floor((diff % 86400000) / 3600000)).padStart(2, '0');
         const mins = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
         const secs = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
-        setTimeLeft(`${hrs}:${mins}:${secs}`);
+        if (days > 0) {
+          setTimeLeft(`${days}d ${hrs}h ${mins}m ${secs}s`);
+        } else {
+          setTimeLeft(`${hrs}:${mins}:${secs}`);
+        }
       }
     };
     updateTimer();
@@ -229,7 +234,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
     .map((b, idx) => ({
       index: idx + 1,
       amount: getBidAmount(b),
-      time: new Date(b.submittedAt || 0).toLocaleTimeString(),
+      time: formatTime(b.submittedAt || 0),
       label: b.sellerOrgName || `Bid #${idx + 1}`
     }));
 

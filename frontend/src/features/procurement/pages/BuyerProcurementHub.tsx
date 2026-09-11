@@ -52,6 +52,7 @@ import { KpiCard } from '../../shared/KpiCard';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
+import { formatDate } from '../../shared/format';
 
 interface NormalizedProcurement {
   id: number;
@@ -101,18 +102,7 @@ const formatCurrency = (val: number) => {
   }).format(val);
 };
 
-const formatDateTime = (value?: string) => {
-  if (!value) return '—';
-  try {
-    return new Date(value).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  } catch {
-    return value;
-  }
-};
+const formatDateTime = (value?: string) => formatDate(value);
 
 export default function BuyerProcurementHub() {
   const { token, user } = useAuth();

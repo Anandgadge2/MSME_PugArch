@@ -23,6 +23,7 @@ import {
 } from '../utils/procurementDisplay';
 import { cn } from '../../../lib/utils';
 import { formatRefId } from '../../../utils/refIdUtils';
+import { formatDate } from '../../shared/format';
 
 function BuyerLogoIcon({ name, logoUrl }: { name?: string; logoUrl?: string | null }) {
     const [imgErr, setImgErr] = useState(false);
@@ -398,11 +399,11 @@ function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: numbe
                 </span>
             </td>
             <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-600 text-xs font-semibold whitespace-nowrap">
-                {item.startDate ? new Date(item.startDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                {item.startDate ? formatDate(item.startDate) : 'N/A'}
             </td>
             <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-800 text-xs whitespace-nowrap">
                 <div className="space-y-0.5">
-                    <p className="font-extrabold text-slate-900">{item.endDate ? new Date(item.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
+                    <p className="font-extrabold text-slate-900">{item.endDate ? formatDate(item.endDate) : 'N/A'}</p>
                     <span className={cn(
                         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
                         deadlineAlert

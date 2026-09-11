@@ -325,14 +325,17 @@ const recalculateRanks = async (tx: any, auctionId: number) => {
 
 router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const rawId = req.params.procurementId;
+    const rawId = String(req.params.procurementId || '').trim();
     const numId = Number(rawId);
 
-    const auction = await db.auction.findFirst({
+    // 1. Direct match by referenceNo or auctionCode first (prevents integer ID cross-contamination between bids & requirements)
+    let auction = await db.auction.findFirst({
       where: {
         OR: [
-          ...(Number.isFinite(numId) && numId > 0 ? [{ linkedBidId: numId }, { linkedRequirementId: numId }] : []),
-          { referenceNo: String(rawId) }
+          { referenceNo: rawId },
+          { referenceNo: `RFQ-${rawId}` },
+          { referenceNo: `REQ-${rawId}` },
+          { auctionCode: rawId },
         ]
       },
       include: {
@@ -344,6 +347,55 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
       },
       orderBy: { id: 'desc' }
     });
+
+    // 2. If not found by reference string, resolve via specific linked entity
+    if (!auction && Number.isFinite(numId) && numId > 0) {
+      // Check if numeric ID is a ProcurementBid
+      const pb = await db.procurementBid.findUnique({
+        where: { id: numId },
+        select: { id: true, bidNumber: true }
+      }).catch(() => null);
+
+      if (pb) {
+        auction = await db.auction.findFirst({
+          where: {
+            OR: [
+              { linkedBidId: pb.id },
+              ...(pb.bidNumber ? [{ referenceNo: pb.bidNumber }, { auctionCode: pb.bidNumber }] : [])
+            ]
+          },
+          include: {
+            winnerSeller: { select: { id: true, name: true, email: true } },
+            bids: { orderBy: { createdAt: 'desc' }, take: 10 }
+          },
+          orderBy: { id: 'desc' }
+        });
+      }
+
+      // If still not found, check Requirement
+      if (!auction) {
+        const reqItem = await (db as any).requirement.findUnique({
+          where: { id: numId },
+          select: { id: true, requirementNumber: true }
+        }).catch(() => null);
+
+        if (reqItem) {
+          auction = await db.auction.findFirst({
+            where: {
+              OR: [
+                { linkedRequirementId: reqItem.id },
+                ...(reqItem.requirementNumber ? [{ referenceNo: reqItem.requirementNumber }] : [])
+              ]
+            },
+            include: {
+              winnerSeller: { select: { id: true, name: true, email: true } },
+              bids: { orderBy: { createdAt: 'desc' }, take: 10 }
+            },
+            orderBy: { id: 'desc' }
+          });
+        }
+      }
+    }
 
     if (!auction) {
       return apiResponse.success(res, null, 200, 'No auction linked to this procurement');
@@ -696,6 +748,16 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
           currentWinnerId: participantRecords[0].sellerUserId || null
         }
       });
+    }
+
+    // Advance linked procurementBid lifecycle stage
+    if (linkedBid) {
+      await db.procurementBid.update({
+        where: { id: linkedBid.id },
+        data: {
+          lifecycleStage: 'FINANCIAL_EVALUATION'
+        }
+      }).catch(() => null);
     }
 
     // Write audit event

@@ -43,6 +43,7 @@ import { fetchRateContracts } from '../../rateContract/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode } from '../../shared/hooks';
+import { formatDate as formatSharedDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
 import ProcurementLifecycleTracker from '../../procurementLifecycle/components/ProcurementLifecycleTracker';
@@ -89,9 +90,8 @@ const DEFAULT_PAGE_SIZE = 10;
 
 const formatDate = (value?: string) => {
   if (!value) return 'Not set';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Not set';
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const formatted = formatSharedDate(value);
+  return formatted === '—' ? 'Not set' : formatted;
 };
 
 const formatMoney = (value?: number) => {
@@ -314,12 +314,13 @@ function CountdownTimer({ endDate }: { endDate?: string }) {
         setTimeLeft('Ended');
         return;
       }
-      const hrs = Math.floor(diff / 3600000);
+      const days = Math.floor(diff / 86400000);
+      const hrs = Math.floor((diff % 86400000) / 3600000);
       const mins = Math.floor((diff % 3600000) / 60000);
       const secs = Math.floor((diff % 60000) / 1000);
       
       const pad = (n: number) => String(n).padStart(2, '0');
-      setTimeLeft(`${pad(hrs)}h : ${pad(mins)}m : ${pad(secs)}s`);
+      setTimeLeft(days > 0 ? `${days}d ${pad(hrs)}h : ${pad(mins)}m : ${pad(secs)}s` : `${pad(hrs)}h : ${pad(mins)}m : ${pad(secs)}s`);
     };
 
     calculateTime();

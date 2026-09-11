@@ -23,6 +23,7 @@ import { UrgentActionsInbox } from '../features/dashboard/components/UrgentActio
 import { RecentOrdersSnapshot } from '../features/dashboard/components/RecentOrdersSnapshot';
 import { BuyerProcurementMonitor } from '../features/dashboard/components/BuyerProcurementMonitor';
 import { BuyerUrgentActionsInbox } from '../features/dashboard/components/BuyerUrgentActionsInbox';
+import { formatDate } from '../features/shared/format';
 import { BuyerSpendAndCompliance } from '../features/dashboard/components/BuyerSpendAndCompliance';
 
 const ADMIN_REVIEW_CHECKLIST = [
@@ -50,9 +51,8 @@ type AdminModule = {
 
 const formatBannerDate = (value?: string | null) => {
   if (!value) return 'No expiry set';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'No expiry set';
-  return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  const formatted = formatDate(value);
+  return formatted === '—' ? 'No expiry set' : formatted;
 };
 
 const readableBannerStatus = (value?: string | null) =>

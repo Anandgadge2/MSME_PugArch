@@ -10,7 +10,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { getApi, normalizeList, postApi } from '../../shared/apiClient';
-import { formatCurrency, formatDateTime } from '../../shared/format';
+import { formatCurrency, formatDate, formatDateTime } from '../../shared/format';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
@@ -1954,7 +1954,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
                 {/* Metadata */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-400 pt-0.5">
                   {mode === 'seller' ? (
-                    <span>Created: {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</span>
+                    <span>Created: {item.createdAt ? formatDate(item.createdAt) : 'N/A'}</span>
                   ) : item.seller?.name ? (
                     <button type="button" onClick={() => onSellerClick?.(item.seller)} className="flex items-center gap-1 text-slate-600 font-semibold hover:text-[#059669]">
                       <Store className="h-3.5 w-3.5 shrink-0 text-slate-400" />
@@ -2164,7 +2164,7 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
             </div>
             {mode === 'seller' ? (
               <span className="text-[10px] font-medium text-slate-400">
-                {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                {item.createdAt ? formatDate(item.createdAt) : ''}
               </span>
             ) : item.seller?.name ? (
               <button
@@ -2999,7 +2999,7 @@ function SellerProfileModal({ seller, loading, onClose }: { seller: any; loading
                 <SellerInfoBox icon={Mail} label="Email" value={seller?.email || profile?.email || 'Not available'} />
                 <SellerInfoBox icon={Building2} label="Business Name" value={profile.businessName || profile.companyName || seller?.name || 'Not available'} />
                 <SellerInfoBox icon={MapPin} label="Location" value={location} />
-                <SellerInfoBox icon={CalendarDays} label="Incorporated" value={profile.dateOfIncorporation ? new Date(profile.dateOfIncorporation).toLocaleDateString() : 'Not available'} />
+                <SellerInfoBox icon={CalendarDays} label="Incorporated" value={profile.dateOfIncorporation ? formatDate(profile.dateOfIncorporation) : 'Not available'} />
                 <SellerInfoBox icon={ShieldCheck} label="PAN" value={pan} />
                 <SellerInfoBox icon={FileText} label="GST" value={gst} />
               </div>

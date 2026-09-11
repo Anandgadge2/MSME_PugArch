@@ -7,7 +7,7 @@ import { cn } from '../../../lib/utils';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/FeatureStates';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
-import { formatDate } from '../../shared/format';
+import { formatDate, formatDateTime } from '../../shared/format';
 import { useFeatureQuery, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
@@ -569,27 +569,6 @@ function signalText(kind: AdminKind, record: RecordMap) {
   if (kind === 'audit') return record.entityType ? `${record.entityType} #${record.entityId || '-'}` : 'System event';
   if (kind === 'fraud') return record.reviewedAt ? `Reviewed ${formatDate(record.reviewedAt)}` : 'Awaiting review';
   return `${record.violations?.length || 0} recent violations`;
-}
-
-function formatDateTime(dateVal: any) {
-  if (!dateVal) return 'ΓÇö';
-  const d = new Date(dateVal);
-  if (isNaN(d.getTime())) return 'ΓÇö';
-
-  const dateStr = d.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  });
-
-  const timeStr = d.toLocaleTimeString('en-IN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true
-  });
-
-  return `${dateStr} ${timeStr}`;
 }
 
 const SortHeadButton = memo(function SortHeadButton({

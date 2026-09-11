@@ -903,24 +903,23 @@ export default function ProcurementDraftsPage() {
                               </Button>
 
                               {/* Discard / Delete */}
-                              <Button
+                              <button
                                 type="button"
-                                variant="outline"
-                                size="sm"
                                 disabled={isDeleting}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   d.isLocal ? discardLocal() : discardServer(d);
                                 }}
-                                className="h-8 w-8 p-0 rounded-lg border-slate-200 text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 transition-colors shadow-2xs cursor-pointer flex items-center justify-center"
+                                className="inline-flex h-8 w-8 min-w-8 items-center justify-center rounded-lg border border-rose-200/80 bg-rose-50/60 text-rose-600 hover:bg-rose-100 hover:border-rose-300 hover:text-rose-700 transition-all shadow-2xs cursor-pointer shrink-0 disabled:opacity-50 disabled:pointer-events-none active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
                                 title={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
+                                aria-label={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
                               >
                                 {isDeleting ? (
-                                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-500" />
+                                  <RefreshCw className="h-4 w-4 animate-spin text-rose-600 shrink-0" />
                                 ) : (
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Trash2 className="h-4 w-4 shrink-0" />
                                 )}
-                              </Button>
+                              </button>
 
                               {/* Continue Draft */}
                               {!d.isPublished && (
@@ -975,13 +974,14 @@ export default function ProcurementDraftsPage() {
                             e.stopPropagation();
                             d.isLocal ? discardLocal() : discardServer(d);
                           }}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
+                          className="inline-flex h-8 w-8 min-w-8 items-center justify-center rounded-lg border border-slate-200/80 bg-slate-50/60 text-slate-500 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 transition-all cursor-pointer shrink-0 disabled:opacity-50 disabled:pointer-events-none active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
                           title={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
+                          aria-label={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
                         >
                           {isDeleting ? (
-                            <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-500" />
+                            <RefreshCw className="h-4 w-4 animate-spin text-rose-500 shrink-0" />
                           ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-4 w-4 shrink-0" />
                           )}
                         </button>
                       </div>
@@ -1232,7 +1232,7 @@ function DraftDetailDialog({
             onClick={() => { onClose(); onDelete(); }}
             className="h-9 rounded-xl border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition-all active:scale-95 cursor-pointer shadow-2xs"
           >
-            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Discard
+            <Trash2 className="mr-1.5 h-4 w-4" /> Discard
           </Button>
           <Button
             type="button"

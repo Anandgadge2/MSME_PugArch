@@ -15,7 +15,7 @@ import { api } from '../lib/api';
 import { openFileAsset } from '../lib/files';
 import { cn } from '../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../features/shared/FeatureStates';
-import { formatCurrency, formatDate, maskEmail } from '../features/shared/format';
+import { formatCurrency, formatDate, formatDateTime, formatTime, maskEmail } from '../features/shared/format';
 import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
@@ -553,17 +553,7 @@ export default function PurchaseOrders() {
   };
 
   const formatTimestamp = (value?: string | Date | null) => {
-    if (!value) return '-';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '-';
-    return date.toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
+    return formatDateTime(value);
   };
 
 
@@ -1060,7 +1050,7 @@ export default function PurchaseOrders() {
                           <div>
                             <p className="text-slate-700">{formatDate(order.updatedAt)}</p>
                             <p className="text-[9px] font-semibold text-slate-400 mt-0.5">
-                              {new Date(order.updatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                              {formatTime(order.updatedAt)}
                             </p>
                           </div>
                         ) : (

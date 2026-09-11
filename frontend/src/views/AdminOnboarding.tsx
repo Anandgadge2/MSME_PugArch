@@ -2905,9 +2905,7 @@ export default function AdminOnboarding() {
                             label="Date in PAN"
                             value={
                               selectedItem.profile?.dateAsInPan
-                                ? new Date(
-                                  selectedItem.profile.dateAsInPan,
-                                ).toLocaleDateString()
+                                ? formatDate(selectedItem.profile.dateAsInPan)
                                 : "N/A"
                             }
                           />
@@ -2985,9 +2983,7 @@ export default function AdminOnboarding() {
                             label="Date of Incorporation"
                             value={
                               selectedItem.profile?.dateOfIncorporation
-                                ? new Date(
-                                  selectedItem.profile.dateOfIncorporation,
-                                ).toLocaleDateString()
+                                ? formatDate(selectedItem.profile.dateOfIncorporation)
                                 : "N/A"
                             }
                           />

@@ -22,6 +22,7 @@ import {
 import { Button } from '../../../components/ui/button';
 import { reverseAuctionApi, type ReverseAuction, type ReverseAuctionParticipant } from '../api';
 import { toast } from 'sonner';
+import { formatTime } from '../../shared/format';
 
 export interface LiveAuctionLeaderboardProps {
   auctionId: number;
@@ -97,10 +98,15 @@ export default function LiveAuctionLeaderboard({
       if (diff <= 0) {
         setTimeLeft('00:00:00');
       } else {
-        const hrs = String(Math.floor(diff / 3600000)).padStart(2, '0');
+        const days = Math.floor(diff / 86400000);
+        const hrs = String(Math.floor((diff % 86400000) / 3600000)).padStart(2, '0');
         const mins = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
         const secs = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
-        setTimeLeft(`${hrs}:${mins}:${secs}`);
+        if (days > 0) {
+          setTimeLeft(`${days}d ${hrs}h ${mins}m ${secs}s`);
+        } else {
+          setTimeLeft(`${hrs}:${mins}:${secs}`);
+        }
       }
     };
 
@@ -451,7 +457,7 @@ export default function LiveAuctionLeaderboard({
             {bids.slice(0, 10).map((bidItem, idx) => (
               <div key={bidItem.id || idx} className="flex items-center justify-between text-xs text-slate-600">
                 <span className="font-mono text-[10px] text-slate-400">
-                  {bidItem.submittedAt ? new Date(bidItem.submittedAt).toLocaleTimeString() : 'Recent'}
+                  {bidItem.submittedAt ? formatTime(bidItem.submittedAt) : '—'}
                 </span>
                 <span className="font-bold text-slate-800">
                   {bidItem.sellerOrgName || `Vendor #${bidItem.sellerOrgId}`} submitted offer of{' '}

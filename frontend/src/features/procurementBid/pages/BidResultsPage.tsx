@@ -14,6 +14,7 @@ import { PageShell, ProcurementEmptyState, ProcurementErrorState, ProcurementHer
 import { money, type BidResultRow, type ProcurementBid } from '../data';
 import { procurementBidApi } from '../api';
 import { downloadCsv } from '../../shared/exportUtils';
+import { formatDate, formatDateTime, formatCurrency } from '../../shared/format';
 import { getApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
@@ -118,7 +119,7 @@ export default function BidResultsPage() {
       const doc = engine.generate({
         documentTitle: 'SUPPLIER QUOTATION RESPONSE',
         documentNumber: `QUOTE-${result.id || result.participationId || 'REF'}`,
-        dateStr: result.submittedAt ? new Date(result.submittedAt).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN'),
+        dateStr: formatDate(result.submittedAt),
         status: result.technicalStatus || 'Submitted',
         parties: [
           {
@@ -137,7 +138,7 @@ export default function BidResultsPage() {
             phone: result.sellerMobile !== 'Not listed' ? result.sellerMobile : undefined,
             details: [
               `Contact Person: ${result.contactPerson || 'Representative'}`,
-              `Submitted Date: ${result.submittedAt ? new Date(result.submittedAt).toLocaleString('en-IN') : 'N/A'}`,
+              `Submitted Date: ${formatDateTime(result.submittedAt)}`,
             ],
           },
         ],
@@ -527,8 +528,8 @@ export default function BidResultsPage() {
                     ? row.sellerMobile 
                     : (row.details?.sellerMobile || row.details?.mobile || (row.seller as any)?.mobile || (row.seller as any)?.organization?.mobile || (row.seller as any)?.organization?.phone || 'Not listed');
                   const rawDate = row.submittedAt || row.details?.submittedAt || (row as any).createdAt || (row.details as any)?.createdAt;
-                  const submissionTime = rawDate && !isNaN(new Date(rawDate).getTime())
-                    ? new Date(rawDate).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                  const submissionTime = rawDate
+                    ? formatDateTime(rawDate)
                     : 'Recently submitted';
 
                   return (
@@ -688,8 +689,8 @@ export default function BidResultsPage() {
                         ? row.sellerMobile 
                         : (row.details?.sellerMobile || row.details?.mobile || (row.seller as any)?.mobile || 'Not listed');
                       const rawDate = row.submittedAt || row.details?.submittedAt || (row as any).createdAt || (row.details as any)?.createdAt;
-                      const submissionTime = rawDate && !isNaN(new Date(rawDate).getTime())
-                        ? new Date(rawDate).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                      const submissionTime = rawDate
+                        ? formatDateTime(rawDate)
                         : 'Submitted';
 
                       return (
@@ -1310,10 +1311,13 @@ export default function BidResultsPage() {
             vendorName: r.sellerName || `Vendor ${idx + 1}`,
             quotedAmount: Number(r.totalPrice || 0),
             offeredQty: String((r as any).offeredQuantity || (r as any).quantity || 1),
-            deliveryTimeline: (r as any).deliveryTimeline || r.details?.deliveryTimeline
+            deliveryTimeline: (r as any).deliveryTimeline || r.details?.deliveryTimeline,
+            makeBrand: (r as any).makeBrand || (r as any).brand || r.details?.makeBrand,
+            model: (r as any).model || r.details?.model,
+            technicalStatus: (r as any).technicalStatus || ((r as any).isDisqualified ? 'DISQUALIFIED' : 'QUALIFIED'),
           }))}
           onAuctionStarted={(newAuction) => {
-            router.push(`/seller/procurement/reverse-auction/${newAuction.id}/live`);
+            router.push(`/reverse-auctions/${newAuction.id}/live`);
           }}
         />
       )}

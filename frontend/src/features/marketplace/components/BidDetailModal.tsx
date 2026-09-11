@@ -5,6 +5,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { toast } from 'sonner';
 import { marketplaceApi, type BuyerRequirement } from '../api';
 import { openFileAsset } from '../../../lib/files';
+import { formatDate } from '../../shared/format';
 import {
     X, Package, Wrench, Landmark, BadgeCheck, MapPin,
     Tag, Hash, IndianRupee, Calendar, CheckCircle,
@@ -159,7 +160,7 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                     { icon: <MapPin className="h-3.5 w-3.5 text-[#0b2447]" />, label: 'Location', value: requirement.location || requirement.buyerOrganization?.city || '—' },
                                     { icon: <Hash className="h-3.5 w-3.5 text-[#0b2447]" />, label: 'Quantity', value: requirement.quantity ? `${requirement.quantity} ${requirement.unit || ''}`.trim() : 'As per scope' },
                                     { icon: <IndianRupee className="h-3.5 w-3.5 text-[#0b2447]" />, label: 'Budget', value: requirement.budgetMax ? `₹${Number(requirement.budgetMin || 0).toLocaleString('en-IN')} – ₹${Number(requirement.budgetMax).toLocaleString('en-IN')}` : 'Open / Negotiable' },
-                                    { icon: <Calendar className="h-3.5 w-3.5 text-[#0b2447]" />, label: 'Last Date', value: new Date(requirement.lastDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) },
+                                    { icon: <Calendar className="h-3.5 w-3.5 text-[#0b2447]" />, label: 'Last Date', value: formatDate(requirement.lastDate) },
                                     ...((user?.role === 'buyer' || user?.role === 'admin') ? [{ icon: <CheckCircle className="h-3.5 w-3.5 text-green-600" />, label: 'Responses', value: `${requirement._count?.responses || 0} received` }] : []),
                                 ].map(item => (
                                     <div key={item.label} className="bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100">

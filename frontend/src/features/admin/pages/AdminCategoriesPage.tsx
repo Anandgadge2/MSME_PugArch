@@ -10,6 +10,7 @@ import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { getCategoryImageUrl, buildCategoryFallbackSvg, BUNDLED_CATEGORY_PHOTO_VERSION } from '../../marketplace/utils/categoryImages';
 import { KpiCard } from '../../shared/KpiCard';
+import { formatDate, formatTime } from '../../shared/format';
 
 export interface Category {
   id: number;
@@ -383,17 +384,7 @@ export default function AdminCategoriesPage() {
     try {
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return { date: '—', time: '' };
-      const date = d.toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-      });
-      const time = d.toLocaleTimeString('en-IN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-      return { date, time, iso: d.toISOString() };
+      return { date: formatDate(d), time: formatTime(d), iso: d.toISOString() };
     } catch {
       return { date: '—', time: '' };
     }

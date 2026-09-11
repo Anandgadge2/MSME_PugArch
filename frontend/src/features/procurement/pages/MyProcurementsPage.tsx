@@ -49,20 +49,20 @@ import {
   ScrollText,
   Activity,
   GitPullRequest,
- 
   Sparkles,
- 
+  Ban,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Skeleton } from '../../../components/ui/skeleton';
 import { cn } from '../../../lib/utils';
-import { getApi } from '../../shared/apiClient';
+import { getApi, postApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
-import { formatDate } from '../../shared/format';
+import { formatDate, formatDateTime as formatSharedDateTime } from '../../shared/format';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useQuery } from '@tanstack/react-query';
 import { sellerRoutes, buyerRoutes } from '@/lib/routes';
+import { CancelProcurementModal, type CancelTargetProcurement } from '../components/CancelProcurementModal';
 
 function ProcurementsTableSkeleton() {
   return (
@@ -336,6 +336,15 @@ const getConsolidatedType = (p: NormalizedProcurement): string => {
   return 'RFQ';
 };
 
+export const isProcurementCancellable = (p: any): boolean => {
+  if (!p) return false;
+  const sGroup = String(p.statusGroup || '').toLowerCase();
+  const s = String(p.status || '').toLowerCase();
+  if (['cancelled', 'rejected', 'expired', 'voided', 'abandoned'].includes(sGroup) || ['cancelled', 'rejected'].includes(s)) return false;
+  if (['completed', 'awarded', 'converted_to_order', 'order_placed', 'po_generated', 'delivered', 'grn_completed', 'invoice_submitted', 'payment_completed'].includes(s) || sGroup === 'completed') return false;
+  return true;
+};
+
 const TYPE_BADGE_STYLES: Record<string, string> = {
   'RFQ': 'border-blue-200 bg-blue-50 text-blue-800',
   'RFP': 'border-indigo-200 bg-indigo-50 text-indigo-800',
@@ -381,18 +390,7 @@ type SortDir = SortDirection;
 const formatCurrency = (v: number) =>
   v ? `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—';
 
-const formatDateTime = (value?: string) => {
-  if (!value) return '—';
-  try {
-    return new Date(value).toLocaleString('en-IN', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-      hour12: true,
-    });
-  } catch {
-    return value;
-  }
-};
+const formatDateTime = (value?: string) => formatSharedDateTime(value);
 
 
 
@@ -570,6 +568,47 @@ export default function MyProcurementsPage() {
   const procurements = queryData?.procurements || [];
   const isKpisLoading = loading && !queryData?.kpis;
 
+  /* ── Cancellation Modal State & Handlers ── */
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [procurementToCancel, setProcurementToCancel] = useState<CancelTargetProcurement | null>(null);
+
+  const handleOpenCancelModal = useCallback((p: NormalizedProcurement, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setProcurementToCancel({
+      id: p.id,
+      type: p.type,
+      title: p.title,
+      referenceNumber: p.referenceNumber,
+      typeLabel: p.typeLabel,
+      estimatedValue: p.estimatedValue,
+      status: p.status,
+      statusGroup: p.statusGroup,
+    });
+    setCancelModalOpen(true);
+  }, []);
+
+  const handleConfirmCancel = useCallback(async (params: { type: string; id: number; reason: string; remarks?: string }) => {
+    try {
+      await postApi('/api/buyer/procurements/cancel', params);
+      toast.success('Procurement cancelled successfully', {
+        description: `Reference: ${procurementToCancel?.referenceNumber || params.id}`
+      });
+      await loadData();
+      if (selectedProcurement && selectedProcurement.id === params.id) {
+        setSelectedProcurement(prev => prev ? {
+          ...prev,
+          status: 'CANCELLED',
+          statusLabel: 'Cancelled',
+          statusGroup: 'cancelled'
+        } : null);
+      }
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      toast.error(e?.message || 'Failed to cancel procurement');
+      throw err;
+    }
+  }, [loadData, procurementToCancel, selectedProcurement]);
+
   /* ── KPI Click Handler ── */
   const handleKpiClick = (group: string | null) => {
     if (activeKpi === group) {
@@ -697,14 +736,23 @@ export default function MyProcurementsPage() {
 
   if (detailOpen && selectedProcurement) {
     return (
-      <ProcurementDetailView
-        procurement={selectedProcurement}
-        onBack={closeDetail}
-        onGoTo={() => {
-          closeDetail();
-          router.push(resolveProcurementActionUrl(selectedProcurement));
-        }}
-      />
+      <>
+        <ProcurementDetailView
+          procurement={selectedProcurement}
+          onBack={closeDetail}
+          onGoTo={() => {
+            closeDetail();
+            router.push(resolveProcurementActionUrl(selectedProcurement));
+          }}
+          onCancel={p => handleOpenCancelModal(p || selectedProcurement)}
+        />
+        <CancelProcurementModal
+          isOpen={cancelModalOpen}
+          onClose={() => setCancelModalOpen(false)}
+          procurement={procurementToCancel}
+          onConfirm={handleConfirmCancel}
+        />
+      </>
     );
   }
 
@@ -959,14 +1007,31 @@ export default function MyProcurementsPage() {
 
                           {/* Action */}
                           <td className="rounded-r-xl px-4 py-4 text-right">
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={e => openDetail(p, e)}
-                              className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
-                            >
-                              View Details
-                            </Button>
+                            <div className="flex items-center justify-end gap-2">
+                              {isProcurementCancellable(p) && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={e => handleOpenCancelModal(p, e)}
+                                  title={p.statusGroup === 'pending_approval' ? 'Withdraw Request' : 'Cancel Procurement'}
+                                  className="h-8 px-2.5 rounded-lg border-slate-200 text-rose-600 hover:bg-rose-50 hover:border-rose-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Ban className="h-3.5 w-3.5" />
+                                  <span className="hidden xl:inline">
+                                    {p.statusGroup === 'pending_approval' ? 'Withdraw' : 'Cancel'}
+                                  </span>
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={e => openDetail(p, e)}
+                                className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
+                              >
+                                View Details
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1043,15 +1108,28 @@ export default function MyProcurementsPage() {
                         </div>
                       </div>
 
-                      {/* Action Button */}
-                      <button
-                        type="button"
-                        onClick={e => openDetail(p, e)}
-                        className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#12335f] px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-[#0b2445] hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
-                      >
-                        View Details
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </button>
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2">
+                        {isProcurementCancellable(p) && (
+                          <button
+                            type="button"
+                            onClick={e => handleOpenCancelModal(p, e)}
+                            title={p.statusGroup === 'pending_approval' ? 'Withdraw Request' : 'Cancel Procurement'}
+                            className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-center text-xs font-bold text-rose-600 shadow-2xs hover:bg-rose-50 hover:border-rose-200 active:scale-95 transition-all duration-200 cursor-pointer"
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                            <span>{p.statusGroup === 'pending_approval' ? 'Withdraw' : 'Cancel'}</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={e => openDetail(p, e)}
+                          className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#12335f] px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-[#0b2445] hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
+                        >
+                          View Details
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1112,7 +1190,12 @@ export default function MyProcurementsPage() {
         </section>
       )}
 
-
+      <CancelProcurementModal
+        isOpen={cancelModalOpen}
+        onClose={() => setCancelModalOpen(false)}
+        procurement={procurementToCancel}
+        onConfirm={handleConfirmCancel}
+      />
     </div>
   );
 }
@@ -1252,10 +1335,12 @@ export function ProcurementDetailView({
   procurement: p,
   onBack,
   onGoTo,
+  onCancel,
 }: {
   procurement: any;
   onBack: () => void;
   onGoTo?: () => void;
+  onCancel?: (p: any) => void;
 }) {
   /* ── 1. Timeline Calculations (Guaranteed Order) ── */
   const rawSteps =
@@ -1388,10 +1473,20 @@ export function ProcurementDetailView({
           </div>
 
           <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+            {onCancel && isProcurementCancellable(p) && (
+              <Button
+                type="button"
+                onClick={() => onCancel(p)}
+                className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold border border-rose-500/50 backdrop-blur-sm transition-all shadow-xs active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                {p.statusGroup === 'pending_approval' ? 'Withdraw Request' : 'Cancel Procurement'}
+              </Button>
+            )}
             <Button
               type="button"
               onClick={onBack}
-              className="h-9 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 backdrop-blur-sm transition-all shadow-xs active:scale-95"
+              className="h-9 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 backdrop-blur-sm transition-all shadow-xs active:scale-95 cursor-pointer"
             >
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back to List
             </Button>

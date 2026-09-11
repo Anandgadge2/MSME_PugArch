@@ -17,6 +17,7 @@ import { KpiCard } from '../features/shared/KpiCard';
 import { downloadCsv } from '../features/shared/exportUtils';
 import { PdfEngine, DocumentConfig } from '../lib/pdfEngine';
 import { ExcelEngine, ExcelDocumentConfig } from '../lib/excelEngine';
+import { formatDate, formatDateTime } from '../features/shared/format';
 import { useAuth } from '../hooks/useAuth';
 import ProcurementReportPage from '../features/reports/pages/ProcurementReportPage';
 import SuppliersReportPage from '../features/reports/pages/SuppliersReportPage';
@@ -215,7 +216,7 @@ export default function MISReports() {
       const config: ExcelDocumentConfig = {
         documentTitle: 'Jharsuguda MSME & Industry Linkage MIS Report',
         documentNumber: `MIS-${Date.now().toString().slice(-6)}`,
-        dateStr: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+        dateStr: formatDate(new Date()),
         infoGrid: {
           'Ecosystem': 'Jharsuguda Industrial Hub',
           'Statutory Act': 'MSMED Act 2006 (45-Day Rule)',
@@ -265,7 +266,7 @@ export default function MISReports() {
       const docConfig: DocumentConfig = {
         documentTitle: 'Jharsuguda Industry Linkage Executive MIS',
         documentNumber: `MIS-${Date.now().toString().slice(-6)}`,
-        dateStr: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+        dateStr: formatDate(new Date()),
         status: 'OFFICIAL AUDIT COPY',
         parties: [
           {
@@ -1052,7 +1053,7 @@ export default function MISReports() {
                         <p className="text-[11px] text-slate-500 font-medium">
                           Buyer: <strong className="text-slate-800">{act.partyA}</strong> • Seller: <strong className="text-slate-800">{act.partyB}</strong>
                         </p>
-                        <p className="text-[10px] text-slate-400">{new Date(act.date).toLocaleString('en-IN')}</p>
+                        <p className="text-[10px] text-slate-400">{formatDateTime(act.date)}</p>
                       </div>
                       <div className="text-right">
                         <span className="font-black text-[#12335f]">₹{Number(act.amount).toLocaleString('en-IN')}</span>

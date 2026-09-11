@@ -22,6 +22,7 @@ import {
   Gavel,
 } from 'lucide-react';
 import { formatDate, lifecycleLabels, money, type BidResultRow, type ProcurementBid } from './data';
+import { formatDateTime } from '../shared/format';
 
 export function StatusBadge({ label }: { label: string }) {
   const normalized = String(label || '').trim().toUpperCase();
@@ -365,7 +366,7 @@ export function ProcurementTimelineTracker({ stages }: { stages: TimelineStage[]
               {stage.time && (
                 <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-slate-500">
                   <Clock className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{new Date(stage.time).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                  <span>{formatDateTime(stage.time)}</span>
                 </div>
               )}
 

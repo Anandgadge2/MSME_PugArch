@@ -24,26 +24,21 @@ import {
 import { Button } from '@/components/ui/button';
 import { BuyerRequirementDetailSkeleton } from '@/components/ui/skeleton';
 import { getApi, postApi, peekApi, authHeaders } from '../../shared/apiClient';
+import { formatDate as formatSharedDate, formatDateTime as formatSharedDateTime } from '../../shared/format';
 import { sellerRoutes } from '@/lib/routes';
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 
 const formatDate = (value?: string | null) => {
   if (!value) return 'Not set';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return 'Not set';
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const formatted = formatSharedDate(value);
+  return formatted === '—' ? 'Not set' : formatted;
 };
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return 'Not set';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return 'Not set';
-  return `${d.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  })}, ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+  const formatted = formatSharedDateTime(value);
+  return formatted === '—' ? 'Not set' : formatted;
 };
 
 const formatMoney = (value?: number | string | null) => {

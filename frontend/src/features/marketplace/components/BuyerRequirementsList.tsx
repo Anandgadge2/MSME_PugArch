@@ -607,7 +607,7 @@ export function BuyerRequirementsList({
                                             </td>
                                             <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-800 text-xs whitespace-nowrap">
                                                 <div className="space-y-0.5">
-                                                    <p className="font-extrabold text-slate-900">{new Date(req.lastDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                                                    <p className="font-extrabold text-slate-900">{formatDateIN(req.lastDate)}</p>
                                                     <span className={cn(
                                                         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
                                                         daysRemaining <= 3 ? 'bg-rose-50 text-rose-700 border-rose-200' : daysRemaining <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-[#0b2447] border-slate-200'

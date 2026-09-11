@@ -1297,7 +1297,7 @@ const generateTaxInvoiceForDelivery = async (delivery: DeliveryDto) => {
     const sgst = Math.round(subtotal * 0.09 * 100) / 100;
     const grandTotal = Math.round((subtotal + cgst + sgst) * 100) / 100;
     const invNumber = `INV-${po?.poNumber || `PO-${delivery.purchaseOrderId}`}`;
-    const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const dateStr = formatDate(new Date());
 
     const config: DocumentConfig = {
         documentTitle: 'Official Tax Invoice',
@@ -1469,9 +1469,7 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
         // Date string
         const dateRaw = fetchedInvoice?.createdAt || po?.invoices?.[0]?.createdAt;
-        const dateStr = dateRaw
-            ? new Date(dateRaw).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-            : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const dateStr = formatDate(dateRaw || new Date());
 
         const totalVal = Number(fetchedInvoice?.totalAmount || fetchedInvoice?.amount || po?.amount || 0);
 

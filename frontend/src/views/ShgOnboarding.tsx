@@ -8,6 +8,7 @@ import { cn } from '../lib/utils';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { shgApi, type ShgProfile } from '../features/shg/api';
+import { formatDate } from '../features/shared/format';
 import SellerOnboarding from './SellerOnboarding';
 
 const steps = [
@@ -602,11 +603,6 @@ function SupportCard({ icon: Icon, title, text, href }: { icon: React.ComponentT
 }
 
 const readable = (value: unknown) => String(value || '—').replaceAll('_', ' ').replaceAll('-', ' ').toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
-const formatDate = (value: unknown) => {
-  if (!value) return '—';
-  const date = new Date(String(value));
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-};
 
 function ShgDashboardSection({ section, profile, progress }: { section: string; profile: ShgProfile; progress: number }) {
   const status = profile.applicationStatus || 'IN_PROGRESS';

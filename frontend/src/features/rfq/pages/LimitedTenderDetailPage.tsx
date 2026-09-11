@@ -1,36 +1,23 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
-import { getApi } from '../../shared/apiClient';
+import { getApi, postApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
 import { formatRefId } from '../../../utils/refIdUtils';
+import { formatDate, formatDateTime } from '../../shared/format';
 import { toast } from 'sonner';
 
 function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
   if (!dateVal) return undefined;
-  const d = new Date(dateVal);
-  if (isNaN(d.getTime())) return String(dateVal);
-  if (includeTime) {
-    return d.toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-  }
-  return d.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  const formatted = includeTime ? formatDateTime(dateVal) : formatDate(dateVal);
+  return formatted === '—' ? String(dateVal) : formatted;
 }
 
 export default function LimitedTenderDetailPage({ initialData }: { initialData?: any } = {}) {
@@ -157,65 +144,93 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
     Number(payload?.vendors?.inviteCount) || 0
   );
 
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
+  const statusUpper = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
+  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
+
   return (
-    <ProcurementDetailUnifiedView
-      procurementType="LIMITED_TENDER"
-      procurementLabel="Limited Tender"
-      id={bid.id || reqObj.id || requestId}
-      displayId={limitedTenderNumber}
-      invitedCount={computedInviteCount}
-      invitedSellers={invitedSellersList}
-      invitations={invitationsList}
-      subject={title}
-      status={bid.status || reqObj.status || 'OPEN'}
-      buyerName={bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name}
-      orgName={bid.buyerOrganizationName || reqObj.buyerOrganization?.organizationName || reqObj.organization?.organizationName}
-      buyer={{
-        name: bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name || 'Buyer',
-        email: bid.buyerEmail || reqObj.buyerEmail || reqObj.buyer?.email || '',
-        mobile: bid.buyerMobile || reqObj.buyerMobile || reqObj.buyer?.mobile || '',
-        buyerProfile: bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization,
-      }}
-      estimatedValue={bid.estimatedValue || reqObj.estimatedValue || basics.estimatedValue}
-      deadlineDate={bid.endDate || reqObj.lastDate || schedule.submissionDate}
-      createdAt={bid.startDate || bid.createdAt || reqObj.createdAt}
-      publishedDate={formatDateString(schedule.publishDate || bid.startDate || reqObj.createdAt)}
-      closingDate={formatDateString(bid.endDate || reqObj.lastDate || schedule.submissionDate, true)}
-      clarificationDate={formatDateString(schedule.clarificationDeadline, true)}
-      technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate, true)}
-      financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate, true)}
-      category={bid.category?.name || bid.category || reqObj.category?.name || basics.category}
-      procurementMethod="Limited Tender"
-      buyingType={basics.buyingType || 'Goods / Products'}
-      deliveryLocation={bid.deliveryLocation || bid.location || reqObj.location || basics.deliveryLocation}
-      paymentTerms={bid.paymentTerms || terms.paymentTerms || 'Standard Payment Terms'}
-      deliveryTerms={bid.deliveryTerms || terms.deliveryTerms || 'Door delivery'}
-      description={bid.description || reqObj.description || basics.description}
-      payload={payload}
-      documents={bid.documents || bid.bidDocuments || reqObj.documents || payload.documents || []}
-      items={bid.items || payload.items || reqObj.items || payload.boqTable || []}
-      evaluationMethod={
-        [
-          payload.evaluation?.method,
-          payload.evaluation?.evaluationMethod,
-          payload.evaluationMethod,
-          payload.rules?.evaluationMethod,
-          reqObj?.payload?.evaluation?.method,
-          bid.technicalPacket?.evaluation?.method,
-          bid.evaluationMethod,
-        ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
-        bid.evaluationMethod ||
-        payload.evaluationMethod ||
-        'Selective Evaluation'
-      }
-      participations={participationsList}
-      participantsCount={bid.participantsCount ?? participationsList.length}
-      emdAmount={bid.emdAmount || reqObj.emdAmount || basics.emdAmount}
-      isEmdRequired={bid.isEmdRequired ?? reqObj.isEmdRequired ?? basics.isEmdRequired}
-      backRoute={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "/buyer/my-procurements" : "/seller/opportunities"}
-      backRouteLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "My Procurements" : "Opportunities"}
-      submitButtonLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? 'View Evaluation & Results' : 'Submit Limited Tender Proposal'}
-      onSubmitClick={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal}
-    />
+    <>
+      <ProcurementDetailUnifiedView
+        procurementType="LIMITED_TENDER"
+        procurementLabel="Limited Tender"
+        id={bid.id || reqObj.id || requestId}
+        displayId={limitedTenderNumber}
+        invitedCount={computedInviteCount}
+        invitedSellers={invitedSellersList}
+        invitations={invitationsList}
+        subject={title}
+        status={bid.status || reqObj.status || 'OPEN'}
+        buyerName={bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name}
+        orgName={bid.buyerOrganizationName || reqObj.buyerOrganization?.organizationName || reqObj.organization?.organizationName}
+        buyer={{
+          name: bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name || 'Buyer',
+          email: bid.buyerEmail || reqObj.buyerEmail || reqObj.buyer?.email || '',
+          mobile: bid.buyerMobile || reqObj.buyerMobile || reqObj.buyer?.mobile || '',
+          buyerProfile: bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization,
+        }}
+        estimatedValue={bid.estimatedValue || reqObj.estimatedValue || basics.estimatedValue}
+        deadlineDate={bid.endDate || reqObj.lastDate || schedule.submissionDate}
+        createdAt={bid.startDate || bid.createdAt || reqObj.createdAt}
+        publishedDate={formatDateString(schedule.publishDate || bid.startDate || reqObj.createdAt)}
+        closingDate={formatDateString(bid.endDate || reqObj.lastDate || schedule.submissionDate, true)}
+        clarificationDate={formatDateString(schedule.clarificationDeadline, true)}
+        technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate, true)}
+        financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate, true)}
+        category={bid.category?.name || bid.category || reqObj.category?.name || basics.category}
+        procurementMethod="Limited Tender"
+        buyingType={basics.buyingType || 'Goods / Products'}
+        deliveryLocation={bid.deliveryLocation || bid.location || reqObj.location || basics.deliveryLocation}
+        paymentTerms={bid.paymentTerms || terms.paymentTerms || 'Standard Payment Terms'}
+        deliveryTerms={bid.deliveryTerms || terms.deliveryTerms || 'Door delivery'}
+        description={bid.description || reqObj.description || basics.description}
+        payload={payload}
+        documents={bid.documents || bid.bidDocuments || reqObj.documents || payload.documents || []}
+        items={bid.items || payload.items || reqObj.items || payload.boqTable || []}
+        evaluationMethod={
+          [
+            payload.evaluation?.method,
+            payload.evaluation?.evaluationMethod,
+            payload.evaluationMethod,
+            payload.rules?.evaluationMethod,
+            reqObj?.payload?.evaluation?.method,
+            bid.technicalPacket?.evaluation?.method,
+            bid.evaluationMethod,
+          ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
+          bid.evaluationMethod ||
+          payload.evaluationMethod ||
+          'Selective Evaluation'
+        }
+        participations={participationsList}
+        participantsCount={bid.participantsCount ?? participationsList.length}
+        emdAmount={bid.emdAmount || reqObj.emdAmount || basics.emdAmount}
+        isEmdRequired={bid.isEmdRequired ?? reqObj.isEmdRequired ?? basics.isEmdRequired}
+        backRoute={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "/buyer/my-procurements" : "/seller/opportunities"}
+        backRouteLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "My Procurements" : "Opportunities"}
+        submitButtonLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? 'View Evaluation & Results' : 'Submit Limited Tender Proposal'}
+        onSubmitClick={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal}
+        onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
+        cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Tender' : 'Cancel Tender'}
+      />
+      {canCancel && (
+        <CancelProcurementModal
+          isOpen={cancelModalOpen}
+          onClose={() => setCancelModalOpen(false)}
+          procurement={{
+            id: Number(bid.id || reqObj.id || requestId),
+            type: 'bid_tender',
+            title: title,
+            referenceNumber: limitedTenderNumber,
+            typeLabel: 'Limited Tender',
+            status: statusUpper,
+          }}
+          onConfirm={async (params) => {
+            await postApi('/api/buyer/procurements/cancel', params);
+            toast.success('Limited Tender cancelled successfully');
+            router.push('/buyer/my-procurements');
+          }}
+        />
+      )}
+    </>
   );
 }

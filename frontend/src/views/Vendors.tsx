@@ -10,6 +10,7 @@ import { indiaStatesDistricts } from '../data/indiaStatesDistricts';
 import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
 import { EntityIdLink } from '../features/shared/EntityIdLink';
+import { formatDate } from '../features/shared/format';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
 import { GridCardSkeleton } from '../components/ui/skeleton';
 import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
@@ -768,7 +769,7 @@ const Vendors = () => {
                       { label: 'GST Number', value: selectedVendor.sellerProfile?.gst, icon: FileText },
                       { label: 'Business PAN', value: selectedVendor.sellerProfile?.pan, icon: Briefcase },
                       { label: 'Email Address', value: selectedVendor.email, icon: Mail },
-                      { label: 'Incorporation', value: selectedVendor.sellerProfile?.dateOfIncorporation ? new Date(selectedVendor.sellerProfile.dateOfIncorporation).toLocaleDateString() : 'N/A', icon: Clock },
+                      { label: 'Incorporation', value: selectedVendor.sellerProfile?.dateOfIncorporation ? formatDate(selectedVendor.sellerProfile.dateOfIncorporation) : 'N/A', icon: Clock },
                       { label: 'MSME Type', value: selectedVendor.sellerProfile?.msmeType?.replace(/_/g, ' '), icon: Building2 },
                       { label: 'Vendor Type', value: selectedVendor.sellerProfile?.vendorType?.replace(/_/g, ' '), icon: Briefcase }
                     ].map(item => (

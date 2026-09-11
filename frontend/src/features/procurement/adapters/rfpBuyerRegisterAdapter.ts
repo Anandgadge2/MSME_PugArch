@@ -33,6 +33,8 @@ export const rfpBuyerRegisterAdapter = {
       case 'awarded':
       case 'completed':
         return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+      case 'cancelled':
+        return 'border-rose-200 bg-rose-50 text-rose-700';
       case 'draft':
       default:
         return 'border-slate-200 bg-slate-100 text-slate-600';
@@ -45,6 +47,7 @@ export const rfpBuyerRegisterAdapter = {
       case 'published': return 'Proposals Open';
       case 'evaluating': return 'Proposal Evaluation';
       case 'awarded': return 'RFP Awarded';
+      case 'cancelled': return 'RFP Cancelled';
       case 'draft': return 'Draft RFP';
       default: return status.toUpperCase();
     }
@@ -56,6 +59,7 @@ export const rfpBuyerRegisterAdapter = {
       canEdit: s === 'draft',
       canViewProposals: ['published', 'evaluating', 'awarded'].includes(s),
       canEvaluate: s === 'evaluating' || s === 'published',
+      canCancel: !['awarded', 'completed', 'cancelled'].includes(s),
       primaryActionLabel: s === 'draft' ? 'Edit RFP' : 'View Proposals'
     };
   }

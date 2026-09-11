@@ -18,8 +18,9 @@ import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar'
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import ProcurementLifecycleTracker from '../../procurementLifecycle/components/ProcurementLifecycleTracker';
 import { inferCurrentLifecycleStage, mapProcurementOrderToLifecycle } from '../../procurementLifecycle/statusMapper';
+import { formatDate } from '../../shared/format';
 
-const fmt = (value?: string) => value ? new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Pending';
+const fmt = (value?: string) => value ? formatDate(value) : 'Pending';
 const roleTitle = (role?: string) => role === 'seller' ? 'Seller Awarded Bids' : role === 'admin' ? 'Admin Procurement Orders' : 'Buyer Awarded Orders';
 type OrderSortKey = 'poNumber' | 'title' | 'buyer' | 'seller' | 'status' | 'amount' | 'createdAt';
 

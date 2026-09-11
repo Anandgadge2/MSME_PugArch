@@ -12,6 +12,7 @@ import { MethodBadge, ProcurementStatusBadge, BuyerTypeBadge } from '../../procu
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
+import { formatDate } from '../../shared/format';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 type SellerEventView = 'all' | 'invited' | 'submitted' | 'clarifications';
@@ -361,7 +362,7 @@ export default function SellerEventListPage() {
                         </td>
                         <td className="px-4 py-3.5 text-xs font-semibold text-slate-600">{bid.category}</td>
                         <td className="px-4 py-3.5 text-xs font-semibold text-slate-600">
-                          {bid.endDate ? new Date(bid.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'NA'}
+                          {bid.endDate ? formatDate(bid.endDate) : 'NA'}
                         </td>
                         <td className="px-4 py-3.5">
                           <ProcurementStatusBadge status={bid.status} />

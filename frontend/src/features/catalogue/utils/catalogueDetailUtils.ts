@@ -1,3 +1,5 @@
+import { formatDate } from '../../shared/format';
+
 export type DetailField = { label: string; value: unknown; always?: boolean };
 
 export const hasValue = (value: unknown) => {
@@ -21,9 +23,8 @@ export const formatCatalogueMoney = (value: unknown, currency = 'INR') => {
 
 export const formatCatalogueDate = (value: unknown) => {
   if (!value) return null;
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const formatted = formatDate(value);
+  return formatted === '—' ? null : formatted;
 };
 
 export const formatCataloguePercent = (value: unknown) => {

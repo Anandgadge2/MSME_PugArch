@@ -28,14 +28,14 @@ import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
-import { formatDateTime } from '../../shared/format';
+import { formatDate, formatDateTime } from '../../shared/format';
 import { downloadCsv } from '../../shared/exportUtils';
 import { ExcelEngine, type ExcelDocumentConfig } from '../../../lib/excelEngine';
 
 const COLORS = ['#12335f', '#0f766e', '#c86413', '#6366f1', '#dc2626', '#64748b'];
 
 const asArray = (value: any) => Array.isArray(value) ? value : [];
-const dateLabel = (value?: string) => value ? new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not recorded';
+const dateLabel = (value?: string) => value ? formatDate(value) : 'Not recorded';
 const monthKey = (value?: string) => {
     const date = value ? new Date(value) : new Date();
     if (Number.isNaN(date.getTime())) return 'Unknown';

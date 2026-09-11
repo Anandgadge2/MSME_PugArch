@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { api, unwrapApiData, readJsonResponse, BASE_URL } from '../../lib/api';
+import { formatDateTime } from '../../features/shared/format';
 import {
   AlertTriangle,
   ArrowRight,
@@ -1188,7 +1189,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                               <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-800">{item.message}</p>
                               {item.createdAt && (
                                 <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                                  {new Date(item.createdAt).toLocaleString()}
+                                  {formatDateTime(item.createdAt)}
                                 </p>
                               )}
                             </div>

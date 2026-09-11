@@ -10,7 +10,7 @@ import { Pagination } from './Pagination';
 import { EntityIdLink } from './EntityIdLink';
 import { ViewModeToggle } from './ViewModeToggle';
 import { KpiCard } from './KpiCard';
-import { formatCurrency, formatDate } from './format';
+import { formatCurrency, formatDate, formatDateTime } from './format';
 import { usePaginatedFeatureQuery, useResponsiveViewMode } from './hooks';
 import { SortableHeader, type SortDirection } from './SortableHeader';
 import { deleteApi, postApi, putApi } from './apiClient';
@@ -381,34 +381,12 @@ function GenericDetailsModal({ title, record, canMutate, onClose, onEdit, onDele
 
   const formatDetailValue = (key: string, value: any) => {
     if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
-      try {
-        const d = new Date(value);
-        if (!isNaN(d.getTime())) {
-          return d.toLocaleString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          });
-        }
-      } catch { }
+      const formatted = formatDateTime(value);
+      if (formatted !== '—') return formatted;
     }
     if (key.endsWith('At') || key.endsWith('Date') || key.endsWith('Time')) {
-      try {
-        const d = new Date(value);
-        if (!isNaN(d.getTime())) {
-          return d.toLocaleString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          });
-        }
-      } catch { }
+      const formatted = formatDateTime(value);
+      if (formatted !== '—') return formatted;
     }
     return String(value);
   };
@@ -478,7 +456,7 @@ function GenericDetailsModal({ title, record, canMutate, onClose, onEdit, onDele
                       </div>
                       <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
                         <p className="text-[9px] font-black uppercase text-slate-400">Validity Date</p>
-                        <p className="mt-1 text-sm font-black text-slate-800">{resp.validityDate ? new Date(resp.validityDate).toLocaleDateString() : 'Not specified'}</p>
+                        <p className="mt-1 text-sm font-black text-slate-800">{resp.validityDate ? formatDate(resp.validityDate) : 'Not specified'}</p>
                       </div>
                     </div>
                     {resp.notes && (
