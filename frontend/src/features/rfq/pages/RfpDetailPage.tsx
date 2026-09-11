@@ -31,6 +31,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const pathname = usePathname() || '';
   const { user } = useAuth();
   const currentUser: any = user;
+  const [cancelModalOpen, setCancelModalOpen] = React.useState(false);
 
   const explicitReqId = searchParams?.get('requirementId') || '';
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || '';
@@ -240,7 +241,6 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   };
 
   const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin';
-  const [cancelModalOpen, setCancelModalOpen] = React.useState(false);
   const rawStatus = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
   const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(rawStatus);
 

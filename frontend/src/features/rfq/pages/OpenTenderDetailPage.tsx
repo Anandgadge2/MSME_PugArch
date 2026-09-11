@@ -26,6 +26,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   const pathname = usePathname() || '';
   const { user } = useAuth();
   const currentUser: any = user;
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
   const explicitReqId = searchParams?.get('requirementId') || '';
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || '';
@@ -144,7 +145,6 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
 
   const participationsList = bid.participations || reqObj.participations || reqObj.responses || [];
 
-  const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
   const statusUpper = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
   const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
