@@ -20,6 +20,7 @@ import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { toast } from 'sonner';
 import { ComparisonMatrixSkeleton } from '../../../components/ui/skeleton';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 export default function BidResultsPage() {
   const { user } = useAuth();
@@ -370,6 +371,155 @@ export default function BidResultsPage() {
     );
   };
 
+  const tableColumns = React.useMemo<ColumnDef<BidResultRow>[]>(() => [
+    {
+      key: 'select',
+      header: 'Select',
+      width: 'w-[40px]',
+      align: 'center',
+      cell: (row, idx) => {
+        const partId = row.participationId || idx + 1;
+        const isSelected = selectedForCompare.includes(partId);
+        return (
+          <button
+            onClick={() => toggleSellerSelection(partId)}
+            className="text-slate-400 hover:text-blue-600 transition"
+          >
+            {isSelected ? (
+              <CheckSquare className="h-4.5 w-4.5 text-blue-600 fill-blue-50" />
+            ) : (
+              <Square className="h-4.5 w-4.5 text-slate-300 hover:text-slate-400" />
+            )}
+          </button>
+        );
+      }
+    },
+    {
+      key: 'seller',
+      header: 'Supplier & Contact',
+      sortable: true,
+      sortKey: 'seller',
+      cell: (row) => {
+        const sellerOrg = row.details?.organizationName || (row.seller as any)?.organization?.organizationName || row.sellerName || 'Supplier';
+        const contactPerson = row.contactPerson || row.details?.contactPerson || row.sellerName || 'Representative';
+        const email = row.sellerEmail && row.sellerEmail !== 'Not provided' 
+          ? row.sellerEmail 
+          : (row.details?.sellerEmail || row.details?.email || (row.seller as any)?.email || 'Not provided');
+        const mobile = row.sellerMobile && row.sellerMobile !== 'Not listed' 
+          ? row.sellerMobile 
+          : (row.details?.sellerMobile || row.details?.mobile || (row.seller as any)?.mobile || 'Not listed');
+        return (
+          <div>
+            <div className="font-black text-slate-900 uppercase text-xs">{sellerOrg}</div>
+            <div className="text-[11px] font-bold text-slate-500 mt-0.5">👤 {contactPerson}</div>
+            <div className="text-[10px] text-slate-400 font-medium mt-0.5 flex flex-wrap items-center gap-x-2">
+              <span>✉️ {email}</span>
+              {mobile && mobile !== 'Not listed' && <span>📞 {mobile}</span>}
+            </div>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'date',
+      header: 'Submission Date',
+      sortable: true,
+      sortKey: 'date',
+      width: 'w-40',
+      cell: (row) => {
+        const rawDate = row.submittedAt || row.details?.submittedAt || (row as any).createdAt || (row.details as any)?.createdAt;
+        const submissionTime = rawDate ? formatDateTime(rawDate) : 'Submitted';
+        return (
+          <div className="flex items-center gap-1.5 text-slate-600 font-semibold whitespace-nowrap">
+            <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+            <span>{submissionTime}</span>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'item',
+      header: 'Offered Item / Make',
+      sortable: true,
+      sortKey: 'item',
+      cell: (row) => (
+        <div>
+          <div className="font-bold text-slate-800">{row.offeredItem}</div>
+          <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+            {row.makeBrand && row.makeBrand !== 'As quoted' ? `Make: ${row.makeBrand}` : 'Standard Make'} 
+            {row.model && row.model !== 'Standard' ? ` | Model: ${row.model}` : ''}
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'attachments',
+      header: 'Attachments',
+      sortable: true,
+      sortKey: 'attachments',
+      width: 'w-36',
+      cell: (row) => {
+        const docCount = row.documents ? row.documents.length : 0;
+        const itemCount = row.details?.lineItems?.length || 1;
+        return (
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
+            <span className="inline-flex items-center rounded-md bg-slate-100 text-slate-700 px-2 py-0.5">
+              📄 {docCount} Doc{docCount === 1 ? '' : 's'}
+            </span>
+            <span className="inline-flex items-center rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5">
+              📦 {itemCount} Item{itemCount === 1 ? '' : 's'}
+            </span>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'totalPrice',
+      header: 'Quoted Total',
+      sortable: true,
+      sortKey: 'totalPrice',
+      align: 'right',
+      width: 'w-32',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (row) => (
+        <span className="font-black text-slate-900 text-xs">
+          {row.totalPrice ? money(row.totalPrice) : 'Pending'}
+        </span>
+      )
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      width: 'w-64',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (row) => (
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => setSelectedResult(row)}
+            className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-250 bg-white hover:bg-slate-50 text-slate-700 px-3 text-[10px] font-bold transition shadow-2xs"
+          >
+            <Eye className="h-3.5 w-3.5 text-slate-500" /> View Details
+          </button>
+          {row.resultStatus === 'Awarded' || bid?.status === 'Awarded' ? (
+            <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-100 px-3 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
+              <CheckCircle2 className="h-3.5 w-3.5" /> PO Generated
+            </span>
+          ) : (
+            <button
+              onClick={() => setAwardModal({ show: true, row, remarks: '', submitting: false })}
+              className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 text-[10px] font-black transition shadow-2xs"
+            >
+              Accept Quotation
+            </button>
+          )}
+        </div>
+      )
+    }
+  ], [selectedForCompare, bid]);
+
   const handleCompareClick = () => {
     if (selectedForCompare.length >= 2) {
       router.push(`/bids/${bidId}/compare?ids=${selectedForCompare.join(',')}`);
@@ -632,152 +782,15 @@ export default function BidResultsPage() {
             </div>
           ) : (
             /* List Table View */
-            <div className="table-shell">
-              <div className="table-shell-scroller">
-                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[1100px] w-full text-xs">
-                  <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
-                    <tr>
-                      <th className="px-3 py-3 w-[40px] text-center select-none">Select</th>
-                      {[
-                        { label: 'Supplier & Contact', key: 'seller' },
-                        { label: 'Submission Date', key: 'date' },
-                        { label: 'Offered Item / Make', key: 'item' },
-                        { label: 'Attachments', key: 'attachments' },
-                        { label: 'Quoted Total', key: 'totalPrice' },
-                      ].map(col => {
-                        const isSorted = sortKey === col.key;
-                        return (
-                          <th
-                            key={col.key}
-                            onClick={() => handleSort(col.key)}
-                            className={`px-4 py-3 font-black cursor-pointer select-none transition-colors group ${
-                              isSorted ? 'text-blue-700 bg-blue-50/60 font-black' : 'hover:bg-slate-100 hover:text-slate-900'
-                            }`}
-                            title={`Sort by ${col.label} (${isSorted ? (sortDir === 'asc' ? 'Ascending' : 'Descending') : 'Click to sort'})`}
-                          >
-                            <div className="inline-flex items-center gap-1.5">
-                              <span>{col.label}</span>
-                              {isSorted ? (
-                                sortDir === 'asc' ? (
-                                  <ArrowUp className="h-3.5 w-3.5 text-blue-600" />
-                                ) : (
-                                  <ArrowDown className="h-3.5 w-3.5 text-blue-600" />
-                                )
-                              ) : (
-                                <ArrowUpDown className="h-3 w-3 text-slate-400 opacity-40 group-hover:opacity-100 transition-opacity" />
-                              )}
-                            </div>
-                          </th>
-                        );
-                      })}
-                      <th className="px-4 py-3 font-black text-right select-none">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-150">
-                    {sortedRanking.length ? sortedRanking.map((row, idx) => {
-                      const partId = row.participationId || idx + 1;
-                      const isSelected = selectedForCompare.includes(partId);
-                      const docCount = row.documents ? row.documents.length : 0;
-                      const itemCount = row.details?.lineItems?.length || 1;
-                      const sellerOrg = row.details?.organizationName || (row.seller as any)?.organization?.organizationName || row.sellerName || 'Supplier';
-                      const contactPerson = row.contactPerson || row.details?.contactPerson || row.sellerName || 'Representative';
-                      const email = row.sellerEmail && row.sellerEmail !== 'Not provided' 
-                        ? row.sellerEmail 
-                        : (row.details?.sellerEmail || row.details?.email || (row.seller as any)?.email || 'Not provided');
-                      const mobile = row.sellerMobile && row.sellerMobile !== 'Not listed' 
-                        ? row.sellerMobile 
-                        : (row.details?.sellerMobile || row.details?.mobile || (row.seller as any)?.mobile || 'Not listed');
-                      const rawDate = row.submittedAt || row.details?.submittedAt || (row as any).createdAt || (row.details as any)?.createdAt;
-                      const submissionTime = rawDate
-                        ? formatDateTime(rawDate)
-                        : 'Submitted';
-
-                      return (
-                        <tr key={partId} className={`hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-blue-50/30' : 'bg-white'}`}>
-                          <td className="px-3 py-3.5 text-center">
-                            <button
-                              onClick={() => toggleSellerSelection(partId)}
-                              className="text-slate-400 hover:text-blue-600 transition"
-                            >
-                              {isSelected ? (
-                                <CheckSquare className="h-4.5 w-4.5 text-blue-600 fill-blue-50" />
-                              ) : (
-                                <Square className="h-4.5 w-4.5 text-slate-300 hover:text-slate-400" />
-                              )}
-                            </button>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="font-black text-slate-900 uppercase text-xs">{sellerOrg}</div>
-                            <div className="text-[11px] font-bold text-slate-500 mt-0.5">👤 {contactPerson}</div>
-                            <div className="text-[10px] text-slate-400 font-medium mt-0.5 flex flex-wrap items-center gap-x-2">
-                              <span>✉️ {email}</span>
-                              {mobile && mobile !== 'Not listed' && <span>📞 {mobile}</span>}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5 font-semibold text-slate-600 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5 text-slate-600">
-                              <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                              <span>{submissionTime}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="font-bold text-slate-800">{row.offeredItem}</div>
-                            <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
-                              {row.makeBrand && row.makeBrand !== 'As quoted' ? `Make: ${row.makeBrand}` : 'Standard Make'} 
-                              {row.model && row.model !== 'Standard' ? ` | Model: ${row.model}` : ''}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
-                              <span className="inline-flex items-center rounded-md bg-slate-100 text-slate-700 px-2 py-0.5">
-                                📄 {docCount} Doc{docCount === 1 ? '' : 's'}
-                              </span>
-                              <span className="inline-flex items-center rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5">
-                                📦 {itemCount} Item{itemCount === 1 ? '' : 's'}
-                              </span>
-                            </div>
-                          </td>
-                          {/* <td className="px-4 py-3.5">
-                            <StatusBadge label={row.technicalStatus} />
-                          </td> */}
-                          <td className="px-4 py-3.5 font-black text-slate-900 text-xs">
-                            {row.totalPrice ? money(row.totalPrice) : 'Pending'}
-                          </td>
-                          <td className="px-4 py-3.5 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => setSelectedResult(row)}
-                                className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-250 bg-white hover:bg-slate-50 text-slate-700 px-3 text-[10px] font-bold transition shadow-2xs"
-                              >
-                                <Eye className="h-3.5 w-3.5 text-slate-500" /> View Quotation Details
-                              </button>
-                              {row.resultStatus === 'Awarded' || bid.status === 'Awarded' ? (
-                                <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-100 px-3 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
-                                  <CheckCircle2 className="h-3.5 w-3.5" /> PO Generated
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => setAwardModal({ show: true, row, remarks: '', submitting: false })}
-                                  className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 text-[10px] font-black transition shadow-2xs"
-                                >
-                                  Accept Quotation
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    }) : (
-                      <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-xs font-bold text-slate-500">No evaluation results available currently.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-</div>
-              </div>
-            </div>
+            <DataTable<BidResultRow>
+              data={sortedRanking}
+              columns={tableColumns}
+              keyExtractor={(row, idx) => row.participationId || idx + 1}
+              showSrNo={false}
+              rowClassName={(row, idx) => selectedForCompare.includes(row.participationId || idx + 1) ? 'bg-blue-50/30' : ''}
+              minWidth="min-w-[1100px]"
+              emptyTitle="No evaluation results available currently."
+            />
           )}
         </section>
 

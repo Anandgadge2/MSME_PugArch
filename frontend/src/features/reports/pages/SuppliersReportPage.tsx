@@ -9,6 +9,7 @@ import { Loader2 } from '@/components/ui/loader';
 import { Button } from '../../../components/ui/button';
 import { InlineError } from '../../shared/FeatureStates';
 import { getApi } from '../../shared/apiClient';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import {
     BarChart,
     Bar,
@@ -60,6 +61,58 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
         </div>
     );
 }
+
+const MARKETPLACE_COLUMNS: ColumnDef<any>[] = [
+    {
+        key: 'name',
+        header: 'Metric',
+        width: 'w-[25%]',
+        cell: (row: any) => {
+            const Icon = row.icon;
+            return (
+                <div className="flex items-center gap-2">
+                    <span
+                        className="flex h-6 w-6 items-center justify-center rounded-md"
+                        style={{ backgroundColor: `${row.color}18` }}
+                        aria-hidden="true"
+                    >
+                        <Icon className="h-3.5 w-3.5" style={{ color: row.color }} />
+                    </span>
+                    <span className="font-black" style={{ color: row.color }}>
+                        {row.name}
+                    </span>
+                </div>
+            );
+        },
+    },
+    {
+        key: 'value',
+        header: 'Count',
+        width: 'w-[20%]',
+        align: 'right',
+        cell: (row: any) => (
+            <span className="font-black text-slate-900">{row.value.toLocaleString('en-IN')}</span>
+        ),
+    },
+    {
+        key: 'subtext',
+        header: 'Description',
+        width: 'w-[35%]',
+        cell: (row: any) => <span className="font-semibold text-slate-500">{row.subtext}</span>,
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        width: 'w-[20%]',
+        align: 'right',
+        cell: () => (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                Active
+            </span>
+        ),
+    },
+];
 
 export default function SuppliersReportPage() {
     const { data, isLoading, error, refetch, isFetching } = useQuery({
@@ -170,75 +223,21 @@ export default function SuppliersReportPage() {
 
             {/* Summary Table */}
             {data && (
-                <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                    {/* Table header */}
-                    <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                            Marketplace Summary
-                        </p>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-xs" role="table" aria-label="Marketplace metrics summary">
-                            <thead>
-                                <tr className="border-b border-slate-100">
-                                    <th scope="col" className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Metric</th>
-                                    <th scope="col" className="px-5 py-3 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">Count</th>
-                                    <th scope="col" className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Description</th>
-                                    <th scope="col" className="px-5 py-3 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {([
-                                    { name: 'Sellers',  value: data.sellers,  subtext: 'Onboarded vendor base',        icon: Store,   color: '#10b981' },
-                                    { name: 'Products', value: data.products, subtext: 'Active catalogue items',        icon: Package, color: '#3b82f6' },
-                                    { name: 'Services', value: data.services, subtext: 'Published service listings',    icon: Wrench,  color: '#8b5cf6' },
-                                    { name: 'Ratings',  value: data.ratings,  subtext: 'Submitted reviews',             icon: Star,    color: '#f59e0b' },
-                                ] as const).map((row, idx, arr) => {
-                                    const Icon = row.icon;
-                                    return (
-                                        <tr
-                                            key={row.name}
-                                            className={`transition-colors hover:bg-slate-50/70 ${idx < arr.length - 1 ? 'border-b border-slate-100' : ''}`}
-                                        >
-                                            {/* Metric name */}
-                                            <td className="px-5 py-3.5">
-                                                <div className="flex items-center gap-2">
-                                                    <span
-                                                        className="flex h-6 w-6 items-center justify-center rounded-md"
-                                                        style={{ backgroundColor: `${row.color}18` }}
-                                                        aria-hidden="true"
-                                                    >
-                                                        <Icon className="h-3.5 w-3.5" style={{ color: row.color }} />
-                                                    </span>
-                                                    <span
-                                                        className="font-black"
-                                                        style={{ color: row.color }}
-                                                    >
-                                                        {row.name}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            {/* Count */}
-                                            <td className="px-5 py-3.5 text-right font-black text-slate-900">
-                                                {row.value.toLocaleString('en-IN')}
-                                            </td>
-                                            {/* Description */}
-                                            <td className="px-5 py-3.5 font-semibold text-slate-500">
-                                                {row.subtext}
-                                            </td>
-                                            {/* Status badge */}
-                                            <td className="px-5 py-3.5 text-right">
-                                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-                                                    Active
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
+                <div className="space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        Marketplace Summary
+                    </p>
+                    <DataTable<any>
+                        data={[
+                            { name: 'Sellers',  value: data.sellers,  subtext: 'Onboarded vendor base',        icon: Store,   color: '#10b981' },
+                            { name: 'Products', value: data.products, subtext: 'Active catalogue items',        icon: Package, color: '#3b82f6' },
+                            { name: 'Services', value: data.services, subtext: 'Published service listings',    icon: Wrench,  color: '#8b5cf6' },
+                            { name: 'Ratings',  value: data.ratings,  subtext: 'Submitted reviews',             icon: Star,    color: '#f59e0b' },
+                        ]}
+                        columns={MARKETPLACE_COLUMNS}
+                        keyExtractor={(row) => row.name}
+                        showSrNo={false}
+                    />
                 </div>
             )}
 

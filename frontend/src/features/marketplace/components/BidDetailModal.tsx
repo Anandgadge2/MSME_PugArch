@@ -1,9 +1,10 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
 import { toast } from 'sonner';
 import { marketplaceApi, type BuyerRequirement } from '../api';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { openFileAsset } from '../../../lib/files';
 import { formatDate } from '../../shared/format';
 import {
@@ -46,6 +47,56 @@ export function BidDetailModal({ bid, onClose }: Props) {
     const [price, setPrice] = useState('');
     const [timeline, setTimeline] = useState('');
     const [submitting, setSubmitting] = useState(false);
+
+    const itemColumns = useMemo<ColumnDef<any>[]>(() => [
+        {
+            key: 'name',
+            header: 'Item Name',
+            cell: (item) => <span className="font-bold text-slate-900">{item.name}</span>,
+        },
+        {
+            key: 'specification',
+            header: 'Specifications',
+            cell: (item) => <span className="max-w-[200px] truncate block" title={item.specification}>{item.specification || '—'}</span>,
+        },
+        {
+            key: 'quantity',
+            header: 'Qty / Unit',
+            cell: (item) => <span>{item.quantity} {item.unit}</span>,
+        },
+        {
+            key: 'unitPrice',
+            header: 'Est. Price',
+            cell: (item) => (
+                <span className="text-[#0b2447] font-bold">
+                    {item.unitPrice ? `₹${Number(item.unitPrice).toLocaleString('en-IN')}` : '—'}
+                </span>
+            ),
+        },
+        {
+            key: 'brandPolicy',
+            header: 'Brand Policy',
+            cell: (item) => <span className="text-slate-500 font-semibold">{item.brandPolicy || 'Any Brand'}</span>,
+        },
+    ], []);
+
+    const consigneeColumns = useMemo<ColumnDef<any>[]>(() => [
+        {
+            key: 'name',
+            header: 'Consignee Name',
+            cell: (c) => <span className="font-bold text-slate-900">{c.name || '—'}</span>,
+        },
+        {
+            key: 'location',
+            header: 'Delivery Destination',
+            cell: (c) => <span>{c.location || '—'}</span>,
+        },
+        {
+            key: 'quantity',
+            header: 'Quantity',
+            cell: (c) => <span className="font-bold">{c.quantity}</span>,
+        },
+    ], []);
 
     /* Lock body scroll */
     useEffect(() => {
@@ -332,32 +383,13 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                             <p className="text-[11px] font-black text-[#0b2447] uppercase tracking-wider flex items-center gap-1">
                                                 <Package className="h-3.5 w-3.5" /> Line Items Specification Checklist
                                             </p>
-                                            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                                                <table className="w-full text-left border-collapse text-xs">
-                                                    <thead>
-                                                        <tr className="bg-slate-50 border-b border-slate-200 font-black text-slate-500 uppercase text-[10px]">
-                                                            <th className="p-2.5">Item Name</th>
-                                                            <th className="p-2.5">Specifications</th>
-                                                            <th className="p-2.5">Qty / Unit</th>
-                                                            <th className="p-2.5">Est. Price</th>
-                                                            <th className="p-2.5">Brand Policy</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                                                        {requirement.payload.items.map((item: any, idx: number) => (
-                                                            <tr key={idx} className="hover:bg-slate-50/50">
-                                                                <td className="p-2.5 font-bold text-slate-900">{item.name}</td>
-                                                                <td className="p-2.5 max-w-[200px] truncate" title={item.specification}>{item.specification || '—'}</td>
-                                                                <td className="p-2.5">{item.quantity} {item.unit}</td>
-                                                                <td className="p-2.5 text-[#0b2447] font-bold">
-                                                                    {item.unitPrice ? `₹${Number(item.unitPrice).toLocaleString('en-IN')}` : '—'}
-                                                                </td>
-                                                                <td className="p-2.5 text-slate-500 font-semibold">{item.brandPolicy || 'Any Brand'}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
+                                            <DataTable<any>
+                                                data={requirement.payload.items}
+                                                columns={itemColumns}
+                                                keyExtractor={(item, idx) => String(idx)}
+                                                emptyTitle="No line items"
+                                                emptyDescription="No line items specified."
+                                            />
                                         </div>
                                     )}
 
@@ -367,26 +399,13 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                             <p className="text-[11px] font-black text-[#0b2447] uppercase tracking-wider flex items-center gap-1">
                                                 <Truck className="h-3.5 w-3.5" /> Consignee & Shipping Allocations
                                             </p>
-                                            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                                                <table className="w-full text-left border-collapse text-xs">
-                                                    <thead>
-                                                        <tr className="bg-slate-50 border-b border-slate-200 font-black text-slate-500 uppercase text-[10px]">
-                                                            <th className="p-2.5">Consignee Name</th>
-                                                            <th className="p-2.5">Delivery Destination</th>
-                                                            <th className="p-2.5">Quantity</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                                                        {requirement.payload.consigneeDetails.map((consignee: any, idx: number) => (
-                                                            <tr key={idx} className="hover:bg-slate-50/50">
-                                                                <td className="p-2.5 font-bold text-slate-900">{consignee.name || '—'}</td>
-                                                                <td className="p-2.5">{consignee.location || '—'}</td>
-                                                                <td className="p-2.5 font-bold">{consignee.quantity}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
+                                            <DataTable<any>
+                                                data={requirement.payload.consigneeDetails}
+                                                columns={consigneeColumns}
+                                                keyExtractor={(c, idx) => String(idx)}
+                                                emptyTitle="No consignees"
+                                                emptyDescription="No consignee allocations specified."
+                                            />
                                         </div>
                                     )}
 

@@ -14,6 +14,7 @@ import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { ListSkeleton } from '../../../components/ui/skeleton';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
 import { useAuth } from '../../../hooks/useAuth';
 import { useDebounce } from '../../../hooks/useDebounce';
@@ -51,6 +52,48 @@ const calcUtilization = (contract: RateContractDto) => {
   const spent = orders.reduce((s, po) => s + Number(po.totalValue || po.amount || 0), 0);
   return { totalVal, spent, remaining: Math.max(0, totalVal - spent) };
 };
+
+const RATE_SCHEDULE_COLUMNS: ColumnDef<any>[] = [
+  {
+    key: 'itemName',
+    header: 'Item',
+    cell: (item: any) => <span className="font-semibold text-slate-900">{item.itemName}</span>,
+  },
+  {
+    key: 'unitOfMeasure',
+    header: 'UOM',
+    width: 'w-20',
+    cell: (item: any) => <span className="text-slate-500">{item.unitOfMeasure}</span>,
+  },
+  {
+    key: 'baseRate',
+    header: 'Base Rate',
+    width: 'w-28',
+    align: 'right',
+    cell: (item: any) => <span className="font-bold tabular-nums">{formatCurrency(item.baseRate)}</span>,
+  },
+  {
+    key: 'discount',
+    header: 'Discount',
+    width: 'w-24',
+    align: 'right',
+    cell: (item: any) => <span>{item.discount}%</span>,
+  },
+  {
+    key: 'gst',
+    header: 'GST',
+    width: 'w-20',
+    align: 'right',
+    cell: (item: any) => <span>{item.gst}%</span>,
+  },
+  {
+    key: 'estimatedAnnualQuantity',
+    header: 'Est. Qty',
+    width: 'w-24',
+    align: 'right',
+    cell: (item: any) => <span className="tabular-nums">{item.estimatedAnnualQuantity}</span>,
+  },
+];
 
 export default function RateContractsPage() {
   const { user } = useAuth();
@@ -378,32 +421,12 @@ export default function RateContractsPage() {
                       {meta.itemRateSchedule && meta.itemRateSchedule.length > 0 && (
                         <div>
                           <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Item Rate Schedule</h4>
-                          <div className="overflow-x-auto rounded-xl border border-slate-200">
-                            <table className="w-full text-left text-xs">
-                              <thead className="bg-slate-50">
-                                <tr>
-                                  <th className="px-3 py-2 font-bold text-slate-500">Item</th>
-                                  <th className="px-3 py-2 font-bold text-slate-500">UOM</th>
-                                  <th className="px-3 py-2 font-bold text-slate-500">Base Rate</th>
-                                  <th className="px-3 py-2 font-bold text-slate-500">Discount</th>
-                                  <th className="px-3 py-2 font-bold text-slate-500">GST</th>
-                                  <th className="px-3 py-2 font-bold text-slate-500">Est. Qty</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {meta.itemRateSchedule.map((item, idx) => (
-                                  <tr key={item.id || idx} className="hover:bg-slate-50">
-                                    <td className="px-3 py-2 font-semibold text-slate-900">{item.itemName}</td>
-                                    <td className="px-3 py-2 text-slate-500">{item.unitOfMeasure}</td>
-                                    <td className="px-3 py-2 font-bold tabular-nums">{formatCurrency(item.baseRate)}</td>
-                                    <td className="px-3 py-2">{item.discount}%</td>
-                                    <td className="px-3 py-2">{item.gst}%</td>
-                                    <td className="px-3 py-2 tabular-nums">{item.estimatedAnnualQuantity}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+                          <DataTable<any>
+                            data={meta.itemRateSchedule}
+                            columns={RATE_SCHEDULE_COLUMNS}
+                            keyExtractor={(item, idx) => item.id || idx}
+                            showSrNo={false}
+                          />
                         </div>
                       )}
 

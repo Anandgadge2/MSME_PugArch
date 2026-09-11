@@ -11,6 +11,7 @@ import { formatDate, formatDateTime } from '../../shared/format';
 import { useFeatureQuery, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { toast } from 'sonner';
 import { api } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
@@ -318,6 +319,118 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
 
   const currentUserId = useMemo(() => currentUser ? Number(currentUser.id) : null, [currentUser]);
 
+  const adminColumns = useMemo<ColumnDef<RecordMap>[]>(() => [
+    {
+      key: 'record',
+      header: 'Record',
+      width: 'w-[32%]',
+      sortable: true,
+      cell: (record) => (
+        <div>
+          <EntityIdLink
+            label={rowIdLabel(kind, record)}
+            id={record.id}
+            size="sm"
+            onClick={() => setSelected(record)}
+          />
+          <p className="mt-1 font-black text-slate-900 text-wrap-anywhere">{rowTitle(kind, record)}</p>
+          <p className="text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p>
+          {kind === 'users' && aadhaarKycOf(record) && (
+            <span className={cn(
+              'mt-2 inline-flex rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wider',
+              aadhaarKycOf(record)?.status === 'VERIFIED'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : aadhaarKycOf(record)?.status === 'FAILED'
+                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                  : 'border-amber-200 bg-amber-50 text-amber-700'
+            )}>
+              Aadhaar {label(aadhaarKycOf(record)?.status)}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-[18%]',
+      sortable: true,
+      cell: (record) => (
+        kind === 'users' ? (
+          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => handleToggleUserStatus(record)}
+              className={cn(
+                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#12335f] focus:ring-offset-2",
+                record.accountStatus === 'ACTIVE' ? "bg-emerald-500" : "bg-slate-300"
+              )}
+            >
+              <span
+                className={cn(
+                  "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                  record.accountStatus === 'ACTIVE' ? "translate-x-4" : "translate-x-0"
+                )}
+              />
+            </button>
+            <span className={cn(
+              "text-[10px] font-black uppercase tracking-wider",
+              record.accountStatus === 'ACTIVE' ? "text-emerald-700" : "text-slate-500"
+            )}>
+              {record.accountStatus === 'ACTIVE' ? "Active" : "Inactive"}
+            </span>
+          </div>
+        ) : (
+          <span className={`rounded-lg border px-3 py-1 text-[10px] font-black uppercase ${severityClass(statusOf(kind, record))}`}>{label(statusOf(kind, record))}</span>
+        )
+      ),
+    },
+    {
+      key: 'severity',
+      header: 'Severity/Role',
+      width: 'w-[18%]',
+      sortable: true,
+      cell: (record) => (
+        kind === 'users' ? (
+          <span className={cn("inline-flex items-center rounded-md border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider", roleBadgeClass(record.role))}>
+            {roleLabel(record.role)}
+          </span>
+        ) : (
+          <span className="text-xs font-black uppercase text-slate-700">
+            {label(record.severity || record.role || record.alertType || '-')}
+          </span>
+        )
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      width: 'w-[16%]',
+      sortable: true,
+      cell: (record) => (
+        <span className="text-xs font-bold text-slate-500">{formatDateTime(record.createdAt || record.updatedAt)}</span>
+      ),
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      width: 'w-[12%]',
+      align: 'right',
+      cell: (record) => (
+        <div onClick={e => e.stopPropagation()}>
+          <ActionMenu
+            kind={kind}
+            record={record}
+            currentUserId={currentUserId ?? null}
+            onView={() => setSelected(record)}
+            onEdit={() => setEditingUser(record)}
+            onDelete={() => handleDeleteUser(record)}
+          />
+        </div>
+      ),
+    },
+  ], [kind, currentUserId]);
+
   const metrics = useMemo(() => {
     if (kind === 'users') {
       const activeCount = records.filter(r => r.accountStatus === 'ACTIVE').length;
@@ -452,103 +565,22 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
           </div>
         </>
       ) : (
-        <div className="rounded-lg border border-slate-200 bg-white overflow-x-clip">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[940px] text-left text-sm">
-              <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th className="p-3 w-16">Sr. No.</th>
-                  <th className="p-3"><SortHeadButton label="Record" field="record" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} /></th>
-                  <th className="p-3"><SortHeadButton label="Status" field="status" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} /></th>
-                  <th className="p-3"><SortHeadButton label="Severity/Role" field="severity" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} /></th>
-                  <th className="p-3"><SortHeadButton label="Date" field="date" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} /></th>
-                  <th className="p-3">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {records.map((record, index) => (
-                  <tr key={`${kind}-${record.id || rowTitle(kind, record)}`} className="hover:bg-slate-50">
-                    <td className="p-3 font-mono text-xs font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
-                    <td className="p-3">
-                      <EntityIdLink
-                        label={rowIdLabel(kind, record)}
-                        id={record.id}
-                        size="sm"
-                        onClick={() => setSelected(record)}
-                      />
-                      <p className="mt-1 font-black text-slate-900 text-wrap-anywhere">{rowTitle(kind, record)}</p>
-                      <p className="text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{rowSubtitle(kind, record) || `#${record.id || '-'}`}</p>
-                      {kind === 'users' && aadhaarKycOf(record) && (
-                        <span className={cn(
-                          'mt-2 inline-flex rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wider',
-                          aadhaarKycOf(record)?.status === 'VERIFIED'
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : aadhaarKycOf(record)?.status === 'FAILED'
-                              ? 'border-rose-200 bg-rose-50 text-rose-700'
-                              : 'border-amber-200 bg-amber-50 text-amber-700'
-                        )}>
-                          Aadhaar {label(aadhaarKycOf(record)?.status)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      {kind === 'users' ? (
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleUserStatus(record)}
-                            className={cn(
-                              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#12335f] focus:ring-offset-2",
-                              record.accountStatus === 'ACTIVE' ? "bg-emerald-500" : "bg-slate-300"
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                                record.accountStatus === 'ACTIVE' ? "translate-x-4" : "translate-x-0"
-                              )}
-                            />
-                          </button>
-                          <span className={cn(
-                            "text-[10px] font-black uppercase tracking-wider",
-                            record.accountStatus === 'ACTIVE' ? "text-emerald-700" : "text-slate-500"
-                          )}>
-                            {record.accountStatus === 'ACTIVE' ? "Active" : "Inactive"}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className={`rounded-lg border px-3 py-1 text-[10px] font-black uppercase ${severityClass(statusOf(kind, record))}`}>{label(statusOf(kind, record))}</span>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      {kind === 'users' ? (
-                        <span className={cn("inline-flex items-center rounded-md border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider", roleBadgeClass(record.role))}>
-                          {roleLabel(record.role)}
-                        </span>
-                      ) : (
-                        <span className="text-xs font-black uppercase text-slate-700">
-                          {label(record.severity || record.role || record.alertType || '-')}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3 text-xs font-bold text-slate-500">{formatDateTime(record.createdAt || record.updatedAt)}</td>
-                    <td className="p-3">
-                      <ActionMenu
-                        kind={kind}
-                        record={record}
-                        currentUserId={currentUserId ?? null}
-                        onView={() => setSelected(record)}
-                        onEdit={() => setEditingUser(record)}
-                        onDelete={() => handleDeleteUser(record)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
-        </div>
+        <DataTable<RecordMap>
+          data={records}
+          columns={adminColumns}
+          keyExtractor={(record, index) => `${kind}-${record.id || rowTitle(kind, record) || index}`}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          sortKey={sortKey}
+          sortDirection={sortDirection}
+          onSort={(field) => toggleSort(field)}
+          showSrNo
+          srNoWidth="w-[4%]"
+          caption="Admin Records"
+        />
       )}
 
 

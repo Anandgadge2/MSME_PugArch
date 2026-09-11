@@ -7,6 +7,7 @@ import { downloadCsv } from "../features/shared/exportUtils";
 import { Button } from "../components/ui/button";
 import { ResponsiveFilterBar } from "../components/ui/ResponsiveFilterBar";
 import { Pagination } from "../features/shared/Pagination";
+import { DataTable, ColumnDef } from "../components/ui/data-table";
 import { useResponsiveViewMode } from "../features/shared/hooks";
 import { ViewModeToggle } from "../features/shared/ViewModeToggle";
 import { KpiCard } from "../features/shared/KpiCard";
@@ -1222,6 +1223,202 @@ export default function AdminOnboarding() {
     );
   };
 
+  const onboardingColumns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: "name",
+      header: "Full Name",
+      sortable: true,
+      sortKey: "name",
+      width: "w-[24%]",
+      cell: (item) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            void openItemForReview(item);
+          }}
+          className="block text-left group/name cursor-pointer w-full min-w-0"
+          title="Click to view full personal details"
+        >
+          <div className="font-bold text-slate-800 text-xs tracking-tight group-hover/name:text-[#12335f] group-hover/name:underline decoration-[#f9a825] underline-offset-2 transition-colors flex items-center gap-1.5 text-wrap-anywhere">
+            <span>{item.name}</span>
+            <Eye className="h-3 w-3 opacity-0 group-hover/name:opacity-100 text-[#12335f] transition-opacity shrink-0" />
+          </div>
+          <div className="mt-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">
+            {getRoleLabel(item)}
+          </div>
+        </button>
+      )
+    },
+    {
+      key: "entity",
+      header: "Entity Name",
+      sortable: true,
+      sortKey: "entity",
+      width: "w-[26%]",
+      cell: (item) => (
+        <div>
+          {getEntityName(item) ? (
+            <div className="font-bold text-slate-600 text-xs underline decoration-indigo-200 underline-offset-4 break-words">
+              {getEntityName(item)}
+            </div>
+          ) : (
+            <div className="text-xs font-semibold italic text-slate-400">
+              Onboarding in progress
+            </div>
+          )}
+          {getEntityLocation(item) && (
+            <div className="mt-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">
+              {getEntityLocation(item)}
+            </div>
+          )}
+        </div>
+      )
+    },
+    {
+      key: "submitted",
+      header: "Submitted At",
+      sortable: true,
+      sortKey: "submitted",
+      width: "w-36",
+      cell: (item) => (
+        <div className="text-[11px] font-bold text-slate-500 font-mono">
+          {formatDateTime(item.createdAt)}
+        </div>
+      )
+    },
+    {
+      key: "progress",
+      header: "Progress",
+      sortable: true,
+      sortKey: "progress",
+      width: "w-36",
+      cell: (item) => (
+        <div className="min-w-[100px] max-w-[140px] flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-500">
+            <span>Verified</span>
+            <span className={cn(getProgress(item) === 100 ? "text-emerald-600" : "text-[#12335f]")}>
+              {getProgress(item)}%
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className={cn("h-full transition-all duration-500 rounded-full", getProgress(item) === 100 ? "bg-emerald-500" : "bg-[#12335f]")}
+              style={{ width: `${getProgress(item)}%` }}
+            />
+          </div>
+        </div>
+      )
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      sortKey: "status",
+      width: "w-44",
+      cell: (item) => {
+        const status = item.onboardingStatus || "pending";
+        let dotColor = "bg-slate-400";
+        let title = "Pending";
+        let subtext = "Awaiting review";
+        
+        switch (status) {
+          case "approved_for_procurement":
+            dotColor = "bg-emerald-500";
+            title = "Approved for Procurement";
+            subtext = "Procurement approval";
+            break;
+          case "rejected":
+            dotColor = "bg-red-500";
+            title = "Rejected";
+            subtext = "Application denied";
+            break;
+          case "resubmission_required":
+            dotColor = "bg-amber-500";
+            title = "Resubmission Required";
+            subtext = "Correction needed";
+            break;
+          case "under_compliance_review":
+            dotColor = "bg-blue-500";
+            title = "Compliance Review";
+            subtext = "In verification queue";
+            break;
+          case "manual_review_required":
+            dotColor = "bg-orange-500";
+            title = "Manual Review";
+            subtext = "Action required";
+            break;
+          case "verified":
+            dotColor = "bg-indigo-500";
+            title = "Verified";
+            subtext = "Checks passed";
+            break;
+          case "pending_validation":
+            dotColor = "bg-slate-500";
+            title = "Pending Validation";
+            subtext = "System check";
+            break;
+          default:
+            dotColor = "bg-slate-400";
+            title = status.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+            subtext = "Pending status";
+        }
+
+        return (
+          <div className="min-w-[160px] flex flex-col gap-2 p-2 rounded-lg border border-slate-100 bg-slate-50/50">
+            <div className="flex items-start gap-2">
+              <div className={cn("mt-1 h-2 w-2 rounded-full shrink-0 shadow-sm", dotColor)} />
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-700 truncate" title={title}>
+                  {title}
+                </div>
+                <div className="text-[9px] font-bold text-slate-400 truncate mt-0.5" title={subtext}>
+                  {subtext}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-0.5 px-0.5">
+              {getSections(item).map((section: string) => {
+                const secStatus = item.sectionStatus?.[section] || "pending";
+                const isApproved = secStatus === "approved";
+                const isRejected = secStatus === "rejected";
+                return (
+                  <div 
+                    key={section}
+                    title={`${section.toUpperCase()}: ${secStatus.toUpperCase()}`}
+                    className={cn(
+                      "h-1 flex-1 rounded-sm transition-colors",
+                      isApproved ? "bg-emerald-500" : 
+                      isRejected ? "bg-red-500" : 
+                      "bg-slate-200"
+                    )}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
+    },
+    {
+      key: "action",
+      header: "Action",
+      align: "right",
+      width: "w-24",
+      cell: (item) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            void openItemForReview(item);
+          }}
+          className="text-[10px] font-black text-indigo-600 uppercase hover:underline hover:text-indigo-800 transition-all decoration-2 underline-offset-4 inline-flex items-center"
+        >
+          Review <span className="ml-1 text-base leading-none">→</span>
+        </button>
+      )
+    }
+  ], []);
+
   const handleKpiClick = (target: string) => {
     if (target === "pending") {
       setStatusFilter((prev) => {
@@ -1521,195 +1718,29 @@ export default function AdminOnboarding() {
                 ) : (
                   <>
                     {/* Responsive Table (List view) */}
-                    <div className={cn(
-                      "overflow-x-auto w-full max-w-full bg-white",
-                      viewMode === "list" ? "block" : "hidden"
-                    )}>
-                      <table data-ux-wrapped="true" className="w-full text-left border-collapse min-w-[900px]">
-                        <thead className="bg-[#f8f9fa] border-b border-[#dadce0]">
-                          <tr>
-                            <th className="p-3 text-[10px] font-black uppercase tracking-wider text-[#12335f] text-center w-12">
-                              Sr. No.
-                            </th>
-                            {renderSortTableHead("Full Name", "name")}
-                            {renderSortTableHead("Entity Name", "entity")}
-                            {renderSortTableHead("Submitted At", "submitted")}
-                            {renderSortTableHead("Progress", "progress")}
-                            {renderSortTableHead("Status", "status")}
-                            <th className="p-3 text-[10px] font-black uppercase tracking-wider text-[#12335f] text-right">
-                              Action
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#f1f3f5]">
-                          {pagedCurrentData.map((item, index) => (
-                            <tr
-                              key={item._id}
-                              onMouseEnter={() => prefetchDetail(item)}
-                              className="hover:bg-[#fcfcfd] transition-colors"
-                            >
-                              <td className="p-3 text-center">
-                                <div className="font-mono text-xs font-black text-slate-400">
-                                  {String((currentPage - 1) * pageSize + index + 1).padStart(2, "0")}
-                                </div>
-                              </td>
-                              <td className="p-3">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void openItemForReview(item);
-                                  }}
-                                  className="block text-left group/name cursor-pointer w-full min-w-0"
-                                  title="Click to view full personal details"
-                                >
-                                  <div className="font-bold text-slate-800 text-xs tracking-tight group-hover/name:text-[#12335f] group-hover/name:underline decoration-[#f9a825] underline-offset-2 transition-colors flex items-center gap-1.5 text-wrap-anywhere">
-                                    <span>{item.name}</span>
-                                    <Eye className="h-3 w-3 opacity-0 group-hover/name:opacity-100 text-[#12335f] transition-opacity shrink-0" />
-                                  </div>
-                                  <div className="mt-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                    {getRoleLabel(item)}
-                                  </div>
-                                </button>
-                              </td>
-                              <td className="p-3">
-                                {getEntityName(item) ? (
-                                  <div className="font-bold text-slate-600 text-xs underline decoration-indigo-200 underline-offset-4 break-words">
-                                    {getEntityName(item)}
-                                  </div>
-                                ) : (
-                                  <div className="text-xs font-semibold italic text-slate-400">
-                                    Onboarding in progress
-                                  </div>
-                                )}
-                                {getEntityLocation(item) && (
-                                  <div className="mt-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                    {getEntityLocation(item)}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="p-3">
-                                <div className="text-[11px] font-bold text-slate-500 font-mono">
-                                  {formatDateTime(item.createdAt)}
-                                </div>
-                              </td>
-                              <td className="p-3">
-                                <div className="min-w-[100px] max-w-[140px] flex flex-col gap-1.5">
-                                  <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-500">
-                                    <span>Verified</span>
-                                    <span className={cn(getProgress(item) === 100 ? "text-emerald-600" : "text-[#12335f]")}>
-                                      {getProgress(item)}%
-                                    </span>
-                                  </div>
-                                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                                    <div
-                                      className={cn("h-full transition-all duration-500 rounded-full", getProgress(item) === 100 ? "bg-emerald-500" : "bg-[#12335f]")}
-                                      style={{ width: `${getProgress(item)}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="p-3">
-                                {(() => {
-                                  const status = item.onboardingStatus || "pending";
-                                  let dotColor = "bg-slate-400";
-                                  let title = "Pending";
-                                  let subtext = "Awaiting review";
-                                  
-                                  switch (status) {
-                                    case "approved_for_procurement":
-                                      dotColor = "bg-emerald-500";
-                                      title = "Approved for Procurement";
-                                      subtext = "Procurement approval";
-                                      break;
-                                    case "rejected":
-                                      dotColor = "bg-red-500";
-                                      title = "Rejected";
-                                      subtext = "Application denied";
-                                      break;
-                                    case "resubmission_required":
-                                      dotColor = "bg-amber-500";
-                                      title = "Resubmission Required";
-                                      subtext = "Correction needed";
-                                      break;
-                                    case "under_compliance_review":
-                                      dotColor = "bg-blue-500";
-                                      title = "Compliance Review";
-                                      subtext = "In verification queue";
-                                      break;
-                                    case "manual_review_required":
-                                      dotColor = "bg-orange-500";
-                                      title = "Manual Review";
-                                      subtext = "Action required";
-                                      break;
-                                    case "verified":
-                                      dotColor = "bg-indigo-500";
-                                      title = "Verified";
-                                      subtext = "Checks passed";
-                                      break;
-                                    case "pending_validation":
-                                      dotColor = "bg-slate-500";
-                                      title = "Pending Validation";
-                                      subtext = "System check";
-                                      break;
-                                    default:
-                                      dotColor = "bg-slate-400";
-                                      title = status.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-                                      subtext = "Pending status";
-                                  }
-
-                                  return (
-                                    <div className="min-w-[160px] flex flex-col gap-2 p-2 rounded-lg border border-slate-100 bg-slate-50/50">
-                                      <div className="flex items-start gap-2">
-                                        <div className={cn("mt-1 h-2 w-2 rounded-full shrink-0 shadow-sm", dotColor)} />
-                                        <div className="min-w-0">
-                                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-700 truncate" title={title}>
-                                            {title}
-                                          </div>
-                                          <div className="text-[9px] font-bold text-slate-400 truncate mt-0.5" title={subtext}>
-                                            {subtext}
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-0.5 px-0.5">
-                                        {getSections(item).map((section: string) => {
-                                          const secStatus = item.sectionStatus?.[section] || "pending";
-                                          const isApproved = secStatus === "approved";
-                                          const isRejected = secStatus === "rejected";
-                                          return (
-                                            <div 
-                                              key={section}
-                                              title={`${section.toUpperCase()}: ${secStatus.toUpperCase()}`}
-                                              className={cn(
-                                                "h-1 flex-1 rounded-sm transition-colors",
-                                                isApproved ? "bg-emerald-500" : 
-                                                isRejected ? "bg-red-500" : 
-                                                "bg-slate-200"
-                                              )}
-                                            />
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  );
-                                })()}
-                              </td>
-                              <td className="p-3 text-right">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void openItemForReview(item);
-                                  }}
-                                  className="text-[10px] font-black text-indigo-600 uppercase hover:underline hover:text-indigo-800 transition-all decoration-2 underline-offset-4 inline-flex items-center"
-                                >
-                                  Review <span className="ml-1 text-base leading-none">→</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    {viewMode === "list" && (
+                      <DataTable<any>
+                        data={pagedCurrentData}
+                        columns={onboardingColumns}
+                        keyExtractor={(item) => item._id}
+                        isLoading={isLoading}
+                        showSrNo={true}
+                        srNoHeader="Sr. No."
+                        srNoWidth="w-16"
+                        sortKey={sortBy === 'oldest' ? 'submitted' : sortBy === 'newest' ? 'submitted' : sortBy.startsWith('progress') ? 'progress' : sortBy.startsWith('entity') || sortBy.startsWith('name') ? 'entity' : sortBy.startsWith('status') ? 'status' : undefined}
+                        sortDirection={sortBy.endsWith('_desc') || sortBy === 'newest' ? 'desc' : 'asc'}
+                        onSort={(key) => toggleAdminSort(key)}
+                        page={currentPage}
+                        pageSize={pageSize}
+                        total={currentData.length}
+                        onPageChange={setPage}
+                        onPageSizeChange={setPageSize}
+                        paginationLabel="applications"
+                        emptyTitle={`No ${activeTab === "shg" ? "SHG" : activeTab} registrations`}
+                        emptyDescription={`No ${activeTab === "shg" ? "SHG" : activeTab} registrations in record.`}
+                        caption={`Admin ${activeTab} Registration Management Table`}
+                      />
+                    )}
 
                     {/* Desktop Grid view (alternative to table) */}
                     {viewMode === "grid" && (
@@ -1995,14 +2026,16 @@ export default function AdminOnboarding() {
                         })}
                       </div>
                     )}
-                    <Pagination
-                      page={currentPage}
-                      pageSize={pageSize}
-                      total={currentData.length}
-                      onPageChange={setPage}
-                      onPageSizeChange={setPageSize}
-                      label="applications"
-                    />
+                    {viewMode === "grid" && (
+                      <Pagination
+                        page={currentPage}
+                        pageSize={pageSize}
+                        total={currentData.length}
+                        onPageChange={setPage}
+                        onPageSizeChange={setPageSize}
+                        label="applications"
+                      />
+                    )}
                   </>
                 )}
               </CardContent>
@@ -2798,46 +2831,61 @@ export default function AdminOnboarding() {
                         <div className="space-y-3">
                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Frequently Bought Requirements List ({showcaseItems.length})</span>
                           
-                          {showcaseItemsLoading ? (
-                            <div className="py-6 text-center text-xs text-slate-400 font-bold uppercase tracking-wider">
-                              Loading requirements...
-                            </div>
-                          ) : showcaseItems.length === 0 ? (
-                            <p className="text-[10px] font-bold text-slate-400 uppercase italic">No showcase items uploaded by this buyer.</p>
-                          ) : (
-                            <div className="overflow-x-auto rounded-xl border border-slate-100 max-h-72 overflow-y-auto">
-                              <table className="w-full border-collapse text-left text-[11px] font-semibold text-slate-700">
-                                <thead>
-                                  <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-black uppercase text-slate-500 tracking-wider">
-                                    <th className="p-3 w-16">Sl. No.</th>
-                                    <th className="p-3">Item Description</th>
-                                    <th className="p-3 w-28">Category</th>
-                                    <th className="p-3 w-28">Monthly Qty</th>
-                                    <th className="p-3 w-20">Unit</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 bg-white">
-                                  {showcaseItems.map((item, idx) => (
-                                    <tr key={item.id} className="hover:bg-slate-50/40">
-                                      <td className="p-3 font-bold text-slate-400">{item.serialNo || (idx + 1)}</td>
-                                      <td className="p-3 font-extrabold text-slate-900">{item.itemDescription}</td>
-                                      <td className="p-3">
-                                        {item.category ? (
-                                          <span className="bg-slate-100 text-slate-800 rounded px-1.5 py-0.5 text-[9px] font-bold">
-                                            {item.category}
-                                          </span>
-                                        ) : (
-                                          "-"
-                                        )}
-                                      </td>
-                                      <td className="p-3 text-slate-900 font-bold">{item.estimatedMonthlyRequirement || "-"}</td>
-                                      <td className="p-3 text-slate-500 font-bold">{item.unit || "-"}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
+                          <DataTable
+                            data={showcaseItems}
+                            columns={[
+                              {
+                                key: 'serialNo',
+                                header: 'Sl. No.',
+                                width: 'w-16',
+                                cell: (item: any, idx: number) => (
+                                  <span className="font-bold text-slate-400">{item.serialNo || (idx + 1)}</span>
+                                )
+                              },
+                              {
+                                key: 'itemDescription',
+                                header: 'Item Description',
+                                cell: (item: any) => (
+                                  <span className="font-extrabold text-slate-900">{item.itemDescription}</span>
+                                )
+                              },
+                              {
+                                key: 'category',
+                                header: 'Category',
+                                width: 'w-28',
+                                cell: (item: any) => (
+                                  item.category ? (
+                                    <span className="bg-slate-100 text-slate-800 rounded px-1.5 py-0.5 text-[9px] font-bold">
+                                      {item.category}
+                                    </span>
+                                  ) : (
+                                    "-"
+                                  )
+                                )
+                              },
+                              {
+                                key: 'estimatedMonthlyRequirement',
+                                header: 'Monthly Qty',
+                                width: 'w-28',
+                                cell: (item: any) => (
+                                  <span className="text-slate-900 font-bold">{item.estimatedMonthlyRequirement || "-"}</span>
+                                )
+                              },
+                              {
+                                key: 'unit',
+                                header: 'Unit',
+                                width: 'w-20',
+                                cell: (item: any) => (
+                                  <span className="text-slate-500 font-bold">{item.unit || "-"}</span>
+                                )
+                              }
+                            ]}
+                            keyExtractor={(item: any) => item.id}
+                            isLoading={showcaseItemsLoading}
+                            emptyTitle="No showcase items uploaded by this buyer."
+                            emptyDescription="This buyer has not listed any recurring requirements yet."
+                            rowClassName="hover:bg-slate-50/40 text-[11px]"
+                          />
                         </div>
                       </div>
                     </>

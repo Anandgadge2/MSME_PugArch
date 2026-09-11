@@ -59,31 +59,33 @@ import { cn } from '../../../lib/utils';
 import { getApi, postApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
 import { formatDate, formatDateTime as formatSharedDateTime } from '../../shared/format';
-import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { DataTable, type ColumnDef, type SortDirection } from '../../../components/ui/data-table';
 import { useQuery } from '@tanstack/react-query';
 import { sellerRoutes, buyerRoutes } from '@/lib/routes';
 import { CancelProcurementModal, type CancelTargetProcurement } from '../components/CancelProcurementModal';
 
+const procurementSkeletonColumns: ColumnDef<any>[] = [
+  { key: 'type', header: 'Type', width: 'w-32', cell: () => null },
+  { key: 'title', header: 'Title & Reference', width: 'w-96', cell: () => null },
+  { key: 'status', header: 'Status', width: 'w-36', cell: () => null },
+  { key: 'estimatedValue', header: 'Est. Value', width: 'w-36', cell: () => null },
+  { key: 'category', header: 'Category & Location', width: 'w-44', cell: () => null },
+  { key: 'updatedAt', header: 'Updated', width: 'w-32', cell: () => null },
+  { key: 'action', header: 'Action', align: 'right', width: 'w-32', cell: () => null }
+];
+
 function ProcurementsTableSkeleton() {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
-      <div className="space-y-2.5 p-2">
-        {Array.from({ length: 6 }).map((_, idx) => (
-          <div key={idx} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200/70 bg-white p-4 shadow-2xs">
-            <Skeleton className="h-6 w-8 rounded-md shrink-0" />
-            <Skeleton className="h-6 w-24 rounded-full shrink-0" />
-            <Skeleton className="h-4 w-24 shrink-0" />
-            <div className="flex-1 min-w-[200px] space-y-1.5">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-3 w-1/2" />
-            </div>
-            <Skeleton className="h-4 w-20 shrink-0" />
-            <Skeleton className="h-6 w-20 rounded-full shrink-0" />
-            <Skeleton className="h-8 w-20 rounded-xl shrink-0" />
-          </div>
-        ))}
-      </div>
-    </div>
+    <DataTable
+      data={[]}
+      columns={procurementSkeletonColumns}
+      isLoading={true}
+      skeletonRows={6}
+      showSrNo={true}
+      srNoHeader="Sr. No."
+      minWidth="min-w-[950px]"
+      keyExtractor={(_, idx) => idx}
+    />
   );
 }
 
@@ -730,6 +732,147 @@ export default function MyProcurementsPage() {
   const { page, pageSize, pageItems: pagedProcurements, total, setPage, setPageSize } = usePagination<NormalizedProcurement>(displayData, 10);
   const hasActiveFilters = !!(typeFilter || statusFilter || valueFilter || dateFilter || searchQuery);
 
+  const procurementColumns: ColumnDef<any>[] = useMemo(() => [
+    {
+      key: 'type',
+      header: 'Type',
+      sortable: true,
+      sortKey: 'type',
+      width: 'w-32',
+      cell: (p: any) => {
+        const typeVal = getConsolidatedType(p);
+        const TypeIcon = getTypeIcon(typeVal);
+        return (
+          <span className={cn(
+            "inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border transition-transform group-hover:scale-105",
+            TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
+          )}>
+            <TypeIcon className="h-3.5 w-3.5 shrink-0" />
+            {typeVal}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'title',
+      header: 'Title & Reference',
+      sortable: true,
+      sortKey: 'title',
+      width: 'w-96',
+      cell: (p: any) => (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+              {p.referenceNumber}
+            </span>
+          </div>
+          <p title={p.title} className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+            {p.title}
+          </p>
+          {p.description && (
+            <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">
+              {p.description}
+            </p>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortKey: 'status',
+      width: 'w-36',
+      cell: (p: any) => (
+        <span className={cn(
+          'inline-flex whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
+          p.statusGroup === 'draft' ? 'border-slate-200 bg-slate-50 text-slate-600' :
+            p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+              p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
+                p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                  'border-red-200 bg-red-50 text-red-700'
+        )}>
+          {p.statusLabel}
+        </span>
+      )
+    },
+    {
+      key: 'estimatedValue',
+      header: 'Est. Value',
+      sortable: true,
+      sortKey: 'estimatedValue',
+      width: 'w-36',
+      cell: (p: any) => (
+        <span className="text-xs font-extrabold text-slate-900 block">
+          {formatCurrency(p.estimatedValue)}
+        </span>
+      )
+    },
+    {
+      key: 'category',
+      header: 'Category & Location',
+      sortable: true,
+      sortKey: 'category',
+      width: 'w-44',
+      cell: (p: any) => (
+        <div className="space-y-1">
+          <span title={p.category || '—'} className="text-xs font-bold text-slate-600 line-clamp-1">{p.category || '—'}</span>
+          {p.deliveryLocation && (
+            <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-400">
+              <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
+              {p.deliveryLocation}
+            </span>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'updatedAt',
+      header: 'Updated',
+      sortable: true,
+      sortKey: 'updatedAt',
+      width: 'w-32',
+      cell: (p: any) => (
+        <span className="text-xs font-bold text-slate-500">
+          {formatDateTime(p.updatedAt)}
+        </span>
+      )
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      align: 'right',
+      width: 'w-32',
+      cell: (p: any) => (
+        <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+          {isProcurementCancellable(p) && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={e => handleOpenCancelModal(p, e)}
+              title={p.statusGroup === 'pending_approval' ? 'Withdraw Request' : 'Cancel Procurement'}
+              className="h-8 px-2.5 rounded-lg border-slate-200 text-rose-600 hover:bg-rose-50 hover:border-rose-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <Ban className="h-3.5 w-3.5" />
+              <span className="hidden xl:inline">
+                {p.statusGroup === 'pending_approval' ? 'Withdraw' : 'Cancel'}
+              </span>
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            onClick={e => openDetail(p, e)}
+            className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
+          >
+            View Details
+          </Button>
+        </div>
+      )
+    }
+  ], [sortKey, sortDir]);
+
   /* ═══════════════════════════════════════════════
      RENDER
      ═══════════════════════════════════════════════ */
@@ -910,138 +1053,26 @@ export default function MyProcurementsPage() {
         <div className="space-y-4">
           {/* ═══ LIST VIEW ═══ */}
           {viewMode === 'list' && (
-            <>
-              <div className="overflow-x-auto w-full max-w-full rounded-2xl border border-slate-200/80 bg-slate-50/20 p-2 shadow-sm">
-                <table className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left">
-                  <thead>
-                    <tr className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                      <th className="px-4 py-3 text-center w-16 select-none">Sr. No.</th>
-                      <th className="px-4 py-3 w-32"><SortableHeader label="Type" field="type" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 w-96"><SortableHeader label="Title & Reference" field="title" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 w-36"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 w-36"><SortableHeader label="Est. Value" field="estimatedValue" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 w-44"><SortableHeader label="Category & Location" field="category" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 w-32"><SortableHeader label="Updated" field="updatedAt" activeField={sortKey} direction={sortDir} onSort={handleSort} /></th>
-                      <th className="px-4 py-3 text-right w-32 select-none font-black">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pagedProcurements.map((p: any, idx) => {
-                      const typeVal = getConsolidatedType(p);
-                      const TypeIcon = getTypeIcon(typeVal);
-                      return (
-                        <tr
-                          key={`${p.type}-${p.id}`}
-                          className="group bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 hover:bg-slate-50/70 transition-all duration-300 ease-out align-middle cursor-pointer"
-                          onClick={() => openDetail(p)}
-                        >
-                          {/* Serial Number */}
-                          <td className="rounded-l-xl px-4 py-4 text-xs font-black text-slate-400 text-center">
-                            {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
-                          </td>
-
-                          {/* Type Badge */}
-                          <td className="px-4 py-4">
-                            <span className={cn(
-                              "inline-flex items-center gap-1.5 whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border transition-transform group-hover:scale-105",
-                              TYPE_BADGE_STYLES[typeVal] || 'border-slate-200 bg-slate-50 text-slate-700'
-                            )}>
-                              <TypeIcon className="h-3.5 w-3.5 shrink-0" />
-                              {typeVal}
-                            </span>
-                          </td>
-
-                          {/* Title & Reference */}
-                          <td className="px-4 py-4 space-y-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                {p.referenceNumber}
-                              </span>
-                            </div>
-                            <p title={p.title} className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
-                              {p.title}
-                            </p>
-                            {p.description && (
-                              <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">
-                                {p.description}
-                              </p>
-                            )}
-                          </td>
-
-                          {/* Status */}
-                          <td className="px-4 py-4">
-                            <span className={cn(
-                              'inline-flex whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
-                              p.statusGroup === 'draft' ? 'border-slate-200 bg-slate-50 text-slate-600' :
-                                p.statusGroup === 'pending_approval' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                                  p.statusGroup === 'active' ? 'border-sky-200 bg-sky-50 text-sky-700' :
-                                    p.statusGroup === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                                      'border-red-200 bg-red-50 text-red-700'
-                            )}>
-                              {p.statusLabel}
-                            </span>
-                          </td>
-
-                          {/* Est Value */}
-                          <td className="px-4 py-4">
-                            <span className="text-xs font-extrabold text-slate-900 block">
-                              {formatCurrency(p.estimatedValue)}
-                            </span>
-                          </td>
-
-                          {/* Category & Location */}
-                          <td className="px-4 py-4 space-y-1">
-                            <span title={p.category || '—'} className="text-xs font-bold text-slate-600 line-clamp-1">{p.category || '—'}</span>
-                            {p.deliveryLocation && (
-                              <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-400">
-                                <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
-                                {p.deliveryLocation}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Updated */}
-                          <td className="px-4 py-4 text-xs font-bold text-slate-500">
-                            {formatDateTime(p.updatedAt)}
-                          </td>
-
-                          {/* Action */}
-                          <td className="rounded-r-xl px-4 py-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              {isProcurementCancellable(p) && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={e => handleOpenCancelModal(p, e)}
-                                  title={p.statusGroup === 'pending_approval' ? 'Withdraw Request' : 'Cancel Procurement'}
-                                  className="h-8 px-2.5 rounded-lg border-slate-200 text-rose-600 hover:bg-rose-50 hover:border-rose-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Ban className="h-3.5 w-3.5" />
-                                  <span className="hidden xl:inline">
-                                    {p.statusGroup === 'pending_approval' ? 'Withdraw' : 'Cancel'}
-                                  </span>
-                                </Button>
-                              )}
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={e => openDetail(p, e)}
-                                className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
-                              >
-                                View Details
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-
-            </>
+            <DataTable
+              data={pagedProcurements}
+              columns={procurementColumns}
+              keyExtractor={(p: any) => `${p.type}-${p.id}`}
+              showSrNo={true}
+              srNoHeader="Sr. No."
+              minWidth="min-w-[950px]"
+              sortKey={sortKey}
+              sortDirection={sortDir}
+              onSort={(field) => handleSort(field as SortKey)}
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={[10, 20, 50]}
+              paginationLabel="procurements"
+              onRowClick={(p) => openDetail(p)}
+              rowClassName="group hover:bg-slate-50/70 transition-colors align-middle cursor-pointer"
+            />
           )}
 
           {/* ═══ GRID VIEW ═══ */}
@@ -1137,17 +1168,19 @@ export default function MyProcurementsPage() {
             </div>
           )}
 
-          {/* ═══ PAGINATION ═══ */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              label="procurements"
-            />
-          </div>
+          {/* ═══ PAGINATION (Grid View) ═══ */}
+          {viewMode === 'grid' && total > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                label="procurements"
+              />
+            </div>
+          )}
         </div>
       ) : (
         /* ── Empty State ── */
@@ -1393,6 +1426,185 @@ export function ProcurementDetailView({
       ? (Math.max(0, lastActiveIndex) / (timelineSteps.length - 1)) * 100
       : 0;
 
+  const boqColumns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'itemName',
+      header: 'Item Name & Description',
+      minWidth: 'min-w-[200px]',
+      cell: (item: any) => (
+        <div className="space-y-1">
+          <p className="font-bold text-slate-900 group-hover:text-blue-900 transition-colors">
+            {item.itemName}
+          </p>
+          {item.description && (
+            <p title={item.description} className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
+              {item.description}
+            </p>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'specifications',
+      header: 'Technical Specifications',
+      minWidth: 'min-w-[150px]',
+      cell: (item: any) => {
+        const spec = item.specifications || {};
+        return (
+          <span className="bg-slate-100/80 px-2 py-0.5 rounded text-slate-700 border border-slate-200/60 inline-block text-[11px]">
+            {spec.technicalSpecs || item.technicalSpecs || '—'}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'brand',
+      header: 'Brand / Make',
+      minWidth: 'min-w-[130px]',
+      cell: (item: any) => {
+        const spec = item.specifications || {};
+        return (
+          <div className="text-[11px] space-y-1 text-slate-700">
+            <div>
+              <span className="text-slate-400">Make:</span>{' '}
+              <span className="font-bold text-slate-800">
+                {spec.brand_preference || item.brand || 'Any Standard'}
+              </span>
+            </div>
+            <div className="text-[10px]">
+              <span className="text-slate-400">Alt Allowed:</span>{' '}
+              <span
+                className={cn(
+                  'font-bold px-1.5 py-0.2 rounded text-[10px]',
+                  spec.brand_flexible?.toLowerCase() === 'no'
+                    ? 'bg-rose-50 text-rose-700'
+                    : 'bg-emerald-50 text-emerald-700'
+                )}
+              >
+                {spec.brand_flexible?.toLowerCase() === 'no' ? 'No' : 'Yes'}
+              </span>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'tax',
+      header: 'HSN / Tax',
+      minWidth: 'min-w-[110px]',
+      cell: (item: any) => {
+        const spec = item.specifications || {};
+        const hsn = spec.hsn_sac_code || spec.hsn || '—';
+        const gst =
+          spec.gst !== undefined
+            ? `${spec.gst}%`
+            : spec.gstPercent
+            ? `${spec.gstPercent}%`
+            : '18%';
+        return (
+          <div className="text-[11px] space-y-0.5 text-slate-700">
+            <div className="font-mono text-slate-600">{hsn}</div>
+            <span className="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/60 font-bold text-[10px]">
+              GST {gst}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'quantity',
+      header: 'Quantity',
+      width: 'w-20',
+      align: 'center',
+      cell: (item: any) => {
+        const qty = Number(item.quantity || 1);
+        return (
+          <div className="text-center">
+            <p className="font-black text-slate-900">{qty}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase">
+              {item.unitOfMeasure || 'Nos'}
+            </p>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'unitPrice',
+      header: 'Unit Price',
+      width: 'w-28',
+      align: 'right',
+      cell: (item: any) => {
+        const unitPrice = item.estimatedUnitPrice || item.price || item.unitPrice || 0;
+        return (
+          <span className="font-semibold text-slate-800 tabular-nums">
+            {unitPrice ? formatCurrency(unitPrice) : '—'}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'totalPrice',
+      header: 'Total Amount',
+      width: 'w-28',
+      align: 'right',
+      headerClassName: 'bg-emerald-50/40',
+      cellClassName: 'bg-emerald-50/40',
+      cell: (item: any) => {
+        const unitPrice = item.estimatedUnitPrice || item.price || item.unitPrice || 0;
+        const qty = Number(item.quantity || 1);
+        const totalPrice = unitPrice ? unitPrice * qty : 0;
+        return (
+          <span className="font-black text-emerald-800 tabular-nums">
+            {totalPrice
+              ? formatCurrency(totalPrice)
+              : p.estimatedValue
+              ? formatCurrency(p.estimatedValue)
+              : '—'}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'warranty',
+      header: 'Warranty & SLA',
+      minWidth: 'min-w-[130px]',
+      align: 'center',
+      cell: (item: any) => {
+        const spec = item.specifications || {};
+        return (
+          <div className="text-center text-[11px] space-y-1 text-slate-600">
+            <div className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 text-[10px]">
+              {spec.warranty || '12M Warranty'}
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium">
+              {spec.deliverySchedule || 'Standard SLA'}
+            </div>
+          </div>
+        );
+      },
+    }
+  ], [p.estimatedValue]);
+
+  const itemsList = useMemo(() => {
+    if (p.items && p.items.length > 0) return p.items;
+    return [{
+      id: 'default-procurement-item',
+      itemName: p.title || 'Procurement Item',
+      description: p.description || '',
+      quantity: p.quantity || 1,
+      unitOfMeasure: 'Nos',
+      estimatedUnitPrice: p.estimatedValue || 0,
+      specifications: {
+        technicalSpecs: '—',
+        brand_preference: 'Any Standard',
+        brand_flexible: 'yes',
+        gst: 18,
+        warranty: '12M Warranty',
+        deliverySchedule: 'Standard SLA'
+      }
+    }];
+  }, [p.items, p.title, p.description, p.quantity, p.estimatedValue]);
+
   return (
     <div className="mx-auto w-full min-w-0 max-w-7xl space-y-4 pb-12 animate-in fade-in slide-in-from-bottom-3 duration-200">
       
@@ -1592,138 +1804,16 @@ export function ProcurementDetailView({
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-500 tracking-wider">
-              <tr>
-                <th className="px-3 py-2.5 w-10 text-center">#</th>
-                <th className="px-3 py-2.5 min-w-[200px]">Item Name & Description</th>
-                <th className="px-3 py-2.5 min-w-[150px]">Technical Specifications</th>
-                <th className="px-3 py-2.5 min-w-[130px]">Brand / Make</th>
-                <th className="px-3 py-2.5 min-w-[110px]">HSN / Tax</th>
-                <th className="px-3 py-2.5 w-20 text-center">Quantity</th>
-                <th className="px-3 py-2.5 w-28 text-right">Unit Price</th>
-                <th className="px-3 py-2.5 w-28 text-right bg-emerald-50/40">Total Amount</th>
-                <th className="px-3 py-2.5 min-w-[130px] text-center">Warranty & SLA</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {p.items && p.items.length > 0 ? (
-                p.items.map((item: any, idx: number) => {
-                  const spec = item.specifications || {};
-                  const unitPrice = item.estimatedUnitPrice || item.price || item.unitPrice || 0;
-                  const qty = Number(item.quantity || 1);
-                  const totalPrice = unitPrice ? unitPrice * qty : 0;
-                  const hsn = spec.hsn_sac_code || spec.hsn || '—';
-                  const gst =
-                    spec.gst !== undefined
-                      ? `${spec.gst}%`
-                      : spec.gstPercent
-                      ? `${spec.gstPercent}%`
-                      : '18%';
-
-                  return (
-                    <tr
-                      key={idx}
-                      className="hover:bg-blue-50/20 transition-colors align-top group"
-                    >
-                      <td className="px-3 py-3 text-center font-bold text-slate-400">
-                        {idx + 1}
-                      </td>
-                      <td className="px-3 py-3 space-y-1">
-                        <p className="font-bold text-slate-900 group-hover:text-blue-900 transition-colors">
-                          {item.itemName}
-                        </p>
-                        {item.description && (
-                          <p title={item.description} className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
-                            {item.description}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-[11px] text-slate-600">
-                        <span className="bg-slate-100/80 px-2 py-0.5 rounded text-slate-700 border border-slate-200/60 inline-block">
-                          {spec.technicalSpecs || item.technicalSpecs || 'Refer to BOQ'}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-[11px] space-y-1 text-slate-700">
-                        <div>
-                          <span className="text-slate-400">Make:</span>{' '}
-                          <span className="font-bold text-slate-800">
-                            {spec.brand_preference || item.brand || 'Any Standard'}
-                          </span>
-                        </div>
-                        <div className="text-[10px]">
-                          <span className="text-slate-400">Alt Allowed:</span>{' '}
-                          <span
-                            className={cn(
-                              'font-bold px-1.5 py-0.2 rounded text-[10px]',
-                              spec.brand_flexible?.toLowerCase() === 'no'
-                                ? 'bg-rose-50 text-rose-700'
-                                : 'bg-emerald-50 text-emerald-700'
-                            )}
-                          >
-                            {spec.brand_flexible?.toLowerCase() === 'no' ? 'No' : 'Yes'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-[11px] space-y-0.5 text-slate-700">
-                        <div className="font-mono text-slate-600">{hsn}</div>
-                        <span className="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/60 font-bold text-[10px]">
-                          GST {gst}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <p className="font-black text-slate-900">{qty}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">
-                          {item.unitOfMeasure || 'Nos'}
-                        </p>
-                      </td>
-                      <td className="px-3 py-3 text-right font-semibold text-slate-800 tabular-nums">
-                        {unitPrice ? formatCurrency(unitPrice) : '—'}
-                      </td>
-                      <td className="px-3 py-3 text-right font-black text-emerald-800 tabular-nums bg-emerald-50/40">
-                        {totalPrice
-                          ? formatCurrency(totalPrice)
-                          : p.estimatedValue
-                          ? formatCurrency(p.estimatedValue)
-                          : '—'}
-                      </td>
-                      <td className="px-3 py-3 text-center text-[11px] space-y-1 text-slate-600">
-                        <div className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 text-[10px]">
-                          {spec.warranty || '12M Warranty'}
-                        </div>
-                        <div className="text-[10px] text-slate-500 font-medium">
-                          {spec.deliverySchedule || 'Standard SLA'}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr className="hover:bg-slate-50/80">
-                  <td className="px-3 py-3 text-center font-bold text-slate-400">1</td>
-                  <td className="px-3 py-3">
-                    <p className="font-bold text-slate-900">{p.title || 'Procurement Item'}</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      {p.description || 'Standard procurement items'}
-                    </p>
-                  </td>
-                  <td className="px-3 py-3 text-[11px] text-slate-600">Refer to attached BOQ</td>
-                  <td className="px-3 py-3 text-[11px] text-slate-700">Any Standard Make</td>
-                  <td className="px-3 py-3 text-[11px] text-slate-700">GST 18%</td>
-                  <td className="px-3 py-3 text-center font-bold">{p.quantity || 1} Nos</td>
-                  <td className="px-3 py-3 text-right font-semibold">
-                    {p.estimatedValue ? formatCurrency(p.estimatedValue) : '—'}
-                  </td>
-                  <td className="px-3 py-3 text-right font-black text-emerald-800 bg-emerald-50/40">
-                    {p.estimatedValue ? formatCurrency(p.estimatedValue) : '—'}
-                  </td>
-                  <td className="px-3 py-3 text-center text-[11px] text-slate-600">12 Months</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          data={itemsList}
+          columns={boqColumns}
+          keyExtractor={(item: any, idx: number) => item.id || `boq-${idx}`}
+          showSrNo={true}
+          srNoHeader="#"
+          srNoWidth="w-10"
+          minWidth="min-w-[950px]"
+          rowClassName="hover:bg-blue-50/20 transition-colors align-top group"
+        />
       </section>
 
       {/* ── Rich Multi-Tonal Cards Grid ── */}

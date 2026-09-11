@@ -9,6 +9,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
 import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock, X } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
+import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
@@ -1367,6 +1368,98 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   const canCaptureMissingBankAfterApproval = isProfileLocked && currentSection === 'bank' && bankAccountsCount === 0;
   const shouldDisableProfileFields = isProfileLocked && !isAccountSettings && !canCaptureMissingBankAfterApproval;
 
+  const officeColumns: ColumnDef<any>[] = useMemo(() => [
+    {
+      key: 'name',
+      header: 'Office',
+      width: 'w-1/4',
+      sortable: true,
+      sortKey: 'name',
+      cell: (office: any) => (
+        <div className="text-slate-600 break-words max-w-[180px]">
+          <div className="font-semibold text-slate-800">{office.name}</div>
+          <div className="text-xs text-slate-400">{office.type}</div>
+        </div>
+      )
+    },
+    {
+      key: 'address',
+      header: 'Address',
+      width: 'w-1/2',
+      sortable: true,
+      sortKey: 'address',
+      cell: (office: any) => (
+        <div className="text-slate-600 whitespace-normal break-words max-w-[300px]">
+          {office.address}, {office.city}, {office.state} - {office.pincode}
+        </div>
+      )
+    },
+    {
+      key: 'action',
+      header: 'ACTION',
+      align: 'right',
+      cell: (office: any) => (
+        <div className="flex items-center justify-end gap-3">
+          <button type="button" onClick={() => handleEditOffice(office)} className="text-[#12335f] hover:text-[#0b2445] font-bold text-xs uppercase">EDIT</button>
+          <button type="button" onClick={() => handleDeleteOffice(office.id)} className="text-red-500 hover:text-red-700 font-bold text-xs uppercase">DELETE</button>
+        </div>
+      )
+    }
+  ], []);
+
+  const bankColumns: ColumnDef<any>[] = useMemo(() => [
+    {
+      key: 'ifsc',
+      header: 'IFSC',
+      sortable: true,
+      sortKey: 'ifsc',
+      cell: (bank: any) => <span className="font-mono font-medium text-slate-700">{bank.ifsc}</span>
+    },
+    {
+      key: 'bankName',
+      header: 'Bank Name',
+      sortable: true,
+      sortKey: 'bankName',
+      cell: (bank: any) => <span className="break-words max-w-[150px]">{bank.bankName}</span>
+    },
+    {
+      key: 'accountNumber',
+      header: 'Bank Account Number',
+      sortable: true,
+      sortKey: 'accountNumber',
+      cell: (bank: any) => <span className="break-all font-mono">{bankAccountDisplay(bank)}</span>
+    },
+    {
+      key: 'holderName',
+      header: 'Account Holder',
+      sortable: true,
+      sortKey: 'holderName',
+      cell: (bank: any) => <span className="break-words max-w-[150px]">{bank.holderName || '-'}</span>
+    },
+    {
+      key: 'primary',
+      header: 'Primary',
+      sortable: true,
+      sortKey: 'primary',
+      cell: (bank: any) => (
+        <span className={bank.isPrimary ? "font-bold text-emerald-700" : "text-slate-500"}>
+          {bank.isPrimary ? 'Yes' : 'No'}
+        </span>
+      )
+    },
+    {
+      key: 'action',
+      header: 'ACTION',
+      align: 'right',
+      cell: (bank: any) => (
+        <div className="flex items-center justify-end gap-3">
+          <button type="button" onClick={() => handleEditBank(bank)} className="text-indigo-600 hover:text-indigo-800 font-bold text-xs uppercase">Edit</button>
+          <button type="button" onClick={() => handleDeleteBank(bank.id)} className="text-red-500 hover:text-red-700 font-bold text-xs uppercase">Delete</button>
+        </div>
+      )
+    }
+  ], []);
+
   if (isFetching) return <div className="flex h-screen items-center justify-center font-black  text-[#12335f] animate-pulse">Loading profile...</div>;
 
   return (
@@ -1803,52 +1896,22 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                         <div className="pt-4 space-y-6 animate-in fade-in min-w-0 w-full">
                           <p className="text-sm text-gray-700">You need to update your GSTIN for getting the order above 40 lakhs.</p>
 
-                          <div className="overflow-x-auto border border-gray-200 bg-white rounded-xl w-full">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full text-left text-sm min-w-[600px]">
-                              <thead className="bg-gray-50 border-b border-gray-200">
-                                <tr>
-                                  <th className="px-4 py-4 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight">Sr. No.</th>
-                                  <th className="px-4 py-4 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight w-1/4"><button type="button" onClick={() => setOfficeSortKey('name')} className="inline-flex items-center">Office <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" /></button></th>
-                                  <th className="px-4 py-4 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight w-1/2"><button type="button" onClick={() => setOfficeSortKey('address')} className="inline-flex items-center">Address <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" /></button></th>
-
-                                  <th className="px-4 py-4 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight">ACTION</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {formData.offices.length === 0 ? (
-                                  <tr>
-                                    <td colSpan={5} className="py-6 px-0 text-gray-500">
-                                      <div className="flex flex-col sm:flex-row justify-between items-center gap-2.5 sm:gap-3 px-6">
-                                        <span className="text-xs sm:text-sm">No offices added.</span>
-                                        <button onClick={() => { setOfficeTab('add'); resetOfficeForm(); }} className="text-[#12335f] font-bold hover:underline uppercase text-[10px] sm:text-xs">ADD NEW OFFICE</button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ) : (
-                                  [...formData.offices].sort((a: any, b: any) => String(officeSortKey === 'address' ? a.address : officeSortKey === 'gst' ? a.gstNumber || '' : a.name || '').localeCompare(String(officeSortKey === 'address' ? b.address : officeSortKey === 'gst' ? b.gstNumber || '' : b.name || ''))).map((office: any, index: number) => (
-                                    <tr key={office.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
-                                      <td className="px-4 py-4 font-mono text-xs font-bold text-gray-400">{String(index + 1).padStart(2, '0')}</td>
-                                      <td className="px-4 py-4 text-gray-600 break-words max-w-[180px]">
-                                        <div className="font-semibold">{office.name}</div>
-                                        <div className="text-xs text-gray-400">{office.type}</div>
-                                      </td>
-                                      <td className="px-4 py-4 text-gray-600 whitespace-normal break-words max-w-[300px]">
-                                        {office.address}, {office.city}, {office.state} - {office.pincode}
-                                      </td>
-                                      {/* <td className="px-4 py-4 text-gray-600 break-all">-</td> */}
-                                      <td className="px-4 py-4">
-                                        <button onClick={() => handleEditOffice(office)} className="text-[#12335f] hover:text-[#0b2445] font-bold text-xs uppercase mr-4">EDIT</button>
-                                        <button onClick={() => handleDeleteOffice(office.id)} className="text-red-500 hover:text-red-700 font-bold text-xs uppercase">DELETE</button>
-                                      </td>
-                                    </tr>
-                                  ))
-                                )}
-                              </tbody>
-                            </table>
-</div>
+                          <div className="space-y-3 w-full">
+                            <DataTable
+                              data={[...formData.offices].sort((a: any, b: any) => String(officeSortKey === 'address' ? a.address : officeSortKey === 'gst' ? a.gstNumber || '' : a.name || '').localeCompare(String(officeSortKey === 'address' ? b.address : officeSortKey === 'gst' ? b.gstNumber || '' : b.name || '')))}
+                              columns={officeColumns}
+                              keyExtractor={(office: any, idx) => office.id || idx}
+                              showSrNo={true}
+                              srNoHeader="Sr. No."
+                              minWidth="min-w-[600px]"
+                              sortKey={officeSortKey}
+                              sortDirection="asc"
+                              onSort={(field) => setOfficeSortKey(field as any)}
+                              emptyTitle="No offices added."
+                              emptyDescription="Add your office locations for order fulfillment."
+                            />
                             {formData.offices.length > 0 && (
-                              <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
+                              <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
                                 <span className="text-sm text-gray-600">{formData.offices.length} of {formData.offices.length} Office Location displayed.</span>
                                 <button onClick={() => { setOfficeTab('add'); resetOfficeForm(); }} className="text-[#12335f] font-bold hover:underline uppercase text-xs">ADD NEW OFFICE</button>
                               </div>
@@ -1999,54 +2062,19 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                       {bankTab === 'manage' && (
                         <div className="pt-4 space-y-6 animate-in fade-in min-w-0 w-full">
 
-                          <div className="overflow-x-auto border border-gray-200 bg-white rounded-xl w-full">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full text-left text-sm min-w-[640px]">
-                              <thead className="bg-gray-50 border-b border-gray-200">
-                                <tr>
-                                  <th className="px-3 py-3 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight">Sr. No.</th>
-                                  <th className="px-3 py-3 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight"><button type="button" onClick={() => setBankSortKey('ifsc')} className="inline-flex items-center">IFSC <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" /></button></th>
-                                  <th className="px-3 py-3 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight"><button type="button" onClick={() => setBankSortKey('bankName')} className="inline-flex items-center">Bank Name <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" /></button></th>
-                                  <th className="px-3 py-3 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight"><button type="button" onClick={() => setBankSortKey('accountNumber')} className="inline-flex items-center">Bank Account Number <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" /></button></th>
-                                  <th className="px-3 py-3 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight"><button type="button" onClick={() => setBankSortKey('holderName')} className="inline-flex items-center">Account Holder <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" /></button></th>
-                                  {/* <th className="px-3 py-3 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight"><button type="button" onClick={() => setBankSortKey('pfms')} className="inline-flex items-center">PFMS <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" /></button></th> */}
-                                  <th className="px-3 py-3 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight"><button type="button" onClick={() => setBankSortKey('primary')} className="inline-flex items-center">Primary <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" /></button></th>
-                                  <th className="px-3 py-3 font-semibold text-gray-800 text-[10px] sm:text-xs uppercase tracking-wider whitespace-normal leading-tight">ACTION</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {normalizeList(formData.bankAccounts).length === 0 ? (
-                                  <tr>
-                                    <td colSpan={8} className="py-6 px-0 text-gray-500">
-                                      <div className="flex flex-col sm:flex-row justify-between items-center gap-2.5 sm:gap-3 px-6">
-                                        <span className="text-xs sm:text-sm">No accounts added.</span>
-                                        <button onClick={() => setBankTab('add')} className="text-[#12335f] font-bold hover:underline uppercase text-[10px] sm:text-xs">ADD NEW BANK ACCOUNT</button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ) : (
-                                  [...normalizeList(formData.bankAccounts)].sort((a: any, b: any) => String(a[bankSortKey] ?? '').localeCompare(String(b[bankSortKey] ?? ''))).map((bank: any, index: number) => (
-                                    <tr key={bank.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors text-xs">
-                                      <td className="px-3 py-3 font-mono font-bold text-gray-400">{String(index + 1).padStart(2, '0')}</td>
-                                      <td className="px-3 py-3 text-gray-600 font-medium">{bank.ifsc}</td>
-                                      <td className="px-3 py-3 text-gray-600 break-words max-w-[150px]">{bank.bankName}</td>
-                                      <td className="px-3 py-3 text-gray-600 break-all font-mono">{bankAccountDisplay(bank)}</td>
-                                      <td className="px-3 py-3 text-gray-600 break-words max-w-[150px]">{bank.holderName || '-'}</td>
-                                      {/*  <td className="px-3 py-3 text-gray-600">-</td>*/}
-                                      <td className="px-3 py-3 text-gray-600">{bank.isPrimary ? 'Yes' : 'No'}</td>
-                                      <td className="px-3 py-3">
-                                        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
-                                          <button onClick={() => handleEditBank(bank)} className="text-indigo-600 hover:text-indigo-800 font-bold text-[10px] uppercase">Edit</button>
-                                          <button onClick={() => handleDeleteBank(bank.id)} className="text-red-500 hover:text-red-700 font-bold text-[10px] uppercase">Delete</button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))
-                                )}
-                              </tbody>
-                            </table>
-</div>
-                          </div>
+                          <DataTable
+                            data={[...normalizeList(formData.bankAccounts)].sort((a: any, b: any) => String(a[bankSortKey] ?? '').localeCompare(String(b[bankSortKey] ?? '')))}
+                            columns={bankColumns}
+                            keyExtractor={(bank: any, idx) => bank.id || idx}
+                            showSrNo={true}
+                            srNoHeader="Sr. No."
+                            minWidth="min-w-[640px]"
+                            sortKey={bankSortKey}
+                            sortDirection="asc"
+                            onSort={(field) => setBankSortKey(field as any)}
+                            emptyTitle="No accounts added."
+                            emptyDescription="Add verified bank accounts for escrow and payment settlements."
+                          />
                           <div className="flex justify-end pt-4">
                             <Button onClick={() => {
                               if (normalizeList(formData.bankAccounts).length === 0) {

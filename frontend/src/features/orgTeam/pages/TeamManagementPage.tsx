@@ -22,8 +22,9 @@ import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
-import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../../shared/hooks';
+import { DataTable, ColumnDef, type SortDirection } from '../../../components/ui/data-table';
+import { TableSkeleton } from '../../../components/ui/skeleton';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { validateRequiredText } from '../../../lib/validation';
@@ -120,30 +121,8 @@ const MemberGridSkeleton = () => (
 );
 
 const MemberTableSkeleton = () => (
-    <div className="overflow-x-auto">
-        <table className="w-full min-w-[800px] text-sm">
-            <thead className="border-b border-slate-100 bg-slate-50/60">
-                <tr>
-                    {Array.from({ length: 8 }).map((_, i) => (
-                        <th key={i} className="px-4 py-3"><div className="h-3 w-16 bg-slate-200 rounded animate-pulse" /></th>
-                    ))}
-                </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-                {Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i} className="animate-pulse">
-                        <td className="px-4 py-3"><div className="h-3 w-6 bg-slate-100 rounded" /></td>
-                        <td className="px-4 py-3 space-y-2"><div className="h-4 w-24 bg-slate-200 rounded" /><div className="h-3 w-32 bg-slate-100 rounded" /></td>
-                        <td className="px-4 py-3"><div className="h-3 w-40 bg-slate-100 rounded" /></td>
-                        <td className="px-4 py-3"><div className="h-5 w-20 bg-slate-100 rounded-md" /></td>
-                        <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-md" /></td>
-                        <td className="px-4 py-3 space-y-2"><div className="h-3 w-20 bg-slate-100 rounded" /><div className="h-2 w-16 bg-slate-50 rounded" /></td>
-                        <td className="px-4 py-3 space-y-2"><div className="h-3 w-20 bg-slate-100 rounded" /><div className="h-2 w-16 bg-slate-50 rounded" /></td>
-                        <td className="px-4 py-3 text-right"><div className="inline-flex gap-2"><div className="h-8 w-8 bg-slate-100 rounded-md" /><div className="h-8 w-8 bg-slate-100 rounded-md" /></div></td>
-                    </tr>
-                ))}
-            </tbody>
-        </table>
+    <div className="p-4">
+        <TableSkeleton rows={5} cols={8} />
     </div>
 );
 
@@ -400,6 +379,102 @@ export default function TeamManagementPage() {
         </>
     );
 
+    const memberColumns = useMemo<ColumnDef<Member>[]>(() => [
+        {
+            key: 'name',
+            header: 'Member',
+            sortable: true,
+            sortKey: 'name',
+            width: 'w-[24%]',
+            cell: (member) => (
+                <div>
+                    <EntityIdLink label={`MBR-${member.userId}`} id={member.userId} size="sm" onClick={() => { }} />
+                    <p className="mt-1 text-sm font-black text-slate-900 text-wrap-anywhere">{member.user.name}</p>
+                    {member.user.mobile && (
+                        <p className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                            <Phone className="h-2.5 w-2.5" /> {member.user.mobile}
+                        </p>
+                    )}
+                </div>
+            )
+        },
+        {
+            key: 'email',
+            header: 'Email',
+            sortable: true,
+            sortKey: 'email',
+            width: 'w-[20%]',
+            cell: (member) => (
+                <span className="text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{member.user.email}</span>
+            )
+        },
+        {
+            key: 'role',
+            header: 'Role',
+            sortable: true,
+            sortKey: 'role',
+            width: 'w-[16%]',
+            cell: (member) => (
+                <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>
+                    {member.customRole?.name || member.orgRole.replace(/_/g, ' ')}
+                </span>
+            )
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            sortable: true,
+            sortKey: 'status',
+            width: 'w-[12%]',
+            cell: (member) => (
+                <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${member.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+                    {member.isActive ? 'Active' : 'Inactive'}
+                </span>
+            )
+        },
+        {
+            key: 'joined',
+            header: 'Joined',
+            sortable: true,
+            sortKey: 'joined',
+            width: 'w-[14%]',
+            cell: (member) => (
+                <div className="text-xs font-semibold text-slate-700">
+                    <p>{formatDateTime(member.acceptedAt || member.invitedAt)}</p>
+                    <p className="text-[10px] text-slate-400">{formatRelative(member.acceptedAt || member.invitedAt)}</p>
+                </div>
+            )
+        },
+        {
+            key: 'lastLogin',
+            header: 'Last Login',
+            sortable: true,
+            sortKey: 'lastLogin',
+            width: 'w-[14%]',
+            cell: (member) => (
+                <div className="text-xs font-semibold text-slate-500">
+                    {member.user.lastLoginAt ? (
+                        <>
+                            <p>{formatDateTime(member.user.lastLoginAt)}</p>
+                            <p className="text-[10px] text-slate-400">{formatRelative(member.user.lastLoginAt)}</p>
+                        </>
+                    ) : '—'}
+                </div>
+            )
+        },
+        {
+            key: 'actions',
+            header: 'Actions',
+            width: 'w-32',
+            align: 'right',
+            cell: (member) => (
+                <div className="text-right" onClick={e => e.stopPropagation()}>
+                    {renderMemberActions(member)}
+                </div>
+            )
+        }
+    ], [user?.id, canAssignRoles, canDisableMembers]);
+
     if (permissionsLoading) {
         return <LoadingState label="Checking team access..." />;
     }
@@ -627,67 +702,24 @@ export default function TeamManagementPage() {
                             </div>
                         </div>
                     ) : (
-                        <>
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[800px] text-sm">
-                                <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                    <tr>
-                                        <th className="px-4 py-2.5 text-left w-12">#</th>
-                                        <th className="px-4 py-2.5 text-left"><SortableHeader label="Member" field="name" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left w-56"><SortableHeader label="Email" field="email" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left w-48"><SortableHeader label="Role" field="role" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left w-32"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left w-44"><SortableHeader label="Joined" field="joined" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-left w-44"><SortableHeader label="Last Login" field="lastLogin" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                        <th className="px-4 py-2.5 text-right w-32">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {pageItems.map((member, idx) => (
-                                        <tr key={member.id} className="hover:bg-slate-50/60">
-                                            <td className="px-4 py-3 text-xs font-mono text-slate-400">{String((page - 1) * pageSize + idx + 1).padStart(2, '0')}</td>
-                                            <td className="px-4 py-3">
-                                                <EntityIdLink label={`MBR-${member.userId}`} id={member.userId} size="sm" onClick={() => { }} />
-                                                <p className="mt-1 text-sm font-black text-slate-900 text-wrap-anywhere">{member.user.name}</p>
-                                                {member.user.mobile && (
-                                                    <p className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
-                                                        <Phone className="h-2.5 w-2.5" /> {member.user.mobile}
-                                                    </p>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-[10px] font-semibold text-slate-500 text-wrap-anywhere">{member.user.email}</td>
-                                            <td className="px-4 py-3">
-                                                <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${roleBadgeClass}`}>
-                                                    {member.customRole?.name || member.orgRole.replace(/_/g, ' ')}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${member.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
-                                                    {member.isActive ? 'Active' : 'Inactive'}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3 text-xs font-semibold text-slate-700">
-                                                <p>{formatDateTime(member.acceptedAt || member.invitedAt)}</p>
-                                                <p className="text-[10px] text-slate-400">{formatRelative(member.acceptedAt || member.invitedAt)}</p>
-                                            </td>
-                                            <td className="px-4 py-3 text-xs font-semibold text-slate-500">
-                                                {member.user.lastLoginAt ? (
-                                                    <>
-                                                        <p>{formatDateTime(member.user.lastLoginAt)}</p>
-                                                        <p className="text-[10px] text-slate-400">{formatRelative(member.user.lastLoginAt)}</p>
-                                                    </>
-                                                ) : '—'}
-                                            </td>
-                                            <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                                                {renderMemberActions(member)}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="members" />
-                        </>
+                        <DataTable<Member>
+                            data={pageItems}
+                            columns={memberColumns}
+                            keyExtractor={(member) => member.id}
+                            sortKey={sortKey}
+                            sortDirection={sortDirection}
+                            onSort={(field) => toggleSort(field as MemberSortKey)}
+                            page={page}
+                            pageSize={pageSize}
+                            total={total}
+                            onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
+                            paginationLabel="members"
+                            showSrNo={true}
+                            srNoHeader="#"
+                            srNoWidth="w-12"
+                            minWidth="min-w-[800px]"
+                        />
                     )}
                 </CardContent>
             </Card>}

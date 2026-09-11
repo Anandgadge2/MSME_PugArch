@@ -23,6 +23,7 @@ import { Button } from '../../../components/ui/button';
 import { reverseAuctionApi, type ReverseAuction, type ReverseAuctionParticipant } from '../api';
 import { toast } from 'sonner';
 import { formatTime } from '../../shared/format';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 export interface LiveAuctionLeaderboardProps {
   auctionId: number;
@@ -174,6 +175,94 @@ export default function LiveAuctionLeaderboard({
   });
 
   const l1Winner = sortedParticipants[0];
+
+  const leaderboardColumns = React.useMemo<ColumnDef<ReverseAuctionParticipant>[]>(() => [
+    {
+      key: 'rank',
+      header: 'Rank',
+      width: 'w-[15%]',
+      cell: (part, idx) => {
+        const rank = part.currentRank || idx + 1;
+        const isL1 = rank === 1;
+        return (
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black ${
+              isL1
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                : rank === 2
+                ? 'bg-slate-200 text-slate-800'
+                : rank === 3
+                ? 'bg-amber-50 text-amber-800'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {isL1 ? '🥇 L1' : rank === 2 ? '🥈 L2' : rank === 3 ? '🥉 L3' : `L${rank}`}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'vendor',
+      header: 'Vendor Organization',
+      width: 'w-[35%]',
+      cell: (part) => (
+        <span className="text-slate-900 font-black">
+          {part.sellerOrgName || `Vendor #${part.sellerOrgId}`}
+        </span>
+      )
+    },
+    {
+      key: 'bestBid',
+      header: 'Best Bid (INR)',
+      width: 'w-[20%]',
+      cell: (part) => {
+        const amount = Number(part.lastBidAmount || 0);
+        const isL1 = (part.currentRank || 1) === 1;
+        return (
+          <span className={`text-xs font-black ${isL1 ? 'text-emerald-700' : 'text-slate-900'}`}>
+            {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : 'Awaiting Bid'}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'savings',
+      header: 'Savings from Opening',
+      width: 'w-[18%]',
+      cell: (part) => {
+        const amount = Number(part.lastBidAmount || 0);
+        const diffFromStart = startPrice > amount && amount > 0 ? startPrice - amount : 0;
+        return diffFromStart > 0 ? (
+          <span className="text-emerald-600 font-bold text-[11px]">
+            -₹{diffFromStart.toLocaleString('en-IN')}
+          </span>
+        ) : (
+          <span className="text-slate-500">Opening Level</span>
+        );
+      }
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-[12%]',
+      align: 'right',
+      cell: (part, idx) => {
+        const rank = part.currentRank || idx + 1;
+        const isL1 = rank === 1;
+        return (
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase ${
+              isL1
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {isL1 ? 'Winning Lead' : 'Participating'}
+          </span>
+        );
+      }
+    }
+  ], [startPrice]);
 
   return (
     <section className="rounded-3xl border border-slate-200/80 bg-white shadow-md overflow-hidden space-y-6 p-6">
@@ -359,92 +448,18 @@ export default function LiveAuctionLeaderboard({
         <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
           <Trophy className="h-4 w-4 text-amber-500" /> Live Bid Ranking Leaderboard
         </h3>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/90 border-b border-slate-200">
-                <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3">Rank</th>
-                  <th className="px-4 py-3">Vendor Organization</th>
-                  <th className="px-4 py-3">Best Bid (INR)</th>
-                  <th className="px-4 py-3">Savings from Opening</th>
-                  <th className="px-4 py-3 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                {sortedParticipants.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-400 font-medium">
-                      No participating vendors recorded yet.
-                    </td>
-                  </tr>
-                ) : (
-                  sortedParticipants.map((part, idx) => {
-                    const rank = part.currentRank || idx + 1;
-                    const amount = Number(part.lastBidAmount || 0);
-                    const isL1 = rank === 1;
-                    const diffFromStart = startPrice > amount && amount > 0 ? startPrice - amount : 0;
-
-                    return (
-                      <tr
-                        key={part.id || idx}
-                        className={`transition ${
-                          isL1
-                            ? 'bg-emerald-50/40 hover:bg-emerald-50/70 font-bold'
-                            : 'hover:bg-slate-50'
-                        }`}
-                      >
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black ${
-                              isL1
-                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                : rank === 2
-                                ? 'bg-slate-200 text-slate-800'
-                                : rank === 3
-                                ? 'bg-amber-50 text-amber-800'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {isL1 ? '🥇 L1' : rank === 2 ? '🥈 L2' : rank === 3 ? '🥉 L3' : `L${rank}`}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-900 font-black">
-                          {part.sellerOrgName || `Vendor #${part.sellerOrgId}`}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs font-black ${isL1 ? 'text-emerald-700' : 'text-slate-900'}`}>
-                            {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : 'Awaiting Bid'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-500">
-                          {diffFromStart > 0 ? (
-                            <span className="text-emerald-600 font-bold text-[11px]">
-                              -₹{diffFromStart.toLocaleString('en-IN')}
-                            </span>
-                          ) : (
-                            'Opening Level'
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase ${
-                              isL1
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {isL1 ? 'Winning Lead' : 'Participating'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable<ReverseAuctionParticipant>
+          columns={leaderboardColumns}
+          data={sortedParticipants}
+          keyExtractor={(part, idx) => String(part.id || idx)}
+          emptyTitle="No participating vendors"
+          emptyDescription="No participating vendors recorded yet."
+          minWidth="min-w-[640px]"
+          rowClassName={(part, idx) => {
+            const rank = part.currentRank || idx + 1;
+            return rank === 1 ? 'bg-emerald-50/40 font-bold' : '';
+          }}
+        />
       </div>
 
       {/* Real-time Bid Activity Stream */}

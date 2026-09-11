@@ -28,6 +28,7 @@ import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
+import { DataTable, type ColumnDef } from '../../../components/ui/data-table';
 
 function buyerLogo(buyer: any) {
     const profile = buyer.profile || {};
@@ -87,40 +88,110 @@ function BuyerLogoImage({
     );
 }
 
+const buyerColumns: ColumnDef<any>[] = [
+    {
+        key: 'organization',
+        header: 'Buyer Organization',
+        width: 'min-w-[250px]',
+        cell: (buyer: any) => {
+            const logo = buyerLogo(buyer);
+            const initialsText = initials(buyer.organizationName);
+            const initialsBg = getInitialsBg(buyer.id);
+            const profileHref = `/buyer-requirements/${buyer.id}`;
+            return (
+                <div className="flex items-center gap-3.5">
+                    <Link href={profileHref} className="shrink-0">
+                        <div className="flex h-14 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-2 group-hover:border-[#0b2447] group-hover:shadow-xs transition-all">
+                            <BuyerLogoImage
+                                logo={logo}
+                                name={buyer.organizationName}
+                                orgInitials={initialsText}
+                                initialsBg={initialsBg}
+                            />
+                        </div>
+                    </Link>
+                    <Link href={profileHref} className="font-extrabold text-slate-900 hover:text-[#0b2447] transition-colors leading-snug">
+                        {buyer.organizationName}
+                    </Link>
+                </div>
+            );
+        }
+    },
+    {
+        key: 'location',
+        header: 'Location',
+        width: 'min-w-[180px]',
+        cell: (buyer: any) => {
+            const profile = buyer.profile || {};
+            const location = Array.from(new Set([buyer.city, buyer.district, buyer.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
+            return (
+                <div className="flex items-center gap-1.5 text-slate-600 text-xs">
+                    <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <span className="leading-snug">{location || '—'}</span>
+                </div>
+            );
+        }
+    },
+    {
+        key: 'type',
+        header: 'Type',
+        cell: (buyer: any) => (
+            <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">
+                {buyer.organizationType ? String(buyer.organizationType).replace(/_/g, ' ') : 'ENTERPRISE'}
+            </span>
+        )
+    },
+    {
+        key: 'requirements',
+        header: 'Requirements',
+        cell: (buyer: any) => {
+            const requirements = buyer._count?.buyerRequirements || 0;
+            return (
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50/90 border border-blue-100 px-2.5 py-0.5 text-[11px] font-bold text-[#0b2447]">
+                    {requirements} Published
+                </span>
+            );
+        }
+    },
+    {
+        key: 'verification',
+        header: 'Verification',
+        cell: () => (
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                <BadgeCheck className="h-3 w-3 text-emerald-500" /> Verified
+            </span>
+        )
+    },
+    {
+        key: 'action',
+        header: 'Action',
+        align: 'right',
+        cell: (buyer: any) => {
+            const profileHref = `/buyer-requirements/${buyer.id}`;
+            return (
+                <Link
+                    href={profileHref}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3.5 py-1.5 text-xs font-bold text-slate-700 shadow-xs transition-all hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] active:scale-95"
+                >
+                    <Eye className="h-3.5 w-3.5" /> View
+                </Link>
+            );
+        }
+    }
+];
+
 function BuyersSkeleton({ viewMode }: { viewMode: 'grid' | 'list' }) {
     if (viewMode === 'list') {
         return (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-2xs">
-                <table className="w-full text-left text-sm">
-                    <thead className="border-b border-slate-200 bg-slate-50">
-                        <tr>
-                            <th className="px-4 py-3 sm:px-6 min-w-[240px]"><Skeleton className="h-4 w-32" /></th>
-                            <th className="px-4 py-3 sm:px-6 min-w-[180px]"><Skeleton className="h-4 w-24" /></th>
-                            <th className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-20" /></th>
-                            <th className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-20" /></th>
-                            <th className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-16" /></th>
-                            <th className="px-4 py-3 sm:px-6 text-right"><Skeleton className="h-4 w-20 ml-auto" /></th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {Array.from({ length: 6 }).map((_, idx) => (
-                            <tr key={idx}>
-                                <td className="px-4 py-3 sm:px-6">
-                                    <div className="flex items-center gap-3">
-                                        <Skeleton className="h-12 w-24 rounded-xl shrink-0" />
-                                        <Skeleton className="h-4 w-40" />
-                                    </div>
-                                </td>
-                                <td className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-32" /></td>
-                                <td className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-20" /></td>
-                                <td className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-16" /></td>
-                                <td className="px-4 py-3 sm:px-6"><Skeleton className="h-4 w-16 rounded-full" /></td>
-                                <td className="px-4 py-3 sm:px-6 text-right"><Skeleton className="h-8 w-20 rounded-lg ml-auto" /></td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+            <DataTable
+                data={[]}
+                columns={buyerColumns}
+                isLoading={true}
+                skeletonRows={6}
+                showSrNo={false}
+                keyExtractor={(_, idx) => idx}
+                minWidth="min-w-[850px]"
+            />
         );
     }
 
@@ -350,84 +421,23 @@ export default function MarketplaceBuyersPage() {
                         <p className="mt-2 text-sm font-medium text-slate-500">Try adjusting the filters or searching for a different name or city.</p>
                     </div>
                 ) : (
-                    <div className="space-y-6">
+                    <>
                         {viewMode === 'list' ? (
-                            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-2xs">
-                                <table className="w-full text-left text-sm">
-                                    <thead className="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                        <tr>
-                                            <th className="px-4 py-3 sm:px-6 min-w-[250px]">Buyer Organization</th>
-                                            <th className="px-4 py-3 sm:px-6 min-w-[180px]">Location</th>
-                                            <th className="px-4 py-3 sm:px-6">Type</th>
-                                            <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Requirements</th>
-                                            <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Verification</th>
-                                            <th className="px-4 py-3 sm:px-6 text-right whitespace-nowrap">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {pagedBuyers.map((buyer: any) => {
-                                            const profile = buyer.profile || {};
-                                            const location = Array.from(new Set([buyer.city, buyer.district, buyer.state, profile.city, profile.district, profile.state].filter(Boolean))).join(', ');
-                                            const requirements = buyer._count?.buyerRequirements || 0;
-                                            const logo = buyerLogo(buyer);
-                                            const initialsText = initials(buyer.organizationName);
-                                            const initialsBg = getInitialsBg(buyer.id);
-                                            const profileHref = `/buyer-requirements/${buyer.id}`;
-
-                                            return (
-                                                <tr key={buyer.id} className="hover:bg-blue-50/40 transition-colors group">
-                                                    <td className="px-4 py-3 sm:px-6">
-                                                        <div className="flex items-center gap-3.5">
-                                                            <Link href={profileHref} className="shrink-0">
-                                                                <div className="flex h-14 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-2 group-hover:border-[#0b2447] group-hover:shadow-xs transition-all">
-                                                                    <BuyerLogoImage
-                                                                        logo={logo}
-                                                                        name={buyer.organizationName}
-                                                                        orgInitials={initialsText}
-                                                                        initialsBg={initialsBg}
-                                                                    />
-                                                                </div>
-                                                            </Link>
-                                                            <Link href={profileHref} className="font-extrabold text-slate-900 hover:text-[#0b2447] transition-colors leading-snug">
-                                                                {buyer.organizationName}
-                                                            </Link>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-3 sm:px-6">
-                                                        <div className="flex items-center gap-1.5 text-slate-600 text-xs">
-                                                            <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                            <span className="leading-snug">{location || '—'}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-3 sm:px-6">
-                                                        <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">
-                                                            {buyer.organizationType ? String(buyer.organizationType).replace(/_/g, ' ') : 'ENTERPRISE'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 sm:px-6 whitespace-nowrap">
-                                                        <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50/90 border border-blue-100 px-2.5 py-0.5 text-[11px] font-bold text-[#0b2447]">
-                                                            {requirements} Published
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 sm:px-6 whitespace-nowrap">
-                                                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
-                                                            <BadgeCheck className="h-3 w-3 text-emerald-500" /> Verified
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 sm:px-6 text-right whitespace-nowrap">
-                                                        <Link
-                                                            href={profileHref}
-                                                            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3.5 py-1.5 text-xs font-bold text-slate-700 shadow-xs transition-all hover:bg-[#0b2447] hover:text-white hover:border-[#0b2447] active:scale-95"
-                                                        >
-                                                            <Eye className="h-3.5 w-3.5" /> View
-                                                        </Link>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
+                            <DataTable
+                                data={pagedBuyers}
+                                columns={buyerColumns}
+                                showSrNo={false}
+                                minWidth="min-w-[850px]"
+                                keyExtractor={(buyer: any) => buyer.id}
+                                rowClassName="hover:bg-blue-50/40 transition-colors group"
+                                page={page}
+                                pageSize={pageSize}
+                                total={total}
+                                onPageChange={setPage}
+                                onPageSizeChange={setPageSize}
+                                pageSizeOptions={[12, 24, 48]}
+                                paginationLabel="buyers"
+                            />
                         ) : (
                             <div className="grid gap-4 sm:gap-4.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                                 {pagedBuyers.map((buyer: any) => {
@@ -500,16 +510,18 @@ export default function MarketplaceBuyersPage() {
                                 })}
                             </div>
                         )}
-                        <Pagination
-                            page={page}
-                            pageSize={pageSize}
-                            total={total}
-                            onPageChange={setPage}
-                            onPageSizeChange={setPageSize}
-                            pageSizeOptions={[12, 24, 48]}
-                            label="buyers"
-                        />
-                    </div>
+                        {viewMode === 'grid' && (
+                            <Pagination
+                                page={page}
+                                pageSize={pageSize}
+                                total={total}
+                                onPageChange={setPage}
+                                onPageSizeChange={setPageSize}
+                                pageSizeOptions={[12, 24, 48]}
+                                label="buyers"
+                            />
+                        )}
+                    </>
                 )}
             </main>
 

@@ -26,6 +26,7 @@ import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { cn } from '../../../lib/utils';
 import { formatRefId } from '../../../utils/refIdUtils';
 import {
@@ -435,6 +436,264 @@ export default function AdminBidManagementPage() {
 
   const canViewAdmin = isAdminRole(user?.role);
 
+  const intakeColumns: ColumnDef<ProcurementIntakeRecord>[] = useMemo(() => [
+    {
+      key: 'reference',
+      header: 'Reference',
+      width: 'w-[14%]',
+      cell: (record) => (
+        <span className="font-mono font-bold text-slate-900 whitespace-nowrap">
+          {formatRefId('REQ', record.id, record.requirementNumber, record.methodSlug || record.procurementMethod)}
+        </span>
+      ),
+    },
+    {
+      key: 'title',
+      header: 'Title',
+      width: 'w-[20%]',
+      cell: (record) => (
+        <p className="font-bold text-slate-900 line-clamp-2 max-w-[220px]">{record.title}</p>
+      ),
+    },
+    {
+      key: 'method',
+      header: 'Method',
+      width: 'w-[12%]',
+      cell: (record) => <span className="text-slate-600">{readable(record.methodSlug || record.procurementMethod)}</span>,
+    },
+    {
+      key: 'buyer',
+      header: 'Buyer',
+      width: 'w-[14%]',
+      cell: (record) => <span className="text-slate-600">{record.organization?.organizationName || record.buyer?.organization?.organizationName || record.buyer?.name || 'Buyer'}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-[10%]',
+      cell: (record) => <StatusBadge label={readable(record.status)} />,
+    },
+    {
+      key: 'documents',
+      header: 'Documents',
+      width: 'w-[14%]',
+      cell: (record) => {
+        const docs = record.payload?.documents?.filter(document => document.fileName || document.fileAssetId || document.documentUrl) || [];
+        return docs.length ? (
+          <div className="space-y-1">
+            {docs.slice(0, 3).map((document, index) => (
+              <p key={document.id || document.fileAssetId || `${document.fileName || 'doc'}-${index}`} className="max-w-[180px] truncate font-semibold text-slate-600 text-xs">
+                {document.name || document.label || 'Document'}: <span className="font-bold text-slate-900">{document.fileName || `Asset #${document.fileAssetId}`}</span>
+              </p>
+            ))}
+            {docs.length > 3 && <p className="text-[10px] font-black text-slate-400">+{docs.length - 3} more</p>}
+          </div>
+        ) : (
+          <span className="font-semibold text-slate-400 text-xs">No files</span>
+        );
+      },
+    },
+    {
+      key: 'value',
+      header: 'Value',
+      width: 'w-[10%]',
+      cell: (record) => <span className="font-bold text-slate-900 whitespace-nowrap">{money(Number(record.estimatedValue || 0))}</span>,
+    },
+    {
+      key: 'updated',
+      header: 'Updated',
+      width: 'w-[10%]',
+      cell: (record) => <span className="text-slate-500 whitespace-nowrap text-xs">{formatDate(record.updatedAt)}</span>,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-[12%]',
+      align: 'right',
+      cellClassName: 'text-right',
+      cell: (record) => {
+        const isUpdating = updatingIntakeId === record.id;
+        const canAct = !['APPROVED', 'REJECTED', 'PUBLISHED', 'OPEN'].includes(String(record.status || '').toUpperCase());
+        return (
+          <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+            {canAct && (
+              <>
+                <button type="button" disabled={isUpdating} onClick={() => updateIntakeStatus(record, 'APPROVED')} className="flex h-8 items-center rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60">Approve</button>
+                <button type="button" disabled={isUpdating} onClick={() => updateIntakeStatus(record, 'REJECTED')} className="flex h-8 items-center rounded-lg bg-red-600 px-3 text-[10px] font-black uppercase text-white shadow-sm hover:bg-red-700 disabled:opacity-60">Reject</button>
+              </>
+            )}
+            {!canAct && (
+              <span className="flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-[10px] font-black uppercase text-slate-400">No action</span>
+            )}
+          </div>
+        );
+      },
+    },
+  ], [updatingIntakeId]);
+
+  const bidColumns: ColumnDef<ProcurementBid>[] = useMemo(() => [
+    {
+      key: 'id',
+      header: 'Bid number',
+      width: 'w-[8%]',
+      cell: (bid) => <span className="whitespace-nowrap font-mono font-bold text-slate-900">#{bid.id}</span>,
+    },
+    {
+      key: 'title',
+      header: 'Title',
+      width: 'w-[18%]',
+      cell: (bid) => <p className="font-bold text-slate-900 line-clamp-2 leading-snug" title={bid.title}>{bid.title}</p>,
+    },
+    {
+      key: 'buyer',
+      header: 'Buyer',
+      width: 'w-[14%]',
+      cell: (bid) => (
+        <div className="text-slate-700">
+          <p className="font-semibold">{bid.buyerName}</p>
+          <span className="block mt-0.5 text-[10px] font-medium text-slate-400">{bid.buyerType}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      width: 'w-[10%]',
+      cell: (bid) => <span className="text-slate-600">{bid.category}</span>,
+    },
+    {
+      key: 'type',
+      header: 'Type',
+      width: 'w-[10%]',
+      cell: (bid) => <span className="whitespace-nowrap text-slate-600">{bid.procurementType || bid.bidType}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-[8%]',
+      cell: (bid) => <StatusBadge label={bid.status} />,
+    },
+    {
+      key: 'approval',
+      header: 'Approval',
+      width: 'w-[8%]',
+      cell: (bid) => <StatusBadge label={readable(bid.approvalStatus)} />,
+    },
+    {
+      key: 'start',
+      header: 'Start',
+      width: 'w-[8%]',
+      cell: (bid) => <span className="whitespace-nowrap text-slate-500 text-xs">{formatDate(bid.startDate)}</span>,
+    },
+    {
+      key: 'end',
+      header: 'End',
+      width: 'w-[8%]',
+      cell: (bid) => <span className="whitespace-nowrap text-slate-500 text-xs">{formatDate(bid.endDate)}</span>,
+    },
+    {
+      key: 'participants',
+      header: 'Participants',
+      width: 'w-[8%]',
+      cell: (bid) => <span className="whitespace-nowrap font-bold text-slate-900">{bid.participantsCount || bid.results?.length || 0}</span>,
+    },
+    {
+      key: 'stage',
+      header: 'Lifecycle',
+      width: 'w-[8%]',
+      cell: (bid) => <StatusBadge label={bid.currentStage} />,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-[160px]',
+      align: 'right',
+      cellClassName: 'text-right whitespace-nowrap',
+      cell: (bid) => (
+        <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => refreshSelectedBid(bid)} className="flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-[10px] font-black uppercase text-slate-700 shadow-2xs transition-colors hover:bg-slate-50">
+            <Eye className="h-3 w-3" /> Review
+          </button>
+          <button onClick={() => approve(bid.id)} className="flex h-8 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 text-[10px] font-black uppercase text-white shadow-2xs transition-colors hover:bg-emerald-700">
+            <ShieldCheck className="h-3 w-3" /> Approve
+          </button>
+          <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="flex h-8 items-center gap-1 rounded-lg bg-red-600 px-2.5 text-[10px] font-black uppercase text-white shadow-2xs transition-colors hover:bg-red-700">
+            <XCircle className="h-3 w-3" /> Reject
+          </button>
+          <Link href={`/bids/${bid.id}`} className="flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-[10px] font-black uppercase text-slate-700 shadow-2xs transition-colors hover:bg-slate-50">
+            Details
+          </Link>
+        </div>
+      ),
+    },
+  ], []);
+
+  const participantColumns: ColumnDef<ProcurementBidParticipation>[] = useMemo(() => [
+    {
+      key: 'participation',
+      header: 'Participation',
+      width: 'w-[12%]',
+      cell: (p) => <span className="font-mono font-bold text-slate-900 whitespace-nowrap">{p.participationNumber || p.id}</span>,
+    },
+    {
+      key: 'seller',
+      header: 'Seller',
+      width: 'w-[14%]',
+      cell: (p) => <span className="text-slate-700">{p.seller?.name || 'Seller'}</span>,
+    },
+    {
+      key: 'verification',
+      header: 'Verification',
+      width: 'w-[10%]',
+      cell: (p) => <StatusBadge label={readable(p.seller?.onboardingStatus || 'Verified')} />,
+    },
+    {
+      key: 'submitted',
+      header: 'Submitted',
+      width: 'w-[12%]',
+      cell: (p) => <span className="text-slate-500 whitespace-nowrap text-xs">{p.submittedAt ? new Date(p.submittedAt).toLocaleString('en-IN') : readable(p.submissionStatus)}</span>,
+    },
+    {
+      key: 'technical',
+      header: 'Technical',
+      width: 'w-[10%]',
+      cell: (p) => <StatusBadge label={readable(p.technicalStatus)} />,
+    },
+    {
+      key: 'financial',
+      header: 'Financial',
+      width: 'w-[10%]',
+      cell: (p) => <StatusBadge label={readable(p.financialStatus)} />,
+    },
+    {
+      key: 'final',
+      header: 'Final',
+      width: 'w-[10%]',
+      cell: (p) => <StatusBadge label={readable(p.finalStatus)} />,
+    },
+    {
+      key: 'rank',
+      header: 'Rank',
+      width: 'w-[8%]',
+      cell: (p) => <StatusBadge label={rankLabel(p.rank)} />,
+    },
+    {
+      key: 'documents',
+      header: 'Documents',
+      width: 'w-[14%]',
+      cell: (p) => (
+        <div className="space-y-1">
+          {(p.documents || []).map(doc => (
+            <p key={doc.id} className="max-w-[180px] truncate font-semibold text-slate-600 text-xs">
+              {doc.documentCategory === 'FINANCIAL_QUOTE' && p.financialStatus !== 'OPENED' ? 'Sealed financial quote' : <>{doc.documentName || doc.documentCategory || 'Document'}: <span className="font-bold text-slate-900">{doc.fileName || 'file'}</span></>}
+            </p>
+          ))}
+          {!(p.documents || []).length && <span className="font-semibold text-slate-400 text-xs">No documents</span>}
+        </div>
+      ),
+    },
+  ], []);
+
   return (
     <PageShell>
       <main className="mx-auto w-full max-w-7xl px-4 py-5">
@@ -534,73 +793,31 @@ export default function AdminBidManagementPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1080px] border-collapse text-left text-xs">
-                      <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-                          {['Reference', 'Title', 'Method', 'Buyer', 'Status', 'Documents', 'Value', 'Updated', 'Actions'].map(head => <th key={head} className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">{head}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                        {pagedIntakeRecords.map(record => {
-                          const docs = record.payload?.documents?.filter(document => document.fileName || document.fileAssetId || document.documentUrl) || [];
-                          const isUpdating = updatingIntakeId === record.id;
-                          const canAct = !['APPROVED', 'REJECTED', 'PUBLISHED', 'OPEN'].includes(String(record.status || '').toUpperCase());
-                          return (
-                            <tr key={record.id} className="cursor-pointer transition hover:bg-slate-50/50 align-top">
-                              <td className="p-3 font-mono font-bold text-slate-900 whitespace-nowrap">{formatRefId('REQ', record.id, record.requirementNumber, record.methodSlug || record.procurementMethod)}</td>
-                              <td className="p-3">
-                                <p className="font-bold text-slate-900 line-clamp-1 max-w-[220px]">{record.title}</p>
-                              </td>
-                              <td className="p-3 text-slate-600">{readable(record.methodSlug || record.procurementMethod)}</td>
-                              <td className="p-3 text-slate-600">{record.organization?.organizationName || record.buyer?.organization?.organizationName || record.buyer?.name || 'Buyer'}</td>
-                              <td className="p-3"><StatusBadge label={readable(record.status)} /></td>
-                              <td className="p-3">
-                                {docs.length ? (
-                                  <div className="space-y-1">
-                                    {docs.slice(0, 3).map((document, index) => (
-                                      <p key={document.id || document.fileAssetId || `${document.fileName || 'doc'}-${index}`} className="max-w-[180px] truncate font-semibold text-slate-600">
-                                        {document.name || document.label || 'Document'}: <span className="font-bold text-slate-900">{document.fileName || `Asset #${document.fileAssetId}`}</span>
-                                      </p>
-                                    ))}
-                                    {docs.length > 3 && <p className="text-[10px] font-black text-slate-400">+{docs.length - 3} more</p>}
-                                  </div>
-                                ) : (
-                                  <span className="font-semibold text-slate-400">No files</span>
-                                )}
-                              </td>
-                              <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{money(Number(record.estimatedValue || 0))}</td>
-                              <td className="p-3 text-slate-500 whitespace-nowrap">{formatDate(record.updatedAt)}</td>
-                              <td className="p-3 text-right">
-                                <div className="flex justify-end gap-2">
-                                  {canAct && (
-                                    <>
-                                      <button type="button" disabled={isUpdating} onClick={() => updateIntakeStatus(record, 'APPROVED')} className="flex h-8 items-center rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60">Approve</button>
-                                      <button type="button" disabled={isUpdating} onClick={() => updateIntakeStatus(record, 'REJECTED')} className="flex h-8 items-center rounded-lg bg-red-600 px-3 text-[10px] font-black uppercase text-white shadow-sm hover:bg-red-700 disabled:opacity-60">Reject</button>
-                                    </>
-                                  )}
-                                  {!canAct && (
-                                    <span className="flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-[10px] font-black uppercase text-slate-400">No action</span>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                <div className="border-t border-slate-100 bg-slate-50/50 p-3">
-                  <Pagination
+                  <DataTable<ProcurementIntakeRecord>
+                    data={pagedIntakeRecords}
+                    columns={intakeColumns}
+                    keyExtractor={(record) => record.id}
                     page={intakePage}
                     pageSize={intakePageSize}
                     total={totalIntake}
                     onPageChange={setIntakePage}
                     onPageSizeChange={setIntakePageSize}
-                    label="intake records"
+                    paginationLabel="intake records"
+                    minWidth="min-w-[1080px]"
                   />
-                </div>
+                )}
+                {viewMode === 'grid' && (
+                  <div className="border-t border-slate-100 bg-slate-50/50 p-3">
+                    <Pagination
+                      page={intakePage}
+                      pageSize={intakePageSize}
+                      total={totalIntake}
+                      onPageChange={setIntakePage}
+                      onPageSizeChange={setIntakePageSize}
+                      label="intake records"
+                    />
+                  </div>
+                )}
               </section>
             )}
 
@@ -712,56 +929,31 @@ export default function AdminBidManagementPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[1400px] border-collapse text-left text-xs">
-                        <thead>
-                          <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-                            {['Bid number', 'Title', 'Buyer', 'Category', 'Type', 'Status', 'Approval', 'Start', 'End', 'Participants', 'Lifecycle', 'Actions'].map(head => <th key={head} className="whitespace-nowrap p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">{head}</th>)}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                          {pagedBids.map(bid => (
-                            <tr key={bid.id} className="cursor-pointer transition hover:bg-slate-50/50">
-                              <td className="whitespace-nowrap p-3 font-mono font-bold text-slate-900">#{bid.id}</td>
-                              <td className="p-3">
-                                <p className="font-bold text-slate-900 line-clamp-2" title={bid.title}>{bid.title}</p>
-                              </td>
-                              <td className="p-3 text-slate-700">
-                                {bid.buyerName}
-                                <span className="block mt-0.5 text-[10px] font-medium text-slate-400">{bid.buyerType}</span>
-                              </td>
-                              <td className="p-3 text-slate-600">{bid.category}</td>
-                              <td className="whitespace-nowrap p-3 text-slate-600">{bid.procurementType || bid.bidType}</td>
-                              <td className="whitespace-nowrap p-3"><StatusBadge label={bid.status} /></td>
-                              <td className="whitespace-nowrap p-3"><StatusBadge label={readable(bid.approvalStatus)} /></td>
-                              <td className="whitespace-nowrap p-3 text-slate-500">{formatDate(bid.startDate)}</td>
-                              <td className="whitespace-nowrap p-3 text-slate-500">{formatDate(bid.endDate)}</td>
-                              <td className="whitespace-nowrap p-3 font-bold text-slate-900">{bid.participantsCount || bid.results.length}</td>
-                              <td className="whitespace-nowrap p-3"><StatusBadge label={bid.currentStage} /></td>
-                              <td className="whitespace-nowrap p-3 text-right">
-                                <div className="flex justify-end gap-2">
-                                  <button onClick={() => refreshSelectedBid(bid)} className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase text-slate-700 shadow-sm transition-colors hover:bg-slate-50"><Eye className="h-3 w-3" /> Review</button>
-                                  <button onClick={() => approve(bid.id)} className="flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-[10px] font-black uppercase text-white shadow-sm transition-colors hover:bg-emerald-700"><ShieldCheck className="h-3 w-3" /> Approve</button>
-                                  <button onClick={() => reject(bid.id, window.prompt('Reason for rejection') || '')} className="flex h-8 items-center gap-1.5 rounded-lg bg-red-600 px-3 text-[10px] font-black uppercase text-white shadow-sm transition-colors hover:bg-red-700"><XCircle className="h-3 w-3" /> Reject</button>
-                                  <Link href={`/bids/${bid.id}`} className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-black uppercase text-slate-700 shadow-sm transition-colors hover:bg-slate-50">Details</Link>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  <div className="border-t border-slate-100 bg-slate-50/50 p-3">
-                    <Pagination
+                    <DataTable<ProcurementBid>
+                      data={pagedBids}
+                      columns={bidColumns}
+                      keyExtractor={(bid) => bid.id}
                       page={bidsPage}
                       pageSize={bidsPageSize}
                       total={totalBids}
                       onPageChange={setBidsPage}
                       onPageSizeChange={setBidsPageSize}
-                      label="bids"
+                      paginationLabel="bids"
+                      minWidth="min-w-[1400px]"
                     />
-                  </div>
+                  )}
+                  {viewMode === 'grid' && (
+                    <div className="border-t border-slate-100 bg-slate-50/50 p-3">
+                      <Pagination
+                        page={bidsPage}
+                        pageSize={bidsPageSize}
+                        total={totalBids}
+                        onPageChange={setBidsPage}
+                        onPageSizeChange={setBidsPageSize}
+                        label="bids"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </section>
@@ -823,41 +1015,12 @@ export default function AdminBidManagementPage() {
                   <StatusBadge label={`${participants.length} sellers`} />
                 </div>
                 {detailLoading ? <ProcurementLoadingState message="Loading participant review..." /> : !participants.length ? <ProcurementEmptyState title="No participating sellers yet." message="Seller submissions will appear after participation starts." /> : (
-                  <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[1180px] border-collapse text-left text-xs">
-                        <thead>
-                          <tr className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-                            {['Participation', 'Seller', 'Verification', 'Submitted', 'Technical', 'Financial', 'Final', 'Rank', 'Documents'].map(head => <th key={head} className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">{head}</th>)}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                          {participants.map(participant => (
-                            <tr key={participant.id} className="cursor-pointer transition hover:bg-slate-50/50 align-top">
-                              <td className="p-3 font-mono font-bold text-slate-900 whitespace-nowrap">{participant.participationNumber || participant.id}</td>
-                              <td className="p-3 text-slate-700">{participant.seller?.name || 'Seller'}</td>
-                              <td className="p-3"><StatusBadge label={readable(participant.seller?.onboardingStatus || 'Verified')} /></td>
-                              <td className="p-3 text-slate-500 whitespace-nowrap">{participant.submittedAt ? new Date(participant.submittedAt).toLocaleString('en-IN') : readable(participant.submissionStatus)}</td>
-                              <td className="p-3"><StatusBadge label={readable(participant.technicalStatus)} /></td>
-                              <td className="p-3"><StatusBadge label={readable(participant.financialStatus)} /></td>
-                              <td className="p-3"><StatusBadge label={readable(participant.finalStatus)} /></td>
-                              <td className="p-3"><StatusBadge label={rankLabel(participant.rank)} /></td>
-                              <td className="p-3">
-                                <div className="space-y-1">
-                                  {(participant.documents || []).map(doc => (
-                                    <p key={doc.id} className="max-w-[180px] truncate font-semibold text-slate-600">
-                                      {doc.documentCategory === 'FINANCIAL_QUOTE' && participant.financialStatus !== 'OPENED' ? 'Sealed financial quote' : <>{doc.documentName || doc.documentCategory || 'Document'}: <span className="font-bold text-slate-900">{doc.fileName || 'file'}</span></>}
-                                    </p>
-                                  ))}
-                                  {!(participant.documents || []).length && <span className="font-semibold text-slate-400">No documents</span>}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                  <DataTable<ProcurementBidParticipation>
+                    data={participants}
+                    columns={participantColumns}
+                    keyExtractor={(participant) => participant.id}
+                    minWidth="min-w-[1180px]"
+                  />
                 )}
               </section>
 

@@ -42,6 +42,7 @@ import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobil
 import { Pagination } from '../features/shared/Pagination';
 import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
 import { ProfileSkeleton } from '../components/ui/skeleton';
+import { DataTable, ColumnDef } from '../components/ui/data-table';
 
 interface SidebarNavItem {
   id: string;
@@ -1039,6 +1040,154 @@ export default function BuyerProfile() {
     }
   };
 
+  const frequentlyBoughtItemColumns: ColumnDef<any>[] = useMemo(() => [
+    {
+      key: 'select',
+      header: (
+        <div className="flex items-center justify-center">
+          <input
+            type="checkbox"
+            aria-label="Select all items"
+            checked={selectedItemIds.length === items.length && items.length > 0}
+            onChange={(e) => {
+              if (e.target.checked) setSelectedItemIds(items.map(item => item.id));
+              else setSelectedItemIds([]);
+            }}
+            className="rounded border-slate-300 h-3.5 w-3.5 text-[#12335f] focus:ring-[#12335f]"
+          />
+        </div>
+      ),
+      width: 'w-12',
+      align: 'center',
+      cell: (item: any) => (
+        <div className="flex items-center justify-center">
+          <input
+            type="checkbox"
+            aria-label={`Select item ${item.itemDescription}`}
+            checked={selectedItemIds.includes(item.id)}
+            onChange={(e) => {
+              if (e.target.checked) setSelectedItemIds(prev => [...prev, item.id]);
+              else setSelectedItemIds(prev => prev.filter(id => id !== item.id));
+            }}
+            className="rounded border-slate-300 h-3.5 w-3.5 text-[#12335f] focus:ring-[#12335f]"
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'serialNo',
+      header: 'Sl.',
+      sortable: true,
+      sortKey: 'serialNo',
+      width: 'w-16',
+      align: 'left',
+      cell: (item: any, idx: number, startIndex: number) => (
+        <span className="text-xs font-bold text-slate-500">
+          {item.serialNo || (startIndex + idx + 1)}
+        </span>
+      ),
+    },
+    {
+      key: 'itemDescription',
+      header: 'Item Description',
+      sortable: true,
+      sortKey: 'itemDescription',
+      width: 'w-[26%]',
+      align: 'left',
+      cell: (item: any) => {
+        const isHidden = item.status === 'HIDDEN';
+        const isDuplicate = item.remarks && item.remarks.includes('[DUPLICATE DESCRIPTION]');
+        return (
+          <div className="text-xs font-bold text-slate-900">
+            <span className={cn(isHidden && 'line-through text-slate-400')}>{item.itemDescription}</span>
+            {isDuplicate && <span className="ml-2 inline-flex bg-amber-100 text-amber-800 text-[8px] font-black uppercase px-1 py-0.5 rounded">Duplicate</span>}
+            {isHidden && <span className="ml-2 inline-flex bg-slate-200 text-slate-500 text-[8px] font-black uppercase px-1 py-0.5 rounded">Hidden</span>}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      sortable: true,
+      sortKey: 'category',
+      width: 'w-[16%]',
+      align: 'left',
+      cell: (item: any) => <span className="text-xs font-semibold text-slate-600">{item.category || '—'}</span>,
+    },
+    {
+      key: 'estimatedMonthlyRequirement',
+      header: 'Qty/Month',
+      sortable: true,
+      sortKey: 'estimatedMonthlyRequirement',
+      width: 'w-[12%]',
+      align: 'left',
+      cell: (item: any) => <span className="text-xs font-semibold text-slate-600">{item.estimatedMonthlyRequirement || '—'}</span>,
+    },
+    {
+      key: 'unit',
+      header: 'Unit',
+      sortable: true,
+      sortKey: 'unit',
+      width: 'w-20',
+      align: 'left',
+      cell: (item: any) => <span className="text-xs font-semibold text-slate-600">{item.unit || '—'}</span>,
+    },
+    {
+      key: 'remarks',
+      header: 'Remarks',
+      sortable: true,
+      sortKey: 'remarks',
+      width: 'w-[18%]',
+      align: 'left',
+      cell: (item: any) => (
+        <span className="text-xs font-semibold text-slate-500 block max-w-[12rem] truncate" title={item.remarks}>
+          {item.remarks || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-28',
+      align: 'center',
+      cell: (item: any) => {
+        const isHidden = item.status === 'HIDDEN';
+        return (
+          <div className="flex items-center justify-center gap-1">
+            <button
+              type="button"
+              onClick={() => handleEditItem(item)}
+              className="p-1.5 text-slate-500 hover:text-[#12335f] hover:bg-slate-100 rounded-md transition-colors"
+              title="Edit Item"
+              aria-label={`Edit ${item.itemDescription}`}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleItemVisibility(item)}
+              className={cn('p-1.5 rounded-md transition-colors', isHidden ? 'text-emerald-600 hover:bg-emerald-50' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50')}
+              title={isHidden ? 'Show item' : 'Hide item'}
+              aria-label={isHidden ? `Show ${item.itemDescription}` : `Hide ${item.itemDescription}`}
+            >
+              {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteItem(item.id)}
+              className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+              title="Delete Item"
+              aria-label={`Delete ${item.itemDescription}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        );
+      },
+    },
+  ], [selectedItemIds, items]);
+
   if (loading) {
     return <ProfileSkeleton />;
   }
@@ -1573,16 +1722,32 @@ export default function BuyerProfile() {
                               </div>
                               <button type="button" onClick={() => setUploadErrors([])} className="text-red-400 hover:text-red-700 text-[10px] font-black uppercase tracking-wider">Dismiss</button>
                             </div>
-                            <div className="overflow-x-auto rounded-xl border border-red-100 bg-white">
-                              <table className="w-full min-w-[500px] text-left text-xs">
-                                <thead><tr className="border-b border-red-100 bg-red-50"><th className="p-2 pr-4 text-[10px] font-black text-red-600 uppercase tracking-wider w-24">Row #</th><th className="p-2 text-[10px] font-black text-red-600 uppercase tracking-wider">Reason</th></tr></thead>
-                                <tbody className="divide-y divide-red-50">
-                                  {uploadErrors.map((err, i) => (
-                                    <tr key={i}><td className="p-2 pr-4 font-bold text-red-700">{err.rowNumber > 0 ? `Row ${err.rowNumber}` : 'File Error'}</td><td className="p-2 text-red-800 font-semibold">{err.reason}</td></tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
+                            <DataTable
+                              data={uploadErrors}
+                              columns={[
+                                {
+                                  key: 'rowNumber',
+                                  header: 'Row #',
+                                  width: 'w-24',
+                                  headerClassName: 'text-red-600 bg-red-50 text-[10px] font-black uppercase tracking-wider',
+                                  cell: (err: any) => (
+                                    <span className="font-bold text-red-700">
+                                      {err.rowNumber > 0 ? `Row ${err.rowNumber}` : 'File Error'}
+                                    </span>
+                                  )
+                                },
+                                {
+                                  key: 'reason',
+                                  header: 'Reason',
+                                  headerClassName: 'text-red-600 bg-red-50 text-[10px] font-black uppercase tracking-wider',
+                                  cell: (err: any) => (
+                                    <span className="text-red-800 font-semibold">{err.reason}</span>
+                                  )
+                                }
+                              ]}
+                              keyExtractor={(err: any, i: number) => `err-${i}`}
+                              minWidth="min-w-[500px]"
+                            />
                           </div>
                         )}
 
@@ -1623,84 +1788,33 @@ export default function BuyerProfile() {
                         </div>
 
                         {/* Items Table */}
-                        {itemsLoading ? (
-                          <div className="flex h-[150px] items-center justify-center">
-                            <Loader2 className="h-6 w-6 animate-spin text-[#12335f]" />
-                          </div>
-                        ) : items.length === 0 ? (
-                          <div className="text-center py-12 border border-dashed rounded-3xl bg-slate-50/50">
-                            <Building2 className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                            <p className="text-sm font-bold text-slate-500">No frequently bought items uploaded yet</p>
-                            <p className="text-xs text-slate-400 mt-1 leading-relaxed">Download the template, fill it out, and upload it above or add items manually.</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white">
-                              <table className="w-full min-w-[600px] border-collapse text-left">
-                                <thead>
-                                  <tr className="bg-slate-50 border-b border-slate-100">
-                                    <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-12 text-center select-none">
-                                      <input type="checkbox" checked={selectedItemIds.length === items.length && items.length > 0} onChange={(e) => { if (e.target.checked) setSelectedItemIds(items.map(item => item.id)); else setSelectedItemIds([]); }} className="rounded border-slate-300" />
-                                    </th>
-                                    <th className="p-3 w-16"><SortableHeader label="Sl." field="serialNo" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
-                                    <th className="p-3"><SortableHeader label="Item Description" field="itemDescription" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
-                                    <th className="p-3"><SortableHeader label="Category" field="category" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
-                                    <th className="p-3"><SortableHeader label="Qty/Month" field="estimatedMonthlyRequirement" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
-                                    <th className="p-3 w-20"><SortableHeader label="Unit" field="unit" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
-                                    <th className="p-3"><SortableHeader label="Remarks" field="remarks" activeField={itemsSortKey} direction={itemsSortDir} onSort={handleItemsSort} /></th>
-                                    <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider w-28 text-center select-none">Actions</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {pagedItems.map((item, idx) => {
-                                    const isHidden = item.status === 'HIDDEN';
-                                    const isDuplicate = item.remarks && item.remarks.includes('[DUPLICATE DESCRIPTION]');
-                                    return (
-                                      <tr key={item.id} className={cn('border-b border-slate-100 transition-colors', isHidden ? 'bg-slate-50 opacity-60' : 'hover:bg-slate-50/50', isDuplicate && !isHidden && 'bg-amber-50/30')}>
-                                        <td className="p-3 text-center">
-                                          <input type="checkbox" checked={selectedItemIds.includes(item.id)} onChange={(e) => { if (e.target.checked) setSelectedItemIds(prev => [...prev, item.id]); else setSelectedItemIds(prev => prev.filter(id => id !== item.id)); }} className="rounded border-slate-300" />
-                                        </td>
-                                        <td className="p-3 text-xs font-bold text-slate-500">{item.serialNo || ((itemsPage - 1) * itemsPageSize + idx + 1)}</td>
-                                        <td className="p-3 text-xs font-bold text-slate-900">
-                                          <span className={cn(isHidden && 'line-through text-slate-400')}>{item.itemDescription}</span>
-                                          {isDuplicate && <span className="ml-2 inline-flex bg-amber-100 text-amber-800 text-[8px] font-black uppercase px-1 py-0.5 rounded">Duplicate</span>}
-                                          {isHidden && <span className="ml-2 inline-flex bg-slate-200 text-slate-500 text-[8px] font-black uppercase px-1 py-0.5 rounded">Hidden</span>}
-                                        </td>
-                                        <td className="p-3 text-xs font-semibold text-slate-600">{item.category || '—'}</td>
-                                        <td className="p-3 text-xs font-semibold text-slate-600">{item.estimatedMonthlyRequirement || '—'}</td>
-                                        <td className="p-3 text-xs font-semibold text-slate-600">{item.unit || '—'}</td>
-                                        <td className="p-3 text-xs font-semibold text-slate-500 max-w-[12rem] truncate" title={item.remarks}>{item.remarks || '—'}</td>
-                                        <td className="p-3 text-center">
-                                          <div className="flex items-center justify-center gap-1">
-                                            <button onClick={() => handleEditItem(item)} className="p-1.5 text-slate-500 hover:text-[#12335f] hover:bg-slate-100 rounded-md transition-colors" title="Edit Item">
-                                              <Pencil className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button onClick={() => handleToggleItemVisibility(item)} className={cn('p-1.5 rounded-md transition-colors', isHidden ? 'text-emerald-600 hover:bg-emerald-50' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50')} title={isHidden ? 'Show item' : 'Hide item'}>
-                                              {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                                            </button>
-                                            <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Delete Item">
-                                              <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                              <Pagination
-                                page={itemsPage}
-                                pageSize={itemsPageSize}
-                                total={items.length}
-                                onPageChange={setItemsPage}
-                                onPageSizeChange={setItemsPageSize}
-                                label="items"
-                              />
-                            </div>
-                          </div>
-                        )}
+                        <DataTable<any>
+                          data={pagedItems}
+                          columns={frequentlyBoughtItemColumns}
+                          keyExtractor={(item) => item.id}
+                          isLoading={itemsLoading}
+                          sortKey={itemsSortKey}
+                          sortDirection={itemsSortDir}
+                          onSort={handleItemsSort}
+                          page={itemsPage}
+                          pageSize={itemsPageSize}
+                          total={items.length}
+                          onPageChange={setItemsPage}
+                          onPageSizeChange={setItemsPageSize}
+                          paginationLabel="items"
+                          showSrNo={false}
+                          emptyTitle="No frequently bought items uploaded yet"
+                          emptyDescription="Download the template, fill it out, and upload it above or add items manually."
+                          minWidth="min-w-[600px]"
+                          rowClassName={(item) => {
+                            const isHidden = item.status === 'HIDDEN';
+                            const isDuplicate = item.remarks && item.remarks.includes('[DUPLICATE DESCRIPTION]');
+                            return cn(
+                              isHidden ? 'bg-slate-50 opacity-60' : 'hover:bg-slate-50/50',
+                              isDuplicate && !isHidden && 'bg-amber-50/30'
+                            );
+                          }}
+                        />
 
                         {/* Add/Edit Modal dialog */}
                         {isItemModalOpen && (

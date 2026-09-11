@@ -46,6 +46,7 @@ import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
 import { formatDate } from '../../shared/format';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 
 
@@ -577,6 +578,123 @@ export default function ProcurementDraftsPage() {
     );
   };
 
+  const tableColumns = useMemo<ColumnDef<DisplayDraft>[]>(() => [
+    {
+      key: 'title',
+      header: 'Title',
+      sortable: true,
+      sortKey: 'title',
+      cell: (d) => (
+        <div className="w-[240px] min-w-[200px] whitespace-normal break-words font-bold text-slate-900">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="group-hover:text-blue-600 transition-colors">{d.title}</span>
+            {sourceBadge(d.isLocal, d.isPublished, d.id)}
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'methodSlug',
+      header: 'Method',
+      sortable: true,
+      sortKey: 'methodSlug',
+      cell: (d) => methodBadge(d.methodSlug)
+    },
+    {
+      key: 'categoryName',
+      header: 'Category',
+      sortable: true,
+      sortKey: 'categoryName',
+      cell: (d) => <span className="text-slate-600 text-xs font-medium">{d.categoryName || '—'}</span>
+    },
+    {
+      key: 'productOrService',
+      header: 'Item / Service',
+      cell: (d) => <span className="max-w-[140px] truncate block text-slate-600 text-xs font-medium">{d.productOrService || '—'}</span>
+    },
+    {
+      key: 'estimatedValue',
+      header: 'Est. Value',
+      sortable: true,
+      sortKey: 'estimatedValue',
+      cell: (d) => <span className="font-extrabold text-slate-900 tabular-nums text-xs">{formatCurrency(d.estimatedValue)}</span>
+    },
+    {
+      key: 'quantity',
+      header: 'Qty',
+      cell: (d) => <span className="text-slate-600 tabular-nums text-xs font-medium">{[d.quantity, d.unit].filter(Boolean).join(' ') || '—'}</span>
+    },
+    {
+      key: 'updatedAt',
+      header: 'Last Updated',
+      sortable: true,
+      sortKey: 'updatedAt',
+      cell: (d) => <span className="whitespace-nowrap text-xs font-medium text-slate-500">{formatDateTime(d.updatedAt)}</span>
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      width: 'w-[220px]',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (d) => {
+        const isDeleting = !d.isLocal && deletingIds.includes(d.id!);
+        return (
+          <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+            {/* View Details */}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={(e) => openDetail(d, e)}
+              className="h-8 rounded-lg border-slate-200 bg-slate-50/80 px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer"
+              title="View Details"
+            >
+              <Eye className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
+              <span>View</span>
+            </Button>
+
+            {/* Discard / Delete */}
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={(e) => {
+                e.stopPropagation();
+                d.isLocal ? discardLocal() : discardServer(d);
+              }}
+              className="inline-flex h-8 w-8 min-w-8 items-center justify-center rounded-lg border border-rose-200/80 bg-rose-50/60 text-rose-600 hover:bg-rose-100 hover:border-rose-300 hover:text-rose-700 transition-all shadow-2xs cursor-pointer shrink-0 disabled:opacity-50 disabled:pointer-events-none active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+              title={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
+              aria-label={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
+            >
+              {isDeleting ? (
+                <RefreshCw className="h-4 w-4 animate-spin text-rose-600 shrink-0" />
+              ) : (
+                <Trash2 className="h-4 w-4 shrink-0" />
+              )}
+            </button>
+
+            {/* Continue Draft */}
+            {!d.isPublished && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleContinue(d);
+                }}
+                className="h-8 rounded-lg bg-[#12335f] px-3 text-xs font-bold text-white hover:bg-[#0b2445] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+              >
+                <span>Continue</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        );
+      }
+    }
+  ], [deletingIds]);
+
   /* ═══════════════════════════════════════════════════════════════════ */
   if (detailOpen && selectedDraft) {
     return (
@@ -845,107 +963,27 @@ export default function ProcurementDraftsPage() {
         <div className="space-y-4">
           {/* ═══ LIST VIEW (Table) ═══ */}
           {viewMode === 'list' && (
-            <section className="overflow-hidden rounded-[24px] bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/70">
-              <div className="overflow-x-auto bg-slate-50/70 p-2">
-                <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-                  <table data-ux-wrapped="true" className="w-full min-w-[950px] border-separate border-spacing-y-2 text-left text-sm">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-3 text-[10px] font-extrabold uppercase tracking-wide text-slate-500 w-[60px] text-center">Sr. No</th>
-                      <ThCell sortKey="title" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Title</ThCell>
-                      <ThCell sortKey="methodSlug" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Method</ThCell>
-                      <ThCell sortKey="categoryName" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Category</ThCell>
-                      <th className="px-4 py-3 text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Item / Service</th>
-                      <ThCell sortKey="estimatedValue" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Est. Value</ThCell>
-                      <th className="px-4 py-3 text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Qty</th>
-                      <ThCell sortKey="updatedAt" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Last Updated</ThCell>
-                      <th className="px-4 py-3 text-right text-[10px] font-extrabold uppercase tracking-wide text-slate-500 w-[220px]">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pagedDrafts.map((d, idx) => {
-                      const key = d.uniqueKey;
-                      const isDeleting = !d.isLocal && deletingIds.includes(d.id!);
-                      return (
-                        <tr
-                          key={key}
-                          className="group cursor-pointer bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 hover:bg-slate-50/70 transition-all duration-300 ease-out"
-                          onClick={() => openDetail(d)}
-                        >
-                          <td className="rounded-l-2xl px-4 py-3.5 text-center text-xs font-black text-slate-400">
-                            {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
-                          </td>
-                          <td className="w-[240px] min-w-[200px] whitespace-normal break-words px-4 py-3.5 font-bold text-slate-900">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="group-hover:text-blue-600 transition-colors">{d.title}</span>
-                              {sourceBadge(d.isLocal, d.isPublished, d.id)}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5">{methodBadge(d.methodSlug)}</td>
-                          <td className="px-4 py-3.5 text-slate-600 text-xs font-medium">{d.categoryName || '—'}</td>
-                          <td className="max-w-[140px] truncate px-4 py-3.5 text-slate-600 text-xs font-medium">{d.productOrService || '—'}</td>
-                          <td className="px-4 py-3.5 font-extrabold text-slate-900 tabular-nums text-xs">{formatCurrency(d.estimatedValue)}</td>
-                          <td className="px-4 py-3.5 text-slate-600 tabular-nums text-xs font-medium">{[d.quantity, d.unit].filter(Boolean).join(' ') || '—'}</td>
-                          <td className="whitespace-nowrap px-4 py-3.5 text-xs font-medium text-slate-500">{formatDateTime(d.updatedAt)}</td>
-                          <td className="rounded-r-2xl px-4 py-3.5 text-right">
-                            <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
-                              {/* View Details */}
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={(e) => openDetail(d, e)}
-                                className="h-8 rounded-lg border-slate-200 bg-slate-50/80 px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer"
-                                title="View Details"
-                              >
-                                <Eye className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
-                                <span>View</span>
-                              </Button>
-
-                              {/* Discard / Delete */}
-                              <button
-                                type="button"
-                                disabled={isDeleting}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  d.isLocal ? discardLocal() : discardServer(d);
-                                }}
-                                className="inline-flex h-8 w-8 min-w-8 items-center justify-center rounded-lg border border-rose-200/80 bg-rose-50/60 text-rose-600 hover:bg-rose-100 hover:border-rose-300 hover:text-rose-700 transition-all shadow-2xs cursor-pointer shrink-0 disabled:opacity-50 disabled:pointer-events-none active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
-                                title={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
-                                aria-label={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
-                              >
-                                {isDeleting ? (
-                                  <RefreshCw className="h-4 w-4 animate-spin text-rose-600 shrink-0" />
-                                ) : (
-                                  <Trash2 className="h-4 w-4 shrink-0" />
-                                )}
-                              </button>
-
-                              {/* Continue Draft */}
-                              {!d.isPublished && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleContinue(d);
-                                  }}
-                                  className="h-8 rounded-lg bg-[#12335f] px-3 text-xs font-bold text-white hover:bg-[#0b2445] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1"
-                                >
-                                  <span>Continue</span>
-                                  <ArrowRight className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-</div>
-              </div>
-            </section>
+            <DataTable<DisplayDraft>
+              data={pagedDrafts}
+              columns={tableColumns}
+              keyExtractor={(d) => d.uniqueKey}
+              showSrNo={true}
+              srNoHeader="Sr. No"
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              sortKey={sortKey}
+              sortDirection={sortDir}
+              onSort={(field) => handleSort(field as SortKey)}
+              onRowClick={(d) => openDetail(d)}
+              paginationLabel="drafts"
+              emptyTitle="No procurement drafts found"
+              emptyDescription={searchQuery || methodFilter || sourceFilter || activeKpi
+                ? 'No drafts match the active search and filter criteria. Try clearing your filters.'
+                : 'Start a Create Procurement process and click Save Draft. Your drafts will appear here for you to continue them at any time.'}
+            />
           )}
 
           {/* ═══ GRID VIEW (Multi-Column Card Grid) ═══ */}
@@ -1085,17 +1123,19 @@ export default function ProcurementDraftsPage() {
             </div>
           )}
 
-          {/* ═══ PAGINATION ═══ */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              label="drafts"
-            />
-          </div>
+          {/* ═══ GRID PAGINATION ═══ */}
+          {viewMode === 'grid' && (
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                label="drafts"
+              />
+            </div>
+          )}
         </div>
       ) : (
         /* Empty State */

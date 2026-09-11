@@ -20,6 +20,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { isShgUser } from '../../../lib/shg';
 import { procurementOrderApi } from '../../procurementBid/orderApi';
 import { formatDate } from '../../shared/format';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 interface OrderItem {
   id: string;
@@ -106,25 +107,99 @@ export function RecentOrdersSnapshot() {
     }
   };
 
+  const columns = React.useMemo<ColumnDef<OrderItem>[]>(() => [
+    {
+      key: 'poNumber',
+      header: 'PO & Date',
+      cell: (order) => (
+        <div>
+          <div className="font-bold text-slate-900 font-mono text-[10px]">{order.poNumber}</div>
+          <div className="text-[9px] font-medium text-slate-400">{order.date}</div>
+        </div>
+      )
+    },
+    {
+      key: 'partyName',
+      header: isBuyer ? 'Supplier / MSME Vendor' : 'Buyer Department',
+      cell: (order) => (
+        <div className="font-semibold text-slate-800 line-clamp-1 max-w-[180px]">
+          {order.partyName}
+        </div>
+      )
+    },
+    {
+      key: 'itemName',
+      header: 'Item Description',
+      cell: (order) => (
+        <div>
+          <div className="font-medium text-slate-700 line-clamp-1 max-w-[220px]">
+            {order.itemName}
+          </div>
+          <div className="text-[9px] text-slate-400 font-medium">Qty: {order.quantity}</div>
+        </div>
+      )
+    },
+    {
+      key: 'amount',
+      header: 'Value (₹)',
+      align: 'right',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (order) => (
+        <span className="font-extrabold text-[#12335f] whitespace-nowrap">
+          ₹{order.amount.toLocaleString('en-IN')}
+        </span>
+      )
+    },
+    {
+      key: 'status',
+      header: 'Fulfillment',
+      align: 'center',
+      cellClassName: 'text-center',
+      headerClassName: 'text-center',
+      cell: (order) => (
+        <span className={`inline-flex items-center text-[8px] font-bold uppercase px-2 py-0.5 rounded border ${getStatusBadge(order.status)}`}>
+          {order.statusLabel}
+        </span>
+      )
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      align: 'right',
+      cellClassName: 'text-right',
+      headerClassName: 'text-right',
+      cell: (order) => (
+        <Link href={order.actionHref}>
+          <Button 
+            variant="outline" 
+            className="h-6 px-2 text-[9px] font-bold uppercase tracking-wider text-[#12335f] border-slate-200 hover:bg-slate-100 rounded shadow-2xs"
+          >
+            {order.actionLabel}
+          </Button>
+        </Link>
+      )
+    }
+  ], [isBuyer]);
+
   return (
     <section 
       aria-labelledby="recent-orders-heading"
-      className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 overflow-hidden flex flex-col"
+      className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs transition hover:shadow-sm"
     >
-      {/* ── Card Header ── */}
-      <div className="bg-slate-50/50 px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between rounded-t-xl">
-        <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-xl bg-blue-50 text-[#12335f] flex items-center justify-center font-bold">
             <Package className="h-4 w-4" />
           </div>
           <div>
-            <h2 id="recent-orders-heading" className="text-xs font-bold uppercase tracking-wide text-slate-900">
-              {isBuyer ? 'Inbound Orders & Delivery Tracking' : 'Recent Orders & Fulfillment Tracking'}
+            <h2 id="recent-orders-heading" className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-2">
+              Recent Purchase Orders
+              <span className="text-[10px] font-bold text-slate-400 font-mono">({orders.length})</span>
             </h2>
-            <p className="text-[10px] font-medium text-slate-500">
-              {isBuyer 
-                ? 'Active purchase orders in dispatch, inbound transit, or awaiting GRN sign-off'
-                : 'Active purchase orders awaiting dispatch, transit, or GRN inspection'}
+            <p className="text-[11px] text-slate-500 font-medium">
+              {isBuyer ? 'Latest active procurement orders & dispatch tracking' : 'Latest orders received from buyer organizations'}
             </p>
           </div>
         </div>
@@ -163,59 +238,13 @@ export function RecentOrdersSnapshot() {
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-[9px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
-              <tr>
-                <th scope="col" className="px-3.5 py-2">PO & Date</th>
-                <th scope="col" className="px-3 py-2">{isBuyer ? 'Supplier / MSME Vendor' : 'Buyer Department'}</th>
-                <th scope="col" className="px-3 py-2">Item Description</th>
-                <th scope="col" className="px-3 py-2 text-right">Value (₹)</th>
-                <th scope="col" className="px-3 py-2 text-center">Fulfillment</th>
-                <th scope="col" className="px-3.5 py-2 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-[11px]">
-              {orders.map((order) => (
-                <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="px-3.5 py-2.5 whitespace-nowrap">
-                    <div className="font-bold text-slate-900 font-mono text-[10px]">{order.poNumber}</div>
-                    <div className="text-[9px] font-medium text-slate-400">{order.date}</div>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="font-semibold text-slate-800 line-clamp-1 max-w-[180px]">
-                      {order.partyName}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="font-medium text-slate-700 line-clamp-1 max-w-[220px]">
-                      {order.itemName}
-                    </div>
-                    <div className="text-[9px] text-slate-400 font-medium">Qty: {order.quantity}</div>
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-extrabold text-[#12335f] whitespace-nowrap">
-                    ₹{order.amount.toLocaleString('en-IN')}
-                  </td>
-                  <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                    <span className={`inline-flex items-center text-[8px] font-bold uppercase px-2 py-0.5 rounded border ${getStatusBadge(order.status)}`}>
-                      {order.statusLabel}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
-                    <Link href={order.actionHref}>
-                      <Button 
-                        variant="outline" 
-                        className="h-6 px-2 text-[9px] font-bold uppercase tracking-wider text-[#12335f] border-slate-200 hover:bg-slate-100 rounded shadow-2xs"
-                      >
-                        {order.actionLabel}
-                      </Button>
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<OrderItem>
+          data={orders}
+          columns={columns}
+          keyExtractor={(order) => order.id}
+          showSrNo={false}
+          minWidth="min-w-[650px]"
+        />
       )}
     </section>
   );

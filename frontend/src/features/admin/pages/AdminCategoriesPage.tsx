@@ -5,6 +5,7 @@ import { api } from '../../../lib/api';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Pagination } from '../../shared/Pagination';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
@@ -450,6 +451,151 @@ export default function AdminCategoriesPage() {
     };
   }, [categories]);
 
+  const categoryColumns = useMemo<ColumnDef<Category>[]>(() => [
+    {
+      key: 'imageUrl',
+      header: 'IMAGE',
+      align: 'center',
+      width: 'w-20',
+      cell: (cat) => {
+        const displayImg = getCategoryImageUrl(cat as any);
+        return (
+          <div className="h-10 w-10 mx-auto rounded-lg border border-slate-200/80 bg-white flex items-center justify-center shadow-2xs overflow-hidden">
+            <img
+              src={displayImg}
+              alt={cat.name}
+              className="h-full w-full object-cover"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.src = buildCategoryFallbackSvg(cat.name);
+              }}
+            />
+          </div>
+        );
+      }
+    },
+    {
+      key: 'name',
+      header: 'CATEGORY NAME',
+      sortable: true,
+      cell: (cat) => (
+        <div>
+          <div className="font-bold text-slate-800">{cat.name}</div>
+          {cat.description && (
+            <div className="text-[11px] text-slate-400 font-medium truncate max-w-xs">{cat.description}</div>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'type',
+      header: 'TYPE',
+      sortable: true,
+      width: 'w-28',
+      cell: (cat) => (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+          cat.type === 'PRODUCT' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+          cat.type === 'SERVICE' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+          'bg-indigo-50 text-indigo-700 border border-indigo-200'
+        }`}>
+          {cat.type || 'BOTH'}
+        </span>
+      )
+    },
+    {
+      key: 'slug',
+      header: 'SLUG',
+      sortable: true,
+      width: 'w-36',
+      cell: (cat) => (
+        <span className="font-mono text-[11px] text-slate-500">
+          {cat.slug}
+        </span>
+      )
+    },
+    {
+      key: 'isActive',
+      header: 'STATUS',
+      sortable: true,
+      width: 'w-36',
+      cell: (cat) => (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={cat.isActive !== false}
+          aria-label={`Toggle status for ${cat.name}. Currently ${cat.isActive !== false ? 'Active' : 'Inactive'}`}
+          disabled={togglingId === cat.id}
+          onClick={(e) => handleToggleStatus(cat, e)}
+          title={`Click to ${cat.isActive !== false ? 'Deactivate' : 'Activate'} "${cat.name}"`}
+          className={`group inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all border cursor-pointer ${
+            cat.isActive !== false
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 shadow-2xs'
+              : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200 hover:border-slate-300'
+          } ${togglingId === cat.id ? 'opacity-50 cursor-wait' : ''}`}
+        >
+          <span className={`h-2 w-2 rounded-full transition-colors ${
+            cat.isActive !== false ? 'bg-emerald-500 group-hover:bg-emerald-600' : 'bg-slate-400 group-hover:bg-slate-500'
+          }`} />
+          <span>{cat.isActive !== false ? 'ACTIVE' : 'INACTIVE'}</span>
+          <span className={`inline-flex items-center h-3.5 w-6 rounded-full p-0.5 transition-colors ${
+            cat.isActive !== false ? 'bg-emerald-500' : 'bg-slate-300'
+          }`}>
+            <span className={`h-2.5 w-2.5 rounded-full bg-white shadow-xs transform transition-transform ${
+              cat.isActive !== false ? 'translate-x-2.5' : 'translate-x-0'
+            }`} />
+          </span>
+        </button>
+      )
+    },
+    {
+      key: 'updatedAt',
+      header: 'UPDATED AT',
+      sortable: true,
+      width: 'w-40',
+      cell: (cat) => {
+        const dateInfo = formatDateTime(cat.updatedAt || cat.createdAt);
+        return dateInfo.date !== '—' ? (
+          <div className="flex flex-col" title={dateInfo.iso}>
+            <span className="font-semibold text-slate-800 text-[11px]">
+              {dateInfo.date}
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {dateInfo.time}
+            </span>
+          </div>
+        ) : (
+          <span className="text-slate-400 italic text-[11px]">—</span>
+        );
+      }
+    },
+    {
+      key: 'actions',
+      header: 'ACTIONS',
+      align: 'right',
+      width: 'w-24',
+      cell: (cat) => (
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => openEditModal(cat)}
+            title="Edit Category"
+            aria-label={`Edit ${cat.name}`}
+            className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+          >
+            <Edit2 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setDeletingCategory(cat)}
+            title="Delete Category"
+            aria-label={`Delete ${cat.name}`}
+            className="p-1.5 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      )
+    }
+  ], [togglingId]);
+
   return (
     <div className="min-h-screen bg-slate-50/50 p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Top Header */}
@@ -778,250 +924,28 @@ export default function AdminCategoriesPage() {
 
       {/* Categories — List/Table View */}
       {viewMode === 'list' && (
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase text-slate-500 tracking-wider">
-                  <th className="py-3.5 px-4 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleSort('id')}
-                      className="inline-flex items-center justify-center gap-1.5 hover:text-indigo-600 transition-colors font-extrabold cursor-pointer"
-                      title="Sort by SR. NO."
-                    >
-                      SR. NO.
-                      {sortField === 'id' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-indigo-600" /> : <ArrowDown className="h-3 w-3 text-indigo-600" />
-                      ) : (
-                        <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-70" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-4 text-center">IMAGE</th>
-                  <th className="py-3.5 px-4">
-                    <button
-                      type="button"
-                      onClick={() => handleSort('name')}
-                      className="inline-flex items-center gap-1.5 hover:text-indigo-600 transition-colors font-extrabold cursor-pointer"
-                      title="Sort by Category Name"
-                    >
-                      CATEGORY NAME
-                      {sortField === 'name' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-indigo-600" /> : <ArrowDown className="h-3 w-3 text-indigo-600" />
-                      ) : (
-                        <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-70" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-4">
-                    <button
-                      type="button"
-                      onClick={() => handleSort('type')}
-                      className="inline-flex items-center gap-1.5 hover:text-indigo-600 transition-colors font-extrabold cursor-pointer"
-                      title="Sort by Type"
-                    >
-                      TYPE
-                      {sortField === 'type' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-indigo-600" /> : <ArrowDown className="h-3 w-3 text-indigo-600" />
-                      ) : (
-                        <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-70" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-4">
-                    <button
-                      type="button"
-                      onClick={() => handleSort('slug')}
-                      className="inline-flex items-center gap-1.5 hover:text-indigo-600 transition-colors font-extrabold cursor-pointer"
-                      title="Sort by Slug"
-                    >
-                      SLUG
-                      {sortField === 'slug' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-indigo-600" /> : <ArrowDown className="h-3 w-3 text-indigo-600" />
-                      ) : (
-                        <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-70" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-4">
-                    <button
-                      type="button"
-                      onClick={() => handleSort('isActive')}
-                      className="inline-flex items-center gap-1.5 hover:text-indigo-600 transition-colors font-extrabold cursor-pointer"
-                      title="Sort by Status"
-                    >
-                      STATUS
-                      {sortField === 'isActive' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-indigo-600" /> : <ArrowDown className="h-3 w-3 text-indigo-600" />
-                      ) : (
-                        <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-70" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-4">
-                    <button
-                      type="button"
-                      onClick={() => handleSort('updatedAt')}
-                      className="inline-flex items-center gap-1.5 hover:text-indigo-600 transition-colors font-extrabold cursor-pointer"
-                      title="Sort by Last Updated Date & Time"
-                    >
-                      UPDATED AT
-                      {sortField === 'updatedAt' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-indigo-600" /> : <ArrowDown className="h-3 w-3 text-indigo-600" />
-                      ) : (
-                        <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-70" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-4 text-right">ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
-                      Loading categories...
-                    </td>
-                  </tr>
-                ) : filteredCategories.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <p>No categories found matching your criteria.</p>
-                        {isFiltered && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleResetFilters}
-                            className="text-xs font-semibold mt-1"
-                          >
-                            Clear All Filters
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  pagedCategories.map((cat, idx) => {
-                    const displayImg = getCategoryImageUrl(cat as any);
-                    const dateInfo = formatDateTime(cat.updatedAt || cat.createdAt);
-                    return (
-                      <tr key={cat.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3.5 px-4 text-center font-bold text-slate-400">
-                          {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <div className="h-10 w-10 mx-auto rounded-lg border border-slate-200/80 bg-white flex items-center justify-center shadow-2xs overflow-hidden">
-                            <img
-                              src={displayImg}
-                              alt={cat.name}
-                              className="h-full w-full object-cover"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = buildCategoryFallbackSvg(cat.name);
-                              }}
-                            />
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-800">{cat.name}</div>
-                          {cat.description && (
-                            <div className="text-[11px] text-slate-400 font-medium truncate max-w-xs">{cat.description}</div>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                            cat.type === 'PRODUCT' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                            cat.type === 'SERVICE' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                            'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                          }`}>
-                            {cat.type || 'BOTH'}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500">
-                          {cat.slug}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={cat.isActive !== false}
-                            aria-label={`Toggle status for ${cat.name}. Currently ${cat.isActive !== false ? 'Active' : 'Inactive'}`}
-                            disabled={togglingId === cat.id}
-                            onClick={(e) => handleToggleStatus(cat, e)}
-                            title={`Click to ${cat.isActive !== false ? 'Deactivate' : 'Activate'} "${cat.name}"`}
-                            className={`group inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all border cursor-pointer ${
-                              cat.isActive !== false
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 shadow-2xs'
-                                : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200 hover:border-slate-300'
-                            } ${togglingId === cat.id ? 'opacity-50 cursor-wait' : ''}`}
-                          >
-                            <span className={`h-2 w-2 rounded-full transition-colors ${
-                              cat.isActive !== false ? 'bg-emerald-500 group-hover:bg-emerald-600' : 'bg-slate-400 group-hover:bg-slate-500'
-                            }`} />
-                            <span>{cat.isActive !== false ? 'ACTIVE' : 'INACTIVE'}</span>
-                            <span className={`inline-flex items-center h-3.5 w-6 rounded-full p-0.5 transition-colors ${
-                              cat.isActive !== false ? 'bg-emerald-500' : 'bg-slate-300'
-                            }`}>
-                              <span className={`h-2.5 w-2.5 rounded-full bg-white shadow-xs transform transition-transform ${
-                                cat.isActive !== false ? 'translate-x-2.5' : 'translate-x-0'
-                              }`} />
-                            </span>
-                          </button>
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          {dateInfo.date !== '—' ? (
-                            <div className="flex flex-col" title={dateInfo.iso}>
-                              <span className="font-semibold text-slate-800 text-[11px]">
-                                {dateInfo.date}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                {dateInfo.time}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 italic text-[11px]">—</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => openEditModal(cat)}
-                              title="Edit Category"
-                              aria-label={`Edit ${cat.name}`}
-                              className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => setDeletingCategory(cat)}
-                              title="Delete Category"
-                              aria-label={`Delete ${cat.name}`}
-                              className="p-1.5 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="border-t border-slate-200/80 bg-white">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              label="categories"
-            />
-          </div>
-        </div>
+        <DataTable<Category>
+          data={pagedCategories}
+          columns={categoryColumns}
+          keyExtractor={(cat) => cat.id}
+          isLoading={isLoading}
+          showSrNo={true}
+          srNoHeader="SR. NO."
+          srNoWidth="w-20"
+          sortKey={sortField}
+          sortDirection={sortOrder}
+          onSort={(key) => handleSort(key as SortField)}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          paginationLabel="categories"
+          emptyTitle="No categories found"
+          emptyDescription="No categories found matching your criteria."
+          emptyAction={isFiltered ? { label: 'Clear All Filters', onClick: handleResetFilters } : undefined}
+          caption="Categories Management Taxonomy and Classification Table"
+        />
       )}
 
       {/* Add / Edit Category Modal */}

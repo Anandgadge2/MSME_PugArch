@@ -24,6 +24,7 @@ import {
 import { cn } from '../../../lib/utils';
 import { formatRefId } from '../../../utils/refIdUtils';
 import { formatDate } from '../../shared/format';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 function BuyerLogoIcon({ name, logoUrl }: { name?: string; logoUrl?: string | null }) {
     const [imgErr, setImgErr] = useState(false);
@@ -596,6 +597,165 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
         });
     }, [tenders, bids, requirements, sortDirection, sortKey]);
 
+    const tableColumns = useMemo<ColumnDef<OpportunityData>[]>(() => [
+        {
+            key: 'id',
+            header: 'Ref ID',
+            sortable: true,
+            sortKey: 'id',
+            width: 'w-28',
+            cell: (item) => (
+                <span className="inline-block text-[11px] font-mono font-bold text-slate-700 bg-slate-100/90 px-2.5 py-1 rounded-md border border-slate-200/70 whitespace-nowrap shadow-2xs group-hover:border-blue-200 group-hover:bg-blue-50/40 transition-colors">
+                    {item.displayId}
+                </span>
+            )
+        },
+        {
+            key: 'title',
+            header: 'Title / Description',
+            sortable: true,
+            sortKey: 'title',
+            cell: (item) => (
+                <div className="space-y-1">
+                    <p className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug group-hover:text-[#0b2447] transition-colors">
+                        {item.title}
+                    </p>
+                    {(() => {
+                        const parsed = parseDescription(item.rawDescription || item.description);
+                        const showUrgency = parsed.urgency && !parsed.urgency.toLowerCase().includes('normal');
+                        const hasBadges = parsed.method || showUrgency;
+                        return (
+                            <div className="space-y-1">
+                                {hasBadges && (
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {parsed.method && (
+                                            <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/80 whitespace-nowrap shadow-2xs">
+                                                {parsed.method}
+                                            </span>
+                                        )}
+                                        {showUrgency && (
+                                            <span className={cn(
+                                                "px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border whitespace-nowrap shadow-2xs",
+                                                parsed.urgency.toLowerCase().includes('urgent') || parsed.urgency.toLowerCase().includes('high')
+                                                    ? 'bg-rose-50 text-rose-700 border-rose-200/80'
+                                                    : 'bg-amber-50 text-amber-700 border-amber-200/80'
+                                            )}>
+                                                {parsed.urgency} Urgency
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                                {parsed.text ? (
+                                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                                        {parsed.text}
+                                    </p>
+                                ) : !hasBadges && item.description ? (
+                                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                                        {item.description}
+                                    </p>
+                                ) : null}
+                            </div>
+                        );
+                    })()}
+                </div>
+            )
+        },
+        {
+            key: 'buyerName',
+            header: 'Buyer Organization',
+            sortable: true,
+            sortKey: 'buyerName',
+            cell: (item) => (
+                <div className="flex items-center gap-2.5">
+                    <BuyerLogoIcon name={item.buyerName} />
+                    <span className="font-extrabold text-xs sm:text-sm text-slate-900 leading-snug">{item.buyerName}</span>
+                </div>
+            )
+        },
+        {
+            key: 'category',
+            header: 'Category',
+            sortable: true,
+            sortKey: 'category',
+            cell: (item) => (
+                <span className="inline-block bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200/60 text-slate-600 leading-snug text-xs font-semibold">
+                    {item.category}
+                </span>
+            )
+        },
+        {
+            key: 'startDate',
+            header: 'Published Date',
+            sortable: true,
+            sortKey: 'startDate',
+            width: 'w-28',
+            cell: (item) => (
+                <span className="text-slate-600 text-xs font-semibold whitespace-nowrap">
+                    {item.startDate ? formatDate(item.startDate) : 'N/A'}
+                </span>
+            )
+        },
+        {
+            key: 'endDate',
+            header: 'Closes / Timeline',
+            sortable: true,
+            sortKey: 'endDate',
+            width: 'w-32',
+            cell: (item) => {
+                const deadlineAlert = item.statusCode === 'CLOSING_TODAY' || item.statusCode === 'CLOSING_SOON' || item.daysRemaining <= 7;
+                return (
+                    <div className="space-y-0.5 whitespace-nowrap text-xs">
+                        <p className="font-extrabold text-slate-900">{item.endDate ? formatDate(item.endDate) : 'N/A'}</p>
+                        <span className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                            deadlineAlert
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : 'bg-slate-100 text-[#0b2447] border-slate-200'
+                        )}>
+                            {item.deadlineLabel}
+                        </span>
+                    </div>
+                );
+            }
+        },
+        {
+            key: 'statusLabel',
+            header: 'Status',
+            sortable: true,
+            sortKey: 'statusLabel',
+            width: 'w-28',
+            cell: (item) => {
+                const badgeColor = getStatusBadgeClass(item.statusCode);
+                return (
+                    <span className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider shadow-2xs whitespace-nowrap",
+                        badgeColor
+                    )}>
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                        {item.statusLabel}
+                    </span>
+                );
+            }
+        },
+        {
+            key: 'action',
+            header: 'Action',
+            align: 'right',
+            width: 'w-32',
+            cellClassName: 'text-right',
+            headerClassName: 'text-right',
+            cell: (item) => (
+                <Link 
+                    href={item.link} 
+                    className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-[#0b2447] px-3.5 text-xs font-black text-white hover:bg-[#12335f] active:scale-95 transition-all duration-200 shadow-sm"
+                >
+                    View Details 
+                    <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+            )
+        }
+    ], []);
+
     const viewAllHref = user
         ? (user.role === 'seller' ? '/seller/opportunities' : '/marketplace/requirements')
         : '/marketplace/requirements';
@@ -686,32 +846,18 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                             ))}
                         </div>
                     ) : (
-                        <div className="overflow-x-auto rounded-3xl border border-slate-200/80 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.03)] w-full">
-                            <table data-ux-wrapped="true" className="w-full text-left text-sm table-auto border-collapse">
-                                <thead>
-                                    <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-10">#</th>
-                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-28">Ref ID</th>
-                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-[32%]">Title / Description</th>
-                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-[24%]">Buyer Organization</th>
-                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-[16%]">Category</th>
-                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-28">Published Date</th>
-                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-28">Closes / Timeline</th>
-                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 w-24">Status</th>
-                                        <th className="px-4 py-3.5 sm:px-5 sm:py-4 text-right">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                                    {activeOpportunities.slice(0, 8).map((item, index) => (
-                                        <OpportunityListRow 
-                                            key={item.sourceKey}
-                                            item={item} 
-                                            srNo={index + 1} 
-                                        />
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        <DataTable<OpportunityData>
+                            data={activeOpportunities.slice(0, 8)}
+                            columns={tableColumns}
+                            keyExtractor={(item) => item.sourceKey}
+                            showSrNo={true}
+                            srNoHeader="#"
+                            sortKey={sortKey}
+                            sortDirection={sortDirection}
+                            onSort={(key) => toggleSort(key as any)}
+                            emptyTitle="No active procurement opportunities found"
+                            emptyDescription={emptyMessage}
+                        />
                     )}
                 </div>
             </div>

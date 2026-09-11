@@ -7,6 +7,7 @@ import { cn } from '../../lib/utils';
 import { ResponsiveFilterBar } from '../../components/ui/ResponsiveFilterBar';
 import { EmptyState, InlineError, LoadingState } from './FeatureStates';
 import { Pagination } from './Pagination';
+import { DataTable, type ColumnDef } from '../../components/ui/data-table';
 import { EntityIdLink } from './EntityIdLink';
 import { ViewModeToggle } from './ViewModeToggle';
 import { KpiCard } from './KpiCard';
@@ -111,6 +112,73 @@ export default function GenericFeaturePage({ title, description, endpoint, empty
     setSortKey(field);
     setPage(1);
   };
+
+  const genericColumns: ColumnDef<GenericRecord>[] = [
+    {
+      key: 'record',
+      header: 'Record',
+      width: 'w-[36%]',
+      sortable: true,
+      cell: (record) => (
+        <div>
+          <p className="font-black text-slate-900 text-wrap-anywhere">{titleOf(record)}</p>
+          {record.id && (
+            <div className="mt-1">
+              <EntityIdLink id={record.id} size="sm" onClick={() => setSelectedRecord(record)} />
+            </div>
+          )}
+          <p className="mt-1 max-w-md text-[10px] font-semibold text-slate-500 text-wrap-anywhere line-clamp-2">
+            {detailOf(record)}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-[16%]',
+      sortable: true,
+      cell: (record) => (
+        <span className="rounded-lg border border-blue-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase text-[#12335f]">
+          {statusOf(record).replace(/_/g, ' ')}
+        </span>
+      ),
+    },
+    {
+      key: 'value',
+      header: 'Value',
+      width: 'w-[16%]',
+      sortable: true,
+      cell: (record) => (
+        <span className="text-xs font-black text-slate-900">
+          {amountOf(record) ? formatCurrency(amountOf(record)) : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      width: 'w-[16%]',
+      sortable: true,
+      cell: (record) => (
+        <span className="text-xs font-bold text-slate-500">{formatDate(dateOf(record))}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-[12%]',
+      align: 'right',
+      cellClassName: 'text-right',
+      cell: (record) => (
+        <div className="flex justify-end gap-1.5">
+          <IconButton label="View details" icon={Eye} onClick={() => setSelectedRecord(record)} />
+          {canEditRecord(record) && <IconButton label="Edit" icon={Edit3} onClick={() => setEditingRecord(record)} />}
+          {canEditRecord(record) && <IconButton label="Delete" icon={Trash2} tone="red" onClick={() => handleDelete(record)} />}
+        </div>
+      ),
+    },
+  ];
 
   const handleDelete = async (record: GenericRecord) => {
     if (!window.confirm(`Delete ${titleOf(record)}?`)) return;
@@ -273,51 +341,22 @@ export default function GenericFeaturePage({ title, description, endpoint, empty
           </div>
         </>
       ) : (
-        <div className="rounded-lg border border-slate-200 bg-white overflow-x-clip">
-          <div className="overflow-x-auto">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[760px] text-left text-sm">
-              <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th className="p-3 w-20">Sr. No.</th>
-                  <th className="p-3"><SortableHeader label="Record" field="record" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                  <th className="p-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                  <th className="p-3"><SortableHeader label="Value" field="value" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                  <th className="p-3"><SortableHeader label="Date" field="date" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                  <th className="p-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {pageItems.map((record, index) => (
-                  <tr key={record.id || titleOf(record)} className="hover:bg-slate-50">
-                    <td className="p-3 font-mono text-xs font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
-                    <td className="p-3">
-                      <p className="font-black text-slate-900 text-wrap-anywhere">{titleOf(record)}</p>
-                      {record.id && (
-                        <div className="mt-1">
-                          <EntityIdLink id={record.id} size="sm" onClick={() => setSelectedRecord(record)} />
-                        </div>
-                      )}
-                      <p className="mt-1 max-w-md text-[10px] font-semibold text-slate-500 text-wrap-anywhere line-clamp-2">{detailOf(record)}</p>
-                    </td>
-                    <td className="p-3"><span className="rounded-lg border border-blue-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase text-[#12335f]">{statusOf(record).replace(/_/g, ' ')}</span></td>
-                    <td className="p-3 text-xs font-black text-slate-900">{amountOf(record) ? formatCurrency(amountOf(record)) : '-'}</td>
-                    <td className="p-3 text-xs font-bold text-slate-500">{formatDate(dateOf(record))}</td>
-                    <td className="p-3">
-                      <div className="flex justify-end gap-1.5">
-                        <IconButton label="View details" icon={Eye} onClick={() => setSelectedRecord(record)} />
-                        {canEditRecord(record) && <IconButton label="Edit" icon={Edit3} onClick={() => setEditingRecord(record)} />}
-                        {canEditRecord(record) && <IconButton label="Delete" icon={Trash2} tone="red" onClick={() => handleDelete(record)} />}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-</div>
-          </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label={title.toLowerCase()} />
-        </div>
+        <DataTable<GenericRecord>
+          data={pageItems}
+          columns={genericColumns}
+          keyExtractor={(record) => record.id || titleOf(record)}
+          sortKey={sortKey}
+          sortDirection={sortDirection}
+          onSort={(key) => toggleSort(key as GenericSortKey)}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          paginationLabel={title.toLowerCase()}
+          srNoWidth="w-[5%]"
+          minWidth="min-w-[760px]"
+        />
       )}
       {selectedRecord && (
         <GenericDetailsModal

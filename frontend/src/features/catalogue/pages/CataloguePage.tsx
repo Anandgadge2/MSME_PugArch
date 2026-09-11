@@ -13,6 +13,7 @@ import { getApi, normalizeList, postApi } from '../../shared/apiClient';
 import { formatCurrency, formatDate, formatDateTime } from '../../shared/format';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
@@ -734,6 +735,323 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
 
   const isInitialLoading = loading && data.length === 0;
 
+  const isFiltered = Boolean(
+    searchTerm ||
+    statusFilter ||
+    categoryFilter ||
+    priceFilter ||
+    verificationFilter ||
+    kindFilter !== 'all'
+  );
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('');
+    setCategoryFilter('');
+    setPriceFilter('');
+    setVerificationFilter('');
+    setKindFilter('all');
+  };
+
+  const catalogueColumns: ColumnDef<CatalogueRecord>[] = useMemo(() => {
+    const cols: ColumnDef<CatalogueRecord>[] = [
+      {
+        key: 'image',
+        header: 'Image',
+        width: 'w-16',
+        align: 'center',
+        cellClassName: 'text-center align-middle',
+        cell: (item) => {
+          const imageSrc = getCatalogueImageSrc(item);
+          return (
+            <button
+              type="button"
+              onClick={() => setSelectedDetailsItem(item)}
+              className="inline-block h-8 w-8 rounded-md overflow-hidden border border-slate-200 bg-slate-50 hover:opacity-85 transition-opacity"
+              title="View details"
+            >
+              {imageSrc ? (
+                <img src={imageSrc} alt={item.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+              ) : (
+                <div className={cn('flex h-full w-full items-center justify-center text-white', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
+                  {item.itemKind === 'product' ? <PackageSearch className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
+                </div>
+              )}
+            </button>
+          );
+        },
+      },
+      {
+        key: 'name',
+        header: 'Item',
+        width: 'w-[210px]',
+        sortable: true,
+        sortKey: 'name',
+        cell: (item) => (
+          <div className="w-full">
+            <div className="flex items-center gap-2 mb-0.5">
+              <EntityIdLink
+                label={`${item.itemKind === 'product' ? 'PRD' : 'SVC'}-${item.id}`}
+                id={item.id}
+                size="sm"
+                onClick={() => setSelectedDetailsItem(item)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedDetailsItem(item)}
+              className="block text-left"
+            >
+              <p className="max-w-[190px] break-words text-sm font-black leading-snug text-neutral-900 hover:text-emerald-700 hover:underline line-clamp-2">
+                {item.name}
+              </p>
+            </button>
+            <p className="mt-0.5 max-w-[190px] break-words text-[11px] font-medium text-slate-500 line-clamp-2">{item.description || 'No description'}</p>
+          </div>
+        ),
+      },
+      {
+        key: 'kind',
+        header: 'Type',
+        width: 'w-20',
+        sortable: true,
+        sortKey: 'kind',
+        cell: (item) => (
+          <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase text-slate-700">
+            {item.itemKind}
+          </span>
+        ),
+      },
+      {
+        key: 'category',
+        header: 'Category',
+        width: 'w-28',
+        sortable: true,
+        sortKey: 'category',
+        cell: (item) => (
+          item.category?.name ? (
+            <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-700 text-wrap-anywhere">
+              {item.category.name}
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold text-slate-400">NA</span>
+          )
+        ),
+      },
+      {
+        key: 'hsn',
+        header: 'HSN',
+        width: 'w-24',
+        sortable: true,
+        sortKey: 'hsn',
+        cell: (item) => (
+          item.hsnCode ? (
+            <span className="font-mono text-[11px] font-bold text-slate-700 text-wrap-anywhere">{item.hsnCode}</span>
+          ) : (
+            <span className="text-[10px] font-bold text-slate-400">NA</span>
+          )
+        ),
+      },
+      {
+        key: 'seller',
+        header: 'Seller',
+        width: 'w-28',
+        sortable: true,
+        sortKey: 'seller',
+        cell: (item) => (
+          item.seller?.name ? (
+            mode === 'seller' ? (
+              <span className="text-xs font-bold text-slate-700 text-wrap-anywhere">{item.seller.name}</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => openSellerProfile(item.seller)}
+                className="inline-flex items-start gap-1 text-xs font-bold text-slate-700 hover:text-[#059669] hover:underline text-wrap-anywhere text-left"
+              >
+                <Store className="h-3 w-3 text-slate-400 shrink-0 mt-0.5" />
+                <span className="text-wrap-anywhere">{item.seller.name}</span>
+              </button>
+            )
+          ) : (
+            <span className="text-[10px] font-bold text-slate-400">—</span>
+          )
+        ),
+      },
+      {
+        key: 'price',
+        header: 'Price',
+        width: 'w-24',
+        align: 'right',
+        cellClassName: 'text-right whitespace-nowrap',
+        sortable: true,
+        sortKey: 'price',
+        cell: (item) => {
+          const value = cataloguePrice(item);
+          return (
+            <div>
+              <p className="text-sm font-black text-emerald-700">{formatCurrency(value)}</p>
+              {item.itemKind === 'product' && item.unitOfMeasure && (
+                <p className="text-[10px] font-bold text-slate-400">/{item.unitOfMeasure}</p>
+              )}
+              {item.itemKind === 'service' && item.pricingModel && (
+                <p className="text-[10px] font-bold text-slate-400">{item.pricingModel.replace(/_/g, ' ')}</p>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        width: 'w-28',
+        sortable: true,
+        sortKey: 'status',
+        cell: (item) => {
+          const status = item.status || 'DRAFT';
+          const actionState = buyerActions[`${item.itemKind}-${item.id}`];
+          const buyerStatusLabel = actionState?.purchase
+            ? `Purchase ${String(actionState.purchase.status || 'requested').replace(/_/g, ' ')}`
+            : actionState?.rfq
+              ? `RFQ ${String(actionState.rfq.status || 'sent').replace(/_/g, ' ')}`
+              : '';
+          return (
+            <div className="whitespace-nowrap min-w-[112px]">
+              <Badge variant={status === 'ACTIVE' ? 'success' : status === 'ARCHIVED' || status === 'INACTIVE' ? 'warning' : 'default'}>
+                {status.replace(/_/g, ' ')}
+              </Badge>
+              {buyerStatusLabel && (
+                <p className="mt-1 text-[9px] font-black uppercase tracking-wide text-emerald-700">{buyerStatusLabel}</p>
+              )}
+            </div>
+          );
+        },
+      },
+    ];
+
+    if (mode === 'seller') {
+      cols.push({
+        key: 'createdAt',
+        header: 'Date & Time',
+        width: 'w-36',
+        sortable: true,
+        sortKey: 'createdAt',
+        cell: (item) => (
+          <span className="text-xs text-slate-500 font-semibold whitespace-nowrap tabular-nums">
+            {formatDateTime(item.createdAt)}
+          </span>
+        ),
+      });
+    }
+
+    cols.push({
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-[160px]',
+      align: 'right',
+      cellClassName: 'text-right sticky right-0 z-[5] bg-white group-hover:bg-slate-50/60 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.05)] border-l border-slate-100',
+      cell: (item) => {
+        const status = item.status || 'DRAFT';
+        return (
+          <div className="inline-flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+            {mode === 'seller' && (
+              <>
+                <button type="button" onClick={() => openViewDetails(item)} title="View details" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">
+                  <Eye className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" onClick={() => router.push(item.itemKind === 'product' ? `/seller/products/${item.id}/edit` : `/seller/services/${item.id}/edit`)} disabled={status === 'ARCHIVED'} title="Edit" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 shrink-0">
+                  <Settings2 className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" onClick={() => duplicateItem(item)} title="Duplicate" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => togglePublish(item)}
+                  title={status === 'ACTIVE' ? 'Deactivate' : 'Publish'}
+                  className={cn(
+                    "inline-flex h-8 w-8 items-center justify-center rounded-md border shrink-0 transition-colors",
+                    status === 'ACTIVE'
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                  )}
+                >
+                  {status === 'ACTIVE' ? (
+                    <ToggleRight className="h-3.5 w-3.5" />
+                  ) : (
+                    <ToggleLeft className="h-3.5 w-3.5" />
+                  )}
+                </button>
+                <button type="button" onClick={() => deleteItem(item)} title="Delete" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-red-600 hover:bg-red-50 shrink-0">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
+            {mode === 'admin' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDetailsItem(item)}
+                  title="View details"
+                  aria-label="Details"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shrink-0"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                </button>
+                {item.seller && (
+                  <button
+                    type="button"
+                    onClick={() => openSellerProfile(item.seller)}
+                    title="View seller"
+                    aria-label="Seller"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-colors shrink-0"
+                  >
+                    <Store className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </>
+            )}
+            {mode === 'buyer' && (
+              <>
+                <CompareToggleButton item={{ type: item.itemKind, id: item.id, categoryId: item.categoryId }} iconOnly />
+                <button
+                  type="button"
+                  onClick={() => setSelectedDetailsItem(item)}
+                  title="View details"
+                  aria-label="Details"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shrink-0"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddToCart(item)}
+                  disabled={!buyerApproved || addingItemKey === `${item.itemKind}-${item.id}`}
+                  title={buyerApproved ? 'Add to cart' : 'Approval required'}
+                  aria-label="Add to cart"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#12335f] text-[#12335f] hover:bg-[#12335f]/5 disabled:cursor-not-allowed disabled:opacity-50 transition-colors shrink-0"
+                >
+                  {addingItemKey === `${item.itemKind}-${item.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openPurchaseBid(item)}
+                  disabled={!buyerApproved}
+                  title={buyerApproved ? 'Purchase or request bid' : 'Approval required'}
+                  aria-label="Purchase"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 transition-colors shrink-0"
+                >
+                  <ShoppingCart className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+        );
+      },
+    });
+
+    return cols;
+  }, [addingItemKey, buyerActions, buyerApproved, mode, router]);
+
   return (
     <div className="min-w-0 space-y-6">
       {/* Premium Dashboard Banner Header */}
@@ -991,260 +1309,41 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
               ))}
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
-              <div className="relative overflow-x-auto">
-                <table className={cn("w-full table-fixed text-left text-sm", mode === 'seller' ? "min-w-[1040px]" : "min-w-[900px]")}>
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                      <th className="px-3 py-3 w-14 text-center">
-                        <CatalogueSortHead label="Sr. No" field="sr" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
-                      </th>
-                      <th className="px-2 py-3 w-16 text-center">Image</th>
-                      <th className="px-3 py-3 w-[210px]">
-                        <CatalogueSortHead label="Item" field="name" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
-                      </th>
-                      <th className="px-2 py-3 w-20 whitespace-nowrap">
-                        <CatalogueSortHead label="Type" field="kind" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
-                      </th>
-                      <th className="px-2 py-3 w-28 whitespace-nowrap">
-                        <CatalogueSortHead label="Category" field="category" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
-                      </th>
-                      <th className="px-2 py-3 w-24 whitespace-nowrap">
-                        <CatalogueSortHead label="HSN" field="hsn" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
-                      </th>
-                      <th className="px-2 py-3 w-28 whitespace-nowrap">
-                        <CatalogueSortHead label="Seller" field="seller" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
-                      </th>
-                      <th className="px-2 py-3 w-24 text-right whitespace-nowrap">
-                        <CatalogueSortHead label="Price" field="price" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} align="right" />
-                      </th>
-                      <th className="px-2 py-3 w-24 whitespace-nowrap">
-                        <CatalogueSortHead label="Status" field="status" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
-                      </th>
-                      {mode === 'seller' && (
-                        <th className="px-2 py-3 w-36 whitespace-nowrap">
-                          <CatalogueSortHead label="Date & Time" field="createdAt" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
-                        </th>
-                      )}
-                      <th className="sticky right-0 z-10 bg-slate-50 px-3 py-3 w-[160px] min-w-[160px] text-right whitespace-nowrap border-l border-slate-200 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.05)]">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pagedItems.map((item, index) => {
-                      const value = cataloguePrice(item);
-                      const status = item.status || 'DRAFT';
-                      const imageSrc = getCatalogueImageSrc(item);
-                      const actionState = buyerActions[`${item.itemKind}-${item.id}`];
-                      const buyerStatusLabel = actionState?.purchase
-                        ? `Purchase ${String(actionState.purchase.status || 'requested').replace(/_/g, ' ')}`
-                        : actionState?.rfq
-                          ? `RFQ ${String(actionState.rfq.status || 'sent').replace(/_/g, ' ')}`
-                          : '';
-                      return (
-                        <tr key={`${item.itemKind}-${item.id}`} className="group border-b border-slate-100 bg-white transition hover:bg-slate-50/60 last:border-b-0">
-                          <td className="px-3 py-3 text-center text-xs font-medium text-slate-500 align-middle">
-                            {String((page - 1) * pageSize + index + 1).padStart(2, '0')}
-                          </td>
-                          <td className="px-2 py-3 text-center align-middle">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedDetailsItem(item)}
-                              className="inline-block h-8 w-8 rounded-md overflow-hidden border border-slate-200 bg-slate-50 hover:opacity-85 transition-opacity"
-                              title="View details"
-                            >
-                              {imageSrc ? (
-                                <img src={imageSrc} alt={item.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                              ) : (
-                                <div className={cn('flex h-full w-full items-center justify-center text-white', item.itemKind === 'product' ? 'bg-[#059669]' : 'bg-emerald-600')}>
-                                  {item.itemKind === 'product' ? <PackageSearch className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
-                                </div>
-                              )}
-                            </button>
-                          </td>
-                          <td className="px-3 py-3 align-top w-[210px]">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <EntityIdLink
-                                label={`${item.itemKind === 'product' ? 'PRD' : 'SVC'}-${item.id}`}
-                                id={item.id}
-                                size="sm"
-                                onClick={() => setSelectedDetailsItem(item)}
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedDetailsItem(item)}
-                              className="block text-left"
-                            >
-                              <p className="max-w-[190px] break-words text-sm font-black leading-snug text-neutral-900 hover:text-emerald-700 hover:underline line-clamp-2">
-                                {item.name}
-                              </p>
-                            </button>
-                            <p className="mt-0.5 max-w-[190px] break-words text-[11px] font-medium text-slate-500 line-clamp-2">{item.description || 'No description'}</p>
-                          </td>
-                          <td className="px-3 py-3 align-top">
-                            <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase text-slate-700">
-                              {item.itemKind}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3 align-top  ">
-                            {item.category?.name ? (
-                              <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-700 text-wrap-anywhere">
-                                {item.category.name}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-bold text-slate-400">NA</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 align-top">
-                            {item.hsnCode ? (
-                              <span className="font-mono text-[11px] font-bold text-slate-700 text-wrap-anywhere">{item.hsnCode}</span>
-                            ) : (
-                              <span className="text-[10px] font-bold text-slate-400">NA</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 align-top">
-                            {item.seller?.name ? (
-                              mode === 'seller' ? (
-                                <span className="text-xs font-bold text-slate-700 text-wrap-anywhere">{item.seller.name}</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => openSellerProfile(item.seller)}
-                                  className="inline-flex items-start gap-1 text-xs font-bold text-slate-700 hover:text-[#059669] hover:underline text-wrap-anywhere text-left"
-                                >
-                                  <Store className="h-3 w-3 text-slate-400 shrink-0 mt-0.5" />
-                                  <span className="text-wrap-anywhere">{item.seller.name}</span>
-                                </button>
-                              )
-                            ) : (
-                              <span className="text-[10px] font-bold text-slate-400">—</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 text-right whitespace-nowrap align-top">
-                            <p className="text-sm font-black text-emerald-700">{formatCurrency(value)}</p>
-                            {item.itemKind === 'product' && item.unitOfMeasure && (
-                              <p className="text-[10px] font-bold text-slate-400">/{item.unitOfMeasure}</p>
-                            )}
-                            {item.itemKind === 'service' && item.pricingModel && (
-                              <p className="text-[10px] font-bold text-slate-400">{item.pricingModel.replace(/_/g, ' ')}</p>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 align-top whitespace-nowrap min-w-[112px]">
-                            <Badge variant={status === 'ACTIVE' ? 'success' : status === 'ARCHIVED' || status === 'INACTIVE' ? 'warning' : 'default'}>
-                              {status.replace(/_/g, ' ')}
-                            </Badge>
-                            {buyerStatusLabel && (
-                              <p className="mt-1 text-[9px] font-black uppercase tracking-wide text-emerald-700">{buyerStatusLabel}</p>
-                            )}
-                          </td>
-                          {mode === 'seller' && (
-                            <td className="px-3 py-3 align-top text-xs text-slate-500 font-semibold whitespace-nowrap tabular-nums">
-                              {formatDateTime(item.createdAt)}
-                            </td>
-                          )}
-                          <td className="sticky right-0 z-[5] w-[160px] min-w-[160px] bg-white px-3 py-3 text-right align-middle whitespace-nowrap border-l border-slate-100 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.05)] group-hover:bg-slate-50/60">
-                            <div className="inline-flex items-center justify-end gap-1">
-                              {mode === 'seller' && (
-                                <>
-                                  <button type="button" onClick={() => openViewDetails(item)} title="View details" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">
-                                    <Eye className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button type="button" onClick={() => router.push(item.itemKind === 'product' ? `/seller/products/${item.id}/edit` : `/seller/services/${item.id}/edit`)} disabled={status === 'ARCHIVED'} title="Edit" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 shrink-0">
-                                    <Settings2 className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button type="button" onClick={() => duplicateItem(item)} title="Duplicate" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">
-                                    <Copy className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => togglePublish(item)}
-                                    title={status === 'ACTIVE' ? 'Deactivate' : 'Publish'}
-                                    className={cn(
-                                      "inline-flex h-8 w-8 items-center justify-center rounded-md border shrink-0 transition-colors",
-                                      status === 'ACTIVE'
-                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                        : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
-                                    )}
-                                  >
-                                    {status === 'ACTIVE' ? (
-                                      <ToggleRight className="h-3.5 w-3.5" />
-                                    ) : (
-                                      <ToggleLeft className="h-3.5 w-3.5" />
-                                    )}
-                                  </button>
-                                  <button type="button" onClick={() => deleteItem(item)} title="Delete" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-red-600 hover:bg-red-50 shrink-0">
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </>
-                              )}
-                              {mode === 'admin' && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedDetailsItem(item)}
-                                    title="View details"
-                                    aria-label="Details"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shrink-0"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                  </button>
-                                  {item.seller && (
-                                    <button
-                                      type="button"
-                                      onClick={() => openSellerProfile(item.seller)}
-                                      title="View seller"
-                                      aria-label="Seller"
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-colors shrink-0"
-                                    >
-                                      <Store className="h-3.5 w-3.5" />
-                                    </button>
-                                  )}
-                                </>
-                              )}
-                              {mode === 'buyer' && (
-                                <>
-                                  <CompareToggleButton item={{ type: item.itemKind, id: item.id, categoryId: item.categoryId }} iconOnly />
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedDetailsItem(item)}
-                                    title="View details"
-                                    aria-label="Details"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shrink-0"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAddToCart(item)}
-                                    disabled={!buyerApproved || addingItemKey === `${item.itemKind}-${item.id}`}
-                                    title={buyerApproved ? 'Add to cart' : 'Approval required'}
-                                    aria-label="Add to cart"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#12335f] text-[#12335f] hover:bg-[#12335f]/5 disabled:cursor-not-allowed disabled:opacity-50 transition-colors shrink-0"
-                                  >
-                                    {addingItemKey === `${item.itemKind}-${item.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShoppingCart className="h-3.5 w-3.5" />}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openPurchaseBid(item)}
-                                    disabled={!buyerApproved}
-                                    title={buyerApproved ? 'Purchase or request bid' : 'Approval required'}
-                                    aria-label="Purchase"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 transition-colors shrink-0"
-                                  >
-                                    <ShoppingCart className="h-3.5 w-3.5" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="marketplace items" />
-            </div>
+            <DataTable<CatalogueRecord>
+              data={pagedItems}
+              columns={catalogueColumns}
+              keyExtractor={(item) => `${item.itemKind}-${item.id}`}
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              paginationLabel="marketplace items"
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onSort={(key) => {
+                setSortKey(key as any);
+                setSortDirection(prev => sortKey === key ? (prev === 'asc' ? 'desc' : 'asc') : 'asc');
+              }}
+              showSrNo
+              srNoWidth="w-14"
+              minWidth={mode === 'seller' ? "min-w-[1040px]" : "min-w-[900px]"}
+              isLoading={loading && data.length === 0}
+              emptyTitle="No catalogue items found"
+              emptyDescription={
+                isFiltered
+                  ? "No items match your active filters or search criteria."
+                  : "No marketplace products or services have been added yet."
+              }
+              emptyAction={
+                isFiltered
+                  ? {
+                      label: "Reset Filters",
+                      onClick: resetFilters,
+                    }
+                  : undefined
+              }
+            />
           )}
           {viewMode === 'grid' && (
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -1299,35 +1398,69 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
             <CardTitle className="text-sm font-black">Import History</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto pt-4">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="pb-2 pr-3">Batch</th><th className="pb-2 pr-3">Type</th><th className="pb-2 pr-3">File</th><th className="pb-2 pr-3">Rows</th><th className="pb-2 pr-3">Status</th><th className="pb-2 pr-3">Date</th><th className="pb-2">Report</th>
-                </tr>
-              </thead>
-              <tbody>
-                {importHistory.map(batch => (
-                  <tr key={batch.id} className="border-t border-slate-100">
-                    <td className="py-2 pr-3 font-mono">#{batch.id}</td>
-                    <td className="py-2 pr-3">{batch.type}</td>
-                    <td className="py-2 pr-3 max-w-[180px] truncate">{batch.fileName}</td>
-                    <td className="py-2 pr-3">{batch.validRows}/{batch.totalRows} ok · {batch.invalidRows} fail</td>
-                    <td className="py-2 pr-3"><Badge>{batch.status}</Badge></td>
-                    <td className="py-2 pr-3">{formatDateTime(batch.createdAt)}</td>
-                    <td className="py-2">
-                      {batch.invalidRows > 0 ? (
-                        <button type="button" className="text-[10px] font-black uppercase text-red-700 hover:underline" onClick={() => {
+            <DataTable
+              data={importHistory}
+              columns={[
+                {
+                  key: 'id',
+                  header: 'Batch',
+                  width: 'w-20',
+                  cell: (batch: any) => <span className="font-mono">#{batch.id}</span>
+                },
+                {
+                  key: 'type',
+                  header: 'Type',
+                  width: 'w-24',
+                  cell: (batch: any) => <span>{batch.type}</span>
+                },
+                {
+                  key: 'fileName',
+                  header: 'File',
+                  cell: (batch: any) => <span className="max-w-[180px] truncate block">{batch.fileName}</span>
+                },
+                {
+                  key: 'rows',
+                  header: 'Rows',
+                  width: 'w-40',
+                  cell: (batch: any) => <span>{batch.validRows}/{batch.totalRows} ok · {batch.invalidRows} fail</span>
+                },
+                {
+                  key: 'status',
+                  header: 'Status',
+                  width: 'w-28',
+                  cell: (batch: any) => <Badge>{batch.status}</Badge>
+                },
+                {
+                  key: 'createdAt',
+                  header: 'Date',
+                  width: 'w-40',
+                  cell: (batch: any) => <span>{formatDateTime(batch.createdAt)}</span>
+                },
+                {
+                  key: 'report',
+                  header: 'Report',
+                  width: 'w-24',
+                  cell: (batch: any) => (
+                    batch.invalidRows > 0 ? (
+                      <button
+                        type="button"
+                        className="text-[10px] font-black uppercase text-red-700 hover:underline cursor-pointer"
+                        onClick={() => {
                           downloadCatalogueFile(`/api/catalogue/import/${batch.id}/errors/download`, `import_errors_${batch.id}.xlsx`)
                             .catch(() => toast.error('Download failed'));
-                        }}>Errors</button>
-                      ) : (
-                        <span className="text-[10px] font-bold text-emerald-600 uppercase">✔ Success</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        }}
+                      >
+                        Errors
+                      </button>
+                    ) : (
+                      <span className="text-[10px] font-bold text-emerald-600 uppercase">✔ Success</span>
+                    )
+                  )
+                }
+              ]}
+              keyExtractor={(batch: any) => batch.id}
+              rowClassName="hover:bg-slate-50/50 text-xs"
+            />
           </CardContent>
         </Card>
       )}

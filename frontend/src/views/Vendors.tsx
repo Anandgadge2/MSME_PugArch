@@ -19,6 +19,7 @@ import { useSupplierSummary } from '../features/ratings/hooks';
 import { Star as StarIcon } from 'lucide-react';
 
 import { cn } from '../lib/utils';
+import { DataTable, ColumnDef } from '../components/ui/data-table';
 
 interface Vendor {
   _id: string;
@@ -255,6 +256,143 @@ const Vendors = () => {
     setSortDirection(prev => sortKey === key && prev === 'asc' ? 'desc' : 'asc');
     setSortKey(key);
   };
+
+  const vendorColumns = useMemo<ColumnDef<Vendor>[]>(() => [
+    {
+      key: 'name',
+      header: 'Vendor Identity',
+      sortable: true,
+      sortKey: 'name',
+      width: 'w-[36%]',
+      cell: (vendor) => (
+        <div className="flex items-center gap-2.5 w-full">
+          <div className="h-8 w-8 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#12335f] font-black text-xs shrink-0">
+            {vendor.sellerProfile?.businessName?.charAt(0) || 'V'}
+          </div>
+          <div>
+            <p className="font-black text-xs uppercase tracking-tight text-[#1a1c21] text-wrap-anywhere">
+              {vendor.sellerProfile?.businessName || vendor.name}
+            </p>
+            <div className="mt-1">
+              <EntityIdLink
+                label={`VND-${String(vendor.id || vendor._id).padStart(5, '0')}`}
+                id={vendor.id || vendor._id}
+                size="sm"
+                onClick={() => handleViewProfile(vendor)}
+              />
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-[9px] font-bold text-[#12335f] uppercase">
+                {vendor.sellerProfile?.msmeCategory || 'Registered'} Enterprise
+              </p>
+              {vendor.sellerProfile?.msmeType && (
+                <span className="bg-emerald-50 text-emerald-700 px-1 py-0.2 rounded text-[8px] uppercase font-black">
+                  {vendor.sellerProfile.msmeType.replace(/_/g, ' ')}
+                </span>
+              )}
+              {vendor.sellerProfile?.vendorType && (
+                <span className="bg-blue-50 text-blue-700 px-1 py-0.2 rounded text-[8px] uppercase font-black">
+                  {vendor.sellerProfile.vendorType.replace(/_/g, ' ')}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'region',
+      header: 'Region',
+      sortable: true,
+      sortKey: 'region',
+      width: 'w-[18%]',
+      cell: (vendor) => (
+        <span className="text-[11px] font-bold text-slate-600 uppercase">
+          {vendor.sellerProfile?.city || 'N/A'}, {vendor.sellerProfile?.state || 'N/A'}
+        </span>
+      )
+    },
+    {
+      key: 'gst',
+      header: 'Registration (GST)',
+      sortable: true,
+      sortKey: 'gst',
+      width: 'w-[18%]',
+      cell: (vendor) => (
+        <span className="text-[10px] font-mono font-bold text-slate-600 uppercase bg-[#f1f3f5] border border-[#dadce0] px-2 py-0.5 rounded inline-block">
+          {vendor.sellerProfile?.gst || 'PENDING'}
+        </span>
+      )
+    },
+    {
+      key: 'capability',
+      header: 'Capability',
+      sortable: true,
+      sortKey: 'capability',
+      width: 'w-[20%]',
+      cell: (vendor) => (
+        <div className="flex gap-1 flex-wrap">
+          {(vendor.sellerProfile?.productCategories || []).slice(0, 2).map((c) => (
+            <span key={c} className="text-[9px] font-bold text-slate-500 border border-[#dadce0] rounded px-1.5 py-0.5 uppercase">
+              {c}
+            </span>
+          ))}
+        </div>
+      )
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-16',
+      align: 'right',
+      cell: (vendor) => {
+        const vid = vendor.id || vendor._id;
+        return (
+          <div className="relative inline-flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenKebabId(openKebabId === vid ? null : vid);
+              }}
+              className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
+              title="Actions"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+
+            {openKebabId === vid && (
+              <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenKebabId(null);
+                    handleViewProfile(vendor);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+                >
+                  <Info className="h-3.5 w-3.5 text-slate-500" />
+                  <span>View Info</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenKebabId(null);
+                    handleOpenQuoteModal(vendor);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+                >
+                  <FileText className="h-3.5 w-3.5 text-[#12335f]" />
+                  <span>Request Quote</span>
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      }
+    }
+  ], [openKebabId]);
 
   const renderSortHeader = (label: string, field: typeof sortKey, align: 'left' | 'right' = 'left') => {
     const isActive = sortKey === field;
@@ -586,119 +724,27 @@ const Vendors = () => {
               ))}
             </div>
           ) : (
-            /* LIST VIEW (Table style high density) */
-            <div className="overflow-x-auto bg-white border border-slate-200/80 rounded-2xl shadow-sm">
-              <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full text-left border-collapse min-w-[900px]">
-                <thead className="bg-[#f8f9fa] border-b border-[#dadce0]">
-                  <tr>
-                    <th className="p-3 text-[10px] font-black uppercase tracking-wider text-[#12335f]">Sr. No.</th>
-                    <th className="p-3">{renderSortHeader('Vendor Identity', 'name')}</th>
-                    <th className="p-3">{renderSortHeader('Region', 'region')}</th>
-                    <th className="p-3">{renderSortHeader('Registration (GST)', 'gst')}</th>
-                    <th className="p-3">{renderSortHeader('Capability', 'capability')}</th>
-                    <th className="p-3 text-right text-[10px] font-black uppercase tracking-wider text-[#12335f]">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#f1f3f5]">
-                  {pagedVendors.map((vendor, index) => (
-                    <tr key={vendor._id} className="hover:bg-[#fcfcfd] transition-colors">
-                      <td className="p-3 font-mono text-[11px] font-black text-slate-400">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
-                      <td className="p-3">
-                        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
-                          <div className="h-8 w-8 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#12335f] font-black text-xs shrink-0">
-                            {vendor.sellerProfile?.businessName?.charAt(0) || 'V'}
-                          </div>
-                          <div>
-                            <p className="font-black text-xs uppercase tracking-tight text-[#1a1c21] text-wrap-anywhere">{vendor.sellerProfile?.businessName || vendor.name}</p>
-                            <div className="mt-1">
-                              <EntityIdLink label={`VND-${String(vendor.id || vendor._id).padStart(5, '0')}`} id={vendor.id || vendor._id} size="sm" onClick={() => handleViewProfile(vendor)} />
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <p className="text-[9px] font-bold text-[#12335f] uppercase">
-                                {vendor.sellerProfile?.msmeCategory || 'Registered'} Enterprise
-                              </p>
-                              {vendor.sellerProfile?.msmeType && (
-                                <span className="bg-emerald-50 text-emerald-700 px-1 py-0.2 rounded text-[8px] uppercase font-black">
-                                  {vendor.sellerProfile.msmeType.replace(/_/g, ' ')}
-                                </span>
-                              )}
-                              {vendor.sellerProfile?.vendorType && (
-                                <span className="bg-blue-50 text-blue-700 px-1 py-0.2 rounded text-[8px] uppercase font-black">
-                                  {vendor.sellerProfile.vendorType.replace(/_/g, ' ')}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-3 text-[11px] font-bold text-slate-600 uppercase">
-                        {vendor.sellerProfile?.city || 'N/A'}, {vendor.sellerProfile?.state || 'N/A'}
-                      </td>
-                      <td className="p-3">
-                        <span className="text-[10px] font-mono font-bold text-slate-600 uppercase bg-[#f1f3f5] border border-[#dadce0] px-2 py-0.5 rounded inline-block">
-                          {vendor.sellerProfile?.gst || 'PENDING'}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <div className="flex gap-1 flex-wrap">
-                          {(vendor.sellerProfile?.productCategories || []).slice(0, 2).map(c => (
-                            <span key={c} className="text-[9px] font-bold text-slate-500 border border-[#dadce0] rounded px-1.5 py-0.5 uppercase">{c}</span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="p-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        <div className="relative inline-flex items-center justify-end">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const vid = vendor.id || vendor._id;
-                              setOpenKebabId(openKebabId === vid ? null : vid);
-                            }}
-                            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
-                            title="Actions"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-
-                          {openKebabId === (vendor.id || vendor._id) && (
-                            <div className="absolute right-0 top-full mt-1.5 z-40 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenKebabId(null);
-                                  handleViewProfile(vendor);
-                                }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                              >
-                                <Info className="h-3.5 w-3.5 text-slate-500" />
-                                <span>View Info</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenKebabId(null);
-                                  handleOpenQuoteModal(vendor);
-                                }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
-                              >
-                                <FileText className="h-3.5 w-3.5 text-[#12335f]" />
-                                <span>Request Quote</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-</div>
-            </div>
+            <DataTable<Vendor>
+              data={pagedVendors}
+              columns={vendorColumns}
+              keyExtractor={(vendor) => vendor._id || vendor.id}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onSort={(field) => toggleSort(field as any)}
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              paginationLabel="vendors"
+              showSrNo={true}
+              srNoHeader="Sr. No."
+              srNoWidth="w-16"
+              minWidth="min-w-[900px]"
+              onRowClick={(vendor) => handleViewProfile(vendor)}
+            />
           )}
-          {filteredVendors.length > 0 && (
+          {viewMode === 'grid' && filteredVendors.length > 0 && (
             <div className="mt-4 overflow-hidden rounded-xl border border-[#dadce0] bg-white">
               <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="vendors" />
             </div>

@@ -49,6 +49,7 @@ import {
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
+import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
 import { useOrgRole } from '../../../hooks/useOrgRole';
@@ -4821,6 +4822,185 @@ function ItemsDetailsForm({
     </div>
   ) : null;
 
+  const procurementItemColumns: ColumnDef<any>[] = useMemo(() => [
+    {
+      key: 'type',
+      header: 'Type',
+      width: 'w-24',
+      cell: (item: any) => (
+        <span className={cn(
+          "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
+          item.itemType === 'Service'
+            ? "border border-purple-200 bg-purple-50 text-purple-700"
+            : "border border-blue-200 bg-blue-50 text-blue-700"
+        )}>
+          {item.itemType || 'Product'}
+        </span>
+      )
+    },
+    {
+      key: 'name',
+      header: 'Item / Service Name',
+      width: 'w-56',
+      cell: (item: any) => (
+        <div className="font-black text-slate-900 text-xs">
+          {item.name || <span className="text-rose-500 italic">Unnamed Item</span>}
+        </div>
+      )
+    },
+    {
+      key: 'specifications',
+      header: 'Specifications / Scope',
+      cellClassName: 'text-slate-600 font-medium max-w-[240px]',
+      cell: (item: any) => {
+        const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
+        return (
+          <span className="line-clamp-2" title={descText || undefined}>
+            {descText ? descText : <span className="text-slate-400 italic">No description</span>}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'quantity',
+      header: 'Qty & UOM',
+      width: 'w-28',
+      align: 'center',
+      cell: (item: any) => (
+        <div>
+          <span className="font-extrabold text-slate-900">{item.quantity}</span>{' '}
+          <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit}</span>
+        </div>
+      )
+    },
+    {
+      key: 'rate',
+      header: 'Est. Unit Rate',
+      width: 'w-28',
+      align: 'right',
+      cellClassName: 'font-extrabold text-slate-900',
+      cell: (item: any) => (
+        Number(item.unitPrice || 0) > 0 ? (
+          <span>₹{Number(item.unitPrice).toLocaleString('en-IN')}</span>
+        ) : (
+          <span className="text-slate-400 font-normal">-</span>
+        )
+      )
+    },
+    {
+      key: 'hsn',
+      header: 'HSN / SAC',
+      width: 'w-24',
+      align: 'center',
+      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600',
+      cell: (item: any) => item.hsn_sac_code || <span className="text-slate-400">-</span>
+    },
+    {
+      key: 'brand',
+      header: 'Brand & Policy',
+      width: 'w-32',
+      cell: (item: any) => (
+        <div>
+          <div className="text-slate-800 text-[11px] font-bold truncate max-w-[120px]">
+            {item.brand_preference || 'Any Brand'}
+          </div>
+          <div className="mt-0.5">
+            {item.brand_flexible === 'No' ? (
+              <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
+                Lock
+              </span>
+            ) : (
+              <span className="inline-flex items-center text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                Flexible
+              </span>
+            )}
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'documents',
+      header: 'Documents & Specs',
+      width: 'w-40',
+      cell: (item: any) => {
+        const attachmentsList = item.attachments || [];
+        const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
+        const docCount = attachmentsList.length || (item.specificationFileName ? 1 : 0);
+
+        return hasDocs ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setQuickDocItem(item)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2 py-1 text-[10px] font-extrabold text-emerald-800 hover:bg-emerald-100 transition-colors"
+              title="Click to view or manage attachments"
+            >
+              <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
+              <span className="truncate max-w-[90px]">
+                {docCount} file{docCount === 1 ? '' : 's'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickDocItem(item)}
+              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+              title="Add more documents"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setQuickDocItem(item)}
+            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all"
+            title="Attach specification or drawing"
+          >
+            <FilePlus className="h-3 w-3 text-slate-400" />
+            <span>+ Attach Doc</span>
+          </button>
+        );
+      }
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      width: 'w-28',
+      align: 'right',
+      cell: (item: any) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedItemForEdit(item);
+              setShowItemDrawer(true);
+            }}
+            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors"
+            title="Edit specifications"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDuplicateItem(item)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            title="Duplicate line item"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleRemoveItem(item.id)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+            title="Delete line item"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )
+    }
+  ], [handleDuplicateItem, handleRemoveItem]);
+
   // 2. Item / Service Schedule Mode
   return (
     <div className="space-y-5 w-full min-w-0 max-w-full">
@@ -4920,248 +5100,42 @@ function ItemsDetailsForm({
       </div>
 
       {/* Modern Schedule Table */}
-      <div className="overflow-hidden border border-slate-200 rounded-xl bg-white shadow-3xs">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] border-collapse text-left text-xs">
-            <thead className="bg-slate-50/90 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200 tracking-wider">
-              <tr>
-                <th className="px-3.5 py-3 w-24">Type</th>
-                <th className="px-3.5 py-3 w-56">Item / Service Name</th>
-                <th className="px-3.5 py-3">Specifications / Scope</th>
-                <th className="px-3.5 py-3 w-28 text-center">Qty & UOM</th>
-                <th className="px-3.5 py-3 w-28 text-right">Est. Unit Rate</th>
-                <th className="px-3.5 py-3 w-24 text-center">HSN / SAC</th>
-                <th className="px-3.5 py-3 w-32">Brand & Policy</th>
-                <th className="px-3.5 py-3 w-40">Documents & Specs</th>
-                <th className="px-3.5 py-3 w-28 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {draft.items.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
-                    <div className="flex flex-col items-center justify-center space-y-3 max-w-md mx-auto">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                        <Package className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-extrabold text-slate-700">No items or services added yet</p>
-                        <p className="text-[11px] text-slate-500 font-medium mt-1">
-                          Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => handleAddNewItem('Product')}
-                          className="h-8 px-3.5 text-xs font-bold bg-[#12335f] text-white hover:bg-[#0b2445]"
-                        >
-                          <Plus className="h-3.5 w-3.5 mr-1" /> Add Product
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleAddNewItem('Service')}
-                          className="h-8 px-3.5 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
-                        >
-                          <Plus className="h-3.5 w-3.5 mr-1" /> Add Service
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={handleImportCartItems}
-                          className="h-8 px-3.5 text-xs font-bold text-slate-700"
-                        >
-                          <ShoppingCart className="h-3.5 w-3.5 mr-1" /> Import Cart
-                        </Button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                draft.items.map((item, index) => {
-                  const attachmentsList = item.attachments || [];
-                  const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
-                  const firstDoc = attachmentsList[0];
-                  const docCount = attachmentsList.length || (item.specificationFileName ? 1 : 0);
-
-                  return (
-                    <tr key={item.id || index} className="align-middle hover:bg-slate-50/70 transition-colors group">
-                      {/* Type */}
-                      <td className="px-3.5 py-3.5">
-                        <span className={cn(
-                          "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
-                          item.itemType === 'Service'
-                            ? "border border-purple-200 bg-purple-50 text-purple-700"
-                            : "border border-blue-200 bg-blue-50 text-blue-700"
-                        )}>
-                          {item.itemType || 'Product'}
-                        </span>
-                      </td>
-
-                      {/* Name */}
-                      <td className="px-3.5 py-3.5">
-                        <div className="font-black text-slate-900 text-xs">
-                          {item.name || <span className="text-rose-500 italic">Unnamed Item</span>}
-                        </div>
-                      </td>
-
-                      {/* Description */}
-                      <td className="px-3.5 py-3.5 text-slate-600 font-medium max-w-[240px]">
-                        {(() => {
-                          const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
-                          return (
-                            <span className="line-clamp-2" title={descText || undefined}>
-                              {descText ? descText : <span className="text-slate-400 italic">No description</span>}
-                            </span>
-                          );
-                        })()}
-                      </td>
-
-                      {/* Quantity & Unit */}
-                      <td className="px-3.5 py-3.5 text-center">
-                        <span className="font-extrabold text-slate-900">{item.quantity}</span>{' '}
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit}</span>
-                      </td>
-
-                      {/* Rate */}
-                      <td className="px-3.5 py-3.5 text-right font-extrabold text-slate-900">
-                        {Number(item.unitPrice || 0) > 0 ? (
-                          <span>₹{Number(item.unitPrice).toLocaleString('en-IN')}</span>
-                        ) : (
-                          <span className="text-slate-400 font-normal">-</span>
-                        )}
-                      </td>
-
-                      {/* HSN/SAC */}
-                      <td className="px-3.5 py-3.5 text-center font-mono text-[11px] font-semibold text-slate-600">
-                        {item.hsn_sac_code || <span className="text-slate-400">-</span>}
-                      </td>
-
-                      {/* Brand & Policy */}
-                      <td className="px-3.5 py-3.5">
-                        <div className="text-slate-800 text-[11px] font-bold truncate max-w-[120px]">
-                          {item.brand_preference || 'Any Brand'}
-                        </div>
-                        <div className="mt-0.5">
-                          {item.brand_flexible === 'No' ? (
-                            <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
-                              Lock
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
-                              Flexible
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Documents / Attachments */}
-                      <td className="px-3.5 py-3.5">
-                        {hasDocs ? (
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setQuickDocItem(item)}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2 py-1 text-[10px] font-extrabold text-emerald-800 hover:bg-emerald-100 transition-colors"
-                              title="Click to view or manage attachments"
-                            >
-                              <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
-                              <span className="truncate max-w-[90px]">
-                                {docCount} file{docCount === 1 ? '' : 's'}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setQuickDocItem(item)}
-                              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
-                              title="Add more documents"
-                            >
-                              <Plus className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setQuickDocItem(item)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all"
-                            title="Attach specification or drawing"
-                          >
-                            <FilePlus className="h-3 w-3 text-slate-400" />
-                            <span>+ Attach Doc</span>
-                          </button>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-3.5 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedItemForEdit(item);
-                              setShowItemDrawer(true);
-                            }}
-                            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors"
-                            title="Edit specifications"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDuplicateItem(item)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-                            title="Duplicate line item"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                            title="Delete line item"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Bottom Table Quick Add Bar */}
-        <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => handleAddNewItem('Product')}
-              className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445]"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add Product Line
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => handleAddNewItem('Service')}
-              className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add Service Line
-            </Button>
+      <DataTable
+        data={draft.items}
+        columns={procurementItemColumns}
+        keyExtractor={(item: any, idx) => item.id || idx}
+        showSrNo={false}
+        minWidth="min-w-[1100px]"
+        rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
+        emptyTitle="No items or services added yet"
+        emptyDescription="Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
+        footer={
+          <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleAddNewItem('Product')}
+                className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445]"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add Product Line
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => handleAddNewItem('Service')}
+                className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add Service Line
+              </Button>
+            </div>
+            <span className="text-[11px] font-semibold text-slate-500">
+              {draft.items.length} line item{draft.items.length === 1 ? '' : 's'} scheduled
+            </span>
           </div>
-          <span className="text-[11px] font-semibold text-slate-500">
-            {draft.items.length} line item{draft.items.length === 1 ? '' : 's'} scheduled
-          </span>
-        </div>
-      </div>
+        }
+      />
 
       {/* Summary Metrics Bar */}
       {(() => {

@@ -23,14 +23,9 @@ import {
 } from 'lucide-react';
 import {
   Card,
-  CardContent,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
+  CardContent
 } from '../../../components/ui/card';
+import { DataTable, type ColumnDef } from '../../../components/ui/data-table';
 import { Button } from '../../../components/ui/button';
 import { Input, Select } from '../../../components/ui/input';
 import { useAuth } from '../../../hooks/useAuth';
@@ -655,112 +650,133 @@ interface ViewProps {
   onSort?: (key: string) => void;
 }
 
-function ListView({ records, startIndex, page, pageSize, total, onSelect, onPageChange, onPageSizeChange, isFetching, sortKey, sortDir, onSort }: ViewProps) {
-  const renderSortableHead = (label: string, field: string, align: 'left' | 'right' = 'left') => {
-    const isSorted = sortKey === field;
-    return (
-      <TableHead
-        onClick={() => onSort?.(field)}
-        className={cn(
-          "p-3 cursor-pointer select-none transition-colors group text-[10px] font-black uppercase tracking-wider",
-          align === 'right' ? 'text-right' : 'text-left',
-          isSorted ? 'text-[#12335f] bg-slate-100/90 font-black' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/50'
-        )}
-        title={`Sort by ${label} (${isSorted ? (sortDir === 'asc' ? 'Ascending' : 'Descending') : 'Click to sort'})`}
-      >
-        <div className={cn("inline-flex items-center gap-1.5", align === 'right' ? 'justify-end' : 'justify-start')}>
-          <span>{label}</span>
-          {isSorted ? (
-            sortDir === 'asc' ? (
-              <ArrowUp className="h-3.5 w-3.5 text-[#12335f]" />
-            ) : (
-              <ArrowDown className="h-3.5 w-3.5 text-[#12335f]" />
-            )
-          ) : (
-            <ArrowUpDown className="h-3 w-3 text-slate-400 opacity-40 group-hover:opacity-100 transition-opacity" />
-          )}
+function ListView({ records, page, pageSize, total, onSelect, onPageChange, onPageSizeChange, isFetching, sortKey, sortDir, onSort }: ViewProps) {
+  const deliveryColumns: ColumnDef<DeliveryDetailDto>[] = [
+    {
+      key: 'tracking',
+      header: 'Tracking',
+      width: 'w-[12%]',
+      sortable: true,
+      sortKey: 'tracking',
+      cell: (record) => (
+        <span className="font-black text-[#12335f]">
+          {record.trackingNumber || `DLV-${record.id}`}
+        </span>
+      ),
+    },
+    {
+      key: 'order',
+      header: 'Order',
+      width: 'w-[20%]',
+      sortable: true,
+      sortKey: 'order',
+      cell: (record) => (
+        <div>
+          <p className="font-bold text-slate-900">
+            {record.purchaseOrder?.title || record.purchaseOrder?.poNumber || `Delivery ${record.id}`}
+          </p>
+          <p className="text-[10px] font-semibold text-slate-500">
+            {record.purchaseOrder?.poNumber}
+          </p>
         </div>
-      </TableHead>
-    );
-  };
+      ),
+    },
+    {
+      key: 'parties',
+      header: 'Parties',
+      width: 'w-[16%]',
+      sortable: true,
+      sortKey: 'parties',
+      cell: (record) => (
+        <div className="text-xs">
+          <p className="text-slate-600">
+            <span className="font-bold">Seller:</span> {record.purchaseOrder?.seller?.name || '—'}
+          </p>
+          <p className="text-slate-500">
+            <span className="font-bold">Buyer:</span> {record.purchaseOrder?.buyer?.name || '—'}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: 'carrier',
+      header: 'Carrier',
+      width: 'w-[12%]',
+      sortable: true,
+      sortKey: 'carrier',
+      cell: (record) => (
+        <p className="font-bold text-slate-800 text-xs">
+          {record.carrierName || record.logisticsPartnerName || 'Pending'}
+        </p>
+      ),
+    },
+    {
+      key: 'expected',
+      header: 'Expected',
+      width: 'w-[10%]',
+      sortable: true,
+      sortKey: 'expected',
+      cell: (record) => (
+        <span className="text-xs text-slate-500">{formatDate(record.expectedDelivery)}</span>
+      ),
+    },
+    {
+      key: 'value',
+      header: 'Value',
+      width: 'w-[10%]',
+      align: 'right',
+      sortable: true,
+      sortKey: 'value',
+      cellClassName: 'text-right font-bold text-slate-900 text-xs',
+      cell: (record) => formatCurrency(record.purchaseOrder?.amount),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-[10%]',
+      sortable: true,
+      sortKey: 'status',
+      cell: (record) => <DeliveryStatusBadge status={record.status} />,
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      width: 'w-[10%]',
+      align: 'right',
+      cellClassName: 'text-right',
+      cell: (record) => (
+        <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+          <Button
+            size="sm"
+            onClick={() => onSelect(record.id)}
+            className="h-8 bg-[#12335f] hover:bg-[#0e2a4f] text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs"
+          >
+            <Eye className="mr-1.5 h-3.5 w-3.5" /> Track Progress
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <div className={cn('overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-opacity', isFetching && 'opacity-90')}>
-      <div className="overflow-x-auto">
-        <Table className="min-w-[960px] border-collapse text-left text-xs">
-          <TableHeader>
-            <TableRow className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-              {renderSortableHead('Sr. No.', 'id')}
-              {renderSortableHead('Tracking', 'tracking')}
-              {renderSortableHead('Order', 'order')}
-              {renderSortableHead('Parties', 'parties')}
-              {renderSortableHead('Carrier', 'carrier')}
-              {renderSortableHead('Expected', 'expected')}
-              {renderSortableHead('Value', 'value', 'right')}
-              {renderSortableHead('Status', 'status')}
-              <TableHead className="text-right p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody className="divide-y divide-slate-100 font-semibold text-slate-700">
-            {records.map((record, index) => (
-              <TableRow key={record.id} onClick={() => onSelect(record.id)} className="hover:bg-slate-50/50 transition cursor-pointer">
-                <TableCell className="font-mono text-xs text-slate-500 p-3">
-                  {String(startIndex + index + 1).padStart(2, '0')}
-                </TableCell>
-                <TableCell className="font-black text-[#12335f] p-3">
-                  {record.trackingNumber || `DLV-${record.id}`}
-                </TableCell>
-                <TableCell className="p-3">
-                  <p className="font-bold text-slate-900">
-                    {record.purchaseOrder?.title || record.purchaseOrder?.poNumber || `Delivery ${record.id}`}
-                  </p>
-                  <p className="text-[10px] font-semibold text-slate-500">
-                    {record.purchaseOrder?.poNumber}
-                  </p>
-                </TableCell>
-                <TableCell className="text-xs p-3">
-                  <p className="text-slate-600">
-                    <span className="font-bold">Seller:</span> {record.purchaseOrder?.seller?.name || '—'}
-                  </p>
-                  <p className="text-slate-500">
-                    <span className="font-bold">Buyer:</span> {record.purchaseOrder?.buyer?.name || '—'}
-                  </p>
-                </TableCell>
-                <TableCell className="text-xs p-3">
-                  <p className="font-bold text-slate-800">{record.carrierName || record.logisticsPartnerName || 'Pending'}</p>
-                </TableCell>
-                <TableCell className="text-xs p-3 text-slate-500">
-                  {formatDate(record.expectedDelivery)}
-                </TableCell>
-                <TableCell className="text-right text-xs font-bold text-slate-900 p-3">
-                  {formatCurrency(record.purchaseOrder?.amount)}
-                </TableCell>
-                <TableCell className="p-3">
-                  <DeliveryStatusBadge status={record.status} />
-                </TableCell>
-                <TableCell className="text-right p-3" onClick={e => e.stopPropagation()}>
-                  <Button
-                    size="sm"
-                    onClick={() => onSelect(record.id)}
-                    className="h-8 bg-[#12335f] hover:bg-[#0e2a4f] text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs"
-                  >
-                    <Eye className="mr-1.5 h-3.5 w-3.5" /> Track Progress
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-      <Pagination
-        page={page}
-        pageSize={pageSize}
-        total={total}
-        onPageChange={onPageChange}
-        onPageSizeChange={onPageSizeChange}
-        label="deliveries"
-      />
-    </div>
+    <DataTable<DeliveryDetailDto>
+      data={records}
+      columns={deliveryColumns}
+      keyExtractor={(record) => record.id}
+      sortKey={sortKey}
+      sortDirection={sortDir}
+      onSort={onSort}
+      page={page}
+      pageSize={pageSize}
+      total={total}
+      onPageChange={onPageChange}
+      onPageSizeChange={onPageSizeChange}
+      paginationLabel="deliveries"
+      onRowClick={(record) => onSelect(record.id)}
+      isLoading={isFetching && records.length === 0}
+      srNoWidth="w-[4%]"
+      minWidth="min-w-[1000px]"
+    />
   );
 }
 

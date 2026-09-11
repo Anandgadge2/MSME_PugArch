@@ -17,6 +17,7 @@ import { KpiCard } from '../../shared/KpiCard';
 import { runWithToast } from '../../../lib/toast';
 import { useApproveGrn, useGrn, useRejectGrn, useSubmitGrn } from '../hooks';
 import type { GrnStatus } from '../api';
+import { DataTable } from '../../../components/ui/data-table';
 
 const STATUS_TONE: Record<GrnStatus, string> = {
     DRAFT: 'border-slate-200 bg-slate-50 text-slate-600',
@@ -168,35 +169,66 @@ export default function GrnDetailPage({ id }: Props) {
                     <div className="border-b border-slate-100 bg-slate-50/60 px-3.5 py-2.5 sm:px-4 sm:py-3">
                         <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500">Items ({grn.items.length})</p>
                     </div>
-                    <div className="overflow-x-auto w-full">
-                        <table className="w-full text-xs sm:text-sm">
-                            <thead className="border-b border-slate-100 bg-slate-50/40 text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap">
-                                <tr>
-                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-left">Item</th>
-                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-right w-20 sm:w-24">Ordered</th>
-                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-right w-20 sm:w-24">Received</th>
-                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-right w-20 sm:w-24">Accepted</th>
-                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-right w-20 sm:w-24">Rejected</th>
-                                    <th className="px-3 py-2 sm:px-4 sm:py-2.5 text-left">Reason</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {grn.items.map(item => (
-                                    <tr key={item.id || item.itemName}>
-                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5">
-                                            <p className="text-xs font-black text-slate-900 break-words">{item.itemName}</p>
-                                            <p className="text-[9px] sm:text-[10px] text-slate-500">{item.unitOfMeasure}</p>
-                                        </td>
-                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5 text-right font-mono text-xs">{Number(item.orderedQty)}</td>
-                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5 text-right font-mono text-xs">{Number(item.receivedQty)}</td>
-                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5 text-right font-mono text-xs text-emerald-700 font-bold">{Number(item.acceptedQty)}</td>
-                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5 text-right font-mono text-xs text-red-700 font-bold">{Number(item.rejectedQty)}</td>
-                                        <td className="px-3 py-2 sm:px-4 sm:py-2.5 text-[11px] sm:text-xs text-slate-700 italic break-words">{item.rejectionReason || '—'}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                    <DataTable
+                        data={grn.items}
+                        columns={[
+                            {
+                                key: 'itemName',
+                                header: 'Item',
+                                cell: (item: any) => (
+                                    <div>
+                                        <p className="text-xs font-black text-slate-900 break-words">{item.itemName}</p>
+                                        <p className="text-[9px] sm:text-[10px] text-slate-500">{item.unitOfMeasure}</p>
+                                    </div>
+                                )
+                            },
+                            {
+                                key: 'orderedQty',
+                                header: 'Ordered',
+                                width: 'w-20 sm:w-24',
+                                align: 'right',
+                                cell: (item: any) => (
+                                    <span className="font-mono text-xs">{Number(item.orderedQty)}</span>
+                                )
+                            },
+                            {
+                                key: 'receivedQty',
+                                header: 'Received',
+                                width: 'w-20 sm:w-24',
+                                align: 'right',
+                                cell: (item: any) => (
+                                    <span className="font-mono text-xs">{Number(item.receivedQty)}</span>
+                                )
+                            },
+                            {
+                                key: 'acceptedQty',
+                                header: 'Accepted',
+                                width: 'w-20 sm:w-24',
+                                align: 'right',
+                                cell: (item: any) => (
+                                    <span className="font-mono text-xs text-emerald-700 font-bold">{Number(item.acceptedQty)}</span>
+                                )
+                            },
+                            {
+                                key: 'rejectedQty',
+                                header: 'Rejected',
+                                width: 'w-20 sm:w-24',
+                                align: 'right',
+                                cell: (item: any) => (
+                                    <span className="font-mono text-xs text-red-700 font-bold">{Number(item.rejectedQty)}</span>
+                                )
+                            },
+                            {
+                                key: 'rejectionReason',
+                                header: 'Reason',
+                                cell: (item: any) => (
+                                    <span className="text-[11px] sm:text-xs text-slate-700 italic break-words">{item.rejectionReason || '—'}</span>
+                                )
+                            }
+                        ]}
+                        keyExtractor={(item: any, idx: number) => item.id || `grn-item-${idx}`}
+                        rowClassName="text-xs sm:text-sm hover:bg-slate-50/50"
+                    />
                 </CardContent>
             </Card>
 

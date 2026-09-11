@@ -29,7 +29,8 @@ import { TaxInvoiceCard } from '../../invoices/components/TaxInvoiceCard';
 import { generateTaxInvoicePdf, type TaxInvoiceData, type TaxInvoiceItem } from '../../invoices/lib/invoicePdfGenerator';
 import { Button } from '../../../components/ui/button';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
-import { Card, CardContent, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../../components/ui/card';
+import { Card, CardContent } from '../../../components/ui/card';
+import { DataTable, type ColumnDef } from '../../../components/ui/data-table';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
@@ -560,6 +561,126 @@ export default function SellerDeliveryManagementPage() {
 
     const { page, pageSize, pageItems: pagedDeliveries, total, setPage, setPageSize } = usePagination(sortedItems, 10);
 
+    const sellerDeliveryColumns: ColumnDef<any>[] = [
+        {
+            key: 'id',
+            header: 'Delivery ID',
+            width: 'w-[10%]',
+            sortable: true,
+            cell: (delivery) => (
+                <EntityIdLink label={`DLV-${delivery.id}`} id={delivery.id} size="sm" to={`/delivery/${delivery.id}`} />
+            ),
+        },
+        {
+            key: 'poNumber',
+            header: 'Purchase Order',
+            width: 'w-[18%]',
+            sortable: true,
+            cell: (delivery) => (
+                <div>
+                    <div className="font-semibold text-slate-900 max-w-[200px] truncate" title={delivery.purchaseOrder?.title || 'Delivery'}>
+                        {delivery.purchaseOrder?.title || 'Delivery'}
+                    </div>
+                    {delivery.purchaseOrder?.poNumber && (
+                        <div className="mt-0.5">
+                            <EntityIdLink label={delivery.purchaseOrder.poNumber} id={delivery.purchaseOrder.id} size="sm" to="/orders" />
+                        </div>
+                    )}
+                </div>
+            ),
+        },
+        {
+            key: 'buyer',
+            header: 'Buyer',
+            width: 'w-[14%]',
+            sortable: true,
+            cell: (delivery) => (
+                <span className="font-bold text-slate-700">{delivery.purchaseOrder?.buyer?.name || `#${delivery.purchaseOrder?.buyerId}`}</span>
+            ),
+        },
+        {
+            key: 'amount',
+            header: 'Value',
+            width: 'w-[10%]',
+            align: 'right',
+            sortable: true,
+            cellClassName: 'text-right font-black text-slate-900',
+            cell: (delivery) => (
+                delivery.purchaseOrder?.amount !== undefined ? formatCurrency(delivery.purchaseOrder.amount) : '—'
+            ),
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            width: 'w-[14%]',
+            sortable: true,
+            cell: (delivery) => {
+                const status = String(delivery.status);
+                const stage = (s: string) => {
+                    if (s === 'CREATED' || s === 'PENDING_ACCEPTANCE') return { label: 'Awaiting Acceptance', icon: Clock };
+                    if (s === 'SELLER_ACCEPTED') return { label: 'Awaiting Packing', icon: Package };
+                    if (s === 'PACKED') return { label: 'PACKED / Ready to Dispatch', icon: Truck };
+                    if (s === 'READY_FOR_PICKUP') return { label: 'Ready for Pickup', icon: Truck };
+                    if (s === 'PICKED_UP') return { label: 'Picked Up', icon: Truck };
+                    if (['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(s)) return { label: 'In Transit', icon: Truck };
+                    if (['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(s)) return { label: 'Delivered', icon: CheckCircle2 };
+                    return { label: s.replace(/_/g, ' '), icon: AlertCircle };
+                };
+                const { label: stageLabel } = stage(status);
+                return (
+                    <div className="flex flex-col gap-0.5 items-start">
+                        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[status] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                            {status.replace(/_/g, ' ')}
+                        </span>
+                        <span className="text-[9px] font-semibold text-slate-400">{stageLabel}</span>
+                    </div>
+                );
+            },
+        },
+        {
+            key: 'carrier',
+            header: 'Carrier & Tracking',
+            width: 'w-[13%]',
+            sortable: true,
+            cell: (delivery) =>
+                delivery.trackingNumber || delivery.carrierName ? (
+                    <div>
+                        {delivery.carrierName && <div className="font-bold text-slate-900">{delivery.carrierName}</div>}
+                        {delivery.trackingNumber && <div className="font-mono text-[10px] text-slate-500">No: {delivery.trackingNumber}</div>}
+                    </div>
+                ) : (
+                    <span className="text-slate-400 italic text-[11px]">No details</span>
+                ),
+        },
+        {
+            key: 'eta',
+            header: 'ETA / Expected',
+            width: 'w-[11%]',
+            sortable: true,
+            cell: (delivery) =>
+                delivery.expectedDelivery ? (
+                    <div>
+                        <div className="font-bold text-slate-900">{formatRelative(delivery.expectedDelivery)}</div>
+                        <div className="text-[10px] text-slate-400">{formatDate(delivery.expectedDelivery)}</div>
+                    </div>
+                ) : (
+                    <span className="text-slate-400 italic text-[11px]">—</span>
+                ),
+        },
+        {
+            key: 'actions',
+            header: 'Actions',
+            width: 'w-[10%]',
+            align: 'right',
+            cellClassName: 'text-right',
+            cell: (delivery) => (
+                <div className="flex justify-end">
+                    <ActionButtons delivery={delivery} onAction={(kind) => openAction(kind, delivery)} />
+                </div>
+            ),
+        },
+    ];
+
     return (
         <div className="space-y-6">
             {/* Transparent Header */}
@@ -694,120 +815,43 @@ export default function SellerDeliveryManagementPage() {
                             />
                         </CardContent></Card>
                     ) : (
-                        <div className="space-y-4">
+                        <div>
                             {viewMode === 'grid' ? (
-                                <div className="grid gap-3 lg:grid-cols-2">
-                                    {pagedDeliveries.map(delivery => (
-                                        <DeliveryCard key={delivery.id} delivery={delivery} onAction={(kind) => openAction(kind, delivery)} />
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-                                    <div className="overflow-x-auto">
-                                        <Table className="min-w-[960px] border-collapse text-left text-xs">
-                                            <TableHeader>
-                                                <TableRow className="border-b border-slate-200 bg-slate-50/75 hover:bg-transparent">
-                                                    <TableHead className="w-16 p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Sr. No</TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="Delivery ID" field="id" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="Purchase Order" field="poNumber" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="Buyer" field="buyer" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="text-right p-3"><SortableHeader label="Value" field="amount" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="Carrier & Tracking" field="carrier" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="p-3"><SortableHeader label="ETA / Expected" field="eta" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></TableHead>
-                                                    <TableHead className="text-right w-[200px] p-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Actions</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                                                {pagedDeliveries.map((delivery, index) => {
-                                                    const status = String(delivery.status);
-                                                    const rowNumber = (page - 1) * pageSize + index + 1;
-                                                    
-                                                    const stage = (s: string) => {
-                                                        if (s === 'CREATED' || s === 'PENDING_ACCEPTANCE') return { label: 'Awaiting Acceptance', icon: Clock };
-                                                        if (s === 'SELLER_ACCEPTED') return { label: 'Awaiting Packing', icon: Package };
-                                                        if (s === 'PACKED') return { label: 'PACKED / Ready to Dispatch', icon: Truck };
-                                                        if (s === 'READY_FOR_PICKUP') return { label: 'Ready for Pickup', icon: Truck };
-                                                        if (s === 'PICKED_UP') return { label: 'Picked Up', icon: Truck };
-                                                        if (['DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(s)) return { label: 'In Transit', icon: Truck };
-                                                        if (['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(s)) return { label: 'Delivered', icon: CheckCircle2 };
-                                                        return { label: s.replace(/_/g, ' '), icon: AlertCircle };
-                                                    };
-                                                    const { label: stageLabel } = stage(status);
-
-                                                    return (
-                                                        <TableRow key={delivery.id} className="hover:bg-slate-50/50 transition">
-                                                            <TableCell className="p-3 font-mono text-xs text-slate-500">{rowNumber}</TableCell>
-                                                            <TableCell className="p-3">
-                                                                <EntityIdLink label={`DLV-${delivery.id}`} id={delivery.id} size="sm" to={`/delivery/${delivery.id}`} />
-                                                            </TableCell>
-                                                            <TableCell className="p-3">
-                                                                <div className="font-semibold text-slate-900 max-w-[200px] truncate" title={delivery.purchaseOrder?.title || 'Delivery'}>
-                                                                    {delivery.purchaseOrder?.title || 'Delivery'}
-                                                                </div>
-                                                                {delivery.purchaseOrder?.poNumber && (
-                                                                    <div className="mt-0.5">
-                                                                        <EntityIdLink label={delivery.purchaseOrder.poNumber} id={delivery.purchaseOrder.id} size="sm" to="/orders" />
-                                                                    </div>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="p-3">
-                                                                <span className="font-bold text-slate-700">{delivery.purchaseOrder?.buyer?.name || `#${delivery.purchaseOrder?.buyerId}`}</span>
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-black text-slate-900 p-3">
-                                                                {delivery.purchaseOrder?.amount !== undefined ? formatCurrency(delivery.purchaseOrder.amount) : '—'}
-                                                            </TableCell>
-                                                            <TableCell className="p-3">
-                                                                <div className="flex flex-col gap-0.5 items-start">
-                                                                    <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[status] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                                                                        {status.replace(/_/g, ' ')}
-                                                                    </span>
-                                                                    <span className="text-[9px] font-semibold text-slate-400">{stageLabel}</span>
-                                                                </div>
-                                                            </TableCell>
-                                                            <TableCell className="text-xs font-semibold text-slate-700 p-3">
-                                                                {delivery.trackingNumber || delivery.carrierName ? (
-                                                                    <div>
-                                                                        {delivery.carrierName && <div className="font-bold text-slate-900">{delivery.carrierName}</div>}
-                                                                        {delivery.trackingNumber && <div className="font-mono text-[10px] text-slate-500">No: {delivery.trackingNumber}</div>}
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className="text-slate-400 italic text-[11px]">No details</span>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="text-xs font-semibold text-slate-700 p-3">
-                                                                {delivery.expectedDelivery ? (
-                                                                    <div>
-                                                                        <div className="font-bold text-slate-900">{formatRelative(delivery.expectedDelivery)}</div>
-                                                                        <div className="text-[10px] text-slate-400">{formatDate(delivery.expectedDelivery)}</div>
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className="text-slate-400 italic text-[11px]">—</span>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="text-right p-3">
-                                                                <ActionButtons delivery={delivery} onAction={(kind) => openAction(kind, delivery)} />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    );
-                                                })}
-                                            </TableBody>
-                                        </Table>
+                                <div className="space-y-4">
+                                    <div className="grid gap-3 lg:grid-cols-2">
+                                        {pagedDeliveries.map(delivery => (
+                                            <DeliveryCard key={delivery.id} delivery={delivery} onAction={(kind) => openAction(kind, delivery)} />
+                                        ))}
+                                    </div>
+                                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                                        <Pagination
+                                            page={page}
+                                            pageSize={pageSize}
+                                            total={total}
+                                            onPageChange={setPage}
+                                            onPageSizeChange={setPageSize}
+                                            label="deliveries"
+                                        />
                                     </div>
                                 </div>
-                            )}
-
-                            {/* ═══ PAGINATION ═══ */}
-                            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                                <Pagination
+                            ) : (
+                                <DataTable
+                                    data={pagedDeliveries}
+                                    columns={sellerDeliveryColumns}
+                                    keyExtractor={(delivery) => delivery.id}
+                                    sortKey={sortKey}
+                                    sortDirection={sortDirection}
+                                    onSort={toggleSort}
                                     page={page}
                                     pageSize={pageSize}
                                     total={total}
                                     onPageChange={setPage}
                                     onPageSizeChange={setPageSize}
-                                    label="deliveries"
+                                    paginationLabel="deliveries"
+                                    srNoWidth="w-[4%]"
+                                    minWidth="min-w-[1000px]"
                                 />
-                            </div>
+                            )}
                         </div>
                     )
             }

@@ -22,8 +22,9 @@ import {
 import { Button } from '../components/ui/button';
 import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { cn } from '../lib/utils';
-import { Pagination } from '../features/shared/Pagination';
-import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
+
+import { type SortDirection } from '../features/shared/SortableHeader';
+import { DataTable, type ColumnDef } from '../components/ui/data-table';
 
 type RoleKey = 'admin' | 'seller' | 'buyer';
 type SortKey = 'role' | 'module' | 'permission' | 'duty' | 'example';
@@ -500,52 +501,68 @@ export default function PortalDocumentation() {
           />
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200">
-          <div className="overflow-x-auto">
-            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="min-w-[980px] w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400 w-16">Sr. No.</th>
-                  <th className="px-4 py-3"><SortableHeader label="Role" field="role" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                  <th className="px-4 py-3"><SortableHeader label="Module" field="module" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                  <th className="px-4 py-3"><SortableHeader label="Duty" field="duty" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                  <th className="px-4 py-3"><SortableHeader label="Permission / Access" field="permission" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                  <th className="px-4 py-3"><SortableHeader label="Live Example" field="example" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {paginatedPermissions.length > 0 ? paginatedPermissions.map((row, index) => (
-                  <tr key={`${row.role}-${row.module}-${row.duty}`} className="align-top hover:bg-blue-50/30">
-                    <td className="px-4 py-4 font-black text-[#0b2447]">{(currentPage - 1) * pageSize + index + 1}</td>
-                    <td className="px-4 py-4 font-bold text-slate-900">{row.role}</td>
-                    <td className="px-4 py-4 font-semibold text-slate-700">{row.module}</td>
-                    <td className="px-4 py-4 font-medium leading-6 text-slate-600">{row.duty}</td>
-                    <td className="px-4 py-4"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">{row.permission}</span></td>
-                    <td className="px-4 py-4 font-medium leading-6 text-slate-600">{row.example}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center font-bold text-slate-500">No documentation records found. Clear filters or try another search.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-</div>
-          </div>
-        </div>
-
-        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <Pagination
+        <DataTable
+            data={paginatedPermissions}
+            columns={[
+                {
+                    key: 'role',
+                    header: 'Role',
+                    sortable: true,
+                    sortKey: 'role',
+                    cellClassName: 'font-bold text-slate-900',
+                    cell: (row: any) => row.role
+                },
+                {
+                    key: 'module',
+                    header: 'Module',
+                    sortable: true,
+                    sortKey: 'module',
+                    cellClassName: 'font-semibold text-slate-700',
+                    cell: (row: any) => row.module
+                },
+                {
+                    key: 'duty',
+                    header: 'Duty',
+                    sortable: true,
+                    sortKey: 'duty',
+                    cellClassName: 'font-medium leading-6 text-slate-600',
+                    cell: (row: any) => row.duty
+                },
+                {
+                    key: 'permission',
+                    header: 'Permission / Access',
+                    sortable: true,
+                    sortKey: 'permission',
+                    cell: (row: any) => <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">{row.permission}</span>
+                },
+                {
+                    key: 'example',
+                    header: 'Live Example',
+                    sortable: true,
+                    sortKey: 'example',
+                    cellClassName: 'font-medium leading-6 text-slate-600',
+                    cell: (row: any) => row.example
+                }
+            ] as ColumnDef<any>[]}
+            keyExtractor={(row: any) => `${row.role}-${row.module}-${row.duty}`}
+            showSrNo={true}
+            srNoHeader="Sr. No."
+            srNoWidth="w-16"
+            minWidth="min-w-[980px]"
+            sortKey={sortKey}
+            sortDirection={sortDirection}
+            onSort={(field) => toggleSort(field as SortKey)}
+            rowClassName="align-top hover:bg-blue-50/30"
             page={currentPage}
             pageSize={pageSize}
             total={filteredPermissions.length}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
             pageSizeOptions={[5, 10, 20]}
-            label="records"
-          />
-        </div>
+            paginationLabel="records"
+            emptyTitle="No documentation records found"
+            emptyDescription="Clear filters or try another search."
+        />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">

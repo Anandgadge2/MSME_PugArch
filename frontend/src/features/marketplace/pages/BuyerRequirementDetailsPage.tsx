@@ -26,6 +26,7 @@ import { BuyerRequirementDetailSkeleton } from '@/components/ui/skeleton';
 import { getApi, postApi, peekApi, authHeaders } from '../../shared/apiClient';
 import { formatDate as formatSharedDate, formatDateTime as formatSharedDateTime } from '../../shared/format';
 import { sellerRoutes } from '@/lib/routes';
+import { DataTable, ColumnDef } from '@/components/ui/data-table';
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 
@@ -337,6 +338,42 @@ const BuyerRequirementDetailsPage = () => {
       : 'bg-slate-100 text-slate-500 border-slate-200';
 
   const items = Array.isArray(requirement.items) ? requirement.items : [];
+  const itemColumns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'itemName',
+      header: 'Item Name',
+      cell: (item) => <span className="font-bold text-slate-900">{item.itemName || '—'}</span>,
+    },
+    {
+      key: 'description',
+      header: 'Description',
+      cell: (item) => <span className="text-xs text-slate-600 max-w-[200px] truncate block" title={item.description}>{item.description || '—'}</span>,
+    },
+    {
+      key: 'quantity',
+      header: 'Qty',
+      cell: (item) => <span>{item.quantity ?? '—'}</span>,
+    },
+    {
+      key: 'unitOfMeasure',
+      header: 'Unit',
+      cell: (item) => <span>{item.unitOfMeasure || '—'}</span>,
+    },
+    ...(isBuyer ? [{
+      key: 'estimatedUnitPrice',
+      header: 'Est. Unit Price',
+      cell: (item: any) => <span>{formatMoney(item.estimatedUnitPrice)}</span>,
+    }] : []),
+    {
+      key: 'specifications',
+      header: 'Specifications',
+      cell: (item) => (
+        <span className="text-xs text-slate-600 min-w-[250px] max-w-[400px] block">
+          {formatSpecifications(item.specifications)}
+        </span>
+      ),
+    },
+  ], [isBuyer]);
   const reqDesc = String(requirement?.description || '').toUpperCase();
   const reqTitle = String(requirement?.title || '').toUpperCase();
   const reqPayload = requirement?.payload && typeof requirement.payload === 'object' ? requirement.payload : {};
@@ -484,38 +521,16 @@ const BuyerRequirementDetailsPage = () => {
             {items.length > 0 && (
               <div className="mt-6">
                 <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-slate-500">Items / Line Items</h3>
-                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/40">
-                  <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[600px] text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                        <th className="px-4 py-3">#</th>
-                        <th className="px-4 py-3">Item Name</th>
-                        <th className="px-4 py-3">Description</th>
-                        <th className="px-4 py-3">Qty</th>
-                        <th className="px-4 py-3">Unit</th>
-                        {isBuyer && <th className="px-4 py-3">Est. Unit Price</th>}
-                        <th className="px-4 py-3">Specifications</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                      {items.map((item: any, i: number) => (
-                        <tr key={item.id || i} className="hover:bg-white/60 transition">
-                          <td className="px-4 py-2.5 text-slate-400">{i + 1}</td>
-                          <td className="px-4 py-2.5 font-bold text-slate-900">{item.itemName || '—'}</td>
-                          <td className="px-4 py-2.5 text-xs text-slate-600 max-w-[200px] truncate">{item.description || '—'}</td>
-                          <td className="px-4 py-2.5">{item.quantity ?? '—'}</td>
-                          <td className="px-4 py-2.5">{item.unitOfMeasure || '—'}</td>
-                          {isBuyer && <td className="px-4 py-2.5">{formatMoney(item.estimatedUnitPrice)}</td>}
-                          <td className="px-4 py-2.5 text-xs text-slate-600 min-w-[250px] max-w-[400px]">
-                            {formatSpecifications(item.specifications)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-</div>
-                </div>
+                <DataTable<any>
+                  data={items}
+                  columns={itemColumns}
+                  keyExtractor={(item, i) => String(item.id || i)}
+                  showSrNo={true}
+                  srNoHeader="#"
+                  srNoWidth="w-12"
+                  emptyTitle="No items listed"
+                  emptyDescription="No line items are attached to this requirement."
+                />
               </div>
             )}
 
@@ -716,6 +731,42 @@ const BuyerRequirementDetailsPage = () => {
   );
 };
 
+const responseLineItemColumns: ColumnDef<any>[] = [
+  {
+    key: 'itemName',
+    header: 'Item',
+    cell: (line) => <span className="font-bold text-slate-900">{line.itemName || '—'}</span>,
+  },
+  {
+    key: 'quantity',
+    header: 'Qty',
+    align: 'right',
+    cell: (line) => <span className="tabular-nums">{line.quantity ?? '—'}</span>,
+  },
+  {
+    key: 'unitPrice',
+    header: 'Unit Price',
+    align: 'right',
+    cell: (line) => <span className="tabular-nums">{formatMoney(line.unitPrice)}</span>,
+  },
+  {
+    key: 'gstPercent',
+    header: 'GST %',
+    align: 'right',
+    cell: (line) => <span className="tabular-nums">{line.gstPercent ?? '—'}</span>,
+  },
+  {
+    key: 'makeBrand',
+    header: 'Make / Brand',
+    cell: (line) => <span>{line.makeBrand || '—'}</span>,
+  },
+  {
+    key: 'remarks',
+    header: 'Remarks',
+    cell: (line) => <span className="text-slate-500">{line.remarks || '—'}</span>,
+  },
+];
+
 /** One seller's submission: headline commercials + dynamic responseData (line quotes, documents). */
 function SellerResponseCard({ response, canAccept, acceptingId, onAccept }: { response: any; canAccept?: boolean; acceptingId?: number | null; onAccept?: () => void }) {
   const responseData = response.responseData || {};
@@ -793,33 +844,14 @@ function SellerResponseCard({ response, canAccept, acceptingId, onAccept }: { re
 
       {/* Item-wise quote submitted by the seller */}
       {lineItems.length > 0 && (
-        <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[640px] text-left text-xs">
-            <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Item</th>
-                <th className="px-3 py-2 text-right">Qty</th>
-                <th className="px-3 py-2 text-right">Unit Price</th>
-                <th className="px-3 py-2 text-right">GST %</th>
-                <th className="px-3 py-2">Make / Brand</th>
-                <th className="px-3 py-2">Remarks</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {lineItems.map((line: any, i: number) => (
-                <tr key={i}>
-                  <td className="px-3 py-2 font-bold text-slate-900">{line.itemName || '—'}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{line.quantity ?? '—'}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatMoney(line.unitPrice)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{line.gstPercent ?? '—'}</td>
-                  <td className="px-3 py-2">{line.makeBrand || '—'}</td>
-                  <td className="px-3 py-2 text-slate-500">{line.remarks || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-</div>
+        <div className="mt-3">
+          <DataTable<any>
+            data={lineItems}
+            columns={responseLineItemColumns}
+            keyExtractor={(line, i) => String(line.id || i)}
+            emptyTitle="No line items"
+            emptyDescription="No line items attached to this quote."
+          />
         </div>
       )}
 
@@ -971,67 +1003,112 @@ function ResponseComparisonTable({ responses, canAccept, acceptingId, onAccept }
 }
 
 function ResponseListTable({ responses, canAccept, acceptingId, onAccept }: { responses: any[]; canAccept?: boolean; acceptingId?: number | null; onAccept?: (id: number) => void }) {
-  const sorted = [...responses].sort((a, b) => (Number(a.offeredPrice) || Infinity) - (Number(b.offeredPrice) || Infinity));
-  const validPrices = sorted.map(r => Number(r.offeredPrice)).filter(p => Number.isFinite(p) && p > 0);
+  const sorted = useMemo(() => {
+    return [...responses].sort((a, b) => (Number(a.offeredPrice) || Infinity) - (Number(b.offeredPrice) || Infinity));
+  }, [responses]);
+
+  const validPrices = useMemo(() => {
+    return sorted.map(r => Number(r.offeredPrice)).filter(p => Number.isFinite(p) && p > 0);
+  }, [sorted]);
   const lowestPrice = validPrices.length ? Math.min(...validPrices) : null;
 
   const sellerName = (r: any) => r.sellerOrganization?.organizationName || r.sellerUser?.name || `Seller #${r.sellerUserId || r.id}`;
 
+  const columns = useMemo<ColumnDef<any>[]>(() => {
+    const cols: ColumnDef<any>[] = [
+      {
+        key: 'seller',
+        header: 'Seller',
+        cell: (r) => (
+          <div className="font-bold text-slate-900">
+            {sellerName(r)}
+            {r.status === 'ACCEPTED' && (
+              <span className="ml-2 inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-700 border border-emerald-200">
+                Accepted
+              </span>
+            )}
+            {r.status === 'REJECTED' && (
+              <span className="ml-2 inline-flex items-center rounded-md bg-red-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-red-700 border border-red-200">
+                Rejected
+              </span>
+            )}
+          </div>
+        ),
+      },
+      {
+        key: 'price',
+        header: 'Price',
+        cell: (r) => {
+          const price = Number(r.offeredPrice);
+          const isLowest = lowestPrice != null && price === lowestPrice;
+          return (
+            <span className={`font-black tabular-nums ${isLowest ? 'text-emerald-700' : 'text-slate-900'}`}>
+              {formatMoney(r.offeredPrice)}
+            </span>
+          );
+        },
+      },
+      {
+        key: 'qty',
+        header: 'Qty',
+        cell: (r) => <span className="tabular-nums">{r.offeredQuantity ?? '—'}</span>,
+      },
+      {
+        key: 'delivery',
+        header: 'Delivery',
+        cell: (r) => <span>{r.deliveryTimeline || '—'}</span>,
+      },
+      {
+        key: 'submittedDate',
+        header: 'Submitted Date',
+        cell: (r) => <span className="text-slate-500">{formatDate(r.createdAt)}</span>,
+      },
+      {
+        key: 'rank',
+        header: 'Rank',
+        align: 'center',
+        cell: (r) => {
+          const index = sorted.findIndex((item) => item.id === r.id);
+          const isLowest = index === 0 && lowestPrice != null;
+          return (
+            <span className={`inline-flex rounded px-1.5 py-0.5 text-[9px] font-black uppercase ${
+              isLowest ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
+            }`}>
+              {isLowest ? 'L1' : `L${index + 1}`}
+            </span>
+          );
+        },
+      },
+    ];
+
+    if (canAccept) {
+      cols.push({
+        key: 'action',
+        header: 'Action',
+        align: 'right',
+        cell: (r) => (
+          <button
+            onClick={() => onAccept?.(r.id)}
+            disabled={acceptingId !== null}
+            className="inline-flex shrink-0 items-center rounded-md bg-[#0b2447] px-2.5 py-1 text-[10px] font-black uppercase text-white shadow-sm hover:bg-[#12335f] transition disabled:opacity-50"
+          >
+            {acceptingId === r.id ? 'Accepting...' : 'Accept'}
+          </button>
+        ),
+      });
+    }
+
+    return cols;
+  }, [sorted, lowestPrice, canAccept, acceptingId, onAccept]);
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-      <table className="w-full text-left text-xs">
-        <thead className="border-b border-slate-200 bg-slate-50">
-          <tr>
-            <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-wider text-[10px]">Seller</th>
-            <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-wider text-[10px]">Price</th>
-            <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-wider text-[10px]">Qty</th>
-            <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-wider text-[10px]">Delivery</th>
-            <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-wider text-[10px]">Submitted Date</th>
-            <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-wider text-[10px] text-center">Rank</th>
-            {canAccept && <th className="px-4 py-3 font-black text-slate-500 uppercase tracking-wider text-[10px] text-right">Action</th>}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {sorted.map((r, i) => {
-            const price = Number(r.offeredPrice);
-            const isLowest = lowestPrice != null && price === lowestPrice;
-            return (
-              <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="px-4 py-3 font-bold text-slate-900">
-                  {sellerName(r)}
-                  {r.status === 'ACCEPTED' && <span className="ml-2 inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-700 border border-emerald-200">Accepted</span>}
-                  {r.status === 'REJECTED' && <span className="ml-2 inline-flex items-center rounded-md bg-red-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-red-700 border border-red-200">Rejected</span>}
-                </td>
-                <td className={`px-4 py-3 font-black tabular-nums ${isLowest ? 'text-emerald-700' : 'text-slate-900'}`}>
-                  {formatMoney(r.offeredPrice)}
-                </td>
-                <td className="px-4 py-3 tabular-nums">{r.offeredQuantity ?? '—'}</td>
-                <td className="px-4 py-3">{r.deliveryTimeline || '—'}</td>
-                <td className="px-4 py-3 text-slate-500">{formatDate(r.createdAt)}</td>
-                <td className="px-4 py-3 text-center">
-                  <span className={`inline-flex rounded px-1.5 py-0.5 text-[9px] font-black uppercase ${
-                    isLowest ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {isLowest ? 'L1' : `L${i + 1}`}
-                  </span>
-                </td>
-                {canAccept && (
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => onAccept?.(r.id)}
-                      disabled={acceptingId !== null}
-                      className="inline-flex shrink-0 items-center rounded-md bg-[#0b2447] px-2.5 py-1 text-[10px] font-black uppercase text-white shadow-sm hover:bg-[#12335f] transition disabled:opacity-50"
-                    >
-                      {acceptingId === r.id ? 'Accepting...' : 'Accept'}
-                    </button>
-                  </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <DataTable<any>
+      data={sorted}
+      columns={columns}
+      keyExtractor={(r, i) => String(r.id || i)}
+      emptyTitle="No responses"
+      emptyDescription="No supplier quotations or responses received yet."
+    />
   );
 }
 

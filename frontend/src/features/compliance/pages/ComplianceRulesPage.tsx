@@ -25,6 +25,7 @@ import { Card, CardContent, Badge } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input, Select } from '../../../components/ui/input';
 import { Pagination } from '../../shared/Pagination';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { PageToolbar } from '../../shared/PageToolbar';
 import { KpiCard } from '../../shared/KpiCard';
 import { ViewModeToggle, type ViewMode } from '../../shared/ViewModeToggle';
@@ -199,6 +200,96 @@ export default function ComplianceRulesPage() {
         }
     ];
 
+    const isFiltered = Boolean(q.trim() || severity || isActive || hasViolations);
+
+    const complianceColumns = useMemo<ColumnDef<ComplianceRuleDto>[]>(() => [
+        {
+            key: 'code',
+            header: 'Code',
+            width: 'w-36',
+            cell: (rule) => (
+                <code className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-700 text-wrap-anywhere">
+                    {rule.code}
+                </code>
+            )
+        },
+        {
+            key: 'title',
+            header: 'Title',
+            cell: (rule) => (
+                <div>
+                    <p className="text-sm font-black text-slate-900 text-wrap-anywhere">{rule.title}</p>
+                    {rule.description && (
+                        <p className="mt-0.5 text-[11px] font-semibold text-slate-500 text-wrap-anywhere line-clamp-2">{rule.description}</p>
+                    )}
+                </div>
+            )
+        },
+        {
+            key: 'severity',
+            header: 'Severity',
+            width: 'w-28',
+            cell: (rule) => (
+                <Badge className={cn('rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wide', SEVERITY_TONE[rule.severity])}>
+                    {rule.severity}
+                </Badge>
+            )
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            width: 'w-28',
+            cell: (rule) => (
+                <Badge
+                    className={cn(
+                        'rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wide',
+                        rule.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'
+                    )}
+                >
+                    {rule.isActive ? 'Active' : 'Inactive'}
+                </Badge>
+            )
+        },
+        {
+            key: 'updatedAt',
+            header: 'Last Updated',
+            width: 'w-44',
+            cell: (rule) => (
+                <div className="text-xs font-semibold text-slate-600" title={formatDateTime(rule.updatedAt)}>
+                    <p>{formatDateTime(rule.updatedAt)}</p>
+                    <p className="text-[10px] text-slate-400">{formatRelative(rule.updatedAt)}</p>
+                </div>
+            )
+        },
+        {
+            key: 'actions',
+            header: 'Actions',
+            align: 'right',
+            width: 'w-44',
+            cell: (rule) => (
+                <div className="flex items-center justify-end gap-1">
+                    <button
+                        type="button"
+                        onClick={() => setViolationsFor(rule)}
+                        className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:border-[#12335f] hover:text-[#12335f]"
+                    >
+                        Violations
+                        {(rule.violations?.length || 0) > 0 && (
+                            <span className="ml-1 rounded bg-amber-100 px-1 text-[9px] text-amber-700">{rule.violations?.length}</span>
+                        )}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setEditing(rule)}
+                        className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:border-[#12335f] hover:text-[#12335f]"
+                    >
+                        Edit
+                    </button>
+                </div>
+            )
+        }
+    ], []);
+
     return (
         <div className="space-y-4">
             <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
@@ -298,100 +389,30 @@ export default function ComplianceRulesPage() {
                 />
             )}
 
-            {query.isLoading && !query.data ? (
+            {viewMode === 'list' ? (
+                <DataTable<ComplianceRuleDto>
+                    data={visibleRecords}
+                    columns={complianceColumns}
+                    keyExtractor={(rule) => rule.id}
+                    isLoading={query.isLoading && !query.data}
+                    showSrNo={true}
+                    srNoHeader="#"
+                    srNoWidth="w-14"
+                    page={page}
+                    pageSize={pageSize}
+                    total={total}
+                    onPageChange={setPage}
+                    onPageSizeChange={setPageSize}
+                    paginationLabel="rules"
+                    emptyTitle="No compliance rules"
+                    emptyDescription="Adjust filters or create a new rule."
+                    emptyAction={isFiltered ? { label: 'Reset Filters', onClick: resetFilters } : undefined}
+                    caption="Compliance Rules Catalogue and Violation Management"
+                />
+            ) : query.isLoading && !query.data ? (
                 <ListSkeleton rows={4} />
             ) : visibleRecords.length === 0 ? (
                 <EmptyState title="No compliance rules" description="Adjust filters or create a new rule." />
-            ) : viewMode === 'list' ? (
-                <Card>
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                            <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[860px] text-sm">
-                                <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                    <tr>
-                                        <th className="px-4 py-2.5 text-left w-12">#</th>
-                                        <th className="px-4 py-2.5 text-left">Code</th>
-                                        <th className="px-4 py-2.5 text-left">Title</th>
-                                        <th className="px-4 py-2.5 text-left w-28">Severity</th>
-                                        <th className="px-4 py-2.5 text-left w-24">Status</th>
-                                        <th className="px-4 py-2.5 text-left w-44">Last Updated</th>
-                                        <th className="px-4 py-2.5 text-right w-44">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {visibleRecords.map((rule, idx) => (
-                                        <tr key={rule.id} className="hover:bg-slate-50/60">
-                                            <td className="px-4 py-3 text-xs font-mono text-slate-400">
-                                                {String((page - 1) * pageSize + idx + 1).padStart(2, '0')}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <code className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-700 text-wrap-anywhere">
-                                                    {rule.code}
-                                                </code>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <p className="text-sm font-black text-slate-900 text-wrap-anywhere">{rule.title}</p>
-                                                {rule.description && (
-                                                    <p className="mt-0.5 text-[11px] font-semibold text-slate-500 text-wrap-anywhere line-clamp-2">{rule.description}</p>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <Badge className={cn('rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wide', SEVERITY_TONE[rule.severity])}>
-                                                    {rule.severity}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <Badge
-                                                    className={cn(
-                                                        'rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wide',
-                                                        rule.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'
-                                                    )}
-                                                >
-                                                    {rule.isActive ? 'Active' : 'Inactive'}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-4 py-3 text-xs font-semibold text-slate-600" title={formatDateTime(rule.updatedAt)}>
-                                                <p>{formatDateTime(rule.updatedAt)}</p>
-                                                <p className="text-[10px] text-slate-400">{formatRelative(rule.updatedAt)}</p>
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setViolationsFor(rule)}
-                                                        className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:border-[#12335f] hover:text-[#12335f]"
-                                                    >
-                                                        Violations
-                                                        {(rule.violations?.length || 0) > 0 && (
-                                                            <span className="ml-1 rounded bg-amber-100 px-1 text-[9px] text-amber-700">{rule.violations?.length}</span>
-                                                        )}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setEditing(rule)}
-                                                        className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:border-[#12335f] hover:text-[#12335f]"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-</div>
-                        </div>
-                        <Pagination
-                            page={page}
-                            pageSize={pageSize}
-                            total={total}
-                            onPageChange={setPage}
-                            onPageSizeChange={setPageSize}
-                            label="rules"
-                        />
-                    </CardContent>
-                </Card>
             ) : (
                 <>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">

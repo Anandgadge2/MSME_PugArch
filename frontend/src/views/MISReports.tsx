@@ -21,6 +21,7 @@ import { formatDate, formatDateTime } from '../features/shared/format';
 import { useAuth } from '../hooks/useAuth';
 import ProcurementReportPage from '../features/reports/pages/ProcurementReportPage';
 import SuppliersReportPage from '../features/reports/pages/SuppliersReportPage';
+import { DataTable, ColumnDef } from '../components/ui/data-table';
 
 const PALETTE = {
   navy: '#12335f',
@@ -144,6 +145,53 @@ export default function MISReports() {
     }
     return list;
   }, [stats?.clusterBreakdown, clusterFilter]);
+
+  const clusterColumns: ColumnDef<any>[] = useMemo(() => [
+    {
+      key: 'name',
+      header: 'Industrial Cluster',
+      width: 'w-[28%]',
+      cell: (c: any) => (
+        <span className="font-bold text-slate-900 flex items-center gap-2">
+          <Building2 className="h-3.5 w-3.5 text-[#12335f]" /> {c.name}
+        </span>
+      ),
+    },
+    {
+      key: 'orders',
+      header: 'Total Orders',
+      width: 'w-[18%]',
+      cell: (c: any) => <span className="font-semibold text-slate-700">{c.orders} POs</span>,
+    },
+    {
+      key: 'spend',
+      header: 'Total Sourcing Value',
+      width: 'w-[22%]',
+      cell: (c: any) => <span className="font-black text-slate-900">₹{Number(c.spend).toLocaleString('en-IN')}</span>,
+    },
+    {
+      key: 'percentage',
+      header: 'Ecosystem Share',
+      width: 'w-[16%]',
+      cell: (c: any) => <span className="font-bold text-[#12335f]">{c.percentage}%</span>,
+    },
+    {
+      key: 'status',
+      header: 'Sourcing Status',
+      width: 'w-[16%]',
+      cell: (c: any) => (
+        c.orders > 0 ? (
+          <span className="inline-flex rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+            Active Linkage
+          </span>
+        ) : (
+          <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+            No Active Orders
+          </span>
+        )
+      ),
+    },
+  ], []);
 
   const procurementMethodsData = useMemo(() => {
     const raw = stats?.procurementMethods;
@@ -710,57 +758,19 @@ export default function MISReports() {
           </div>
 
           {/* Cluster Details Table */}
-          <Card className="shadow-sm border-slate-200 overflow-hidden">
-            <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
-              <CardTitle className="text-sm font-black uppercase tracking-wide text-slate-900">
-                Cluster Linkage Performance Summary
-              </CardTitle>
-            </CardHeader>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 font-black uppercase tracking-wider">
-                    <th className="px-4 py-3">Industrial Cluster</th>
-                    <th className="px-4 py-3">Total Orders</th>
-                    <th className="px-4 py-3">Total Sourcing Value</th>
-                    <th className="px-4 py-3">Ecosystem Share</th>
-                    <th className="px-4 py-3">Sourcing Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {clusterData.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-xs font-semibold text-slate-400">
-                        No procurement orders recorded across clusters.
-                      </td>
-                    </tr>
-                  ) : (
-                    clusterData.map((c: any) => (
-                      <tr key={c.name} className="hover:bg-slate-50/80 transition">
-                        <td className="px-4 py-3 font-bold text-slate-900 flex items-center gap-2">
-                          <Building2 className="h-3.5 w-3.5 text-[#12335f]" /> {c.name}
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-slate-700">{c.orders} POs</td>
-                        <td className="px-4 py-3 font-black text-slate-900">₹{Number(c.spend).toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 font-bold text-[#12335f]">{c.percentage}%</td>
-                        <td className="px-4 py-3">
-                          {c.orders > 0 ? (
-                            <span className="inline-flex rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                              Active Linkage
-                            </span>
-                          ) : (
-                            <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
-                              No Active Orders
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <div className="space-y-3">
+            <h3 className="text-sm font-black uppercase tracking-wide text-slate-900">
+              Cluster Linkage Performance Summary
+            </h3>
+            <DataTable<any>
+              data={clusterData}
+              columns={clusterColumns}
+              keyExtractor={(c) => c.name}
+              showSrNo={false}
+              emptyTitle="No cluster procurement data"
+              emptyDescription="No procurement orders recorded across clusters."
+            />
+          </div>
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { FormEvent, useState, useEffect } from 'react';
+import { FormEvent, useState, useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
@@ -33,6 +33,7 @@ import {
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
+import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { formatCurrency, formatDateTime, formatNumber, formatTime } from '../../shared/format';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
@@ -238,6 +239,65 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
       label: b.sellerOrgName || `Bid #${idx + 1}`
     }));
 
+  const liveBidColumns = useMemo<ColumnDef<ReverseAuctionBid>[]>(() => [
+    {
+      key: 'rank',
+      header: 'Rank',
+      width: 'w-[15%]',
+      cell: (row) => (
+        <span className={cn(
+          "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-extrabold",
+          row.rankAtSubmission === 1 ? "bg-emerald-50 text-emerald-700 border border-emerald-200/50" : "bg-zinc-100 text-zinc-600"
+        )}>
+          L{row.rankAtSubmission || '-'}
+        </span>
+      )
+    },
+    ...(isBuyerOrAdmin ? [{
+      key: 'sellerOrgName',
+      header: 'Seller Organization',
+      width: 'w-[30%]',
+      cell: (row: ReverseAuctionBid) => (
+        <span className="font-bold text-zinc-800">
+          {row.sellerOrgName || `Org #${row.sellerOrgId}`}
+        </span>
+      )
+    }] : []),
+    {
+      key: 'submittedAt',
+      header: 'Bid Time',
+      width: 'w-[22%]',
+      cell: (row) => (
+        <span className="font-semibold text-zinc-500">
+          {formatDateTime(row.submittedAt)}
+        </span>
+      )
+    },
+    {
+      key: 'amount',
+      header: 'Bid Amount',
+      width: 'w-[20%]',
+      cell: (row) => (
+        <span className="font-black text-zinc-900">
+          {formatCurrency(getBidAmount(row))}
+        </span>
+      )
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-[13%]',
+      cell: (row) => (
+        <span className={cn(
+          "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase",
+          row.isValid === false ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"
+        )}>
+          {row.isValid === false ? 'Invalid' : 'Valid'}
+        </span>
+      )
+    }
+  ], [isBuyerOrAdmin]);
+
   return (
     <div className="space-y-6 pb-8 bg-white text-zinc-900 p-6 rounded-3xl border border-zinc-200 shadow-xl animate-in fade-in duration-500">
       
@@ -414,59 +474,14 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
               </div>
             </div>
 
-            {bidRows.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-8 text-center text-zinc-500">
-                <p className="text-xs font-bold">No bids submitted yet.</p>
-                <p className="text-[10px] mt-1">Once live bids are validated by the server, they will populate here.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50 text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-200">
-                    <tr>
-                      <th className="px-4 py-3">Rank</th>
-                      {isBuyerOrAdmin && <th className="px-4 py-3">Seller Organization</th>}
-                      <th className="px-4 py-3">Bid Time</th>
-                      <th className="px-4 py-3">Bid Amount</th>
-                      <th className="px-4 py-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-200">
-                    {bidRows.map((row) => (
-                      <tr key={row.id} className="hover:bg-zinc-50 transition duration-150">
-                        <td className="px-4 py-3">
-                          <span className={cn(
-                            "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-extrabold",
-                            row.rankAtSubmission === 1 ? "bg-emerald-50 text-emerald-700 border border-emerald-200/50" : "bg-zinc-100 text-zinc-600"
-                          )}>
-                            L{row.rankAtSubmission || '-'}
-                          </span>
-                        </td>
-                        {isBuyerOrAdmin && (
-                          <td className="px-4 py-3 font-bold text-zinc-800">
-                            {row.sellerOrgName || `Org #${row.sellerOrgId}`}
-                          </td>
-                        )}
-                        <td className="px-4 py-3 font-semibold text-zinc-500">
-                          {formatDateTime(row.submittedAt)}
-                        </td>
-                        <td className="px-4 py-3 font-black text-zinc-900">
-                          {formatCurrency(getBidAmount(row))}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={cn(
-                            "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase",
-                            row.isValid === false ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"
-                          )}>
-                            {row.isValid === false ? 'Invalid' : 'Valid'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <DataTable<ReverseAuctionBid>
+              columns={liveBidColumns}
+              data={bidRows}
+              keyExtractor={(row) => String(row.id)}
+              emptyTitle="No bids placed yet"
+              emptyDescription="Once live bids are validated by the server, they will populate here."
+              minWidth="min-w-[540px]"
+            />
           </CardContent>
         </Card>
 

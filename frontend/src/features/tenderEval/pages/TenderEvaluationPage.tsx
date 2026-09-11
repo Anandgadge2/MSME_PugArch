@@ -19,7 +19,8 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { usePermissions } from '../../../hooks/useOrgRole';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
-import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
+import { type SortDirection } from '../../shared/SortableHeader';
+import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { formatCurrency, formatDateTime } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
 import { getApi } from '../../shared/apiClient';
@@ -140,6 +141,52 @@ function CriteriaTab({ tenderId }: { tenderId: number }) {
         return sortDirection === 'asc' ? res : -res;
     });
 
+    const criteriaColumns: ColumnDef<any>[] = [
+        {
+            key: 'name',
+            header: 'Name',
+            sortable: true,
+            sortKey: 'name',
+            cell: (c: any) => (
+                <div>
+                    <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{c.name}</p>
+                    {c.description && <p className="text-[10px] text-slate-500 text-wrap-anywhere">{c.description}</p>}
+                </div>
+            )
+        },
+        {
+            key: 'maxScore',
+            header: 'Max Score',
+            sortable: true,
+            sortKey: 'maxScore',
+            align: 'right',
+            width: 'w-32',
+            cellClassName: 'font-mono text-xs font-bold',
+            cell: (c: any) => Number(c.maxScore)
+        },
+        {
+            key: 'weightage',
+            header: 'Weightage %',
+            sortable: true,
+            sortKey: 'weightage',
+            align: 'right',
+            width: 'w-32',
+            cellClassName: 'font-mono text-xs',
+            cell: (c: any) => (c.weightage ? `${Number(c.weightage)}%` : '—')
+        },
+        {
+            key: 'isMandatory',
+            header: 'Mandatory',
+            sortable: true,
+            sortKey: 'isMandatory',
+            align: 'center',
+            width: 'w-32',
+            cell: (c: any) => c.isMandatory ? (
+                <span className="inline-flex rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase text-amber-700">Yes</span>
+            ) : <span className="text-[10px] text-slate-400">—</span>
+        }
+    ];
+
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -153,50 +200,26 @@ function CriteriaTab({ tenderId }: { tenderId: number }) {
                 )}
             </div>
 
-            {isLoading ? <LoadingState label="Loading criteria..." /> :
-                error ? <InlineError message={(error as Error).message} /> :
-                    !data || data.length === 0 ? (
-                        <Card><CardContent className="py-12">
-                            <EmptyState title="No criteria defined" description="Add the first scoring criterion to begin technical evaluation." />
-                        </CardContent></Card>
-                    ) : (
-                        <Card className="border-slate-200/80">
-                            <CardContent className="p-0">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm min-w-[500px]">
-                                        <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                        <tr>
-                                            <th className="px-4 py-2.5 text-left w-12">#</th>
-                                            <th className="px-4 py-2.5 text-left"><SortableHeader label="Name" field="name" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                            <th className="px-4 py-2.5 text-right w-32"><SortableHeader label="Max Score" field="maxScore" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
-                                            <th className="px-4 py-2.5 text-right w-32"><SortableHeader label="Weightage %" field="weightage" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
-                                            <th className="px-4 py-2.5 text-center w-32"><SortableHeader label="Mandatory" field="isMandatory" activeField={sortKey} direction={sortDirection} onSort={toggleSort} align="center" /></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {sortedCriteria.map((c, idx) => (
-                                            <tr key={c.id}>
-                                                <td className="px-4 py-3 font-mono text-xs text-slate-400">{String(idx + 1).padStart(2, '0')}</td>
-                                                <td className="px-4 py-3">
-                                                    <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{c.name}</p>
-                                                    {c.description && <p className="text-[10px] text-slate-500 text-wrap-anywhere">{c.description}</p>}
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-mono text-xs font-bold">{Number(c.maxScore)}</td>
-                                                <td className="px-4 py-3 text-right font-mono text-xs">{c.weightage ? `${Number(c.weightage)}%` : '—'}</td>
-                                                <td className="px-4 py-3 text-center">
-                                                    {c.isMandatory ? (
-                                                        <span className="inline-flex rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase text-amber-700">Yes</span>
-                                                    ) : <span className="text-[10px] text-slate-400">—</span>}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                            </CardContent>
-                        </Card>
-                    )
-            }
+            {error ? (
+                <InlineError message={(error as Error).message} />
+            ) : (
+                <DataTable
+                    data={sortedCriteria}
+                    columns={criteriaColumns}
+                    isLoading={isLoading}
+                    skeletonRows={4}
+                    showSrNo={true}
+                    srNoHeader="#"
+                    srNoWidth="w-12"
+                    minWidth="min-w-[500px]"
+                    sortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={(field) => toggleSort(field as CriteriaSortKey)}
+                    keyExtractor={(c: any) => c.id}
+                    emptyTitle="No criteria defined"
+                    emptyDescription="Add the first scoring criterion to begin technical evaluation."
+                />
+            )}
 
             {showAdd && (
                 <AddCriterionModal
@@ -336,67 +359,95 @@ function TechnicalTab({ tenderId }: { tenderId: number }) {
         return 0;
     });
 
+    const technicalColumns: ColumnDef<any>[] = [
+        {
+            key: 'bidder',
+            header: 'Bidder',
+            sortable: true,
+            sortKey: 'bidder',
+            cell: (b: any) => (
+                <div>
+                    <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{b.bid.seller?.name || `Seller #${b.bid.sellerId}`}</p>
+                    <p className="text-[10px] text-slate-500">{b.bid.seller?.email}</p>
+                </div>
+            )
+        },
+        {
+            key: 'totalScore',
+            header: 'Score',
+            sortable: true,
+            sortKey: 'totalScore',
+            align: 'right',
+            width: 'w-32',
+            cellClassName: 'font-mono text-xs font-bold',
+            cell: (b: any) => `${b.totalScore} / ${b.maxScore}`
+        },
+        {
+            key: 'percent',
+            header: '% Pass',
+            sortable: true,
+            sortKey: 'percent',
+            align: 'right',
+            width: 'w-24',
+            cellClassName: 'font-mono text-xs font-black',
+            cell: (b: any) => `${b.percent}%`
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            sortable: true,
+            sortKey: 'status',
+            align: 'center',
+            width: 'w-32',
+            cell: (b: any) => !b.isFullyEvaluated ? (
+                <span className="inline-flex rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black uppercase text-slate-500">Pending</span>
+            ) : b.qualified ? (
+                <span className="inline-flex rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-700">Qualified</span>
+            ) : (
+                <span className="inline-flex rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-red-700">Disqualified</span>
+            )
+        },
+        {
+            key: 'action',
+            header: 'Action',
+            align: 'right',
+            width: 'w-32',
+            cell: (b: any) => (
+                <Button variant="outline" size="sm"
+                    onClick={() => {
+                        const scores: Record<number, number> = {};
+                        const remarks: Record<number, string> = {};
+                        b.results.forEach((r: any) => {
+                            scores[r.criteriaId] = Number(r.score);
+                            if (r.remarks) remarks[r.criteriaId] = r.remarks;
+                        });
+                        setScoring({ bidId: b.bid.id, scores, remarks });
+                    }}
+                >
+                    Score
+                </Button>
+            )
+        }
+    ];
+
     return (
         <div className="space-y-3">
             <p className="text-xs font-semibold text-slate-600">
                 Score each bid against the criteria. Bids scoring ≥60% qualify for financial evaluation.
             </p>
 
-            <Card className="border-slate-200/80">
-                <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                <tr>
-                                    <th className="px-4 py-2.5 text-left"><SortableHeader label="Bidder" field="bidder" activeField={sortKey} direction={sortDirection} onSort={toggleSort} /></th>
-                                    <th className="px-4 py-2.5 text-right w-32"><SortableHeader label="Score" field="totalScore" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
-                                    <th className="px-4 py-2.5 text-right w-24"><SortableHeader label="% Pass" field="percent" activeField={sortKey} direction={sortDirection} onSort={toggleSort} className="justify-end" /></th>
-                                    <th className="px-4 py-2.5 text-center w-32"><SortableHeader label="Status" field="status" activeField={sortKey} direction={sortDirection} onSort={toggleSort} align="center" /></th>
-                                    <th className="px-4 py-2.5 text-right w-32">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {sortedBidScores.map(b => (
-                                    <tr key={b.bid.id}>
-                                        <td className="px-4 py-3">
-                                            <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{b.bid.seller?.name || `Seller #${b.bid.sellerId}`}</p>
-                                            <p className="text-[10px] text-slate-500">{b.bid.seller?.email}</p>
-                                        </td>
-                                        <td className="px-4 py-3 text-right font-mono text-xs font-bold">
-                                            {b.totalScore} / {b.maxScore}
-                                        </td>
-                                        <td className="px-4 py-3 text-right font-mono text-xs font-black">{b.percent}%</td>
-                                        <td className="px-4 py-3 text-center">
-                                            {!b.isFullyEvaluated ? (
-                                                <span className="inline-flex rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black uppercase text-slate-500">Pending</span>
-                                            ) : b.qualified ? (
-                                                <span className="inline-flex rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-700">Qualified</span>
-                                            ) : (
-                                                <span className="inline-flex rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase text-red-700">Disqualified</span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <Button variant="outline" size="sm"
-                                                onClick={() => {
-                                                    const scores: Record<number, number> = {};
-                                                    const remarks: Record<number, string> = {};
-                                                    b.results.forEach(r => {
-                                                        scores[r.criteriaId] = Number(r.score);
-                                                        if (r.remarks) remarks[r.criteriaId] = r.remarks;
-                                                    });
-                                                    setScoring({ bidId: b.bid.id, scores, remarks });
-                                                }}
-                                            >
-                                                Score
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </CardContent>
-            </Card>
+            <DataTable
+                data={sortedBidScores}
+                columns={technicalColumns}
+                showSrNo={false}
+                minWidth="min-w-[600px]"
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                onSort={(field) => toggleSort(field as TechSortKey)}
+                keyExtractor={(b: any) => b.bid.id}
+                emptyTitle="No bids found"
+                emptyDescription="No bids available for technical scoring."
+            />
 
             {scoring && (
                 <ScoringModal
@@ -507,6 +558,67 @@ function FinancialTab({ tenderId }: { tenderId: number }) {
     if (isLoading) return <LoadingState label="Loading financial bids..." />;
     if (error) return <InlineError message={(error as Error).message} onRetry={() => refetch()} />;
 
+    const financialColumns: ColumnDef<any>[] = [
+        {
+            key: 'bidder',
+            header: 'Bidder',
+            cell: (b: any) => (
+                <div>
+                    <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{b.bid.seller?.name}</p>
+                    <p className="text-[10px] text-slate-500">{b.bid.seller?.email}</p>
+                </div>
+            )
+        },
+        {
+            key: 'technicalPercent',
+            header: 'Tech %',
+            align: 'right',
+            width: 'w-28',
+            cellClassName: 'font-mono text-xs',
+            cell: (b: any) => `${b.technicalPercent}%`
+        },
+        {
+            key: 'quotedAmount',
+            header: 'Quoted',
+            align: 'right',
+            width: 'w-36',
+            cellClassName: 'font-mono text-xs font-bold',
+            cell: (b: any) => formatCurrency(b.quotedAmount)
+        },
+        {
+            key: 'evaluatedAmount',
+            header: 'Evaluated',
+            align: 'right',
+            width: 'w-36',
+            cellClassName: 'font-mono text-xs font-black',
+            cell: (b: any) => formatCurrency(b.evaluatedAmount)
+        },
+        {
+            key: 'action',
+            header: 'Action',
+            align: 'right',
+            width: 'w-36',
+            cell: (b: any) => (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                        const input = window.prompt('Enter evaluated amount (for landed cost / tax adjustments)', String(b.evaluatedAmount));
+                        if (input === null) return;
+                        const num = Number(input);
+                        if (!Number.isFinite(num) || num < 0) { toast.error('Invalid amount'); return; }
+                        await runWithToast(
+                            () => evalMut.mutateAsync({ bidId: b.bid.id, data: { evaluatedAmount: num } }),
+                            { loading: 'Saving...', success: 'Saved', error: 'Failed' }
+                        );
+                    }}
+                >
+                    Adjust
+                </Button>
+            )
+        }
+    ];
+
     return (
         <div className="space-y-3">
             <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 flex items-start justify-between gap-3">
@@ -530,60 +642,15 @@ function FinancialTab({ tenderId }: { tenderId: number }) {
                 )}
             </div>
 
-            {!data || data.length === 0 ? (
-                <Card><CardContent className="py-12">
-                    <EmptyState title="No qualifying bids" description="Bids must score ≥60% in technical evaluation to appear here." />
-                </CardContent></Card>
-            ) : (
-                <Card className="border-slate-200/80">
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                    <tr>
-                                        <th className="px-4 py-2.5 text-left">Bidder</th>
-                                        <th className="px-4 py-2.5 text-right w-28">Tech %</th>
-                                        <th className="px-4 py-2.5 text-right w-36">Quoted</th>
-                                        <th className="px-4 py-2.5 text-right w-36">Evaluated</th>
-                                        <th className="px-4 py-2.5 text-right w-36">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {data.map(b => (
-                                        <tr key={b.bid.id}>
-                                            <td className="px-4 py-3">
-                                                <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{b.bid.seller?.name}</p>
-                                                <p className="text-[10px] text-slate-500">{b.bid.seller?.email}</p>
-                                            </td>
-                                            <td className="px-4 py-3 text-right font-mono text-xs">{b.technicalPercent}%</td>
-                                            <td className="px-4 py-3 text-right font-mono text-xs font-bold">{formatCurrency(b.quotedAmount)}</td>
-                                            <td className="px-4 py-3 text-right font-mono text-xs font-black">{formatCurrency(b.evaluatedAmount)}</td>
-                                            <td className="px-4 py-3 text-right">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={async () => {
-                                                        const input = window.prompt('Enter evaluated amount (for landed cost / tax adjustments)', String(b.evaluatedAmount));
-                                                        if (input === null) return;
-                                                        const num = Number(input);
-                                                        if (!Number.isFinite(num) || num < 0) { toast.error('Invalid amount'); return; }
-                                                        await runWithToast(
-                                                            () => evalMut.mutateAsync({ bidId: b.bid.id, data: { evaluatedAmount: num } }),
-                                                            { loading: 'Saving...', success: 'Saved', error: 'Failed' }
-                                                        );
-                                                    }}
-                                                >
-                                                    Adjust
-                                                </Button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
+            <DataTable
+                data={data || []}
+                columns={financialColumns}
+                showSrNo={false}
+                minWidth="min-w-[600px]"
+                keyExtractor={(b: any) => b.bid.id}
+                emptyTitle="No qualifying bids"
+                emptyDescription="Bids must score ≥60% in technical evaluation to appear here."
+            />
         </div>
     );
 }
@@ -593,54 +660,65 @@ function FinancialTab({ tenderId }: { tenderId: number }) {
 function RankingTab({ tenderId }: { tenderId: number }) {
     const { data, isLoading, error, refetch } = useRanking(tenderId);
 
-    if (isLoading) return <LoadingState label="Computing ranking..." />;
+    const rankingColumns: ColumnDef<any>[] = [
+        {
+            key: 'rank',
+            header: 'Rank',
+            width: 'w-24',
+            cell: (b: any) => (
+                <span className={`inline-flex h-8 w-12 items-center justify-center rounded-md font-black ${
+                    b.rank === 1 ? 'bg-emerald-600 text-white' :
+                    b.rank === 2 ? 'bg-blue-100 text-blue-800' :
+                    b.rank === 3 ? 'bg-amber-100 text-amber-800' :
+                    'bg-slate-100 text-slate-600'
+                }`}>
+                    {b.label}
+                </span>
+            )
+        },
+        {
+            key: 'bidder',
+            header: 'Bidder',
+            cell: (b: any) => (
+                <div>
+                    <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{b.bid.seller?.name}</p>
+                    <p className="text-[10px] text-slate-500">{b.bid.seller?.email}</p>
+                </div>
+            )
+        },
+        {
+            key: 'technicalPercent',
+            header: 'Tech %',
+            align: 'right',
+            width: 'w-28',
+            cellClassName: 'font-mono text-xs',
+            cell: (b: any) => `${b.technicalPercent}%`
+        },
+        {
+            key: 'evaluatedAmount',
+            header: 'Final Amount',
+            align: 'right',
+            width: 'w-36',
+            cellClassName: 'font-mono text-base font-black',
+            cell: (b: any) => formatCurrency(b.evaluatedAmount)
+        }
+    ];
+
     if (error) return <InlineError message={(error as Error).message} onRetry={() => refetch()} />;
-    if (!data || data.length === 0) {
-        return (
-            <Card><CardContent className="py-12">
-                <EmptyState title="No qualified bids" description="Complete technical and financial evaluation to see L1/L2/L3 ranking." />
-            </CardContent></Card>
-        );
-    }
 
     return (
-        <Card className="border-slate-200/80">
-            <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                            <tr>
-                                <th className="px-4 py-2.5 text-left w-20">Rank</th>
-                                <th className="px-4 py-2.5 text-left">Bidder</th>
-                                <th className="px-4 py-2.5 text-right w-28">Tech %</th>
-                                <th className="px-4 py-2.5 text-right w-36">Final Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {data.map(b => (
-                                <tr key={b.bid.id} className={b.rank === 1 ? 'bg-emerald-50/30' : ''}>
-                                    <td className="px-4 py-3">
-                                        <span className={`inline-flex h-8 w-12 items-center justify-center rounded-md font-black ${b.rank === 1 ? 'bg-emerald-600 text-white' :
-                                                b.rank === 2 ? 'bg-blue-100 text-blue-800' :
-                                                    b.rank === 3 ? 'bg-amber-100 text-amber-800' :
-                                                        'bg-slate-100 text-slate-600'
-                                            }`}>
-                                            {b.label}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <p className="text-xs font-black text-slate-900 text-wrap-anywhere">{b.bid.seller?.name}</p>
-                                        <p className="text-[10px] text-slate-500">{b.bid.seller?.email}</p>
-                                    </td>
-                                    <td className="px-4 py-3 text-right font-mono text-xs">{b.technicalPercent}%</td>
-                                    <td className="px-4 py-3 text-right font-mono text-base font-black">{formatCurrency(b.evaluatedAmount)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </CardContent>
-        </Card>
+        <DataTable
+            data={data || []}
+            columns={rankingColumns}
+            isLoading={isLoading}
+            skeletonRows={3}
+            showSrNo={false}
+            minWidth="min-w-[600px]"
+            rowClassName={(b: any) => b.rank === 1 ? 'bg-emerald-50/30' : ''}
+            keyExtractor={(b: any) => b.bid.id}
+            emptyTitle="No qualified bids"
+            emptyDescription="Complete technical and financial evaluation to see L1/L2/L3 ranking."
+        />
     );
 }
 
@@ -651,6 +729,57 @@ function ComparativeTab({ tenderId }: { tenderId: number }) {
     const { data, isLoading, error, refetch } = useComparativeStatement(tenderId);
     const generateMut = useGenerateComparative(tenderId);
     const canGenerate = hasPermission('award.recommend');
+
+    const comparativeColumns: ColumnDef<any>[] = [
+        {
+            key: 'bidder',
+            header: 'Bidder',
+            cell: (b: any) => <span className="text-xs font-black text-slate-900 text-wrap-anywhere">{b.seller?.name}</span>
+        },
+        {
+            key: 'technicalPercent',
+            header: 'Tech',
+            align: 'right',
+            width: 'w-24',
+            cellClassName: 'font-mono text-xs',
+            cell: (b: any) => `${b.technicalPercent}%`
+        },
+        {
+            key: 'quotedAmount',
+            header: 'Quoted',
+            align: 'right',
+            width: 'w-32',
+            cellClassName: 'font-mono text-xs',
+            cell: (b: any) => formatCurrency(b.quotedAmount)
+        },
+        {
+            key: 'evaluatedAmount',
+            header: 'Final',
+            align: 'right',
+            width: 'w-32',
+            cellClassName: 'font-mono text-xs font-bold',
+            cell: (b: any) => formatCurrency(b.evaluatedAmount)
+        },
+        {
+            key: 'rank',
+            header: 'Rank',
+            align: 'center',
+            width: 'w-20',
+            cellClassName: 'font-mono text-xs font-black',
+            cell: (b: any) => (b.rank ? `L${b.rank}` : '—')
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            align: 'center',
+            width: 'w-28',
+            cell: (b: any) => b.qualified ? (
+                <span className="text-[10px] font-black text-emerald-700">QUALIFIED</span>
+            ) : (
+                <span className="text-[10px] font-black text-red-700">DISQUALIFIED</span>
+            )
+        }
+    ];
 
     return (
         <div className="space-y-3">
@@ -694,38 +823,15 @@ function ComparativeTab({ tenderId }: { tenderId: number }) {
                                 </div>
 
                                 {data.summary?.bids && (
-                                    <div className="overflow-x-auto rounded-lg border border-slate-200">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200">
-                                                <tr>
-                                                    <th className="px-3 py-2 text-left">Bidder</th>
-                                                    <th className="px-3 py-2 text-right">Tech</th>
-                                                    <th className="px-3 py-2 text-right">Quoted</th>
-                                                    <th className="px-3 py-2 text-right">Final</th>
-                                                    <th className="px-3 py-2 text-center">Rank</th>
-                                                    <th className="px-3 py-2 text-center">Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {data.summary.bids.map((b: any) => (
-                                                    <tr key={b.bidId}>
-                                                        <td className="px-3 py-2 text-xs font-black text-slate-900 text-wrap-anywhere">{b.seller?.name}</td>
-                                                        <td className="px-3 py-2 text-right font-mono text-xs">{b.technicalPercent}%</td>
-                                                        <td className="px-3 py-2 text-right font-mono text-xs">{formatCurrency(b.quotedAmount)}</td>
-                                                        <td className="px-3 py-2 text-right font-mono text-xs font-bold">{formatCurrency(b.evaluatedAmount)}</td>
-                                                        <td className="px-3 py-2 text-center font-mono text-xs font-black">{b.rank ? `L${b.rank}` : '—'}</td>
-                                                        <td className="px-3 py-2 text-center">
-                                                            {b.qualified ? (
-                                                                <span className="text-[10px] font-black text-emerald-700">QUALIFIED</span>
-                                                            ) : (
-                                                                <span className="text-[10px] font-black text-red-700">DISQUALIFIED</span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                    <DataTable
+                                        data={data.summary.bids}
+                                        columns={comparativeColumns}
+                                        showSrNo={false}
+                                        minWidth="min-w-[600px]"
+                                        keyExtractor={(b: any, idx) => b.bidId || idx}
+                                        emptyTitle="No summary bids"
+                                        emptyDescription="No bid details found in the comparative statement."
+                                    />
                                 )}
                             </CardContent>
                         </Card>
@@ -734,3 +840,4 @@ function ComparativeTab({ tenderId }: { tenderId: number }) {
         </div>
     );
 }
+

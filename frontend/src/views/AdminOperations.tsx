@@ -25,6 +25,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
+import { DataTable, ColumnDef } from '../components/ui/data-table';
 import { formatDate, formatDateTime } from '../features/shared/format';
 import { downloadCsv } from '../features/shared/exportUtils';
 import { cn } from '../lib/utils';
@@ -312,6 +313,104 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
     </button>
   );
 
+  const isFiltered = Boolean(debouncedSearchTerm.trim() || roleFilter !== 'all' || statusFilter !== 'all');
+  const clearFilters = () => {
+    setSearchTerm('');
+    setDebouncedSearchTerm('');
+    setRoleFilter('all');
+    setStatusFilter('all');
+    setPage(1);
+  };
+
+  const operationColumns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      key: 'name',
+      header: 'Name',
+      sortable: true,
+      width: 'w-[22%]',
+      cell: (item) => (
+        <div className="min-w-0">
+          <p className="truncate text-sm font-black text-slate-900" title={item.name || '—'}>{item.name || '—'}</p>
+          <p className="break-all text-[11px] font-semibold text-slate-500">{item.email || 'No email'}</p>
+        </div>
+      )
+    },
+    {
+      key: 'role',
+      header: 'Role',
+      sortable: true,
+      width: 'w-24',
+      cell: (item) => (
+        <span className="text-xs font-black uppercase tracking-wide text-[#12335f]">{item.role}</span>
+      )
+    },
+    {
+      key: 'entity',
+      header: 'Entity',
+      sortable: true,
+      width: 'w-[25%]',
+      cell: (item) => {
+        const entityName = getEntityName(item);
+        const entityLocation = getEntityLocation(item);
+        const entitySubtitle = getEntitySubtitle(item);
+        return (
+          <div>
+            {entityName ? (
+              <p className="line-clamp-2 break-words text-sm font-bold leading-snug text-slate-900" title={entityName}>
+                {entityName}
+              </p>
+            ) : (
+              <p className="text-sm font-semibold italic text-slate-400">
+                Onboarding in progress
+              </p>
+            )}
+            {entityLocation ? (
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{entityLocation}</p>
+            ) : entitySubtitle ? (
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{entitySubtitle}</p>
+            ) : null}
+          </div>
+        );
+      }
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      width: 'w-44',
+      cell: (item) => {
+        const status = item.onboardingStatus || item.status || 'pending';
+        return (
+          <span className={cn('inline-flex max-w-[170px] rounded-full border px-2.5 py-1 text-left text-[10px] font-black uppercase leading-tight tracking-wide', statusTone(status))}>
+            {statusLabel(status)}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'date',
+      header: 'Submitted',
+      sortable: true,
+      width: 'w-32',
+      cell: (item) => (
+        <span className="text-xs font-bold text-slate-600">
+          {formatDateTime(item.createdAt)}
+        </span>
+      )
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      align: 'right',
+      width: 'w-28',
+      cell: (item) => (
+        <Link href={getApprovalHref(item)} className="text-xs font-black uppercase tracking-wide text-[#12335f] hover:text-[#0b2445]">
+          Open Review
+        </Link>
+      )
+    }
+  ], []);
+
   const exportCsv = () => {
     const headers = ['Sr No', 'Name', 'Role', 'Entity', 'Email', 'Status', 'Submitted At'];
     const rows = filteredRecords.map((item, index) => {
@@ -500,91 +599,32 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
           </div>
 
           {/* Table list view for Desktop */}
-          <div className={cn(
-            "overflow-x-auto",
-            viewMode === "list" ? "hidden md:block" : "hidden"
-          )}>
-            <table className="w-full min-w-[760px] table-fixed text-left">
-              <thead className="bg-slate-50">
-                <tr className="border-b border-slate-200">
-                  <th className="w-16 px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400">Sr. No.</th>
-                  <th className="w-[22%] px-3 py-3"><SortHead label="Name" field="name" /></th>
-                  <th className="w-20 px-3 py-3"><SortHead label="Role" field="role" /></th>
-                  <th className="w-[22%] px-3 py-3"><SortHead label="Entity" field="entity" /></th>
-                  <th className="w-40 px-3 py-3"><SortHead label="Status" field="status" /></th>
-                  <th className="w-28 px-3 py-3"><SortHead label="Submitted" field="date" /></th>
-                  <th className="w-28 px-3 py-3 text-[10px] font-black uppercase tracking-wider text-[#12335f]">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  [1, 2, 3, 4, 5].map((i) => (
-                    <tr key={i} className="animate-pulse border-b border-slate-50">
-                      <td className="px-3 py-4"><div className="h-4 w-8 bg-slate-100 rounded" /></td>
-                      <td className="px-3 py-4">
-                        <div className="h-4 w-24 bg-slate-100 rounded mb-2" />
-                        <div className="h-3.5 w-32 bg-slate-100 rounded" />
-                      </td>
-                      <td className="px-3 py-4"><div className="h-4 w-12 bg-slate-100 rounded" /></td>
-                      <td className="px-3 py-4">
-                        <div className="h-4 w-36 bg-slate-100 rounded mb-2" />
-                        <div className="h-3 w-16 bg-slate-100 rounded" />
-                      </td>
-                      <td className="px-3 py-4"><div className="h-6 w-20 bg-slate-100 rounded-full" /></td>
-                      <td className="px-3 py-4"><div className="h-4 w-20 bg-slate-100 rounded" /></td>
-                      <td className="px-3 py-4"><div className="h-4 w-16 bg-slate-100 rounded" /></td>
-                    </tr>
-                  ))
-                ) : filteredRecords.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-10 text-center text-sm font-bold text-slate-400">No records found for selected filters.</td></tr>
-                ) : filteredRecords.map((item, index) => {
-                  const status = item.onboardingStatus || item.status || 'pending';
-                  const entityName = getEntityName(item);
-                  const entityLocation = getEntityLocation(item);
-                  const entitySubtitle = getEntitySubtitle(item);
-                  return (
-                    <tr key={`${item.role}-${item.id || item._id}`} className="hover:bg-slate-50/80">
-                      <td className="px-3 py-4 text-xs font-bold text-slate-500">{String((page - 1) * pageSize + index + 1).padStart(2, '0')}</td>
-                      <td className="px-3 py-4">
-                        <p className="truncate text-sm font-black text-slate-900" title={item.name || '—'}>{item.name || '—'}</p>
-                        <p className="break-all text-[11px] font-semibold text-slate-500">{item.email || 'No email'}</p>
-                      </td>
-                      <td className="px-3 py-4 text-xs font-black uppercase tracking-wide text-[#12335f]">{item.role}</td>
-                      <td className="px-3 py-4">
-                        {entityName ? (
-                          <p className="line-clamp-2 break-words text-sm font-bold leading-snug text-slate-900" title={entityName}>
-                            {entityName}
-                          </p>
-                        ) : (
-                          <p className="text-sm font-semibold italic text-slate-400">
-                            Onboarding in progress
-                          </p>
-                        )}
-                        {entityLocation ? (
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{entityLocation}</p>
-                        ) : entitySubtitle ? (
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{entitySubtitle}</p>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-4 text-left">
-                        <span className={cn('inline-flex max-w-[170px] rounded-full border px-2.5 py-1 text-left text-[10px] font-black uppercase leading-tight tracking-wide', statusTone(status))}>
-                          {statusLabel(status)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-4 text-xs font-bold text-slate-600">
-                        {formatDateTime(item.createdAt)}
-                      </td>
-                      <td className="px-3 py-4">
-                        <Link href={getApprovalHref(item)} className="text-xs font-black uppercase tracking-wide text-[#12335f] hover:text-[#12335f]">
-                          Open Review
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {viewMode === "list" && (
+            <div className="hidden md:block">
+              <DataTable<any>
+                data={filteredRecords}
+                columns={operationColumns}
+                keyExtractor={(item) => `${item.role}-${item.id || item._id}`}
+                isLoading={loading}
+                showSrNo={true}
+                srNoHeader="Sr. No."
+                srNoWidth="w-16"
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                onSort={(key) => toggleSort(key as SortKey)}
+                page={page}
+                pageSize={pageSize}
+                total={totalRecords}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                paginationLabel="records"
+                emptyTitle="No records found"
+                emptyDescription="No records found for selected filters."
+                emptyAction={isFiltered ? { label: 'Clear Filters', onClick: clearFilters } : undefined}
+                caption="Admin Operations Onboarding Review Table"
+              />
+            </div>
+          )}
 
           {/* Desktop Grid view */}
           {viewMode === "grid" && (
@@ -917,8 +957,10 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
               );
             })}
           </div>
-          {!loading && totalRecords > 0 && (
-            <Pagination page={page} pageSize={pageSize} total={totalRecords} onPageChange={setPage} onPageSizeChange={setPageSize} />
+          {viewMode === "grid" && !loading && totalRecords > 0 && (
+            <div>
+              <Pagination page={page} pageSize={pageSize} total={totalRecords} onPageChange={setPage} onPageSizeChange={setPageSize} />
+            </div>
           )}
         </section>
 
