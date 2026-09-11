@@ -331,7 +331,7 @@ async function downloadAndUploadUrl(
           } else if (meta.format === "png") {
             finalMime = "image/png";
             finalExt = ".png";
-          } else if (meta.format === "jpeg" || meta.format === "jpg") {
+          } else if (meta.format === "jpeg") {
             finalMime = "image/jpeg";
             finalExt = ".jpg";
           } else {
