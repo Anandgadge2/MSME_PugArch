@@ -43,7 +43,7 @@ import { runWithToast } from '../../../lib/toast';
 import { queryKeys } from '../../shared/queryKeys';
 import {
     invalidateDeliveryCache, useAddDeliveryDocument, useDeliveries, useDelivery, useDeliveryTimeline,
-    useManualStatusUpdate, useMarkPacked, useMarkReadyForPickup, useSellerAccept,
+    useManualStatusUpdate, useMarkDispatched, useMarkPacked, useMarkReadyForPickup, useSellerAccept,
     useSellerReject, useUpdateDispatchDetails
 } from '../hooks';
 import type { DeliveryDto } from '../api';
@@ -287,37 +287,40 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                         </button>
                     )}
 
-                    {['READY_FOR_PICKUP', 'PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status) && (
-                        <>
-                            <button
-                                type="button"
-                                role="menuitem"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setOpen(false);
-                                    onAction('dispatch-details');
-                                }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
-                            >
-                                <Send className="h-3.5 w-3.5 text-[#12335f]" />
-                                <span>{status === 'READY_FOR_PICKUP' ? 'Dispatch Order' : 'Dispatch Order / Fulfillment'}</span>
-                            </button>
-                            <button
-                                type="button"
-                                role="menuitem"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setOpen(false);
-                                    onAction('track-info');
-                                }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left cursor-pointer"
-                            >
-                                <Truck className="h-3.5 w-3.5 text-[#12335f]" />
-                                <span>Update Status</span>
-                            </button>
-                        </>
+                    {/* Pre-dispatch action: Dispatch Order is available BEFORE dispatch */}
+                    {['READY_FOR_PICKUP', 'PICKED_UP'].includes(status) && (
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpen(false);
+                                onAction('dispatch-details');
+                            }}
+                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+                        >
+                            <Send className="h-3.5 w-3.5 text-[#12335f]" />
+                            <span>Dispatch Order</span>
+                        </button>
+                    )}
+
+                    {/* Post-dispatch action: Update Status is available AFTER dispatch */}
+                    {['DISPATCHED', 'IN_TRANSIT', 'AT_HUB', 'OUT_FOR_DELIVERY'].includes(status) && (
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpen(false);
+                                onAction('track-info');
+                            }}
+                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left cursor-pointer"
+                        >
+                            <Truck className="h-3.5 w-3.5 text-[#12335f]" />
+                            <span>Update Status</span>
+                        </button>
                     )}
 
                     {['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(status) && (
@@ -1458,6 +1461,7 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
     const [isDraggingChallan, setIsDraggingChallan] = useState(false);
 
     const updateDispatchMut = useUpdateDispatchDetails();
+    const markDispatchedMut = useMarkDispatched();
     const addDocMut = useAddDeliveryDocument();
 
     const existingChallanDoc = useMemo(() => {
@@ -1704,8 +1708,8 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
     const handleSave = async () => {
         await runWithToast(async () => {
-            // 1. Update dispatch details
-            await updateDispatchMut.mutateAsync({
+            // 1. Update dispatch details (carrier, tracking, eway bill, remarks)
+            const updatedTracking = await updateDispatchMut.mutateAsync({
                 id: delivery.id,
                 data: {
                     trackingNumber: trackingNumber.trim() || undefined,
@@ -1728,17 +1732,71 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                 });
             }
 
+            // 3. Complete dispatch status transition in backend if not yet marked DISPATCHED
+            let dispatchedDelivery: DeliveryDto | null = null;
+            if (delivery.status !== 'DISPATCHED' && !['DISPATCHED', 'IN_TRANSIT', 'AT_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(delivery.status))) {
+                dispatchedDelivery = await markDispatchedMut.mutateAsync(delivery.id);
+            }
+
+            // 4. Update React Query caches immediately with authoritative state
+            const finalUpdated = dispatchedDelivery ? { ...updatedTracking, ...dispatchedDelivery, status: 'DISPATCHED' } : updatedTracking;
+            const nowIso = new Date().toISOString();
+
+            qc.setQueriesData({ queryKey: ['delivery', 'detail', delivery.id] }, (old: any) =>
+                old ? { ...old, ...finalUpdated, updatedAt: nowIso } : old
+            );
+            qc.setQueriesData({ queryKey: queryKeys.deliveries.detail(delivery.id) }, (old: any) =>
+                old ? { ...old, ...finalUpdated, updatedAt: nowIso } : old
+            );
+            qc.setQueriesData({ queryKey: ['delivery', 'list'] }, (old: any) => {
+                if (Array.isArray(old)) {
+                    return old.map((d: any) => d.id === delivery.id ? { ...d, ...finalUpdated, updatedAt: nowIso } : d);
+                }
+                if (old?.records) {
+                    return {
+                        ...old,
+                        records: old.records.map((d: any) => d.id === delivery.id ? { ...d, ...finalUpdated, updatedAt: nowIso } : d)
+                    };
+                }
+                if (old?.items) {
+                    return {
+                        ...old,
+                        items: old.items.map((d: any) => d.id === delivery.id ? { ...d, ...finalUpdated, updatedAt: nowIso } : d)
+                    };
+                }
+                return old;
+            });
+            qc.setQueriesData({ queryKey: queryKeys.deliveries.all }, (old: any) => {
+                if (Array.isArray(old)) {
+                    return old.map((d: any) => d.id === delivery.id ? { ...d, ...finalUpdated, updatedAt: nowIso } : d);
+                }
+                if (old?.records) {
+                    return {
+                        ...old,
+                        records: old.records.map((d: any) => d.id === delivery.id ? { ...d, ...finalUpdated, updatedAt: nowIso } : d)
+                    };
+                }
+                if (old?.items) {
+                    return {
+                        ...old,
+                        items: old.items.map((d: any) => d.id === delivery.id ? { ...d, ...finalUpdated, updatedAt: nowIso } : d)
+                    };
+                }
+                return old;
+            });
+
+            // 5. Invalidate delivery cache for silent background synchronization
             await invalidateDeliveryCache(qc, delivery.id);
         }, {
-            loading: 'Saving dispatch details...',
-            success: 'Dispatch order details and documents saved successfully',
+            loading: 'Saving dispatch details and confirming dispatch...',
+            success: 'Order dispatched and tracking details saved successfully',
             error: (err: any) => err?.message || 'Failed to save dispatch details'
         });
 
         onDone();
     };
 
-    const isSubmitting = updateDispatchMut.isPending || addDocMut.isPending || isGeneratingInvoice || isUploadingChallan;
+    const isSubmitting = updateDispatchMut.isPending || markDispatchedMut.isPending || addDocMut.isPending || isGeneratingInvoice || isUploadingChallan;
 
     return (
         <div className="space-y-6 text-left">

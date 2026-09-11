@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
+import { useAuth } from '../../../hooks/useAuth';
 import { usePermissions } from '../../../hooks/useOrgRole';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
@@ -138,6 +139,7 @@ type GrnSortKey = 'grnNumber' | 'poNumber' | 'seller' | 'items' | 'status' | 're
 
 export default function GrnListPage() {
     const router = useRouter();
+    const { user } = useAuth();
     const { hasPermission } = usePermissions();
     const [filter, setFilter] = useState<GrnStatus | 'ALL'>('ALL');
     const [showCreate, setShowCreate] = useState(false);
@@ -154,7 +156,7 @@ export default function GrnListPage() {
     const [filterItems, setFilterItems] = useState<string>('ALL');
 
     const canViewGrns = hasPermission('grn.view');
-    const canCreate = hasPermission('grn.create');
+    const canCreate = hasPermission('grn.create') && user?.role !== 'seller';
     const { data, isLoading, error, refetch, isFetching } = useGrns(undefined, { enabled: canViewGrns });
 
     const grns = data || [];
