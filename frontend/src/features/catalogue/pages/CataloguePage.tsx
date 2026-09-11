@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Boxes, IndianRupee, PackagePlus, PackageSearch, Plus, RefreshCw, Search, Settings2, Store, Wrench, Grid, List, Eye, ShoppingCart, X, Globe, Tag, Barcode, Info, FileText, Mail, MapPin, ShieldCheck, CalendarDays, Building2, Upload, Trash2, FileUp, ImageIcon, Paperclip, ArrowUp, ArrowDown, ArrowUpDown, Download, Copy, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Boxes, IndianRupee, PackagePlus, PackageSearch, Plus, RefreshCw, Search, Settings2, Store, Wrench, Grid, List, Eye, ShoppingCart, X, Globe, Tag, Barcode, Info, FileText, Mail, MapPin, ShieldCheck, CalendarDays, Building2, Upload, Trash2, FileUp, ImageIcon, Paperclip, ArrowUp, ArrowDown, ArrowUpDown, Download, Copy, ToggleLeft, ToggleRight, MoreVertical } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -227,6 +228,254 @@ const catalogueDocuments = (item: CatalogueRecord) =>
 const isProcurementApproved = (status?: string) =>
   ['approved_for_procurement', 'approved'].includes(String(status || ''));
 
+function CatalogueRowActionMenu({
+  item,
+  mode,
+  status,
+  isOpen,
+  onToggle,
+  onClose,
+  openViewDetails,
+  duplicateItem,
+  togglePublish,
+  deleteItem,
+  onSelectDetails,
+  openSellerProfile,
+  router,
+  onlyRemaining = false,
+  buttonClassName,
+}: {
+  item: CatalogueRecord;
+  mode: CatalogueMode;
+  status: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  openViewDetails: (item: CatalogueRecord) => void;
+  duplicateItem: (item: CatalogueRecord) => void;
+  togglePublish: (item: CatalogueRecord) => void;
+  deleteItem: (item: CatalogueRecord) => void;
+  onSelectDetails: (item: CatalogueRecord) => void;
+  openSellerProfile: (seller: any) => void;
+  router?: any;
+  onlyRemaining?: boolean;
+  buttonClassName?: string;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const internalRouter = useRouter();
+  const navRouter = router || internalRouter;
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
+
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+
+    // If trigger button is completely scrolled out of the viewport, close menu
+    if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) {
+      onClose();
+      return;
+    }
+
+    const menuWidth = 176;
+    const menuEstimatedHeight = mode === 'seller' ? (onlyRemaining ? 130 : 210) : 96;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const shouldOpenUp = spaceBelow < menuEstimatedHeight + 8 && spaceAbove > spaceBelow;
+
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    if (left + menuWidth > window.innerWidth - 8) {
+      left = window.innerWidth - menuWidth - 8;
+    }
+
+    setCoords({
+      top: shouldOpenUp ? undefined : Math.round(rect.bottom + 4),
+      bottom: shouldOpenUp ? Math.round(window.innerHeight - rect.top + 4) : undefined,
+      left: Math.round(left),
+    });
+  }, [onClose, mode, onlyRemaining]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+
+    const handleScroll = (e: Event) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+      updatePosition();
+    };
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        buttonRef.current && !buttonRef.current.contains(e.target as Node)
+      ) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        buttonRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    window.addEventListener('resize', updatePosition);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll, { capture: true });
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, updatePosition, onClose]);
+
+  const handleAction = (fn: () => void) => {
+    onClose();
+    fn();
+  };
+
+  return (
+    <div className="relative inline-flex items-center justify-end" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={`Actions for ${item.name || 'item'}`}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggle();
+        }}
+        className={cn(
+          "h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer shrink-0",
+          isOpen && "bg-slate-100 border-slate-300 text-slate-900",
+          buttonClassName
+        )}
+        title={onlyRemaining ? "More actions" : "Actions"}
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+
+      {isOpen && coords && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            left: `${coords.left}px`,
+            zIndex: 99999,
+            transformOrigin: coords.bottom !== undefined ? 'bottom right' : 'top right',
+          }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          className="w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+          role="menu"
+          aria-label={`Actions for ${item.name || 'item'}`}
+        >
+          {mode === 'seller' && (
+            <>
+              {!onlyRemaining && (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleAction(() => openViewDetails(item))}
+                    className="flex items-center gap-2.5 w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 hover:text-slate-950 transition-colors text-left cursor-pointer"
+                  >
+                    <Eye className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                    <span>View Details</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={status === 'ARCHIVED'}
+                    onClick={() => handleAction(() => navRouter.push(item.itemKind === 'product' ? `/seller/products/${item.id}/edit` : `/seller/services/${item.id}/edit`))}
+                    className="flex items-center gap-2.5 w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left cursor-pointer"
+                  >
+                    <Settings2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>Edit / Manage</span>
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => handleAction(() => duplicateItem(item))}
+                className="flex items-center gap-2.5 w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 hover:text-slate-950 transition-colors text-left cursor-pointer"
+              >
+                <Copy className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                <span>Copy / Duplicate</span>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => handleAction(() => togglePublish(item))}
+                className="flex items-center gap-2.5 w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 hover:text-slate-950 transition-colors text-left cursor-pointer"
+              >
+                {status === 'ACTIVE' ? (
+                  <ToggleRight className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                ) : (
+                  <ToggleLeft className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                )}
+                <span>{status === 'ACTIVE' ? 'Disable' : 'Enable'}</span>
+              </button>
+
+              <div className="my-1 border-t border-slate-100" />
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => handleAction(() => deleteItem(item))}
+                className="flex items-center gap-2.5 w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors text-left cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                <span>Delete</span>
+              </button>
+            </>
+          )}
+
+          {mode === 'admin' && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => handleAction(() => onSelectDetails(item))}
+                className="flex items-center gap-2.5 w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 hover:text-slate-950 transition-colors text-left cursor-pointer"
+              >
+                <Eye className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                <span>View Details</span>
+              </button>
+              {item.seller && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => handleAction(() => openSellerProfile(item.seller))}
+                  className="flex items-center gap-2.5 w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                >
+                  <Store className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  <span>View Seller</span>
+                </button>
+              )}
+            </>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode }) {
   const { user } = useAuth();
   const router = useRouter();
@@ -261,6 +510,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
   const [buyerActions, setBuyerActions] = useState<Record<string, BuyerActionState>>({});
   const [importKind, setImportKind] = useState<'product' | 'service' | null>(null);
   const [importHistory, setImportHistory] = useState<ImportBatchDto[]>([]);
+  const [openActionId, setOpenActionId] = useState<string | number | null>(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 200);
 
   // File upload state for catalogue form
@@ -537,6 +787,10 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
 
   const { page, pageSize, pageItems: pagedItems, total, setPage, setPageSize } = usePagination(sorted, 10);
 
+  useEffect(() => {
+    setOpenActionId(null);
+  }, [page, pageSize, sortKey, sortDirection, debouncedSearchTerm, kindFilter, categoryFilter, statusFilter]);
+
   const averageValue = filtered.length ? filtered.reduce((sum, item) => sum + cataloguePrice(item), 0) / filtered.length : 0;
 
   const updateForm = (field: keyof typeof blankForm, value: string) => setForm(current => ({ ...current, [field]: value }));
@@ -733,6 +987,24 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       : 'Search approved products and services from active sellers.';
 
   const isInitialLoading = loading && data.length === 0;
+
+  const isFiltered = Boolean(
+    searchTerm ||
+    statusFilter ||
+    categoryFilter ||
+    priceFilter ||
+    verificationFilter ||
+    kindFilter !== 'all'
+  );
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('');
+    setCategoryFilter('');
+    setPriceFilter('');
+    setVerificationFilter('');
+    setKindFilter('all');
+  };
 
   return (
     <div className="min-w-0 space-y-6">
@@ -980,6 +1252,11 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                   onEdit={(item) => router.push(item.itemKind === 'product' ? `/seller/products/${item.id}/edit` : `/seller/services/${item.id}/edit`)}
                   onDelete={deleteItem}
                   onViewDetails={openViewDetails}
+                  onDuplicate={duplicateItem}
+                  onTogglePublish={togglePublish}
+                  openActionId={openActionId}
+                  setOpenActionId={setOpenActionId}
+                  router={router}
                   onPurchaseBid={openPurchaseBid}
                   onAddToCart={mode === 'buyer' ? handleAddToCart : undefined}
                   addingToCart={addingItemKey === `${item.itemKind}-${item.id}`}
@@ -1026,7 +1303,10 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                           <CatalogueSortHead label="Date & Time" field="createdAt" sortKey={sortKey} sortDirection={sortDirection} onToggle={(k) => { setSortKey(k); setSortDirection(prev => sortKey === k ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'); }} />
                         </th>
                       )}
-                      <th className="sticky right-0 z-10 bg-slate-50 px-3 py-3 w-[160px] min-w-[160px] text-right whitespace-nowrap border-l border-slate-200 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.05)]">Actions</th>
+                      <th className={cn(
+                        "sticky right-0 z-10 bg-slate-50 px-3 py-3 text-right whitespace-nowrap border-l border-slate-200 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.05)]",
+                        mode === 'seller' ? "w-[76px] min-w-[76px]" : "w-[160px] min-w-[160px]"
+                      )}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1142,100 +1422,62 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                               {formatDateTime(item.createdAt)}
                             </td>
                           )}
-                          <td className="sticky right-0 z-[5] w-[160px] min-w-[160px] bg-white px-3 py-3 text-right align-middle whitespace-nowrap border-l border-slate-100 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.05)] group-hover:bg-slate-50/60">
-                            <div className="inline-flex items-center justify-end gap-1">
-                              {mode === 'seller' && (
-                                <>
-                                  <button type="button" onClick={() => openViewDetails(item)} title="View details" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">
-                                    <Eye className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button type="button" onClick={() => router.push(item.itemKind === 'product' ? `/seller/products/${item.id}/edit` : `/seller/services/${item.id}/edit`)} disabled={status === 'ARCHIVED'} title="Edit" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 shrink-0">
-                                    <Settings2 className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button type="button" onClick={() => duplicateItem(item)} title="Duplicate" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0">
-                                    <Copy className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => togglePublish(item)}
-                                    title={status === 'ACTIVE' ? 'Deactivate' : 'Publish'}
-                                    className={cn(
-                                      "inline-flex h-8 w-8 items-center justify-center rounded-md border shrink-0 transition-colors",
-                                      status === 'ACTIVE'
-                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                        : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
-                                    )}
-                                  >
-                                    {status === 'ACTIVE' ? (
-                                      <ToggleRight className="h-3.5 w-3.5" />
-                                    ) : (
-                                      <ToggleLeft className="h-3.5 w-3.5" />
-                                    )}
-                                  </button>
-                                  <button type="button" onClick={() => deleteItem(item)} title="Delete" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-red-600 hover:bg-red-50 shrink-0">
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </>
-                              )}
-                              {mode === 'admin' && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedDetailsItem(item)}
-                                    title="View details"
-                                    aria-label="Details"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shrink-0"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                  </button>
-                                  {item.seller && (
-                                    <button
-                                      type="button"
-                                      onClick={() => openSellerProfile(item.seller)}
-                                      title="View seller"
-                                      aria-label="Seller"
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-colors shrink-0"
-                                    >
-                                      <Store className="h-3.5 w-3.5" />
-                                    </button>
-                                  )}
-                                </>
-                              )}
-                              {mode === 'buyer' && (
-                                <>
-                                  <CompareToggleButton item={{ type: item.itemKind, id: item.id, categoryId: item.categoryId }} iconOnly />
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedDetailsItem(item)}
-                                    title="View details"
-                                    aria-label="Details"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shrink-0"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAddToCart(item)}
-                                    disabled={!buyerApproved || addingItemKey === `${item.itemKind}-${item.id}`}
-                                    title={buyerApproved ? 'Add to cart' : 'Approval required'}
-                                    aria-label="Add to cart"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#12335f] text-[#12335f] hover:bg-[#12335f]/5 disabled:cursor-not-allowed disabled:opacity-50 transition-colors shrink-0"
-                                  >
-                                    {addingItemKey === `${item.itemKind}-${item.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShoppingCart className="h-3.5 w-3.5" />}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openPurchaseBid(item)}
-                                    disabled={!buyerApproved}
-                                    title={buyerApproved ? 'Purchase or request bid' : 'Approval required'}
-                                    aria-label="Purchase"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 transition-colors shrink-0"
-                                  >
-                                    <ShoppingCart className="h-3.5 w-3.5" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
+                          <td className={cn(
+                            "sticky right-0 z-[5] bg-white px-3 py-3 text-right align-middle whitespace-nowrap border-l border-slate-100 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.05)] group-hover:bg-slate-50/60",
+                            mode === 'seller' ? "w-[76px] min-w-[76px]" : "w-[160px] min-w-[160px]"
+                          )}>
+                            {mode === 'seller' || mode === 'admin' ? (
+                              <div className="inline-flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+                                <CatalogueRowActionMenu
+                                  item={item}
+                                  mode={mode}
+                                  status={status}
+                                  isOpen={openActionId === item.id}
+                                  onToggle={() => setOpenActionId(openActionId === item.id ? null : item.id)}
+                                  onClose={() => setOpenActionId(null)}
+                                  openViewDetails={openViewDetails}
+                                  duplicateItem={duplicateItem}
+                                  togglePublish={togglePublish}
+                                  deleteItem={deleteItem}
+                                  onSelectDetails={setSelectedDetailsItem}
+                                  openSellerProfile={openSellerProfile}
+                                  router={router}
+                                />
+                              </div>
+                            ) : mode === 'buyer' ? (
+                              <div className="inline-flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                                <CompareToggleButton item={{ type: item.itemKind, id: item.id, categoryId: item.categoryId }} iconOnly />
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedDetailsItem(item)}
+                                  title="View details"
+                                  aria-label="Details"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shrink-0"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddToCart(item)}
+                                  disabled={!buyerApproved || addingItemKey === `${item.itemKind}-${item.id}`}
+                                  title={buyerApproved ? 'Add to cart' : 'Approval required'}
+                                  aria-label="Add to cart"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#12335f] text-[#12335f] hover:bg-[#12335f]/5 disabled:cursor-not-allowed disabled:opacity-50 transition-colors shrink-0"
+                                >
+                                  {addingItemKey === `${item.itemKind}-${item.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openPurchaseBid(item)}
+                                  disabled={!buyerApproved}
+                                  title={buyerApproved ? 'Purchase or request bid' : 'Approval required'}
+                                  aria-label="Purchase"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 transition-colors shrink-0"
+                                >
+                                  <ShoppingCart className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ) : null}
                           </td>
                         </tr>
                       );
@@ -1865,7 +2107,26 @@ function CatalogueForm({
   );
 }
 
-function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase = true, onEdit, onDelete, onViewDetails, onPurchaseBid, onAddToCart, addingToCart, onSellerClick, srNo }: {
+function CatalogueCard({
+  item,
+  mode,
+  viewMode = 'grid',
+  actionState,
+  canPurchase = true,
+  onEdit,
+  onDelete,
+  onViewDetails,
+  onDuplicate,
+  onTogglePublish,
+  openActionId,
+  setOpenActionId,
+  router,
+  onPurchaseBid,
+  onAddToCart,
+  addingToCart,
+  onSellerClick,
+  srNo
+}: {
   item: CatalogueRecord;
   mode: CatalogueMode;
   viewMode?: 'grid' | 'list';
@@ -1874,6 +2135,11 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
   onEdit?: (item: CatalogueRecord) => void;
   onDelete?: (item: CatalogueRecord) => void;
   onViewDetails?: (item: CatalogueRecord) => void;
+  onDuplicate?: (item: CatalogueRecord) => void;
+  onTogglePublish?: (item: CatalogueRecord) => void;
+  openActionId?: string | number | null;
+  setOpenActionId?: (id: string | number | null) => void;
+  router?: any;
   onPurchaseBid?: (item: CatalogueRecord) => void;
   onAddToCart?: (item: CatalogueRecord) => void;
   addingToCart?: boolean;
@@ -1984,18 +2250,31 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-1.5">
-                {mode === 'seller' && onEdit && onDelete && (
+              <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                {mode === 'seller' && (
                   <>
                     <Button type="button" variant="outline" size="sm" onClick={() => onViewDetails?.(item)} className="h-8 text-xs font-bold uppercase rounded-lg border-slate-200 text-slate-700 hover:bg-slate-50">
                       <Eye className="h-3.5 w-3.5 mr-1 text-slate-400" /> View
                     </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => onEdit(item)} disabled={status === 'ARCHIVED'} className="h-8 text-xs font-bold uppercase rounded-lg border-emerald-200 text-emerald-700 hover:bg-emerald-50">
+                    <Button type="button" variant="outline" size="sm" onClick={() => onEdit?.(item)} disabled={status === 'ARCHIVED'} className="h-8 text-xs font-bold uppercase rounded-lg border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed">
                       <Settings2 className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Edit
                     </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => onDelete(item)} className="h-8 px-2.5 text-xs font-bold uppercase rounded-lg border-red-200 text-red-600 hover:bg-red-50" title="Delete">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <CatalogueRowActionMenu
+                      item={item}
+                      mode={mode}
+                      status={status}
+                      isOpen={openActionId === item.id}
+                      onToggle={() => setOpenActionId?.(openActionId === item.id ? null : item.id)}
+                      onClose={() => setOpenActionId?.(null)}
+                      openViewDetails={onViewDetails || (() => {})}
+                      duplicateItem={onDuplicate || (() => {})}
+                      togglePublish={onTogglePublish || (() => {})}
+                      deleteItem={onDelete || (() => {})}
+                      onSelectDetails={onViewDetails || (() => {})}
+                      openSellerProfile={onSellerClick || (() => {})}
+                      router={router}
+                      onlyRemaining={true}
+                    />
                   </>
                 )}
                 {mode === 'admin' && (
@@ -2180,8 +2459,8 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-1.5 pt-0.5">
-            {mode === 'seller' && onEdit && onDelete && (
+          <div className="flex items-center gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
+            {mode === 'seller' && (
               <>
                 <Button
                   type="button"
@@ -2197,22 +2476,29 @@ function CatalogueCard({ item, mode, viewMode = 'grid', actionState, canPurchase
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => onEdit(item)}
-                  className="flex-1 h-8 text-[11px] font-bold uppercase rounded-lg text-emerald-700 hover:bg-emerald-50 border-emerald-200"
+                  disabled={status === 'ARCHIVED'}
+                  onClick={() => onEdit?.(item)}
+                  className="flex-1 h-8 text-[11px] font-bold uppercase rounded-lg text-emerald-700 hover:bg-emerald-50 border-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Settings2 className="h-3 w-3 mr-1 text-emerald-500" />
                   Edit
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onDelete(item)}
-                  className="h-8 w-8 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-100 shrink-0 rounded-lg"
-                  title="Delete item"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <CatalogueRowActionMenu
+                  item={item}
+                  mode={mode}
+                  status={status}
+                  isOpen={openActionId === item.id}
+                  onToggle={() => setOpenActionId?.(openActionId === item.id ? null : item.id)}
+                  onClose={() => setOpenActionId?.(null)}
+                  openViewDetails={onViewDetails || (() => {})}
+                  duplicateItem={onDuplicate || (() => {})}
+                  togglePublish={onTogglePublish || (() => {})}
+                  deleteItem={onDelete || (() => {})}
+                  onSelectDetails={onViewDetails || (() => {})}
+                  openSellerProfile={onSellerClick || (() => {})}
+                  router={router}
+                  onlyRemaining={true}
+                />
               </>
             )}
 
