@@ -340,8 +340,14 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   const sourceModel = raw.sourceModel || (linkedRequirementId ? 'REQUIREMENT' : 'PROCUREMENT_BID');
 
   // Title: prefer direct title, then payload basics, contract title, item name or bidNumber
+  const isPlaceholder = (s?: any) => {
+    if (!s) return true;
+    const str = String(s).trim().toLowerCase();
+    return ['procurement bid', 'untitled procurement bid', 'procurement requirement', 'request for proposal', 'request for quotation', 'rate contract'].includes(str) || str.includes('no description') || str.includes('no scope');
+  };
+
   const candidateTitle = firstValue(
-    raw.title && !['Procurement Bid', 'Untitled procurement bid', 'Procurement Requirement'].includes(String(raw.title).trim()) ? raw.title : null,
+    raw.title && !isPlaceholder(raw.title) ? raw.title : null,
     raw.itemName,
     raw.subject,
     raw.name,

@@ -53,7 +53,7 @@ import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
-import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 
 /* ─── Helper Utilities ─────────────────────────────────── */
 
@@ -150,7 +150,8 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     queryKey: ['marketplace-requirement-rc-detail', requirementId],
     queryFn: async () => {
       const data = await getApi<any>(`/api/marketplace/requirements/${requirementId}`);
-      return data;
+      const unwrapped = data?.requirement || data?.data?.requirement || data?.data || data;
+      return unwrapped;
     },
     enabled: !!requirementId,
     initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
@@ -163,7 +164,8 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     queryKey: ['marketplace-requirement-rc-ownresponse', bidSourceId],
     queryFn: async () => {
       const data = await getApi<any>(`/api/marketplace/requirements/${bidSourceId}`);
-      return data;
+      const unwrapped = data?.requirement || data?.data?.requirement || data?.data || data;
+      return unwrapped;
     },
     enabled: !!requestId && !!bidSourceId && user?.role === 'seller',
     staleTime: 60_000,
@@ -173,7 +175,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const isLoading = !hasData && (bidLoading || reqLoading);
   const error = !hasData && (bidError || reqError) ? (bidError || reqError) : null;
 
-  const reqObj = reqData?.requirement || reqData;
+  const reqObj = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
 
   const ownParticipation: any = user?.role === 'seller'
     ? (bidData?.participations || []).find((p: any) =>
@@ -303,13 +305,9 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const isRateQuotationSubmitted = Boolean(ownResponse && ownResponse.status !== 'DRAFT');
 
   if (isLoading) {
-    return (
-      <div className="flex h-[80vh] flex-col items-center justify-center gap-3">
-        <Loader2 className="h-10 w-10 animate-spin text-[#12335f]" />
-        <p className="text-sm font-bold text-slate-500">Loading Rate Contract details...</p>
-      </div>
-    );
+    return <ProcurementDetailSkeleton procurementTypeLabel="Rate Contract" />;
   }
+
 
   if (error || !rcData) {
     return (
@@ -341,7 +339,20 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const rateContractConfig = payload.rateContractConfig || payload.rateContract || {};
 
   /* ── Core Display Fields ── */
-  const subject = rcData.subject || rateContractConfig.contractTitle || 'Rate Contract Opportunity';
+  const subject = 
+    rcData.title ||
+    rcData.subject ||
+    rcData.contractTitle ||
+    rcData.itemName ||
+    rcData.name ||
+    rateContractConfig.contractTitle ||
+    rateContractConfig.title ||
+    basics.title ||
+    basics.contractTitle ||
+    basics.procurementTitle ||
+    (Array.isArray(rcData.items) && (rcData.items[0]?.itemName || rcData.items[0]?.name)) ||
+    (Array.isArray(payload.items) && (payload.items[0]?.itemName || payload.items[0]?.name)) ||
+    'Rate Contract Opportunity';
   const contractNumber = formatRefId('RC', rcData.id, rcData.requirementNumber || (rcData as any).contractNumber || rateContractConfig.rateContractNumber, 'RATE_CONTRACT');
 
   /* ── Buyer Info ── */

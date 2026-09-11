@@ -3,12 +3,12 @@
 import React from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, ShieldAlert, ArrowLeft } from 'lucide-react';
+import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
-import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { formatRefId } from '../../../utils/refIdUtils';
 import RfqDetailPage from './RfqDetailPage';
 import { toast } from 'sonner';
@@ -59,11 +59,13 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const fallbackReqId = activeId;
 
   const isMatchingInitial = Boolean(
-    initialData && activeId && (
+    initialData && (
+      !activeId ||
       String(initialData.id).toLowerCase() === String(activeId).toLowerCase() ||
       String(initialData.requirementNumber || '').toLowerCase() === String(activeId).toLowerCase() ||
       String(initialData.bidNumber || '').toLowerCase() === String(activeId).toLowerCase() ||
-      String(initialData.displayId || '').toLowerCase() === String(activeId).toLowerCase()
+      String(initialData.displayId || '').toLowerCase() === String(activeId).toLowerCase() ||
+      String(initialData.sourceId || '').toLowerCase() === String(activeId).toLowerCase()
     )
   );
 
@@ -82,23 +84,30 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     queryFn: async () => {
       try {
         const res2 = await getApi<any>(`/api/marketplace/requirements/${targetReqId}`);
-        if (res2) return res2.data || res2;
+        const unwrapped = res2?.requirement || res2?.data?.requirement || res2?.data || res2;
+        if (unwrapped && (unwrapped.id || unwrapped.title || unwrapped.requirementNumber)) return unwrapped;
       } catch {}
       try {
         const res = await getApi<any>(`/api/requirements/${targetReqId}`);
-        if (res) return res.data || res;
+        const unwrapped = res?.requirement || res?.data?.requirement || res?.data || res;
+        if (unwrapped && (unwrapped.id || unwrapped.title || unwrapped.requirementNumber)) return unwrapped;
       } catch {}
       return null;
     },
-    enabled: !!targetReqId && (!bidData || !(bidData as any).items?.length),
-    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
+    enabled: !!targetReqId,
+    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? (initialData.requirement || initialData) : undefined,
     staleTime: 60_000,
   });
 
   const isLoading = !initialData && !bidData && !reqData && (isBidLoading || isReqLoading);
   const bid: any = bidData || {};
-  const reqObj: any = reqData || {};
-  const payload = bid.technicalPacket || bid.payload || reqObj.payload || {};
+  const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
+  const payload =
+    bid.technicalPacket ||
+    bid.payload ||
+    reqObj.technicalPacket ||
+    reqObj.payload ||
+    {};
   const basics = payload.basics || {};
   const schedule = payload.schedule || {};
   const terms = payload.terms || {};
@@ -108,13 +117,9 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const serviceDetails = payload.serviceDetails || {};
 
   if (isLoading) {
-    return (
-      <div className="flex h-[80vh] flex-col items-center justify-center gap-3">
-        <Loader2 className="h-10 w-10 animate-spin text-[#12335f]" />
-        <p className="text-sm font-bold text-slate-500">Loading RFP details...</p>
-      </div>
-    );
+    return <ProcurementDetailSkeleton procurementTypeLabel="Request for Proposal" />;
   }
+
 
   const hasFatalError = !bidData && !reqData;
   if (hasFatalError) {
@@ -134,8 +139,59 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     );
   }
 
-  const title = bid.title || bid.subject || reqObj.title || basics.title || 'Request for Proposal';
-  const rawRfpRef = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber;
+  const isGenericTitle = (s?: any) => {
+    if (!s || typeof s !== 'string') return true;
+    const str = s.trim().toLowerCase();
+    return (
+      str === '' ||
+      str === 'request for proposal' ||
+      str === 'request for quotation' ||
+      str === 'procurement requirement' ||
+      str === 'procurement opportunity' ||
+      str === 'open tender' ||
+      str === 'limited tender' ||
+      str === 'rate contract' ||
+      str === 'rate contract opportunity' ||
+      str === 'rfq opportunity' ||
+      str === 'rfp opportunity' ||
+      str === 'tender opportunity' ||
+      str.includes('no description') ||
+      str.includes('no scope') ||
+      str === 'n/a' ||
+      str === '—'
+    );
+  };
+
+  const candidateTitles = [
+    bid.title,
+    reqObj.title,
+    basics.title,
+    basics.contractTitle,
+    basics.procurementTitle,
+    tender.tenderTitle,
+    tender.title,
+    serviceDetails.title,
+    serviceDetails.serviceTitle,
+    bid.subject,
+    reqObj.subject,
+    bid.itemName,
+    reqObj.itemName,
+    bid.name,
+    reqObj.name,
+    (Array.isArray(bid.items) && (bid.items[0]?.itemName || bid.items[0]?.name || bid.items[0]?.title)),
+    (Array.isArray(reqObj.items) && (reqObj.items[0]?.itemName || reqObj.items[0]?.name || reqObj.items[0]?.title)),
+    (Array.isArray(payload.items) && (payload.items[0]?.itemName || payload.items[0]?.name || payload.items[0]?.title)),
+  ];
+
+  const firstValidTitle = candidateTitles.find(t => t && !isGenericTitle(String(t)));
+  const title = firstValidTitle ? String(firstValidTitle).trim() : (bid.title || reqObj.title || 'Request for Proposal');
+  const rawRfpRef =
+    bid.bidNumber ||
+    bid.referenceNumber ||
+    reqObj.requirementNumber ||
+    reqObj.bidNumber ||
+    basics.bidNumber ||
+    basics.requirementNumber;
   const rfpNumber = formatRefId('RFP', bid.id || reqObj.id || requestId, rawRfpRef, 'RFP');
 
   const methodUpper = String(
@@ -205,9 +261,10 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       id={bid.id || reqObj.id || requestId || 'RFP'}
       displayId={rfpNumber}
       subject={title}
+      title={title}
       status={bid.status || reqObj.status || 'OPEN'}
-      buyerName={bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name}
-      orgName={bid.buyerOrganizationName || reqObj.buyerOrganization?.organizationName || reqObj.organization?.organizationName}
+      buyerName={bid.buyerName || bid.buyerOrganizationName || reqObj.contactPerson || reqObj.buyer?.name || reqObj.buyerOrganization?.organizationName || reqObj.organization?.organizationName || 'Buyer Organization'}
+      orgName={bid.buyerOrganizationName || reqObj.buyerOrganization?.organizationName || reqObj.organization?.organizationName || 'Buyer Organization'}
       buyer={{
         name: bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name || 'Buyer',
         email: bid.buyerEmail || reqObj.buyerEmail || reqObj.buyer?.email || '',
