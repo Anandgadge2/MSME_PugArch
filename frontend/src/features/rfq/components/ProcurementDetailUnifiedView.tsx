@@ -44,6 +44,7 @@ import {
   HelpCircle,
   Gavel,
   Ban,
+  Lock,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -253,10 +254,24 @@ function asArray(val: any): any[] {
   return [val];
 }
 
+function hasExplicitDateTime(val?: string | Date | null): boolean {
+  if (!val) return false;
+  if (typeof val === 'string') {
+    const s = val.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    if (/T00:00:00(\.000)?(Z|[+-]00:00)?$/i.test(s)) return false;
+    return s.includes('T') || s.includes(':');
+  }
+  if (val instanceof Date) {
+    return !(val.getUTCHours() === 0 && val.getUTCMinutes() === 0 && val.getUTCSeconds() === 0 && val.getUTCMilliseconds() === 0);
+  }
+  return false;
+}
+
 function formatDateString(
   dateVal?: string | Date | null,
-  includeTime: boolean = false,
-  defaultMidnightTime: 'endOfDay' | 'startOfDay' = 'endOfDay'
+  includeTime?: boolean,
+  defaultMidnightTime?: 'endOfDay' | 'startOfDay'
 ) {
   if (!dateVal) return null;
   try {
@@ -266,14 +281,20 @@ function formatDateString(
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
     const month = months[d.getMonth()];
     const year = d.getFullYear();
-    if (!includeTime) return `${day} ${month} ${year}`;
+
+    const shouldIncludeTime = includeTime !== undefined ? includeTime : hasExplicitDateTime(dateVal);
+    if (!shouldIncludeTime) return `${day} ${month} ${year}`;
+
+    const isDateOnlyStr = typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim());
     const isMidnightUtc = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
+    if (isDateOnlyStr || (isMidnightUtc && !defaultMidnightTime)) {
+      return `${day} ${month} ${year}`;
+    }
     let hoursNum: number;
     let minutesStr: string;
-    if (isMidnightUtc) {
+    if (isMidnightUtc && defaultMidnightTime) {
       if (defaultMidnightTime === 'startOfDay') {
-        hoursNum = 0;
-        minutesStr = '00';
+        return `${day} ${month} ${year}`;
       } else {
         hoursNum = 23;
         minutesStr = '59';
@@ -286,7 +307,7 @@ function formatDateString(
     let h12 = hoursNum % 12;
     if (h12 === 0) h12 = 12;
     const hoursFormatted = String(h12).padStart(2, '0');
-    return `${day} ${month} ${year} , ${hoursFormatted}:${minutesStr} ${ampm}`;
+    return `${day} ${month} ${year}, ${hoursFormatted}:${minutesStr} ${ampm}`;
   } catch {
     return String(dateVal);
   }
@@ -380,12 +401,160 @@ function formatPrimitiveValue(val: any, valueKey?: string): string {
   return String(val);
 }
 
+interface EvaluationMethodDetails {
+  title: string;
+  badge: string;
+  basisLabel: string;
+  shortSummary: string;
+  description: string;
+  keyPoints: string[];
+}
+
+function getEvaluationMethodDetails(
+  methodRaw?: string | null,
+  context?: {
+    qcbsRatio?: string;
+    passingScore?: string | number;
+    requireDemo?: string;
+  }
+): EvaluationMethodDetails {
+  const lower = (methodRaw || '').toLowerCase().trim();
+
+  // 1. QCBS / Weighted
+  if (
+    lower.includes('qcbs') ||
+    lower.includes('quality and cost') ||
+    lower.includes('weighted technical') ||
+    lower.includes('weighted')
+  ) {
+    const ratioStr = context?.qcbsRatio ? ` (${context.qcbsRatio} Tech:Financial ratio)` : '';
+    const scoreStr = context?.passingScore ? ` Minimum qualifying technical score is ${context.passingScore}%.` : '';
+    const demoStr = context?.requireDemo && context.requireDemo !== 'No' ? ' A technical demonstration or sample presentation is mandatory.' : '';
+    return {
+      title: 'Quality and Cost Based Selection (QCBS)',
+      badge: 'Weighted Tech-Commercial',
+      basisLabel: 'Highest Composite Score (H1)',
+      shortSummary: 'Weighted evaluation combining technical evaluation scores and commercial financial price.',
+      description: `Bids are evaluated on a combined technical and commercial scoring matrix${ratioStr}.${scoreStr}${demoStr} The bidder achieving the highest composite score (H1) is recommended for contract award.`,
+      keyPoints: [
+        'Combined Technical & Financial Scoring',
+        context?.qcbsRatio ? `Configured Ratio: ${context.qcbsRatio}` : 'Configured Tech/Financial Weightage',
+        'Highest Ranked Combined Bidder (H1) Award',
+      ],
+    };
+  }
+
+  // 2. Item-wise L1
+  if (lower.includes('item-wise') || lower.includes('item wise')) {
+    return {
+      title: 'Item-wise L1 Evaluation',
+      badge: 'Split Line-by-Line',
+      basisLabel: 'Lowest Landed Cost Per Item',
+      shortSummary: 'Each line item is evaluated independently for lowest landed cost.',
+      description: 'Line items are evaluated independently on their landed price. Contracts or Purchase Orders may be awarded separately to the lowest responsive bidder (L1) for each individual line item, allowing split awards across multiple vendors.',
+      keyPoints: [
+        'Independent Line Item Evaluation',
+        'Lowest Landed Cost (L1) Per Item',
+        'Multiple Supplier Awards Permitted',
+      ],
+    };
+  }
+
+  // 3. Package-wise L1
+  if (
+    lower.includes('package-wise') ||
+    lower.includes('package wise') ||
+    lower.includes('schedule-wise') ||
+    lower.includes('schedule wise')
+  ) {
+    return {
+      title: 'Package-wise / Schedule L1',
+      badge: 'Package / Lot Award',
+      basisLabel: 'Package Aggregate L1',
+      shortSummary: 'Evaluation is based on aggregate lowest landed cost per bundled package.',
+      description: 'Items are grouped into cohesive packages or schedules. Evaluation is conducted on the aggregate lowest landed price (L1) of all items within each package. Bidders must quote for all items in a package.',
+      keyPoints: [
+        'Package / Lot Aggregate Cost',
+        'All Items in Package Required',
+        'Award to Package L1 Lowest Bidder',
+      ],
+    };
+  }
+
+  // 4. Technical Qualification then L1
+  if (
+    lower.includes('technical qualification then l1') ||
+    lower.includes('technical then l1')
+  ) {
+    const scoreStr = context?.passingScore ? ` (Min. score: ${context.passingScore}%)` : '';
+    return {
+      title: 'Technical Qualification then L1',
+      badge: 'Two-Stage Gated L1',
+      basisLabel: 'L1 Among Qualified',
+      shortSummary: 'Two-stage evaluation: mandatory technical qualification followed by price unsealing.',
+      description: `Bidders must first clear all mandatory technical specifications, eligibility checks, and qualification gates${scoreStr}. Commercial bids are unsealed only for technically compliant bidders, and award goes to the lowest landed bidder (L1).`,
+      keyPoints: [
+        'Cover 1: Technical & Eligibility Scrutiny',
+        'Cover 2: Price Unsealing for Qualified Only',
+        'Lowest Landed Cost (L1) Award',
+      ],
+    };
+  }
+
+  // 5. Reverse Auction
+  if (lower.includes('reverse auction')) {
+    return {
+      title: 'Reverse Auction Final Bid Rank',
+      badge: 'Dynamic Auction',
+      basisLabel: 'Lowest Final Auction Rank (L1)',
+      shortSummary: 'Dynamic downward online auction where lowest real-time price at close wins.',
+      description: 'Eligible and technically qualified bidders participate in a real-time electronic reverse auction. Commercial award is granted to the lowest valid bid rank (L1) submitted before the countdown clock expires.',
+      keyPoints: [
+        'Dynamic Real-Time Decrement Bidding',
+        'Automated Live Rank & Clock Rules',
+        'Contract to Lowest Final Auction Rank (L1)',
+      ],
+    };
+  }
+
+  // 6. Lowest Landed Cost
+  if (lower.includes('lowest landed cost')) {
+    return {
+      title: 'Lowest Landed Cost (L1 Basis)',
+      badge: 'All-Inclusive Landed L1',
+      basisLabel: 'Total Delivered Landed Cost',
+      shortSummary: 'All-inclusive lowest price delivered to destination.',
+      description: 'The quotation with the lowest total landed cost—factoring in basic price, applicable GST, freight, transit insurance, and delivery charges—is designated as L1 for contract award.',
+      keyPoints: [
+        'Base Price + Taxes + Freight + Incidental Costs',
+        'Normalized Net Delivered Price',
+        'Award to Overall Lowest Landed Bidder',
+      ],
+    };
+  }
+
+  // 7. L1 Total Value (Default & standard)
+  return {
+    title: 'L1 Total Value Basis',
+    badge: 'Overall Lowest Cost (L1)',
+    basisLabel: 'Lowest Landed Price (L1)',
+    shortSummary: 'Lowest overall landed cost for the complete scope of requirements.',
+    description: 'Commercial award is determined strictly on the aggregate lowest landed cost (L1) for the entire procurement scope. All eligible items, applicable GST, freight, and incidental expenses are totaled to identify the lowest compliant quotation.',
+    keyPoints: [
+      'Comprehensive Scope Evaluation (All-or-None)',
+      'Inclusive of Base Price, Taxes & Delivery',
+      'Awarded to Lowest Responsive Bidder (L1)',
+    ],
+  };
+}
+
 function parseDateValue(dateVal?: string | Date | null): Date | null {
   if (!dateVal) return null;
   const d = new Date(dateVal);
   if (isNaN(d.getTime())) return null;
+  const isDateOnlyStr = typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim());
   const isMidnightUtc = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
-  if (isMidnightUtc) {
+  if (isMidnightUtc || isDateOnlyStr) {
     const endOfDay = new Date(d.getTime());
     endOfDay.setHours(23, 59, 59, 999);
     return endOfDay;
@@ -393,7 +562,7 @@ function parseDateValue(dateVal?: string | Date | null): Date | null {
   return d;
 }
 
-function DeadlineCountdown({ targetDate }: { targetDate: Date | string }) {
+function DeadlineCountdown({ targetDate, label = 'Quote Due: ' }: { targetDate: Date | string; label?: string }) {
   const dateObj = useMemo(() => parseDateValue(targetDate), [targetDate]);
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number; isPassed: boolean }>({
     days: 0,
@@ -439,7 +608,7 @@ function DeadlineCountdown({ targetDate }: { targetDate: Date | string }) {
     <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-2xs">
       <Clock className="h-3 w-3 text-amber-600 animate-pulse" />
       <span className="font-mono">
-        <span className="text-amber-900/80 font-bold">Stage 1 Quote Due: </span>
+        <span className="text-amber-900/80 font-bold">{label}</span>
         {timeLeft.days > 0 ? `${timeLeft.days}d ` : ''}
         {String(timeLeft.hours).padStart(2, '0')}h {String(timeLeft.minutes).padStart(2, '0')}m {String(timeLeft.seconds).padStart(2, '0')}s left
       </span>
@@ -577,12 +746,14 @@ interface BuyerSideContextValue {
   isBuyer: boolean;
   isOpenTender: boolean;
   isLimitedTender: boolean;
+  shouldShowEstimatedCost?: boolean;
 }
 
 const BuyerSideContext = React.createContext<BuyerSideContextValue>({
   isBuyer: false,
   isOpenTender: false,
   isLimitedTender: false,
+  shouldShowEstimatedCost: false,
 });
 
 function PropertyItem({
@@ -593,6 +764,7 @@ function PropertyItem({
   fullWidth = false,
   highlight = false,
   mono = false,
+  subtext,
 }: {
   label: string;
   value: any;
@@ -601,6 +773,7 @@ function PropertyItem({
   fullWidth?: boolean;
   highlight?: boolean;
   mono?: boolean;
+  subtext?: string;
 }) {
   const ctx = React.useContext(BuyerSideContext);
   const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
@@ -654,6 +827,11 @@ function PropertyItem({
         )}
       >
         <DetailValue value={value} valueKey={label} />
+        {subtext && (
+          <span className="block text-[10.5px] font-medium text-slate-500 mt-0.5">
+            {subtext}
+          </span>
+        )}
       </dd>
     </div>
   );
@@ -1189,9 +1367,22 @@ function ScopeSummaryCard({
     }
   }
 
+  const ctx = React.useContext(BuyerSideContext);
+  const shouldShowCost = ctx.shouldShowEstimatedCost ?? ctx.isBuyer;
+
   const freeText = textParts.join(' ').trim();
   const effectiveUrgency = urgency || 'Normal';
   const isUrgent = String(effectiveUrgency).toLowerCase().includes('urgent');
+
+  const visibleKeyValues = parsedKeyValues.filter(kv => {
+    if (!shouldShowCost) {
+      const lk = kv.label.toLowerCase();
+      if (lk.includes('value') || lk.includes('price') || lk.includes('cost') || lk.includes('rate') || lk.includes('budget')) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-3">
@@ -1199,7 +1390,13 @@ function ScopeSummaryCard({
       <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50/80 p-3 border border-slate-150">
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs">
           <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">Estimated Value:</span>
-          <span className="text-xs font-bold text-emerald-700">{formatCurrency(estimatedValue)}</span>
+          {shouldShowCost ? (
+            <span className="text-xs font-bold text-emerald-700">{formatCurrency(estimatedValue)}</span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600">
+              Confidential <Lock className="h-3 w-3 text-slate-400" />
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs">
           <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">Urgency:</span>
@@ -1210,7 +1407,7 @@ function ScopeSummaryCard({
             {effectiveUrgency}
           </span>
         </div>
-        {parsedKeyValues.map((kv, idx) => (
+        {visibleKeyValues.map((kv, idx) => (
           <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs">
             <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">{kv.label}:</span>
             <span className="text-xs font-semibold text-slate-800">{kv.val}</span>
@@ -1451,6 +1648,8 @@ function LineItemsTable({
   defaultSubject?: string;
   isBuyer?: boolean;
 }) {
+  const ctx = React.useContext(BuyerSideContext);
+  const shouldShowCost = ctx.shouldShowEstimatedCost ?? ctx.isBuyer ?? isBuyer;
   const [viewingItemFiles, setViewingItemFiles] = useState<{ title: string; files: any[] } | null>(null);
   const list = asArray(items).filter(hasDetailData);
 
@@ -1535,6 +1734,13 @@ function LineItemsTable({
       width: 'w-28',
       align: 'right',
       cell: (item) => {
+        if (!shouldShowCost) {
+          return (
+            <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 whitespace-nowrap">
+              Confidential
+            </span>
+          );
+        }
         const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
         const rawRate = firstPresent(item.estimatedUnitPrice, item.unitPrice, item.estimatedRate, item.price, item.rate, item.targetRate, sp.estimatedUnitPrice, sp.unitPrice, sp.estimatedRate, sp.price, sp.rate);
         const rateNumber = (rawRate !== undefined && rawRate !== null && rawRate !== '' && !isNaN(Number(rawRate)) && Number(rawRate) > 0) ? Number(rawRate) : null;
@@ -1623,7 +1829,7 @@ function LineItemsTable({
         );
       },
     },
-  ], [defaultSubject]);
+  ], [defaultSubject, shouldShowCost]);
 
   if (!list.length) return null;
 
@@ -1714,6 +1920,8 @@ function BoqTableList({
   defaultCategory?: string;
   defaultEstimatedValue?: any;
 }) {
+  const ctx = React.useContext(BuyerSideContext);
+  const shouldShowCost = ctx.shouldShowEstimatedCost ?? ctx.isBuyer;
   const list = asArray(data).filter(hasDetailData);
 
   const columns = useMemo<ColumnDef<any>[]>(() => [
@@ -1750,6 +1958,9 @@ function BoqTableList({
       key: 'estimatedRate',
       header: 'Est. Rate',
       cell: (item) => {
+        if (!shouldShowCost) {
+          return <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 whitespace-nowrap">Confidential</span>;
+        }
         const rawRate = firstPresent(item.estimatedRate, item.rate, item.unitPrice, item.price, item.estimatedPrice);
         const rate = (rawRate !== undefined && rawRate !== null && rawRate !== '' && rawRate !== '-')
           ? rawRate
@@ -1769,6 +1980,9 @@ function BoqTableList({
       key: 'total',
       header: 'Total',
       cell: (item) => {
+        if (!shouldShowCost) {
+          return <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 whitespace-nowrap">Confidential</span>;
+        }
         const rawTotal = firstPresent(item.total, item.amount, item.totalPrice, item.estimatedTotal);
         const total = (rawTotal !== undefined && rawTotal !== null && rawTotal !== '' && rawTotal !== '-')
           ? rawTotal
@@ -1776,7 +1990,7 @@ function BoqTableList({
         return <span className="font-bold text-slate-900">{total !== '-' ? (typeof total === 'number' ? formatCurrency(total) : formatPrimitiveValue(total)) : '-'}</span>;
       },
     },
-  ], [defaultCategory, defaultSubject, defaultEstimatedValue]);
+  ], [defaultCategory, defaultSubject, defaultEstimatedValue, shouldShowCost]);
 
   if (!list.length) return null;
 
@@ -2015,6 +2229,7 @@ export interface ProcurementDetailUnifiedViewProps {
   department?: string;
   buyer?: any;
   estimatedValue?: number | string;
+  discloseEstimatedCost?: boolean;
   deadlineDate?: Date | string | null;
   createdAt?: Date | string | null;
   publishedDate?: string;
@@ -2058,6 +2273,8 @@ export interface ProcurementDetailUnifiedViewProps {
   ownResponse?: any;
   emdAmount?: number;
   isEmdRequired?: boolean;
+  packetType?: string;
+  allowClarification?: boolean;
   backRoute?: string;
   backRouteLabel?: string;
   onBack?: () => void;
@@ -2198,11 +2415,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const linkedAuctionQuery = useQuery({
     queryKey: ['linked-reverse-auction', targetId],
     queryFn: () => reverseAuctionApi.getByProcurement(targetId),
-    staleTime: 5000,
+    staleTime: 30000,
     refetchInterval: (query) => {
       const data = query.state.data;
+      if (!data) return false;
       const status = String(data?.statusEnum || data?.status || '').toUpperCase();
-      return status === 'LIVE' ? 3000 : 15000;
+      return status === 'LIVE' ? 3000 : false;
     },
     enabled: Boolean(targetId)
   });
@@ -2278,29 +2496,19 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       const idsToTry = Array.from(new Set([targetId, numericId > 0 ? String(numericId) : null].filter(Boolean) as string[]));
 
       for (const idToken of idsToTry) {
-        try {
-          const reqRes: any = await getApi(`/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`, true);
-          const reqItems = extractArray(reqRes);
-          if (reqItems.length > 0) return reqItems.map(normalizeItem);
-        } catch { }
+        const candidateResults = await Promise.allSettled([
+          getApi(`/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`, true),
+          getApi(`/api/buyer/procurement-bids/${encodeURIComponent(idToken)}/participants`, true),
+          procurementBidApi.detail(idToken),
+          getApi(`/api/marketplace/requirements/${encodeURIComponent(idToken)}/responses`, true)
+        ]);
 
-        try {
-          const directRes: any = await getApi(`/api/buyer/procurement-bids/${encodeURIComponent(idToken)}/participants`, true);
-          const directItems = extractArray(directRes);
-          if (directItems.length > 0) return directItems.map(normalizeItem);
-        } catch { }
-
-        try {
-          const bidRes: any = await procurementBidApi.detail(idToken);
-          const bidItems = extractArray(bidRes);
-          if (bidItems.length > 0) return bidItems.map(normalizeItem);
-        } catch { }
-
-        try {
-          const genRes: any = await getApi(`/api/marketplace/requirements/${encodeURIComponent(idToken)}/responses`, true);
-          const genItems = extractArray(genRes);
-          if (genItems.length > 0) return genItems.map(normalizeItem);
-        } catch { }
+        for (const r of candidateResults) {
+          if (r.status === 'fulfilled' && r.value) {
+            const items = extractArray(r.value);
+            if (items.length > 0) return items.map(normalizeItem);
+          }
+        }
       }
 
       return [];
@@ -2373,6 +2581,40 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const serviceDetails = props.serviceDetails || payload.serviceDetails || {};
   const buyerProfile = props.buyer?.buyerProfile || {};
   const buyerOrg = props.buyer?.buyerOrganization || props.buyer?.organization || {};
+
+  const discloseEstimatedCost = Boolean(
+    props.discloseEstimatedCost ??
+    payload?.discloseEstimatedCost ??
+    basics?.discloseEstimatedCost ??
+    payload?.basics?.discloseEstimatedCost ??
+    false
+  );
+
+  const statusUpper = String(props.status || '').toUpperCase();
+  const isPostBiddingStage = [
+    'FINANCIAL_EVALUATION',
+    'L1_GENERATED',
+    'AWARD_RECOMMENDED',
+    'AWARDED',
+    'CLOSED',
+    'COMPLETED'
+  ].includes(statusUpper);
+
+  const shouldShowEstimatedCost = Boolean(
+    isBuyerSide ||
+    isBuyerOrAdmin ||
+    discloseEstimatedCost ||
+    isPostBiddingStage
+  );
+
+  const allowsReverseAuction = Boolean(
+    (props as any)?.allowReverseAuction ??
+    payload?.allowReverseAuction ??
+    rules?.allowReverseAuction ??
+    basics?.isReverseAuctionNeeded ??
+    payload?.basics?.isReverseAuctionNeeded ??
+    ['REVERSE_AUCTION', 'BID_WITH_REVERSE_AUCTION'].includes(String(props.procurementMethod || props.procurementType || '').toUpperCase())
+  );
 
   const documents = props.documents || [];
   const requiredDocuments = firstPresent(
@@ -2661,14 +2903,44 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     payload.subcategory
   );
 
-  const publishedDateValue = firstPresent(
-    schedule.publishDate,
-    tender.publishDate,
-    tender.bidStartDate,
-    schedule.submissionStartDate,
-    props.publishedDate,
-    props.createdAt
-  );
+  const publishedDateValue = (() => {
+    // 1. If explicit time is present on the primary published date candidates
+    if (hasExplicitDateTime(props.publishedDate)) return props.publishedDate;
+    if (hasExplicitDateTime(schedule.publishDate)) return schedule.publishDate;
+    if (hasExplicitDateTime(tender.publishDate)) return tender.publishDate;
+    if (hasExplicitDateTime(schedule.submissionStartDate)) return schedule.submissionStartDate;
+
+    // 2. If a date-only publishDate was specified, see if createdAt matches the same date
+    const rawPublish = schedule.publishDate || tender.publishDate || props.publishedDate;
+    if (rawPublish && props.createdAt && hasExplicitDateTime(props.createdAt)) {
+      try {
+        const dPub = new Date(rawPublish);
+        const dCreated = new Date(props.createdAt);
+        if (!isNaN(dPub.getTime()) && !isNaN(dCreated.getTime())) {
+          if (
+            dPub.getFullYear() === dCreated.getFullYear() &&
+            dPub.getMonth() === dCreated.getMonth() &&
+            dPub.getDate() === dCreated.getDate()
+          ) {
+            return props.createdAt;
+          }
+        }
+      } catch {}
+    }
+
+    // 3. If createdAt has explicit time
+    if (hasExplicitDateTime(props.createdAt)) return props.createdAt;
+
+    // 4. Fallback to first present value
+    return firstPresent(
+      schedule.publishDate,
+      tender.publishDate,
+      props.publishedDate,
+      props.createdAt,
+      schedule.submissionStartDate,
+      tender.bidStartDate
+    );
+  })();
 
   const closingDateValue = firstPresent(
     schedule.submissionDate,
@@ -2680,7 +2952,60 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.deadlineDate
   );
 
-  const clarificationDateValue = firstPresent(
+  // Clarification window resolution: Check whether bidder clarifications are allowed
+  const isClarificationAllowed = (() => {
+    // 1. Explicit false/no in schedule
+    if (schedule.clarificationAllowed === false || schedule.clarificationAllowed === 'false' || schedule.clarificationAllowed === 0 || schedule.clarificationAllowed === 'No' || schedule.clarificationAllowed === 'no') {
+      return false;
+    }
+    // 2. Explicit false/no in rules
+    if (rules.clarificationAllowed === false || rules.clarificationAllowed === 'false' || rules.clarificationAllowed === 0 || rules.clarificationAllowed === 'No' || rules.clarificationAllowed === 'no') {
+      return false;
+    }
+    // 3. Explicit false in payload root
+    if (payload.clarificationAllowed === false || payload.clarificationAllowed === 'false') {
+      return false;
+    }
+    // 4. Props override if false
+    if ((props as any).allowClarification === false || (props as any).allowClarification === 'false') {
+      return false;
+    }
+    // 5. Positive indicators
+    if (schedule.clarificationAllowed === true || schedule.clarificationAllowed === 'true' || schedule.clarificationAllowed === 'Yes' || schedule.clarificationAllowed === 'yes') {
+      return true;
+    }
+    if (rules.clarificationAllowed === true || rules.clarificationAllowed === 'true' || rules.clarificationAllowed === 'Yes' || rules.clarificationAllowed === 'yes') {
+      return true;
+    }
+    if ((props as any).allowClarification === true) {
+      return true;
+    }
+    // For RFQ, if not explicitly enabled, clarifications are disabled by default
+    return !isRfqType;
+  })();
+
+  // Packet & Opening Evaluation checks
+  const rawPacketType = String(
+    firstPresent(
+      props.packetType,
+      schedule.packetType,
+      payload.packetType,
+      tender.packetType,
+      'Single'
+    )
+  ).toUpperCase();
+
+  const isTwoPacket = rawPacketType.includes('TWO') || rawPacketType === '2';
+  const isTechnicalEvaluationNeeded = Boolean(
+    basics.isTechnicalEvaluationNeeded ||
+    payload.isTechnicalEvaluationNeeded ||
+    tender.isTechnicalEvaluationNeeded ||
+    isTwoPacket
+  );
+  const hasTechnicalOpening = isTechnicalEvaluationNeeded;
+  const hasFinancialOpening = isTwoPacket;
+
+  const clarificationDateValue = isClarificationAllowed ? firstPresent(
     schedule.clarificationEndDate,
     schedule.clarificationDeadline,
     tender.clarificationEndDate,
@@ -2689,14 +3014,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     schedule.preBidMeetingDate,
     tender.preBidDate,
     tender.preBidMeetingDate
-  );
+  ) : undefined;
 
-  const technicalDateValue = firstPresent(
+  const technicalDateValue = hasTechnicalOpening ? firstPresent(
     tender.technicalEvaluationDate,
     schedule.technicalOpeningDate,
     props.technicalDate,
     props.technicalOpeningDate
-  );
+  ) : undefined;
 
   const presentationDateValue = firstPresent(
     schedule.presentationDate,
@@ -2704,13 +3029,13 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.presentationDate
   );
 
-  const financialDateValue = firstPresent(
+  const financialDateValue = hasFinancialOpening ? firstPresent(
     tender.financialEvaluationDate,
     schedule.financialOpeningDate,
     schedule.finalEvaluationDate,
     props.financialDate,
     props.financialOpeningDate
-  );
+  ) : undefined;
 
   const awardDateValue = firstPresent(
     tender.awardDate,
@@ -2728,14 +3053,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     publishedDateValue
   );
 
-  const clarificationDeadlineValue = firstPresent(
+  const clarificationDeadlineValue = isClarificationAllowed ? firstPresent(
     schedule.clarificationDeadline,
     schedule.clarificationEndDate,
     schedule.clarificationDate,
     tender.clarificationDeadline,
     tender.clarificationEndDate,
     props.clarificationDate
-  );
+  ) : undefined;
 
   const preBidDateValue = firstPresent(
     schedule.preBidMeetingDate,
@@ -2782,21 +3107,20 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.bidValidityDate
   );
 
-  const bidValidityDateComputed = bidValidityDateValue
-    ? bidValidityDateValue
-    : (closingDateValue ? (() => {
-        try {
-          const cDate = new Date(closingDateValue);
-          if (!isNaN(cDate.getTime())) {
-            const daysToAdd = Number(rawValidityDays) || 90;
-            const computed = new Date(cDate.getTime() + daysToAdd * 86_400_000);
-            return computed.toISOString();
-          }
-        } catch {}
-        return undefined;
-      })() : undefined);
+  const bidValidityDateComputed = (() => {
+    if (closingDateValue && rawValidityDays) {
+      try {
+        const cDate = new Date(closingDateValue);
+        if (!isNaN(cDate.getTime())) {
+          const daysToAdd = Number(rawValidityDays) || 90;
+          return new Date(cDate.getTime() + daysToAdd * 86_400_000).toISOString();
+        }
+      } catch {}
+    }
+    return bidValidityDateValue;
+  })();
 
-  const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue, true, 'startOfDay') : (props.publishedDate ? formatDateString(props.publishedDate, true, 'startOfDay') : 'N/A');
+  const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue, true) : (props.publishedDate ? formatDateString(props.publishedDate, true) : 'N/A');
   const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue, true, 'endOfDay') : (props.closingDate ? formatDateString(props.closingDate, true, 'endOfDay') : 'N/A');
   const clarificationDateFormatted = clarificationDateValue ? formatDateString(clarificationDateValue, true) : (props.clarificationDate ? formatDateString(props.clarificationDate, true) : 'N/A');
   const clarificationDeadlineFormatted = clarificationDeadlineValue ? formatDateString(clarificationDeadlineValue, true) : (clarificationDateFormatted !== 'N/A' ? clarificationDateFormatted : undefined);
@@ -2805,9 +3129,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const financialDateFormatted = financialDateValue ? formatDateString(financialDateValue, true) : (props.financialDate || props.financialOpeningDate ? formatDateString(props.financialDate || props.financialOpeningDate, true) : 'N/A');
   const awardDateFormatted = awardDateValue ? formatDateString(awardDateValue, true) : (props.awardDate ? formatDateString(props.awardDate, true) : 'N/A');
   const submissionStartDateFormatted = submissionStartDateValue ? formatDateString(submissionStartDateValue, true) : publishedDateFormatted;
-  const requiredByDateFormatted = requiredByDateValue ? formatDateString(requiredByDateValue) : undefined;
+  const requiredByDateFormatted = requiredByDateValue ? formatDateString(requiredByDateValue, true) : undefined;
   const preBidDateFormatted = preBidDateValue ? formatDateString(preBidDateValue, true) : undefined;
-  const bidValidityDateFormatted = bidValidityDateComputed ? formatDateString(bidValidityDateComputed) : undefined;
+  const bidValidityDateFormatted = bidValidityDateComputed ? formatDateString(bidValidityDateComputed, false) : undefined;
 
   const deliveryLocation = firstPresent(
     props.deliveryLocation && props.deliveryLocation !== '—' && props.deliveryLocation !== 'N/A' && props.deliveryLocation !== 'Delivery location not specified' ? props.deliveryLocation : undefined,
@@ -2997,19 +3321,34 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         'No'
       );
 
-  const qcbsRatio = firstPresent(
+  const isQcbsMethod = Boolean(
+    evaluationMethod && (
+      evaluationMethod.toLowerCase().includes('qcbs') ||
+      evaluationMethod.toLowerCase().includes('weighted')
+    )
+  );
+
+  const qcbsRatio = isQcbsMethod ? firstPresent(
     evaluation.qcbsRatio,
     payload.qcbsRatio,
     rules.qcbsRatio,
     (evaluation.techWeight && evaluation.commWeight ? `${evaluation.techWeight}:${evaluation.commWeight}` : undefined),
     (payload.techWeight && payload.commWeight ? `${payload.techWeight}:${payload.commWeight}` : undefined)
-  );
+  ) : undefined;
 
   const passingScore = firstPresent(
     evaluation.passingScore,
     payload.passingScore,
     rules.passingScore
   );
+
+  const evalDetails = useMemo(() => {
+    return getEvaluationMethodDetails(evaluationMethod, {
+      qcbsRatio,
+      passingScore,
+      requireDemo,
+    });
+  }, [evaluationMethod, qcbsRatio, passingScore, requireDemo]);
 
   const isTechEvalNeeded = Boolean(
     payload.isTechnicalEvaluationNeeded ||
@@ -3108,14 +3447,28 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     rules.invitedSellers,
   ]);
 
+  const resolvedWorkflow = (() => {
+    const rawWf = approval.workflow || payload.workflow || rules.workflow;
+    if (!isTwoPacket) {
+      if (!rawWf || rawWf === 'Finance + Procurement' || rawWf.toLowerCase().includes('technical') || rawWf.toLowerCase().includes('two')) {
+        return 'Single Stage (Commercial Only)';
+      }
+      return rawWf;
+    }
+    if (!rawWf || rawWf === 'Finance + Procurement') {
+      return 'Two-Stage (Technical + Financial)';
+    }
+    return rawWf;
+  })();
+
   const supplierControlsData = compactObject({
     selectionMode: firstPresent(vendors.selectionMode, vendors.selection, vendors.type, rules.selectionMode, 'Open'),
     inviteCount: String(effectiveInviteCount),
     msmePreference: firstPresent(vendors.msmePreference, rules.msmePreference, 'Yes'),
     excludeBlacklisted: firstPresent(vendors.excludeBlacklisted, rules.excludeBlacklisted, 'Yes'),
     localVendorPreference: firstPresent(vendors.localVendorPreference, rules.localVendorPreference, 'Yes'),
-    approvalNotes: firstPresent(approval.notes, approval.approvalNotes, rules.approvalNotes, 'PARTIAL DELIVERY WILL BE ACCEPTED'),
-    workflow: firstPresent(approval.workflow, rules.workflow, 'Finance + Procurement'),
+    approvalNotes: firstPresent(approval.notes, approval.approvalNotes, rules.approvalNotes),
+    workflow: resolvedWorkflow,
   });
 
   // isBuyerOrAdmin already defined at top level of component
@@ -3215,9 +3568,22 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       value: closingDateFormatted || 'N/A',
       icon: Clock,
       tone: 'rose' as Tone,
-      subtext: linkedAuction ? 'Stage 1 initial quotation cutoff' : 'Bidding window closing'
+      subtext: (linkedAuction && allowsReverseAuction) ? 'Stage 1 initial quotation cutoff' : 'Bidding window closing'
     },
-    { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' },
+    shouldShowEstimatedCost
+      ? { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' }
+      : {
+          label: 'Estimated Value',
+          value: (
+            <span className="inline-flex items-center gap-1.5 text-slate-700 font-bold">
+              <span>Confidential</span>
+              <Lock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+            </span>
+          ),
+          icon: Lock,
+          tone: 'slate' as Tone,
+          subtext: 'Competitive bidding (sealed)'
+        },
     { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactPerson, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: buyerPhoneNum || 'Procurement officer' },
     { label: 'Evaluation', value: formatPrimitiveValue(evaluationMethod, 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone, subtext: 'Selection criteria' },
     ...(isBuyerOrAdmin ? [{ label: 'Responses', value: Math.max(props.participantsCount || 0, submittedParticipations.length).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone, subtext: isRfqType ? 'Quotations submitted' : 'Proposals submitted' }] : []),
@@ -3228,7 +3594,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     { id: 'scope_docs', label: 'Scope & Documents', icon: FileText, count: documents.length },
     { id: 'terms_schedule', label: 'Terms & Schedule', icon: CalendarDays },
     { id: 'evaluation', label: 'Evaluation & Controls', icon: ClipboardCheck },
-    { id: 'clarifications', label: isRfqType ? 'Clarifications & Quotations' : 'Clarifications & Proposals', icon: MessageSquare, count: (props.totalClarifications || 0) + (isBuyerOrAdmin ? (submittedParticipations.length || 0) : 0) },
+    { id: 'clarifications', label: isClarificationAllowed ? (isRfqType ? 'Clarifications & Quotations' : 'Clarifications & Proposals') : (isRfqType ? 'Quotations' : 'Proposals'), icon: isClarificationAllowed ? MessageSquare : ClipboardList, count: (isClarificationAllowed ? (props.totalClarifications || 0) : 0) + (isBuyerOrAdmin ? (submittedParticipations.length || 0) : 0) },
   ];
 
   const defaultSubmitBtnLabel = props.hasSubmittedProposal
@@ -3263,7 +3629,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               `Method: ${procurementMethod}`,
               `Deadline: ${closingDateFormatted}`,
               // `EMD Required: ${props.isEmdRequired ? formatCurrency(props.emdAmount || 0) : 'Nil'}`, // Commented out as requested
-              `Estimated Value: ${formatCurrency(props.estimatedValue)}`,
+              `Estimated Value: ${shouldShowEstimatedCost ? formatCurrency(props.estimatedValue) : 'Confidential (Competitive Bidding)'}`,
             ],
           },
         ],
@@ -3279,10 +3645,10 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           it.itemName || it.name || it.description || `Item ${i + 1}`,
           String(it.quantity || it.qty || 1),
           it.unit || 'Units',
-          it.estimatedPrice || it.unitPrice || it.price ? formatCurrency(it.estimatedPrice || it.unitPrice || it.price) : '—',
+          shouldShowEstimatedCost ? (it.estimatedPrice || it.unitPrice || it.price ? formatCurrency(it.estimatedPrice || it.unitPrice || it.price) : '—') : 'Confidential',
           it.gstRate || it.gst ? `${it.gstRate || it.gst}%` : 'Standard',
         ]),
-        financials: { grandTotal: Number(props.estimatedValue || 0) },
+        financials: shouldShowEstimatedCost ? { grandTotal: Number(props.estimatedValue || 0) } : undefined,
         terms: [
           `Payment Terms: ${paymentTerms}`,
           `Delivery Terms: ${props.deliveryTerms || 'Standard'}`,
@@ -3299,7 +3665,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   };
 
   return (
-    <BuyerSideContext.Provider value={{ isBuyer: isBuyerSide, isOpenTender: isBuyerOpenTender, isLimitedTender: isBuyerLimitedTender }}>
+    <BuyerSideContext.Provider value={{
+      isBuyer: isBuyerSide,
+      isOpenTender: isBuyerOpenTender,
+      isLimitedTender: isBuyerLimitedTender,
+      shouldShowEstimatedCost,
+    }}>
       <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6 lg:px-8">
         {/* Navigation Breadcrumb & Back Button */}
@@ -3353,7 +3724,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         )}
 
         {/* Live Reverse Auction Banner for Sellers */}
-        {!isBuyerSide && linkedAuction && ['LIVE', 'SCHEDULED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
+        {!isBuyerSide && linkedAuction && allowsReverseAuction && ['LIVE', 'SCHEDULED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
           <SellerLiveAuctionBanner
             auctionId={linkedAuction.id}
             procurementTitle={resolvedSubject}
@@ -3374,7 +3745,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     {formatPrimitiveValue(buyerOrgName, 'organization')}
                   </span>
                 )}
-                {props.deadlineDate && <DeadlineCountdown targetDate={props.deadlineDate} />}
+                {props.deadlineDate && (
+                  <DeadlineCountdown
+                    targetDate={props.deadlineDate}
+                    label={(linkedAuction && allowsReverseAuction) ? 'Stage 1 Quote Due: ' : 'Quote Due: '}
+                  />
+                )}
                 {props.hasSubmittedProposal && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
                     <ShieldCheck className="h-3 w-3" />
@@ -3538,8 +3914,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   {subCategory && (
                     <PropertyItem label="Sub Category" value={subCategory} />
                   )}
-                  <PropertyItem label="Published Date" value={publishedDateFormatted} />
+                  <PropertyItem label="Published Date & Time" value={publishedDateFormatted} />
+                  {submissionStartDateValue && submissionStartDateFormatted !== publishedDateFormatted && (
+                    <PropertyItem label="Submission Start" value={submissionStartDateFormatted} />
+                  )}
                   <PropertyItem label="Submission Deadline" value={closingDateFormatted} />
+                  {requiredByDateFormatted && (
+                    <PropertyItem label="Required By Date & Time" value={requiredByDateFormatted} />
+                  )}
                   {/* Delivery Location - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
                   {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
                     <PropertyItem label="Delivery Location" value={deliveryLocation} />
@@ -3572,10 +3954,10 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             <TimelineRibbon
               dates={[
                 { label: 'Published', value: publishedDateFormatted, icon: Calendar, tone: 'emerald' },
-                { label: 'Clarification', value: clarificationDateFormatted, icon: Info, tone: 'sky' },
+                ...(isClarificationAllowed && clarificationDateFormatted !== 'N/A' ? [{ label: 'Clarification', value: clarificationDateFormatted, icon: Info, tone: 'sky' as Tone }] : []),
                 { label: 'Submission', value: closingDateFormatted, icon: Clock, tone: 'rose' },
-                { label: 'Technical Opening', value: technicalDateFormatted, icon: ClipboardCheck, tone: 'indigo' },
-                { label: 'Financial Opening', value: financialDateFormatted, icon: IndianRupee, tone: 'amber' },
+                ...(hasTechnicalOpening && technicalDateFormatted !== 'N/A' ? [{ label: 'Technical Opening', value: technicalDateFormatted, icon: ClipboardCheck, tone: 'indigo' as Tone }] : []),
+                ...(hasFinancialOpening && financialDateFormatted !== 'N/A' ? [{ label: 'Financial Opening', value: financialDateFormatted, icon: IndianRupee, tone: 'amber' as Tone }] : []),
                 { label: 'Award Status', value: awardDateFormatted, icon: ShieldCheck, tone: 'slate' },
               ]}
             />
@@ -3694,16 +4076,22 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   </h3>
                   <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
                     <PropertyGrid columns={3}>
-                      <PropertyItem label="Publish Date" value={publishedDateFormatted} />
+                      <PropertyItem label="Publish Date & Time" value={publishedDateFormatted} />
                       <PropertyItem label="Submission Start Date" value={submissionStartDateFormatted} />
-                      <PropertyItem label="Clarification Deadline" value={firstPresent(schedule.clarificationDeadline, schedule.clarificationEndDate, clarificationDeadlineFormatted, props.clarificationDate)} />
+                      {isClarificationAllowed && (
+                        <PropertyItem label="Clarification Deadline" value={clarificationDeadlineFormatted || 'N/A'} />
+                      )}
                       <PropertyItem label="Submission Deadline" value={closingDateFormatted} highlight />
-                      <PropertyItem label="Technical Opening Date" value={firstPresent(schedule.technicalOpeningDate, tender.technicalEvaluationDate, props.technicalOpeningDate, technicalDateFormatted)} />
-                      <PropertyItem label="Financial Opening Date" value={firstPresent(schedule.financialOpeningDate, tender.financialEvaluationDate, props.financialOpeningDate, financialDateFormatted)} />
-                      <PropertyItem label="Bid Validity Date" value={firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline, bidValidityDateFormatted)} />
+                      {hasTechnicalOpening && (
+                        <PropertyItem label="Technical Opening Date" value={technicalDateFormatted || 'N/A'} />
+                      )}
+                      {hasFinancialOpening && (
+                        <PropertyItem label="Financial Opening Date" value={financialDateFormatted || 'N/A'} />
+                      )}
+                      <PropertyItem label="Bid Validity Date" value={bidValidityDateFormatted || 'N/A'} />
                       <PropertyItem label="Validity Days" value={validityDaysDisplay} />
                       {requiredByDateFormatted && (
-                        <PropertyItem label="Required By Date" value={requiredByDateFormatted} />
+                        <PropertyItem label="Required By Date & Time" value={requiredByDateFormatted} />
                       )}
                       {preBidDateFormatted && (
                         <PropertyItem label="Pre-Bid Meeting Date" value={preBidDateFormatted} />
@@ -3727,7 +4115,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                       { label: 'Show Seller Rank', value: firstPresent(rules.showSellerRank, schedule.showSellerRank, 'Yes') },
                       { label: 'Allow Withdrawal', value: firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal, 'Yes') },
                       { label: 'Show Lowest Price', value: firstPresent(rules.showLowestPrice, schedule.showLowestPrice, 'Yes') },
-                      { label: 'Clarification Allowed', value: firstPresent(schedule.clarificationAllowed, rules.clarificationAllowed, 'Yes') },
+                      { label: 'Clarification Allowed', value: isClarificationAllowed ? 'Yes' : 'No' },
                       { label: 'Minimum Bidders', value: firstPresent(rules.minimumBidders, schedule.minimumBidders, '3') },
                       { label: 'Pre-Bid Meeting', value: firstPresent(schedule.preBidMeeting, schedule.preBidMeetingDate, 'No') },
                     ]}
@@ -3775,13 +4163,54 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         {activeTab === 'evaluation' && (
           <div className="space-y-5">
             <DataCard title="Evaluation Overview & Method" icon={ClipboardCheck}>
-              <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+              <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150 space-y-4">
                 <PropertyGrid columns={4}>
-                  <PropertyItem label="Evaluation Method" value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')} highlight />
+                  <PropertyItem
+                    label="Evaluation Method"
+                    value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')}
+                    highlight
+                    subtext={evalDetails.badge}
+                  />
+                  <PropertyItem label="Award Basis" value={evalDetails.basisLabel} />
                   {requireDemo && requireDemo !== 'No' && <PropertyItem label="Require Demo" value={formatPrimitiveValue(requireDemo)} />}
-                  {hasDetailData(qcbsRatio) && <PropertyItem label="QCBS Ratio" value={qcbsRatio} />}
-                  {hasDetailData(passingScore) && <PropertyItem label="Passing Score" value={passingScore} />}
+                  {isQcbsMethod && hasDetailData(qcbsRatio) && <PropertyItem label="QCBS Ratio" value={qcbsRatio} />}
+                  {(isQcbsMethod || isTechEvalNeeded) && hasDetailData(passingScore) && <PropertyItem label="Passing Score" value={passingScore} />}
                 </PropertyGrid>
+
+                {/* Short, clear, informative method explanation */}
+                <div className="border-t border-slate-200/80 pt-3.5">
+                  <div className="rounded-lg border border-blue-100/90 bg-blue-50/50 p-3.5 text-xs">
+                    <div className="flex items-start gap-2.5">
+                      <Scale className="h-4 w-4 text-blue-700 mt-0.5 shrink-0" aria-hidden="true" />
+                      <div className="space-y-1.5 min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] font-black uppercase tracking-wider text-blue-900">
+                            Method Description
+                          </span>
+                          <span className="inline-flex items-center rounded-md bg-blue-100/90 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+                            {evalDetails.shortSummary}
+                          </span>
+                        </div>
+                        <p className="text-xs font-medium text-slate-700 leading-relaxed">
+                          {evalDetails.description}
+                        </p>
+                        {evalDetails.keyPoints && evalDetails.keyPoints.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            {evalDetails.keyPoints.map((point, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[10.5px] font-semibold text-slate-700 border border-slate-200 shadow-2xs"
+                              >
+                                <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" aria-hidden="true" />
+                                <span>{point}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </DataCard>
 
@@ -3804,7 +4233,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   <PropertyGrid columns={3}>
                     <PropertyItem label="Selection Mode" value={vendors.selection || payload.selectionMode || rules.selectionMode || 'Open'} />
                     <PropertyItem label="Invite Count" value={String(effectiveInviteCount)} />
-                    <PropertyItem label="Workflow" value={approval.workflow || payload.workflow || 'Finance + Procurement'} />
+                    <PropertyItem label="Workflow" value={resolvedWorkflow} />
                   </PropertyGrid>
                 </div>
 
@@ -3986,8 +4415,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               />
             )}
 
-            {
-              /* Determine clarification kind: Rate Contract and Limited Tender typically use requirement-based clarifications */
+            {isClarificationAllowed && (
               (() => {
                 const clarKind = props.clarificationKind
                   ?? (props.procurementType === 'RATE_CONTRACT' || props.procurementType === 'LIMITED_TENDER' ? 'requirement' : 'quote-request');
@@ -4002,7 +4430,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   />
                 );
               })()
-            }
+            )}
           </div>
         )}
 
@@ -4017,10 +4445,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Estimated Value</span>
               <span className="text-xs sm:text-sm font-bold text-slate-900">{formatMoney(props.estimatedValue)}</span>
             </div>
-            {props.deadlineDate && (
+            {((closingDateFormatted && closingDateFormatted !== 'N/A') || props.deadlineDate) && (
               <div className="hidden sm:block border-l border-slate-200 pl-4">
-                <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Closing Date</span>
-                <span className="text-xs font-semibold text-slate-800">{formatDateString(props.deadlineDate, false)}</span>
+                <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Closing Date & Time</span>
+                <span className="text-xs font-semibold text-slate-800">
+                  {closingDateFormatted && closingDateFormatted !== 'N/A'
+                    ? closingDateFormatted
+                    : formatDateString(props.deadlineDate, true, 'endOfDay')}
+                </span>
               </div>
             )}
           </div>

@@ -25,6 +25,7 @@ export interface ProcurementWizardDraft {
   budgetMin: string;
   budgetMax: string;
   estimatedValue: string;
+  discloseEstimatedCost?: boolean;
   deliveryLocation: string;
   requiredDeliveryDate: string;
   deliveryType: string;
@@ -75,6 +76,7 @@ export const EMPTY_PROCUREMENT_DRAFT: ProcurementWizardDraft = {
   budgetMin: '',
   budgetMax: '',
   estimatedValue: '',
+  discloseEstimatedCost: false,
   deliveryLocation: '',
   requiredDeliveryDate: '',
   deliveryType: '',

@@ -19,7 +19,8 @@ import {
   LogIn,
   Info,
   Clipboard,
-  Truck
+  Truck,
+  Lock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BuyerRequirementDetailSkeleton } from '@/components/ui/skeleton';
@@ -478,13 +479,17 @@ const BuyerRequirementDetailsPage = () => {
             {/* Key details grid */}
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div className="space-y-4">
-                {isBuyer && (
-                  <DetailRow icon={IndianRupee} label="Estimated Value" value={
+                <DetailRow icon={IndianRupee} label="Estimated Value" value={
+                  (isBuyer || requirement.discloseEstimatedCost === true || requirement.payload?.basics?.discloseEstimatedCost === true) ? (
                     requirement.budgetMin && requirement.budgetMax && requirement.budgetMin !== requirement.budgetMax
                       ? `${formatMoney(requirement.budgetMin)} – ${formatMoney(requirement.budgetMax)}`
                       : formatMoney(requirement.estimatedValue || requirement.budgetMax || requirement.budgetMin)
-                  } />
-                )}
+                  ) : (
+                    <span className="inline-flex items-center gap-1 font-semibold text-slate-600">
+                      Confidential <Lock className="h-3 w-3 text-slate-400 inline" />
+                    </span>
+                  )
+                } />
                 <DetailRow icon={Package} label="Quantity" value={requirement.quantity ? `${requirement.quantity} ${requirement.unit || ''}`.trim() : 'Not specified'} />
                 <DetailRow icon={Calendar} label="Deadline" value={
                   <span>

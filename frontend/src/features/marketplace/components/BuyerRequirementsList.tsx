@@ -244,10 +244,11 @@ export function BuyerRequirementsList({
 
         // client-side budget filter
         if (minBudget) {
-            rows = rows.filter(r => Number(r.budgetMax || r.budgetMin || 0) >= Number(minBudget));
+            rows = rows.filter(r => r.discloseEstimatedCost !== false && Number(r.budgetMax || r.budgetMin || 0) >= Number(minBudget));
         }
+
         if (maxBudget) {
-            rows = rows.filter(r => Number(r.budgetMin || r.budgetMax || 0) <= Number(maxBudget));
+            rows = rows.filter(r => r.discloseEstimatedCost !== false && (r.budgetMin != null || r.budgetMax != null) && Number(r.budgetMin || r.budgetMax || 0) <= Number(maxBudget));
         }
 
         return rows;

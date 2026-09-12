@@ -11,10 +11,19 @@ export type ProcurementStatusCode =
     | 'AWARDED'
     | 'CANCELLED';
 
-export function parseDisplayDate(date?: string | Date | null) {
+export function parseDisplayDate(date?: string | Date | null, isDeadline: boolean = false) {
     if (!date) return null;
-    const parsed = date instanceof Date ? date : new Date(date);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+    let parsed = date instanceof Date ? new Date(date.getTime()) : new Date(date);
+    if (Number.isNaN(parsed.getTime())) return null;
+
+    if (isDeadline) {
+        const isDateOnlyStr = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date.trim());
+        const isUtcMidnight = parsed.getUTCHours() === 0 && parsed.getUTCMinutes() === 0 && parsed.getUTCSeconds() === 0;
+        if (isDateOnlyStr || isUtcMidnight) {
+            parsed.setHours(23, 59, 59, 999);
+        }
+    }
+    return parsed;
 }
 
 export function formatDateIN(date?: string | Date | null) {
@@ -25,7 +34,7 @@ export function formatDateIN(date?: string | Date | null) {
 }
 
 export function getDaysRemaining(date?: string | Date | null) {
-    const parsed = parseDisplayDate(date);
+    const parsed = parseDisplayDate(date, true);
     if (!parsed) return null;
     return Math.max(0, Math.ceil((parsed.getTime() - Date.now()) / dayMs));
 }
@@ -38,10 +47,16 @@ function isSameLocalDate(date: Date) {
 }
 
 export function getDeadlineLabel(date?: string | Date | null) {
-    const parsed = parseDisplayDate(date);
+    const parsed = parseDisplayDate(date, true);
     if (!parsed) return 'No deadline';
     const diff = parsed.getTime() - Date.now();
-    if (diff <= 0) return isSameLocalDate(parsed) ? 'Closing Today' : 'Closed';
+    if (diff <= 0) return 'Closed';
+    const hours = Math.floor(diff / (60 * 60 * 1000));
+    const mins = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+    if (hours < 24 && isSameLocalDate(parsed)) {
+        if (hours > 0) return `${hours}h ${mins}m left`;
+        return `${mins}m left`;
+    }
     const days = Math.ceil(diff / dayMs);
     if (days <= 1) return '1d left';
     return `${days}d left`;
@@ -49,9 +64,9 @@ export function getDeadlineLabel(date?: string | Date | null) {
 
 export function getProcurementStatus(item: { status?: string | null; computedStatus?: string | null; statusLabel?: string | null; dueDate?: string | Date | null; isUrgent?: boolean | null }) {
     const raw = String(item.computedStatus || item.statusLabel || item.status || '').toUpperCase().replace(/\s+/g, '_');
-    const dueDate = parseDisplayDate(item.dueDate);
+    const dueDate = parseDisplayDate(item.dueDate, true);
     const days = getDaysRemaining(dueDate);
-    const deadlineLabel = getDeadlineLabel(dueDate);
+    const deadlineLabel = getDeadlineLabel(item.dueDate);
 
     let code: ProcurementStatusCode = 'OPEN';
     let label = 'Open';
@@ -68,7 +83,7 @@ export function getProcurementStatus(item: { status?: string | null; computedSta
     } else if (raw.includes('EVALUATION') || raw.includes('UNDER_REVIEW') || raw.includes('L1_GENERATED') || raw.includes('AWARD_RECOMMENDED')) {
         code = 'UNDER_EVALUATION';
         label = 'Under Evaluation';
-    } else if (deadlineLabel === 'Closing Today') {
+    } else if (dueDate && isSameLocalDate(dueDate) && dueDate.getTime() > Date.now()) {
         code = 'CLOSING_TODAY';
         label = 'Closing Today';
     } else if (raw.includes('CLOSING_SOON') || item.isUrgent || (days !== null && days <= 7)) {

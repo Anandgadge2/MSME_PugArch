@@ -161,7 +161,7 @@ export default function TenderDetailPage() {
     return `₹${val.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
   };
 
-  const formatDateString = (dateStr?: string | Date, includeTime = false) => {
+  const formatDateString = (dateStr?: string | Date, includeTime?: boolean) => {
     if (!dateStr) return '—';
     try {
       const d = new Date(dateStr);
@@ -172,13 +172,19 @@ export default function TenderDetailPage() {
       const month = monthNames[d.getMonth()];
       const year = d.getFullYear();
       
+      const isDateOnlyStr = typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim());
+      const isMidnightUtc = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
+      const hasTime = !isDateOnlyStr && !isMidnightUtc;
+      const shouldIncludeTime = includeTime !== undefined ? includeTime : hasTime;
+
       let base = `${day} ${month} ${year}`;
-      if (includeTime) {
+      if (shouldIncludeTime) {
         let hours = d.getHours();
         const minutes = d.getMinutes().toString().padStart(2, '0');
-        const ampm = 'IST';
-        const formattedHours = hours.toString().padStart(2, '0');
-        base += ` ${formattedHours}:${minutes} ${ampm}`;
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        let h12 = hours % 12 || 12;
+        const formattedHours = h12.toString().padStart(2, '0');
+        base += `, ${formattedHours}:${minutes} ${ampm}`;
       }
       return base;
     } catch {
@@ -267,7 +273,7 @@ export default function TenderDetailPage() {
   });
   const tenderIdString = tender.tenderId || 'N/A';
   const title = validTenderTitle ? String(validTenderTitle).trim() : (tenderIdString !== 'N/A' ? `Tender #${tenderIdString}` : 'Procurement Tender');
-  const publishedDateFormatted = formatDateString(tender.publishedAt);
+  const publishedDateFormatted = formatDateString(tender.publishedAt, true);
   const closesAtFormatted = formatDateString(tender.closesAt, true);
   const orgName = tender.buyer?.buyerProfile?.organizationName || tender.buyer?.name || 'N/A';
 
@@ -417,7 +423,7 @@ export default function TenderDetailPage() {
       technicalDate={schedule.technicalOpeningDate ? formatDateString(schedule.technicalOpeningDate, true) : undefined}
       financialDate={schedule.financialOpeningDate ? formatDateString(schedule.financialOpeningDate, true) : undefined}
       bidValidityDate={schedule.bidValidityDate ? formatDateString(schedule.bidValidityDate) : undefined}
-      requiredByDate={basics.requiredByDate ? formatDateString(basics.requiredByDate) : ((tender as any).deliveryDate ? formatDateString((tender as any).deliveryDate) : undefined)}
+      requiredByDate={basics.requiredByDate ? formatDateString(basics.requiredByDate, true) : ((tender as any).deliveryDate ? formatDateString((tender as any).deliveryDate, true) : undefined)}
       category={tender.category}
       procurementMethod={isLimitedTender ? 'Limited Tender' : 'Open Tender'}
       invitedCount={invitedCountVal}

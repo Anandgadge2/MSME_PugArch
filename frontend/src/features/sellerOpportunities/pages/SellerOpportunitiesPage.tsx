@@ -30,6 +30,7 @@ import {
   Layers,
   RotateCcw,
   TrendingUp,
+  Lock,
   type LucideIcon
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
@@ -43,7 +44,7 @@ import { fetchRateContracts } from '../../rateContract/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode } from '../../shared/hooks';
-import { formatDate as formatSharedDate } from '../../shared/format';
+import { formatDisplayDate as formatSharedDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
@@ -64,6 +65,7 @@ interface SellerOpportunity {
   location?: string;
   closingDate?: string;
   estimatedValue?: number;
+  discloseEstimatedCost?: boolean;
   eligibility: string;
   status: string;
   actionLabel: string;
@@ -89,9 +91,9 @@ interface SellerOpportunity {
 
 const DEFAULT_PAGE_SIZE = 10;
 
-const formatDate = (value?: string) => {
+const formatDate = (value?: string | Date | null, forceTime = false) => {
   if (!value) return 'Not set';
-  const formatted = formatSharedDate(value);
+  const formatted = formatSharedDate(value, { forceTime });
   return formatted === '—' ? 'Not set' : formatted;
 };
 
@@ -504,6 +506,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             bestVal = valB;
           }
 
+          const discloseA = existing.discloseEstimatedCost;
+          const discloseB = opportunity.discloseEstimatedCost;
+          const bestDisclose = discloseB !== undefined ? discloseB : discloseA;
+
           deduped[existingIndex] = {
             ...existing,
             title: bestTitle,
@@ -511,6 +517,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             category: bestCategory,
             location: bestLoc,
             estimatedValue: bestVal,
+            discloseEstimatedCost: bestDisclose,
             href: existing.href || opportunity.href,
             detailsHref: existing.detailsHref || opportunity.detailsHref,
           };
@@ -599,6 +606,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           location: bid.location || bid.deliveryLocation || [bid.district, bid.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: bid.endDate,
           estimatedValue: toNumber(bid.estimatedValue),
+          discloseEstimatedCost: Boolean(bid.discloseEstimatedCost ?? bid.payload?.discloseEstimatedCost ?? bid.payload?.basics?.discloseEstimatedCost ?? false),
           eligibility: bid.participated ? 'Already participated' : 'Check documents',
           status: bid.status || 'Open',
           actionLabel,
@@ -705,6 +713,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           location: req.location || req.deliveryLocation || [req.district, req.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: req.lastDate || req.requiredBy,
           estimatedValue: toNumber(req.budgetMax || req.estimatedValue),
+          discloseEstimatedCost: Boolean(req.discloseEstimatedCost ?? req.payload?.discloseEstimatedCost ?? req.payload?.basics?.discloseEstimatedCost ?? false),
           eligibility: req.verifiedSellersOnly ? 'Verified sellers only' : 'All eligible sellers',
           status: req.status || 'OPEN',
           actionLabel: req.responsesCount > 0 ? 'View Response' : (opportunityType === 'Rate Contract' ? 'Submit Rate' : 'Submit Quotation'),
@@ -772,6 +781,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           location: qr.deliveryLocation || qr.location || [qr.district, qr.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: qr.deadlineDate || qr.endDate,
           estimatedValue: toNumber(qr.estimatedValue),
+          discloseEstimatedCost: Boolean(qr.discloseEstimatedCost ?? qr.payload?.discloseEstimatedCost ?? qr.payload?.basics?.discloseEstimatedCost ?? false),
           eligibility: isQrPrivate ? 'Invited Sellers Only' : 'Open Sourcing',
           status: qr.status || 'OPEN',
           actionLabel: 'Submit Quote',
@@ -819,6 +829,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           location: auction.location || auction.deliveryLocation || [auction.district, auction.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: auction.endTime,
           estimatedValue: toNumber(auction.currentLowestAmount || auction.startPrice),
+          discloseEstimatedCost: Boolean(auction.discloseEstimatedCost ?? true),
           eligibility: 'Check invitation',
           status: auction.statusEnum || auction.status || 'Scheduled',
           actionLabel: 'Join Auction',
@@ -835,8 +846,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           nextAction: '',
           isInvitation: auction.visibilityMode === 'INVITED_SELLERS_ONLY' || auction.isInvited || auction.invitedSellers?.some((v: any) => (v?.sellerOrgId || v) === user?.organizationId),
           detailRows: [
-            { label: 'Auction start', value: formatDate(auction.startTime) },
-            { label: 'Auction end', value: formatDate(auction.endTime) },
+            { label: 'Auction start', value: formatDate(auction.startTime, true) },
+            { label: 'Auction end', value: formatDate(auction.endTime, true) },
             { label: 'Start price', value: formatMoney(toNumber(auction.startPrice)) },
             { label: 'Current L1', value: auction.currentLowestAmount ? formatMoney(toNumber(auction.currentLowestAmount)) : 'Not available' },
             { label: 'Minimum decrement', value: auction.minDecrementAmount ? formatMoney(toNumber(auction.minDecrementAmount)) : 'Not shown' },
@@ -875,6 +886,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           location: meta.deliveryLocation || meta.deliverySla || [meta.district, meta.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: rc.endDate || meta.periodEndDate,
           estimatedValue: rawVal,
+          discloseEstimatedCost: Boolean(rc.discloseEstimatedCost ?? meta.discloseEstimatedCost ?? meta.basics?.discloseEstimatedCost ?? false),
           eligibility: 'Open Rate Contract',
           status: rc.status || meta.activeState || 'ACTIVE',
           actionLabel: 'Submit Quote',
@@ -995,11 +1007,17 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       if (buyerFilter && item.buyer !== buyerFilter) return false;
 
       if (valueRange) {
-        const val = item.estimatedValue || 0;
-        if (valueRange === '5l' && val >= 500000) return false;
-        if (valueRange === '25l' && (val < 500000 || val >= 2500000)) return false;
-        if (valueRange === '1cr' && (val < 2500000 || val >= 10000000)) return false;
-        if (valueRange === 'above1cr' && val < 10000000) return false;
+        const isConfidential = item.discloseEstimatedCost === false && item.type !== 'Reverse Auction';
+        if (valueRange === 'confidential') {
+          if (!isConfidential) return false;
+        } else {
+          if (isConfidential || item.estimatedValue == null) return false;
+          const val = Number(item.estimatedValue) || 0;
+          if (valueRange === '5l' && val >= 500000) return false;
+          if (valueRange === '25l' && (val < 500000 || val >= 2500000)) return false;
+          if (valueRange === '1cr' && (val < 2500000 || val >= 10000000)) return false;
+          if (valueRange === 'above1cr' && val < 10000000) return false;
+        }
       }
 
       if (startDate || endDate) {
@@ -1023,8 +1041,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const kpis = useMemo(() => {
     let live = 0;
     let liveValue = 0;
+    let confidentialLive = 0;
     let closingSoon = 0;
     let closingSoonValue = 0;
+    let confidentialClosingSoon = 0;
     let highValueCount = 0;
     let highValueTotal = 0;
     let participated = 0;
@@ -1032,17 +1052,26 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
     items.forEach(item => {
       const isLive = isOpenOpportunity(item, nowMs);
-      const val = Number(item.estimatedValue) || 0;
+      const isConfidential = item.discloseEstimatedCost === false && item.type !== 'Reverse Auction';
+      const val = isConfidential ? 0 : (Number(item.estimatedValue) || 0);
 
       if (isLive) {
         live++;
-        liveValue += val;
+        if (isConfidential) {
+          confidentialLive++;
+        } else {
+          liveValue += val;
+        }
       }
       if (isClosingSoonOpportunity(item, nowMs)) {
         closingSoon++;
-        closingSoonValue += val;
+        if (isConfidential) {
+          confidentialClosingSoon++;
+        } else {
+          closingSoonValue += val;
+        }
       }
-      if (isLive && val >= 2500000) {
+      if (isLive && !isConfidential && val >= 2500000) {
         highValueCount++;
         highValueTotal += val;
       }
@@ -1055,8 +1084,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     return {
       live,
       liveValue,
+      confidentialLive,
       closingSoon,
       closingSoonValue,
+      confidentialClosingSoon,
       highValueCount,
       highValueTotal,
       participated,
@@ -1073,7 +1104,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         return isClosingSoonOpportunity(item, nowMs);
       }
       if (kpiFilter === 'highValue') {
-        return (Number(item.estimatedValue) || 0) >= 2500000 && isOpenOpportunity(item, nowMs);
+        const isConfidential = item.discloseEstimatedCost === false && item.type !== 'Reverse Auction';
+        return !isConfidential && (Number(item.estimatedValue) || 0) >= 2500000 && isOpenOpportunity(item, nowMs);
       }
       if (kpiFilter === 'participated') {
         return isParticipatedOpportunity(item);
@@ -1090,6 +1122,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         let valB: any = b[sortField];
 
         if (sortField === 'estimatedValue') {
+          const isConfA = a.discloseEstimatedCost === false && a.type !== 'Reverse Auction';
+          const isConfB = b.discloseEstimatedCost === false && b.type !== 'Reverse Auction';
+          if (isConfA && isConfB) return 0;
+          if (isConfA) return 1;
+          if (isConfB) return -1;
           valA = Number(valA) || 0;
           valB = Number(valB) || 0;
         } else if (sortField === 'publishedAt' || sortField === 'closingDate') {
@@ -1241,17 +1278,32 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       sortable: true,
       sortKey: 'estimatedValue',
       width: 'w-40',
-      cell: (item) => (
-        <div className="space-y-0.5">
-          <span className="text-xs font-extrabold text-slate-900 block">
-            {formatMoney(item.estimatedValue)}
-          </span>
-          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-            {item.type === 'Reverse Auction' ? 'Negotiate Price' : 
-             item.type === 'RFP' ? 'Negotiable' : 'Fixed Price'}
-          </span>
-        </div>
-      )
+      cell: (item) => {
+        const isDisclosed = item.discloseEstimatedCost === true || item.type === 'Reverse Auction';
+        if (!isDisclosed) {
+          return (
+            <div className="space-y-0.5">
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600">
+                Confidential <Lock className="h-3 w-3 text-slate-400 inline" />
+              </span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                Competitive Bidding
+              </span>
+            </div>
+          );
+        }
+        return (
+          <div className="space-y-0.5">
+            <span className="text-xs font-extrabold text-slate-900 block">
+              {formatMoney(item.estimatedValue)}
+            </span>
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+              {item.type === 'Reverse Auction' ? 'Negotiate Price' : 
+               item.type === 'RFP' ? 'Negotiable' : 'Fixed Price'}
+            </span>
+          </div>
+        );
+      }
     },
     {
       key: 'actions',
@@ -1390,7 +1442,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         <KpiCard
           label="Live Opportunity Pool"
           value={kpis.live}
-          subtext={`${formatCurrency(kpis.liveValue)} total value`}
+          subtext={
+            kpis.liveValue > 0
+              ? (kpis.confidentialLive > 0 ? `${formatCurrency(kpis.liveValue)} disclosed (${kpis.confidentialLive} sealed)` : `${formatCurrency(kpis.liveValue)} total value`)
+              : (kpis.confidentialLive > 0 ? `${kpis.confidentialLive} sealed competitive bids` : '₹0 total value')
+          }
           icon={IndianRupee}
           tone="blue"
           active={kpiFilter === 'live'}
@@ -1399,7 +1455,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         <KpiCard
           label="Closing in ≤7 Days"
           value={kpis.closingSoon}
-          subtext={`${formatCurrency(kpis.closingSoonValue)} expiring soon`}
+          subtext={
+            kpis.closingSoonValue > 0
+              ? (kpis.confidentialClosingSoon > 0 ? `${formatCurrency(kpis.closingSoonValue)} expiring soon (${kpis.confidentialClosingSoon} sealed)` : `${formatCurrency(kpis.closingSoonValue)} expiring soon`)
+              : (kpis.confidentialClosingSoon > 0 ? `${kpis.confidentialClosingSoon} sealed bids closing` : 'Expiring within 7 days')
+          }
           icon={Clock}
           tone="red"
           active={kpiFilter === 'dueSoon'}
@@ -1408,7 +1468,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         <KpiCard
           label="High-Value Tenders (≥₹25L)"
           value={kpis.highValueCount}
-          subtext={`${formatCurrency(kpis.highValueTotal)} strategic volume`}
+          subtext={
+            kpis.highValueCount > 0
+              ? `${formatCurrency(kpis.highValueTotal)} strategic volume`
+              : (kpis.confidentialLive > 0 ? 'Disclosed bids ≥₹25L (sealed excluded)' : 'No high-value tenders')
+          }
           icon={TrendingUp}
           tone="purple"
           active={kpiFilter === 'highValue'}
@@ -1704,13 +1768,26 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                         <div>
                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Est. Value</p>
                           <div className="mt-1">
-                            <span className="text-xs font-extrabold text-slate-900 block">
-                              {formatMoney(item.estimatedValue)}
-                            </span>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                              {item.type === 'Reverse Auction' ? 'Negotiate Price' : 
-                               item.type === 'RFP' ? 'Negotiable' : 'Fixed Price'}
-                            </span>
+                            {item.discloseEstimatedCost === true || item.type === 'Reverse Auction' ? (
+                              <>
+                                <span className="text-xs font-extrabold text-slate-900 block">
+                                  {formatMoney(item.estimatedValue)}
+                                </span>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                                  {item.type === 'Reverse Auction' ? 'Negotiate Price' : 
+                                   item.type === 'RFP' ? 'Negotiable' : 'Fixed Price'}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 block">
+                                  Confidential <Lock className="h-3 w-3 text-slate-400 inline" />
+                                </span>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                                  Competitive Bidding
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1800,7 +1877,7 @@ function OpportunityDetailPanel({ item }: { item: SellerOpportunity }) {
           <Metric label="Buyer" value={item.buyer || 'Buyer details controlled'} />
           <Metric label="Category" value={item.category || 'General procurement'} />
           <Metric label="Quantity" value={item.quantity || 'Not specified'} />
-          <Metric label="Commercial value" value={formatMoney(item.estimatedValue)} />
+          <Metric label="Commercial value" value={item.discloseEstimatedCost === true || item.type === 'Reverse Auction' ? formatMoney(item.estimatedValue) : 'Confidential (Competitive Bidding)'} />
           <Metric label="Published" value={formatDate(item.publishedAt)} />
           <Metric label="Closing" value={formatDate(item.closingDate)} />
           <Metric label="Responses" value={item.responseCount !== undefined ? item.responseCount.toLocaleString('en-IN') : 'Not shown'} />
@@ -1872,7 +1949,7 @@ function OpportunityDetailsDialog({ item, onClose }: { item: SellerOpportunity; 
                 <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   <Metric label="Published" value={formatDate(item.publishedAt)} />
                   <Metric label="Closing" value={formatDate(item.closingDate)} />
-                  <Metric label="Estimated value" value={formatMoney(item.estimatedValue)} />
+                  <Metric label="Estimated value" value={item.discloseEstimatedCost === true || item.type === 'Reverse Auction' ? formatMoney(item.estimatedValue) : 'Confidential (Competitive Bidding)'} />
                   <Metric label="Quantity" value={item.quantity || 'Not specified'} />
                 </div>
               </section>

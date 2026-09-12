@@ -20,6 +20,7 @@ import {
   Play,
   User,
   Gavel,
+  Lock,
 } from 'lucide-react';
 import { formatDate, lifecycleLabels, money, type BidResultRow, type ProcurementBid } from './data';
 import { formatDateTime } from '../shared/format';
@@ -170,7 +171,13 @@ export function BidCard({ bid, viewHref, participationHref, participationLabel =
         <div className="grid gap-2 text-[11px] font-semibold text-slate-600 sm:grid-cols-2">
           <span className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-blue-50 px-2"><FileText className="h-3.5 w-3.5 text-[#0b2447]" />{bid.itemName}</span>
           <span className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-blue-50 px-2"><MapPin className="h-3.5 w-3.5 text-[#0b2447]" />{bid.location}</span>
-          <span className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-emerald-50 px-2"><IndianRupee className="h-3.5 w-3.5 text-emerald-700" />{money(bid.estimatedValue)}</span>
+          {bid.discloseEstimatedCost === false ? (
+            <span className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-slate-100 px-2 text-slate-700 font-bold">
+              <Lock className="h-3.5 w-3.5 text-slate-500" /> Confidential
+            </span>
+          ) : (
+            <span className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-emerald-50 px-2"><IndianRupee className="h-3.5 w-3.5 text-emerald-700" />{money(bid.estimatedValue)}</span>
+          )}
           <span className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-amber-50 px-2"><CalendarClock className="h-3.5 w-3.5 text-amber-700" />Closes {formatDate(bid.endDate)}</span>
         </div>
         <div className="flex flex-wrap gap-2">

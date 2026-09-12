@@ -11,7 +11,7 @@ import {
     X, Package, Wrench, Landmark, BadgeCheck, MapPin,
     Tag, Hash, IndianRupee, Calendar, CheckCircle,
     Clock, FileText, Send, Flame, Loader2, ShieldCheck,
-    Truck, Info, Coins, FileDown, User
+    Truck, Info, Coins, FileDown, User, Lock
 } from 'lucide-react';
 
 function daysLeft(iso: string) {
@@ -210,7 +210,15 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                     { icon: <Tag className="h-3.5 w-3.5 text-[#0b2447]" />, label: 'Category', value: requirement.category?.name || requirement.requirementType },
                                     { icon: <MapPin className="h-3.5 w-3.5 text-[#0b2447]" />, label: 'Location', value: requirement.location || requirement.buyerOrganization?.city || '—' },
                                     { icon: <Hash className="h-3.5 w-3.5 text-[#0b2447]" />, label: 'Quantity', value: requirement.quantity ? `${requirement.quantity} ${requirement.unit || ''}`.trim() : 'As per scope' },
-                                    { icon: <IndianRupee className="h-3.5 w-3.5 text-[#0b2447]" />, label: 'Budget', value: requirement.budgetMax ? `₹${Number(requirement.budgetMin || 0).toLocaleString('en-IN')} – ₹${Number(requirement.budgetMax).toLocaleString('en-IN')}` : 'Open / Negotiable' },
+                                    {
+                                        icon: <IndianRupee className="h-3.5 w-3.5 text-[#0b2447]" />,
+                                        label: 'Budget',
+                                        value: (requirement.discloseEstimatedCost === false && user?.role !== 'buyer' && user?.role !== 'admin')
+                                            ? 'Confidential 🔒'
+                                            : requirement.budgetMax
+                                                ? `₹${Number(requirement.budgetMin || 0).toLocaleString('en-IN')} – ₹${Number(requirement.budgetMax).toLocaleString('en-IN')}`
+                                                : 'Open / Negotiable'
+                                    },
                                     { icon: <Calendar className="h-3.5 w-3.5 text-[#0b2447]" />, label: 'Last Date', value: formatDate(requirement.lastDate) },
                                     ...((user?.role === 'buyer' || user?.role === 'admin') ? [{ icon: <CheckCircle className="h-3.5 w-3.5 text-green-600" />, label: 'Responses', value: `${requirement._count?.responses || 0} received` }] : []),
                                 ].map(item => (

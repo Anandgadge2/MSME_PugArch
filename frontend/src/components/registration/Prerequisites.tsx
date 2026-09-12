@@ -42,6 +42,7 @@ const shgCommonOptionalDocs = [
   'PAN Card of SHG or Representative',
   'Address Proof',
   'GST Certificate (if applicable)',
+  'ISO Certificate (if applicable)',
   'Product Images / Catalogue',
   'Training / Skill Certificates'
 ];
@@ -118,7 +119,8 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
     optional: [
       'Income tax returns of last 3 years (It is required for BID participation if your business is older than 24 months) ',
       'GST number for inter state business',
-      'NSIC Registered'
+      'NSIC Registered',
+      'ISO Certified'
     ]
   },
   'herSHG': {
@@ -140,6 +142,7 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
     optional: [
       'GST number',
       'NSIC Registered',
+      'ISO Certified',
       'Income tax returns of last 3 years',
     ]
   },
@@ -158,6 +161,7 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
       'DIPP number',
       'GST number',
       'NSIC Registered',
+      'ISO Certified',
       'Income tax returns of last 3 years',
     ]
   }
@@ -242,6 +246,7 @@ export default function Prerequisites({ onProceed, role, variant }: Prerequisite
     if (normalized.includes('activity-specific supporting documents')) return 'activity_specific_supporting_documents';
     if (normalized.includes('income tax returns')) return 'itr_3_years';
     if (normalized.includes('dipp')) return 'dipp_certificate';
+    if (normalized.includes('iso')) return 'iso_certificate';
     if (normalized.includes('gst')) return 'gst_certificate';
     if (normalized.includes('nsic')) return 'nsic_certificate';
     if (normalized.includes('udyam')) return 'udyam_certificate';

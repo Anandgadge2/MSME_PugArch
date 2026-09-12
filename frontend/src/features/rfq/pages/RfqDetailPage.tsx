@@ -37,7 +37,7 @@ const fmt = (val?: number | string | null): string => {
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 };
 
-const fmtDate = (d?: string | Date | null, includeTime = false): string => {
+const fmtDate = (d?: string | Date | null, includeTime?: boolean): string => {
   if (!d) return '—';
   try {
     const dt = new Date(d);
@@ -45,11 +45,20 @@ const fmtDate = (d?: string | Date | null, includeTime = false): string => {
     const day = dt.getDate().toString().padStart(2, '0');
     const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
     const yr = dt.getFullYear();
-    if (!includeTime) return `${day} ${mo} ${yr}`;
+    const isDateOnlyStr = typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.trim());
     const isMidnightUtc = dt.getUTCHours() === 0 && dt.getUTCMinutes() === 0 && dt.getUTCSeconds() === 0;
-    const hh = isMidnightUtc ? '23' : dt.getHours().toString().padStart(2, '0');
-    const mm = isMidnightUtc ? '59' : dt.getMinutes().toString().padStart(2, '0');
-    return `${day} ${mo} ${yr}, ${hh}:${mm} IST`;
+    if (isDateOnlyStr || (isMidnightUtc && !includeTime)) {
+      return `${day} ${mo} ${yr}`;
+    }
+    const shouldIncludeTime = includeTime !== undefined ? includeTime : (!isDateOnlyStr && !isMidnightUtc);
+    if (!shouldIncludeTime) return `${day} ${mo} ${yr}`;
+    let hours = dt.getHours();
+    const mm = dt.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    let h12 = hours % 12;
+    if (h12 === 0) h12 = 12;
+    const hh = h12.toString().padStart(2, '0');
+    return `${day} ${mo} ${yr}, ${hh}:${mm} ${ampm}`;
   } catch { return String(d); }
 };
 
@@ -57,7 +66,9 @@ const calcTimeLeft = (d?: string | Date | null) => {
   if (!d) return { label: '—', isPassed: false };
   let dt = new Date(d);
   if (isNaN(dt.getTime())) return { label: '—', isPassed: false };
-  if (dt.getUTCHours() === 0 && dt.getUTCMinutes() === 0 && dt.getUTCSeconds() === 0) {
+  const isDateOnlyStr = typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.trim());
+  const isMidnightUtc = dt.getUTCHours() === 0 && dt.getUTCMinutes() === 0 && dt.getUTCSeconds() === 0;
+  if (isDateOnlyStr || isMidnightUtc) {
     dt = new Date(dt.getTime());
     dt.setHours(23, 59, 59, 999);
   }
@@ -572,8 +583,37 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     : 'RFQ Opportunities';
   const buyType    = preferReq ? (reqObj?.payload?.basics?.bidType || rawBid?.technicalPacket?.basics?.bidType || 'Product') : (rawBid?.technicalPacket?.basics?.bidType || rawBid?.technicalPacket?.basics?.whatAreYouBuying || reqObj?.payload?.basics?.bidType || 'Product');
   const value      = preferReq ? (reqObj?.estimatedValue || reqObj?.budgetMax || rawBid?.estimatedValue || rawBid?.technicalPacket?.basics?.estimatedValue) : (rawBid?.estimatedValue || reqObj?.estimatedValue || reqObj?.budgetMax || rawBid?.technicalPacket?.basics?.estimatedValue);
-  const deadline   = preferReq ? (reqObj?.lastDate || reqObj?.requiredBy || reqObj?.payload?.schedule?.submissionDate || rawBid?.endDate) : (rawBid?.technicalPacket?.schedule?.submissionDate || rawBid?.technicalPacket?.schedule?.submissionDeadline || reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || rawBid?.endDate || reqObj?.lastDate || reqObj?.requiredBy);
-  const published  = preferReq ? (reqObj?.approvedAt || reqObj?.createdAt || rawBid?.startDate) : (rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.technicalPacket?.schedule?.publishDate || reqObj?.payload?.schedule?.submissionStartDate || rawBid?.startDate || rawBid?.createdAt || reqObj?.createdAt);
+  const deadline   = preferReq
+    ? (reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || reqObj?.lastDate || rawBid?.endDate || reqObj?.requiredBy)
+    : (rawBid?.technicalPacket?.schedule?.submissionDate || rawBid?.technicalPacket?.schedule?.submissionDeadline || reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || rawBid?.endDate || reqObj?.lastDate || reqObj?.requiredBy);
+  const resolvePublishedCandidate = (...candidates: any[]) => {
+    const valid = candidates.filter(Boolean);
+    const withTime = valid.find(c => {
+      if (typeof c === 'string') return c.includes('T') && !c.includes('T00:00:00');
+      if (c instanceof Date) return c.getHours() !== 0 || c.getMinutes() !== 0;
+      return false;
+    });
+    return withTime || valid[0];
+  };
+  const published  = preferReq
+    ? resolvePublishedCandidate(
+        reqObj?.payload?.schedule?.submissionStartDate,
+        reqObj?.approvedAt,
+        reqObj?.createdAt,
+        rawBid?.startDate,
+        rawBid?.createdAt,
+        reqObj?.payload?.schedule?.publishDate,
+        rawBid?.technicalPacket?.schedule?.publishDate
+      )
+    : resolvePublishedCandidate(
+        rawBid?.technicalPacket?.schedule?.submissionStartDate,
+        rawBid?.startDate,
+        rawBid?.createdAt,
+        reqObj?.approvedAt,
+        reqObj?.createdAt,
+        rawBid?.technicalPacket?.schedule?.publishDate,
+        reqObj?.payload?.schedule?.publishDate
+      );
   const location   = preferReq ? (reqObj?.location || reqObj?.deliveryLocation || rawBid?.deliveryLocation || '—') : (rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—');
   const buyerOrg   = preferReq ? (reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || reqObj?.buyerName || rawBid?.buyerOrganizationName || '—') : (rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—');
   const buyerType  = preferReq ? (reqObj?.buyerType || reqObj?.buyerOrganization?.type || rawBid?.buyerType || 'Private Buyer') : (rawBid?.buyerType || rawBid?.technicalPacket?.basics?.buyerType || 'Private Buyer');
@@ -1049,14 +1089,14 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       buyer={{ name: contact, email, mobile, buyerProfile: reqObj?.buyerOrganization || rawBid?.buyerOrganization || rawBid?.buyer?.buyerProfile }}
       estimatedValue={value}
       deadlineDate={deadline}
-      createdAt={published}
-      publishedDate={published ? fmtDate(published) : undefined}
+      createdAt={reqObj?.createdAt || rawBid?.createdAt || published}
+      publishedDate={published ? fmtDate(published, true) : undefined}
       closingDate={deadline ? fmtDate(deadline, true) : undefined}
       clarificationDate={clarDeadline ? fmtDate(clarDeadline, true) : undefined}
       technicalDate={techOpen ? fmtDate(techOpen, true) : undefined}
       financialDate={finOpen ? fmtDate(finOpen, true) : undefined}
       bidValidityDate={bidValDate ? fmtDate(bidValDate) : undefined}
-      requiredByDate={reqByDate ? fmtDate(reqByDate) : undefined}
+      requiredByDate={reqByDate ? fmtDate(reqByDate, true) : undefined}
       category={category}
       subCategory={subCategory}
       projectDuration={projectDuration}

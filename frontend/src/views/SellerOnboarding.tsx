@@ -81,6 +81,12 @@ const matchesDocumentType = (typeA?: string, typeB?: string) => {
     registrationcertificate: ['shgregistrationcertificate', 'registrationcertificate'],
     udyamcertificate: ['udyamcertificate', 'udyamregistrationcertificate', 'udyam'],
     udyamregistrationcertificate: ['udyamcertificate', 'udyamregistrationcertificate', 'udyam'],
+    isocertificate: ['isocertificate', 'isocertification', 'isocertified', 'iso'],
+    isocertified: ['isocertificate', 'isocertification', 'isocertified', 'iso'],
+    nsiccertificate: ['nsiccertificate', 'nsicregistrationcertificate', 'nsicregistered', 'nsic'],
+    nsicregistrationcertificate: ['nsiccertificate', 'nsicregistrationcertificate', 'nsicregistered', 'nsic'],
+    itr3years: ['itr3years', 'incometaxreturns', 'incometaxreturnsoflast3years', 'itr'],
+    dippcertificate: ['dippcertificate', 'dippregistrationcertificate', 'dipp', 'startupcertificate']
   };
 
   return Boolean(aliases[normA]?.includes(normB) || aliases[normB]?.includes(normA));
@@ -404,6 +410,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
         const docs = Array.isArray(cachedRegDetails.selectedDocuments) ? cachedRegDetails.selectedDocuments : [];
         if (cachedRegDetails.gstin || docs.includes('gst_certificate')) types.add('GST_REGISTERED');
         if (docs.includes('nsic_certificate')) types.add('NSIC_REGISTERED');
+        if (docs.includes('iso_certificate')) types.add('ISO_CERTIFIED');
         if (cachedRegDetails.pan || cachedOrg.panNumber) types.add('PAN_AVAILABLE');
         return Array.from(types);
       })(),
@@ -428,15 +435,15 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
 
   const getRequiredDocuments = useCallback(() => {
     if (isHerShg) {
-      const docs: { id: string; label: string; required: boolean; category: 'mandatory' | 'optional' }[] = [
+      const docs: { id: string; label: string; required: boolean; category: 'mandatory' | 'optional'; isRecommended?: boolean }[] = [
         ...SHG_MANDATORY_DOCUMENTS.map(doc => ({ ...doc, required: true as const, category: 'mandatory' as const })),
-        ...SHG_OPTIONAL_DOCUMENTS.map(doc => ({ ...doc, required: false as const, category: 'optional' as const })),
-        ...(SHG_TYPE_OPTIONAL_DOCUMENTS[shgType] || []).map(doc => ({ ...doc, required: false as const, category: 'optional' as const }))
+        ...SHG_OPTIONAL_DOCUMENTS.map(doc => ({ ...doc, required: false as const, category: 'optional' as const, isRecommended: true })),
+        ...(SHG_TYPE_OPTIONAL_DOCUMENTS[shgType] || []).map(doc => ({ ...doc, required: false as const, category: 'optional' as const, isRecommended: true }))
       ];
       return docs;
     }
 
-    const docs: { id: string; label: string; required: boolean; category: 'mandatory' | 'optional' }[] = [
+    const docs: { id: string; label: string; required: boolean; category: 'mandatory' | 'optional'; isRecommended?: boolean }[] = [
       { id: 'pan_copy', label: 'PAN Card Copy', required: true, category: 'mandatory' },
       { id: 'bank_passbook', label: 'Bank Passbook / Cancelled Cheque', required: true, category: 'mandatory' },
       { id: 'address_proof', label: 'Address Proof', required: true, category: 'mandatory' }
@@ -455,21 +462,26 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       business_registration_proof: 'Business Registration Proof (CIN/Shop Act)',
       dipp_certificate: 'DIPP Certificate',
       itr_3_years: 'Income Tax Returns of Last 3 Years',
-      nsic_certificate: 'NSIC Registration Certificate'
+      nsic_certificate: 'NSIC Registration Certificate',
+      iso_certificate: 'ISO Certificate'
     };
 
     // GST Certificate
-    const isGstRequired = Boolean(
-      selectedDocs.includes('gst_certificate') ||
+    const hasGst = Boolean(
       Boolean(regDetails.gstin) ||
+      Boolean(formData.gstin) ||
       formData.registrationTypes?.includes('GST_REGISTERED')
     );
-    docs.push({
-      id: 'gst_certificate',
-      label: 'GST Certificate',
-      required: isGstRequired,
-      category: isGstRequired ? 'mandatory' : 'optional'
-    });
+    const hasGstInSelected = selectedDocs.includes('gst_certificate');
+    if (hasGst || hasGstInSelected) {
+      docs.push({
+        id: 'gst_certificate',
+        label: 'GST Certificate',
+        required: hasGst,
+        category: hasGst ? 'mandatory' : 'optional',
+        isRecommended: !hasGst
+      });
+    }
 
     // Udyam Certificate
     const isUdyamRequired = true;
@@ -480,34 +492,54 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       category: isUdyamRequired ? 'mandatory' : 'optional'
     });
 
-    // DIPP Certificate
-    const isDippRequired = Boolean(
+    // DIPP Certificate - optional & recommended
+    const hasDipp = Boolean(
       selectedDocs.includes('dipp_certificate') ||
       String(regDetails.businessType || '').toLowerCase().includes('startup') ||
       formData.isStartup === true
     );
-    docs.push({
-      id: 'dipp_certificate',
-      label: 'DIPP Certificate',
-      required: isDippRequired,
-      category: isDippRequired ? 'mandatory' : 'optional'
-    });
+    if (hasDipp) {
+      docs.push({
+        id: 'dipp_certificate',
+        label: 'DIPP Certificate',
+        required: false,
+        category: 'optional',
+        isRecommended: true
+      });
+    }
 
-    // NSIC Certificate
-    const isNsicRequired = Boolean(
+    // NSIC Certificate - optional & recommended
+    const hasNsic = Boolean(
       selectedDocs.includes('nsic_certificate') ||
       formData.registrationTypes?.includes('NSIC_REGISTERED')
     );
-    docs.push({
-      id: 'nsic_certificate',
-      label: 'NSIC Registration Certificate',
-      required: isNsicRequired,
-      category: isNsicRequired ? 'mandatory' : 'optional'
-    });
+    if (hasNsic) {
+      docs.push({
+        id: 'nsic_certificate',
+        label: 'NSIC Registration Certificate',
+        required: false,
+        category: 'optional',
+        isRecommended: true
+      });
+    }
+
+    // ISO Certificate - optional & recommended
+    const hasIso = Boolean(
+      selectedDocs.includes('iso_certificate') ||
+      formData.registrationTypes?.includes('ISO_CERTIFIED')
+    );
+    if (hasIso) {
+      docs.push({
+        id: 'iso_certificate',
+        label: 'ISO Certificate',
+        required: false,
+        category: 'optional',
+        isRecommended: true
+      });
+    }
 
     // Aadhaar Card
     const isAadhaarRequired = Boolean(
-      selectedDocs.includes('aadhaar_card') ||
       regDetails.verificationMethod === 'Aadhaar' ||
       Boolean(regDetails.aadhaarNumber)
     );
@@ -515,7 +547,8 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       id: 'aadhaar_card',
       label: 'Aadhaar of Authorized Person',
       required: isAadhaarRequired,
-      category: isAadhaarRequired ? 'mandatory' : 'optional'
+      category: isAadhaarRequired ? 'mandatory' : 'optional',
+      isRecommended: !isAadhaarRequired
     });
 
     // Business Registration Proof
@@ -529,27 +562,56 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       id: 'business_registration_proof',
       label: 'Business Registration Proof (CIN/Shop Act)',
       required: isCorpRequired,
-      category: isCorpRequired ? 'mandatory' : 'optional'
+      category: isCorpRequired ? 'mandatory' : 'optional',
+      isRecommended: !isCorpRequired
     });
 
-    // Add any remaining selected documents from the backend or upgrade existing docs to mandatory
+    // Income Tax Returns (ITR of last 3 years) - optional & recommended
+    const hasItr = Boolean(
+      selectedDocs.includes('itr_3_years') ||
+      formData.participateInBid === true
+    );
+    if (hasItr) {
+      docs.push({
+        id: 'itr_3_years',
+        label: 'Income Tax Returns of Last 3 Years',
+        required: false,
+        category: 'optional',
+        isRecommended: true
+      });
+    }
+
+    // Add any remaining selected documents from the pre-registration checklist as optional & recommended
     selectedDocs.forEach((id: string) => {
-      const existingDoc = docs.find(doc => doc.id === id);
-      if (existingDoc) {
-        existingDoc.required = true;
-        existingDoc.category = 'mandatory';
-      } else {
+      const existingDoc = docs.find(doc => doc.id === id || matchesDocumentType(doc.id, id));
+      if (!existingDoc) {
         docs.push({
           id,
-          label: selectedDocLabels[id] || id,
-          required: true,
-          category: 'mandatory'
+          label: selectedDocLabels[id] || id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          required: false,
+          category: 'optional',
+          isRecommended: true
         });
       }
     });
 
+    // If the seller previously uploaded any document, ensure it is in the list
+    if (Array.isArray(sellerDocuments)) {
+      sellerDocuments.forEach((d: any) => {
+        if (d?.documentType && !docs.some(doc => matchesDocumentType(doc.id, d.documentType))) {
+          docs.push({
+            id: d.documentType,
+            label: selectedDocLabels[d.documentType] || d.documentType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+            required: false,
+            category: 'optional',
+            isRecommended: true
+          });
+        }
+      });
+    }
+
     return docs;
-  }, [formData, regDetails, isHerShg, shgType]);
+  }, [formData, regDetails, isHerShg, shgType, sellerDocuments]);
 
   const areAllDocumentsUploaded = useCallback(() => {
     const required = getRequiredDocuments();
@@ -672,6 +734,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
           const docs = Array.isArray(regDetails.selectedDocuments) ? regDetails.selectedDocuments : [];
           if (regDetails.gstin || docs.includes('gst_certificate')) types.add('GST_REGISTERED');
           if (docs.includes('nsic_certificate')) types.add('NSIC_REGISTERED');
+          if (docs.includes('iso_certificate')) types.add('ISO_CERTIFIED');
           if (regDetails.pan || org.panNumber) types.add('PAN_AVAILABLE');
           return Array.from(types);
         })(),
@@ -2246,9 +2309,16 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                           Required
                                         </span>
                                       ) : (
-                                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                                          Optional
-                                        </span>
+                                        <div className="inline-flex items-center gap-1.5">
+                                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                                            Optional
+                                          </span>
+                                          {doc.isRecommended && (
+                                            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                                              Recommended
+                                            </span>
+                                          )}
+                                        </div>
                                       )}
                                     </div>
                                     {fileAsset ? (
@@ -2289,7 +2359,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                   )}
                                   {status === 'NOT_UPLOADED' && (
                                     <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border", isRequired ? "bg-red-50 text-red-700 border-red-200" : "bg-slate-100 text-slate-600 border-slate-200")}>
-                                      Missing
+                                      {isRequired ? 'Missing' : 'Not Uploaded'}
                                     </span>
                                   )}
 

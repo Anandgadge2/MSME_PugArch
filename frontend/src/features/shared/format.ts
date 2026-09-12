@@ -44,6 +44,45 @@ export const formatDateTime = (value: unknown): string => {
   return `${day} ${month} ${year}, ${h}:${m} ${ampm}`;
 };
 
+/**
+ * Checks whether a given date value has an explicit, non-midnight time component.
+ * Returns false for pure calendar dates (YYYY-MM-DD) or UTC midnight zero timestamps.
+ */
+export const hasExplicitTime = (value: unknown): boolean => {
+  if (!value) return false;
+  if (typeof value === 'string') {
+    const s = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    if (/T00:00:00(\.000)?(Z|[+-]00:00)?$/i.test(s)) return false;
+    return s.includes('T') || s.includes(':');
+  }
+  if (value instanceof Date) {
+    return !(
+      value.getUTCHours() === 0 &&
+      value.getUTCMinutes() === 0 &&
+      value.getUTCSeconds() === 0 &&
+      value.getUTCMilliseconds() === 0
+    );
+  }
+  return false;
+};
+
+/**
+ * Formats a date intelligently:
+ * - If explicit time exists or forceTime is true: returns `${day} ${month} ${year}, ${h}:${m} ${ampm}`
+ * - If pure calendar date: returns `${day} ${month} ${year}` (zero phantom 12:00 AM)
+ */
+export const formatDisplayDate = (
+  value: unknown,
+  options?: { forceTime?: boolean }
+): string => {
+  if (!value) return '—';
+  if (options?.forceTime || hasExplicitTime(value)) {
+    return formatDateTime(value);
+  }
+  return formatDate(value);
+};
+
 /** Distance from now in friendly form, supports both past and future dates. */
 export const formatRelative = (value: unknown): string => {
   const d = safeDate(value);

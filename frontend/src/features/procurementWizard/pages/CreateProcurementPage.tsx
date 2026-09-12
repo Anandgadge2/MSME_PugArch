@@ -246,6 +246,7 @@ type Draft = {
     department: string;
     priority: 'Normal' | 'Urgent' | 'Emergency';
     estimatedValue: number;
+    discloseEstimatedCost: boolean;
     requiredByDate: string;
     deliveryLocation: string;
     isCatalogueAvailable: boolean;
@@ -370,10 +371,14 @@ const DRAFT_KEY = 'msme:guided-procurement-create:v2';
 const today = new Date().toISOString().split('T')[0];
 const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
 const nextFortnight = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
-const toDateTimeLocal = (date: Date) => date.toISOString().slice(0, 16);
+const toDateTimeLocal = (d: Date) => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 const todayDateTime = toDateTimeLocal(new Date());
 const nextWeekDateTime = toDateTimeLocal(new Date(Date.now() + 7 * 86400000));
 const nextWeekPlusOneHourDateTime = toDateTimeLocal(new Date(Date.now() + 7 * 86400000 + 60 * 60000));
+const nextFortnightDateTime = toDateTimeLocal(new Date(Date.now() + 14 * 86400000));
 
 const makeId = () => Math.random().toString(36).substring(2, 9);
 const isReverseAuctionMethod = (method: ProcurementMethodId) => method === 'REVERSE_AUCTION';
@@ -889,8 +894,19 @@ const BUYING_OPTIONS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: strin
 
 const applyMethodDefaults = (draft: Draft, method: ProcurementMethodId): Draft => {
   let updated = { ...draft, type: method };
-  if (isReverseAuctionMethod(method)) updated = syncAuctionDefaults(updated, method);
-  else if (isRateContractMethod(method)) updated = syncRateContractDefaults(updated);
+  if (isReverseAuctionMethod(method)) {
+    updated = syncAuctionDefaults(updated, method);
+  } else if (isReverseAuctionMethod(draft.type)) {
+    updated = {
+      ...updated,
+      basics: {
+        ...updated.basics,
+        isReverseAuctionNeeded: false,
+      },
+      auctionConfig: defaultAuctionConfig(method),
+    };
+  }
+  if (isRateContractMethod(method)) updated = syncRateContractDefaults(updated);
 
   const allowed = BUYING_OPTIONS_BY_METHOD[method] || [];
   if (allowed.length > 0 && !allowed.some(o => o.value === updated.basics.whatAreYouBuying)) {
@@ -954,7 +970,8 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     department: '',
     priority: 'Normal',
     estimatedValue: 0,
-    requiredByDate: nextFortnight,
+    discloseEstimatedCost: false,
+    requiredByDate: nextFortnightDateTime,
     deliveryLocation: '',
     isCatalogueAvailable: false,
     isOnlyOneVendor: false,
@@ -1016,7 +1033,7 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
   },
   schedule: {
     packetType: 'Single',
-    publishDate: today,
+    publishDate: todayDateTime,
     submissionDate: nextWeekDateTime,
     validityDays: 90,
     submissionStartDate: todayDateTime,
@@ -1024,8 +1041,8 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     clarificationDeadline: nextWeekDateTime,
     preBidMeeting: false,
     preBidDate: '',
-    technicalOpeningDate: nextWeekDateTime,
-    financialOpeningDate: nextWeekDateTime,
+    technicalOpeningDate: '',
+    financialOpeningDate: '',
     bidValidityDate: nextFortnight,
     allowWithdrawal: true,
     allowRevision: true,
@@ -1059,7 +1076,7 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     technicalCriteria: [],
   },
   approval: {
-    workflow: 'Finance + Procurement',
+    workflow: 'Single Stage (Commercial Only)',
     approver: '',
     notes: '',
   },
@@ -1351,6 +1368,7 @@ export default function CreateProcurementPage() {
             ...base.basics,
             ...(payload.basics || {}),
             estimatedValue: Number(payload.basics?.estimatedValue || res.estimatedValue || base.basics.estimatedValue || 0),
+            discloseEstimatedCost: Boolean(payload.basics?.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? (res as any)?.discloseEstimatedCost ?? false),
             deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || base.basics.deliveryLocation || ''
           },
           internal: {
@@ -1434,7 +1452,7 @@ export default function CreateProcurementPage() {
     // Step 1 Basics - Errors
     list.push({ label: 'Title is required (min 3 chars)', ok: d.basics.title.trim().length >= 3, severity: 'error', stepIdx: 1 });
     list.push({ label: 'Estimated budget must be set (> 0)', ok: d.basics.estimatedValue > 0, severity: 'error', stepIdx: 1 });
-    list.push({ label: 'Required by date is required', ok: Boolean(d.basics.requiredByDate), severity: 'error', stepIdx: 1 });
+    list.push({ label: 'Required by date & time is required', ok: Boolean(d.basics.requiredByDate), severity: 'error', stepIdx: 1 });
     list.push({ label: 'Delivery location is required', ok: d.basics.deliveryLocation.trim().length > 0, severity: 'error', stepIdx: 1 });
     const isLimitedSourcing = d.type === 'LIMITED_TENDER' || (d.type === 'RFQ' && d.rfqType === 'LIMITED');
     if (isLimitedSourcing) {
@@ -1766,7 +1784,7 @@ export default function CreateProcurementPage() {
         return false;
       }
       if (!d.basics.requiredByDate) {
-        toast.error('Required by date is required.');
+        toast.error('Required by date & time is required.');
         return false;
       }
       if (!d.basics.deliveryLocation.trim()) {
@@ -2746,9 +2764,36 @@ function BasicsStepForm({
             className={inputClass}
             placeholder="0"
           />
-          <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            Estimated budget for the procurement in INR.
-          </p>
+          <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-1 rounded-md">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+            <span>Internal Benchmark — Used for financial validation, CFA approval tier, and EMD computation.</span>
+          </div>
+
+          <div className="mt-2.5 rounded-xl border border-slate-200 bg-slate-50/80 p-3 transition-colors hover:bg-slate-50">
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={draft.basics.discloseEstimatedCost || false}
+                onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, discloseEstimatedCost: e.target.checked } }))}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/20 cursor-pointer"
+              />
+              <div className="text-xs">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                  Disclose estimated budget to participating bidders
+                  {draft.basics.discloseEstimatedCost ? (
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">Public</span>
+                  ) : (
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded">Confidential (Recommended)</span>
+                  )}
+                </span>
+                <p className="text-[10.5px] text-slate-500 mt-0.5 font-normal leading-normal">
+                  {draft.basics.discloseEstimatedCost
+                    ? "The budget estimate will be visible on the public tender view and opportunities feed."
+                    : "Recommended: Keep unchecked to prevent bid anchoring and encourage genuine market competition. Bidders only see item specs, quantity, and delivery timeline."}
+                </p>
+              </div>
+            </label>
+          </div>
         </Field>
 
         <Field label="Procurement category" required>
@@ -2787,7 +2832,35 @@ function BasicsStepForm({
         <Field label="Urgency priority">
           <select
             value={draft.basics.priority}
-            onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, priority: e.target.value as any } }))}
+            onChange={e => {
+              const newPriority = e.target.value as any;
+              updateDraft(c => {
+                let updatedDocs = c.requiredDocs;
+                if (newPriority === 'Emergency') {
+                  const hasEmergencyDoc = updatedDocs.some(
+                    d => d.name.toLowerCase().includes('emergency') || d.name.toLowerCase().includes('justification')
+                  );
+                  if (!hasEmergencyDoc) {
+                    updatedDocs = [
+                      ...updatedDocs,
+                      {
+                        id: `doc_emergency_${Date.now()}`,
+                        name: 'Emergency Approval Note',
+                        required: true,
+                        fileType: 'pdf',
+                        maxSize: 5,
+                        instructions: 'Upload official emergency procurement approval note or PAC justification.'
+                      }
+                    ];
+                  }
+                }
+                return {
+                  ...c,
+                  basics: { ...c.basics, priority: newPriority },
+                  requiredDocs: updatedDocs
+                };
+              });
+            }}
             className={inputClass}
           >
             <option value="Normal">Normal</option>
@@ -2796,10 +2869,16 @@ function BasicsStepForm({
           </select>
         </Field>
 
-        <Field label="Required by date" required>
+        <Field label="Required by Date & Time" required>
           <input
-            type="date"
-            value={draft.basics.requiredByDate}
+            type="datetime-local"
+            value={
+              draft.basics.requiredByDate
+                ? draft.basics.requiredByDate.includes('T')
+                  ? draft.basics.requiredByDate.slice(0, 16)
+                  : `${draft.basics.requiredByDate}T17:00`
+                : ''
+            }
             onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, requiredByDate: e.target.value } }))}
             className={inputClass}
           />
@@ -5434,7 +5513,43 @@ function ScheduleStepForm({
   const isRateContract = isRateContractMethod(draft.type);
 
   const updateSchedule = (key: keyof Draft['schedule'], val: any) => {
-    updateDraft(c => ({ ...c, schedule: { ...c.schedule, [key]: val } }));
+    updateDraft(c => {
+      const nextSchedule = { ...c.schedule, [key]: val };
+      if (key === 'clarificationAllowed' && !val) {
+        nextSchedule.clarificationDeadline = '';
+      }
+      let nextApproval = c.approval;
+      if (key === 'packetType') {
+        if (val === 'Single') {
+          if (!c.basics.isTechnicalEvaluationNeeded) {
+            nextSchedule.technicalOpeningDate = '';
+          }
+          nextSchedule.financialOpeningDate = '';
+          nextApproval = {
+            ...c.approval,
+            workflow: 'Single Stage (Commercial Only)'
+          };
+        } else if (val === 'Two') {
+          nextApproval = {
+            ...c.approval,
+            workflow: 'Two-Stage (Technical + Financial)'
+          };
+        }
+      }
+      if (key === 'validityDays' || key === 'submissionDate') {
+        const days = key === 'validityDays' ? Number(val) : Number(c.schedule.validityDays || 90);
+        const subDate = key === 'submissionDate' ? String(val) : String(c.schedule.submissionDate);
+        if (subDate && days > 0) {
+          try {
+            const d = new Date(subDate);
+            if (!isNaN(d.getTime())) {
+              nextSchedule.bidValidityDate = new Date(d.getTime() + days * 86400000).toISOString().slice(0, 10);
+            }
+          } catch {}
+        }
+      }
+      return { ...c, schedule: nextSchedule, approval: nextApproval };
+    });
   };
   const getMinutesBetween = (start: string, end: string): number => {
     if (!start || !end) return 0;
@@ -6431,6 +6546,7 @@ function DocumentsStepForm({
       onUpdateInstructions={handleUpdateDocInstructions}
       onUploadFile={handleUploadFile}
       onRemoveFile={handleRemoveFile}
+      isEmergencyPriority={draft.basics.priority === 'Emergency'}
     />
   );
 }
@@ -6884,6 +7000,21 @@ function PreviewPublishForm({
         />
       </div> */}
 
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Approval Workflow">
+          <select
+            value={draft.approval.workflow || (draft.schedule.packetType === 'Two' ? 'Two-Stage (Technical + Financial)' : 'Single Stage (Commercial Only)')}
+            onChange={e => updateDraft(c => ({ ...c, approval: { ...c.approval, workflow: e.target.value } }))}
+            className={inputClass}
+          >
+            <option value="Single Stage (Commercial Only)">Single Stage (Commercial Only)</option>
+            <option value="Two-Stage (Technical + Financial)">Two-Stage (Technical + Financial)</option>
+            <option value="Finance + Procurement Dual Review">Finance + Procurement Dual Review</option>
+            <option value="Department Head Sanction">Department Head Sanction</option>
+          </select>
+        </Field>
+      </div>
+
       <Field label="Approval notes / Submission Remarks">
         <textarea
           value={draft.approval.notes}
@@ -7048,9 +7179,11 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     buyerType: draft.basics.buyerType,
     whatAreYouBuying: draft.basics.whatAreYouBuying,
     estimatedValue,
+    discloseEstimatedCost: Boolean(draft.basics.discloseEstimatedCost),
     deliveryLocation,
     category: draft.basics.category,
     subCategory: draft.basics.subCategory,
+    requiredByDate: draft.basics.requiredByDate,
   };
 
   const hasReverseAuction = isReverseAuctionMethod(draft.type) || Boolean(draft.basics.isReverseAuctionNeeded);
@@ -7142,8 +7275,33 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     marketResearchOnly: draft.basics.marketResearchOnly,
   });
 
+  const isClarificationAllowed = Boolean(draft.schedule.clarificationAllowed);
+  const cleanBidValidityDate = (draft.schedule.submissionDate && draft.schedule.validityDays)
+    ? (() => {
+        try {
+          const d = new Date(draft.schedule.submissionDate);
+          if (!isNaN(d.getTime())) {
+            return new Date(d.getTime() + Number(draft.schedule.validityDays) * 86400000).toISOString().slice(0, 10);
+          }
+        } catch {}
+        return draft.schedule.bidValidityDate;
+      })()
+    : draft.schedule.bidValidityDate;
+
+  const cleanSchedule = {
+    ...draft.schedule,
+    clarificationAllowed: isClarificationAllowed,
+    clarificationDeadline: isClarificationAllowed ? (draft.schedule.clarificationDeadline || null) : null,
+    technicalOpeningDate: isTechnicalNeeded ? (draft.schedule.technicalOpeningDate || null) : null,
+    financialOpeningDate: isTwoPacket ? (draft.schedule.financialOpeningDate || null) : null,
+    bidValidityDate: cleanBidValidityDate,
+  };
+
+  const isQcbsChosen = chosenEvaluationMethod.toLowerCase().includes('qcbs') || chosenEvaluationMethod.toLowerCase().includes('weighted');
+
   const payloadJson = {
     ...draft,
+    schedule: cleanSchedule,
     allowReverseAuction: hasReverseAuction,
     serviceDetails: {
       ...draft.serviceDetails,
@@ -7154,6 +7312,10 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
       ...draft.evaluation,
       method: chosenEvaluationMethod,
       evaluationMethod: chosenEvaluationMethod,
+      techWeight: isQcbsChosen ? draft.evaluation.techWeight : null,
+      commWeight: isQcbsChosen ? draft.evaluation.commWeight : null,
+      qcbsRatio: isQcbsChosen ? (draft.evaluation as any).qcbsRatio : null,
+      minQualifyingMarks: isQcbsChosen ? draft.evaluation.minQualifyingMarks : null,
     },
     limitedTenderJustification: draft.limitedTenderJustification || draft.basics.justification || draft.internal.justification || '',
     rfqType: draft.rfqType,
@@ -7166,7 +7328,10 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     documents: mappedDocuments,
     tender,
     rules,
-    basics,
+    basics: {
+      ...basics,
+      isReverseAuctionNeeded: hasReverseAuction,
+    },
     vendors: {
       ...draft.vendors,
       invitedSellers: draft.vendors.invitedSellers || [],
@@ -7174,7 +7339,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
         ? draft.vendors.invitedSellers.length
         : (Number(draft.vendors.inviteCount) || 0)
     },
-    auctionConfig: auctionConfigPayload,
+    auctionConfig: hasReverseAuction ? auctionConfigPayload : null,
     rateContractConfig: rateContractConfigPayload,
     rateContract: rateContractConfigPayload
   };
@@ -7188,6 +7353,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     title,
     description: basics.description,
     estimatedValue,
+    discloseEstimatedCost: Boolean(draft.basics.discloseEstimatedCost),
     requiredBy: draft.basics.requiredByDate || undefined,
     draftStep,
     workflowStatus: 'DRAFT',
