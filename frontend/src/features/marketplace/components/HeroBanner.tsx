@@ -2,18 +2,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, ArrowRight, TrendingUp, ShieldCheck, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight, TrendingUp, ShieldCheck, Sparkles, FileText, Store } from 'lucide-react';
 import type { MarketplaceBanner } from '../api';
 import { DEFAULT_MARKETPLACE_BANNERS } from '../../banners/defaultBanners';
 import { BASE_URL, resolveMediaUrl } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 
 const DEFAULT_IMAGES = [
-    'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1920&q=90&auto=format&fit=crop',
-    'https://6a97e5bed601bb7bf57afe46.imgix.net/equalstock-Cz6pZG0uNCI-unsplash.jpg?w=1920&q=90&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=1920&q=90&auto=format&fit=crop',
-    'https://6a97e5bed601bb7bf57afe46.imgix.net/tommao-wang-jr1DdTyU7eA-unsplash%20(1).jpg?utm_source=unsplash&utm_medium=referral&utm_content=creditShareLink',
+    'https://storage.googleapis.com/jsgsmile1/banners/jharsuguda-steel-industry.jpg',
+    'https://storage.googleapis.com/jsgsmile1/banners/odisha-handicraft-shg.jpg',
+    'https://storage.googleapis.com/jsgsmile1/banners/vedanta-industrial-hub.jpg',
+    'https://storage.googleapis.com/jsgsmile1/banners/thermal-power-plant.jpg',
+    'https://storage.googleapis.com/jsgsmile1/banners/empowering-local-msmes.jpg',
+    'https://storage.googleapis.com/jsgsmile1/banners/digital-procurement.jpg',
 ];
+
 
 interface Props { banners: MarketplaceBanner[]; }
 
@@ -105,39 +108,56 @@ export function HeroBanner({ banners }: Props) {
 
     return (
         <section
-            className="group/hero relative overflow-hidden bg-slate-950 w-full aspect-[16/10] xs:aspect-[16/9] sm:aspect-[2/1] md:aspect-[2.2/1] lg:aspect-[2.4/1] xl:aspect-[2.6/1] 2xl:aspect-[2.8/1] min-h-[300px] xs:min-h-[330px] sm:min-h-[380px] md:min-h-[440px] lg:min-h-[480px] xl:min-h-[520px] max-h-[640px]"
-            aria-label="Hero Banner"
+            className="group/hero relative overflow-hidden bg-slate-950 w-full aspect-[16/9] min-h-[350px] xs:min-h-[370px] sm:min-h-[400px] md:min-h-[440px] lg:min-h-[480px] max-h-[580px]"
+            aria-label="Marketplace Featured Hero Banner"
+            role="region"
+            aria-roledescription="carousel"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
         >
-            {/* Background image with smooth transition */}
-            <div className="absolute inset-0 z-0 overflow-hidden bg-slate-900 select-none pointer-events-none">
+            {/* Dual-Plane Adaptive Banner: Ambient full-bleed backdrop + uncropped sharp foreground image */}
+            <div className="absolute inset-0 z-0 overflow-hidden bg-slate-950 select-none pointer-events-none">
                 {activeImageSrc ? (
-                    <img
-                        key={`${slide?.id ?? 'slide'}-${current}`}
-                        src={activeImageSrc}
-                        alt={slide?.title || 'Marketplace Hero Banner'}
-                        loading="eager"
-                        referrerPolicy="no-referrer"
-                        crossOrigin="anonymous"
-                        onError={() => {
-                            setCurrentImg(DEFAULT_IMAGES[current % DEFAULT_IMAGES.length]);
-                        }}
-                        className={`w-full h-full object-cover object-center transition-all duration-700 ease-out brightness-[1.03] contrast-[1.02] ${fading ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}
-                    />
+                    <>
+                        {/* Plane 0: Atmospheric ambient backdrop (fills 100% of banner, eliminates all black bars/gaps) */}
+                        <img
+                            key={`ambient-${slide?.id ?? 'slide'}-${current}`}
+                            src={activeImageSrc}
+                            alt=""
+                            aria-hidden="true"
+                            className={`absolute inset-0 w-full h-full object-cover object-center blur-2xl md:blur-3xl scale-110 opacity-55 brightness-75 transition-opacity duration-700 ${
+                                fading ? 'opacity-0' : 'opacity-55'
+                            }`}
+                        />
+
+                        {/* Plane 1: Featured Sharp Image (100% visible, uncropped, responsive across all screen sizes) */}
+                        <img
+                            key={`featured-${slide?.id ?? 'slide'}-${current}`}
+                            src={activeImageSrc}
+                            alt={slide?.title || 'Marketplace Hero Banner'}
+                            loading="eager"
+                            referrerPolicy="no-referrer"
+                            onError={() => {
+                                setCurrentImg(DEFAULT_IMAGES[current % DEFAULT_IMAGES.length]);
+                            }}
+                            className={`absolute inset-0 w-full h-full object-contain object-center md:object-right transition-all duration-700 ease-out brightness-[1.02] contrast-[1.02] drop-shadow-2xl ${
+                                fading ? 'opacity-0 scale-98' : 'opacity-100 scale-100'
+                            }`}
+                        />
+                    </>
                 ) : null}
 
-                {/* Soft, localized text readability gradient on the left side only - right side remains 100% bright and clearly visible */}
-                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/45 via-40% to-transparent w-full sm:w-[70%] lg:w-[50%] pointer-events-none" />
-                <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-slate-950/30 to-transparent pointer-events-none" />
+                {/* Text readability gradients (calibrated for WCAG AA contrast on both mobile & desktop) */}
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/65 to-slate-950/25 md:bg-gradient-to-r md:from-slate-950/95 md:via-slate-950/60 md:to-transparent w-full md:w-[65%] lg:w-[55%] pointer-events-none" />
+                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950/40 to-transparent pointer-events-none" />
             </div>
 
             {/* Side Navigation Arrow - Left */}
             <button
                 type="button"
                 onClick={prev}
-                className="hidden md:flex absolute left-3 lg:left-6 top-1/2 -translate-y-1/2 z-30 h-9 w-9 lg:h-11 lg:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-[#c8a45c] hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-0 group-hover/hero:opacity-100 focus:opacity-100"
+                className="hidden md:flex absolute left-3 lg:left-6 top-1/2 -translate-y-1/2 z-30 h-9 w-9 lg:h-11 lg:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-[#c8a45c] hover:bg-black/75 active:scale-95 group/arrow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c8a45c] opacity-0 group-hover/hero:opacity-100 focus:opacity-100"
                 aria-label="Previous Banner Slide"
             >
                 <ChevronLeft className="h-4 w-4 lg:h-5 lg:w-5 transition-transform duration-200 group-hover/arrow:-translate-x-0.5" />
@@ -147,38 +167,60 @@ export function HeroBanner({ banners }: Props) {
             <button
                 type="button"
                 onClick={next}
-                className="hidden md:flex absolute right-3 lg:right-6 top-1/2 -translate-y-1/2 z-30 h-9 w-9 lg:h-11 lg:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-[#c8a45c] hover:bg-black/75 active:scale-95 group/arrow focus:outline-none opacity-0 group-hover/hero:opacity-100 focus:opacity-100"
+                className="hidden md:flex absolute right-3 lg:right-6 top-1/2 -translate-y-1/2 z-30 h-9 w-9 lg:h-11 lg:w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md shadow-2xl transition-all duration-300 hover:scale-110 hover:border-[#c8a45c] hover:bg-black/75 active:scale-95 group/arrow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c8a45c] opacity-0 group-hover/hero:opacity-100 focus:opacity-100"
                 aria-label="Next Banner Slide"
             >
                 <ChevronRight className="h-4 w-4 lg:h-5 lg:w-5 transition-transform duration-200 group-hover/arrow:translate-x-0.5" />
             </button>
-            {/* FLOATING CTA OVERLAY (Top Right) */}
-            <div className="absolute top-3 right-3 sm:top-4 sm:right-5 md:top-5 md:right-6 lg:top-6 lg:right-8 xl:top-7 xl:right-10 z-30 flex flex-col xs:flex-row items-end xs:items-center gap-2 sm:gap-2.5 pointer-events-auto">
+
+            {/* Desktop Floating CTA Overlay (Top Right) - Hidden on mobile to prevent text collisions */}
+            <div className="hidden sm:flex absolute sm:top-4 sm:right-5 md:top-5 md:right-6 lg:top-6 lg:right-8 xl:top-7 xl:right-10 z-30 flex-row items-center gap-2 sm:gap-2.5 pointer-events-auto">
                 <button 
+                    type="button"
                     onClick={handlePostRequirement} 
-                    className="group inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full border border-white/40 bg-black/50 backdrop-blur-md text-white text-[11px] sm:text-xs lg:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/70 active:scale-95 transition-all shadow-lg shrink-0"
+                    className="group inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full border border-white/40 bg-black/50 backdrop-blur-md text-white text-[11px] sm:text-xs lg:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/70 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#c8a45c] transition-all shadow-lg shrink-0"
                 >
+                    <FileText className="h-3.5 w-3.5 text-[#c8a45c]" aria-hidden="true" />
                     <span>Post Requirement</span>
                 </button>
                 <button 
+                    type="button"
                     onClick={handleStartSelling} 
-                    className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] sm:text-xs lg:text-sm font-black active:scale-95 transition-all shadow-xl shadow-black/30 hover:shadow-[0_0_20px_rgba(200,164,92,0.4)] shrink-0"
+                    className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-9 lg:h-10 px-3 sm:px-4 lg:px-5 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] sm:text-xs lg:text-sm font-black active:scale-95 focus-visible:ring-2 focus-visible:ring-[#0b2447] transition-all shadow-xl shadow-black/30 hover:shadow-[0_0_20px_rgba(200,164,92,0.4)] shrink-0"
                 >
-                    {/* Shimmer light sweep */}
                     <span className="absolute inset-0 -translate-x-full hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/30 to-transparent pointer-events-none" />
+                    <Store className="h-3.5 w-3.5 text-[#0b2447]" aria-hidden="true" />
                     <span>Start Selling</span>
                 </button>
             </div>
 
             {/* Hero Main Content Container */}
-            <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-6 sm:py-10 md:py-12 pb-10 sm:pb-14 lg:pb-16">
-                <div className="w-full max-w-xl lg:max-w-2xl">
+            <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-4 sm:py-8 md:py-10 pb-12 sm:pb-14 lg:pb-16 flex flex-col justify-center min-h-[350px] xs:min-h-[370px] sm:min-h-[390px] md:min-h-[430px]">
+                <div className="w-full max-w-full sm:max-w-xl lg:max-w-2xl">
                     <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
                         
-                     
+                        {/* Mobile In-flow Quick Action Toolbar (Top row, cleanly spaced, never overlaps title) */}
+                        <div className="flex sm:hidden items-center gap-2 mb-3 z-20">
+                            <button 
+                                type="button"
+                                onClick={handlePostRequirement} 
+                                className="inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full border border-white/40 bg-black/60 backdrop-blur-md text-white text-[11px] font-bold hover:bg-white/20 active:scale-95 transition-all shadow-md shrink-0"
+                            >
+                                <FileText className="h-3 w-3 text-[#c8a45c]" aria-hidden="true" />
+                                <span>Post Requirement</span>
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={handleStartSelling} 
+                                className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] font-black active:scale-95 transition-all shadow-md shrink-0"
+                            >
+                                <Store className="h-3 w-3 text-[#0b2447]" aria-hidden="true" />
+                                <span>Start Selling</span>
+                            </button>
+                        </div>
 
-                        {/* Title */}
-                        <h1 className="mb-2 sm:mb-3 text-lg xs:text-xl sm:text-3xl md:text-4xl lg:text-[2.75rem] 2xl:text-5xl font-black leading-tight sm:leading-[1.12] tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+                        {/* Title: Unobstructed, full width on mobile */}
+                        <h1 className="mb-2 sm:mb-3 text-xl xs:text-2xl sm:text-3xl md:text-4xl lg:text-[2.65rem] 2xl:text-5xl font-black leading-tight sm:leading-[1.12] tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] max-w-full">
                             {(slide?.title || 'MSME Marketplace').split('\n').map((line, i) => (
                                 <React.Fragment key={i}>
                                     {i > 0 && (
@@ -194,18 +236,18 @@ export function HeroBanner({ banners }: Props) {
 
                         {/* Subtitle */}
                         {slide.subtitle && (
-                            <p className="mb-3.5 sm:mb-5 text-[11px] xs:text-xs sm:text-sm md:text-base leading-relaxed text-slate-100/90 font-medium drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] max-w-md sm:max-w-xl line-clamp-2 sm:line-clamp-3">
+                            <p className="mb-3.5 sm:mb-5 text-xs sm:text-sm md:text-base leading-relaxed text-slate-100/90 font-medium drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] max-w-md sm:max-w-xl line-clamp-2 sm:line-clamp-3">
                                 {slide.subtitle}
                             </p>
                         )}
 
                         {/* Responsive Action Buttons */}
-                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-0.5">
                             {ctaText && ctaLink && (
                                 <Link
                                     href={ctaLink}
                                     onClick={(e) => handleCtaClick(e, ctaLink)}
-                                    className="group relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-4 sm:px-6 rounded-full bg-white text-[#0b2447] text-[11px] sm:text-xs md:text-sm font-black hover:bg-slate-100 active:scale-95 transition-all shadow-xl shadow-black/40 hover:shadow-[0_0_25px_rgba(200,164,92,0.4)] shrink-0"
+                                    className="group relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-4 sm:px-6 rounded-full bg-white text-[#0b2447] text-xs sm:text-xs md:text-sm font-black hover:bg-slate-100 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#0b2447] transition-all shadow-xl shadow-black/40 hover:shadow-[0_0_25px_rgba(200,164,92,0.4)] shrink-0"
                                 >
                                     <span className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/20 to-transparent pointer-events-none" />
                                     <span>{ctaText}</span>
@@ -215,7 +257,7 @@ export function HeroBanner({ banners }: Props) {
 
                             <Link
                                 href="/login"
-                                className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-3.5 sm:px-5 rounded-full border border-white/40 bg-black/40 backdrop-blur-md text-white text-[11px] sm:text-xs md:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/60 active:scale-95 transition-all shadow-lg shrink-0"
+                                className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-3.5 sm:px-5 rounded-full border border-white/40 bg-black/40 backdrop-blur-md text-white text-xs sm:text-xs md:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/60 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#c8a45c] transition-all shadow-lg shrink-0"
                             >
                                 Login to Portal
                             </Link>

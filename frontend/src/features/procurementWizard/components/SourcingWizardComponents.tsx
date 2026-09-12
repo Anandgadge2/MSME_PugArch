@@ -3,6 +3,7 @@
 import React from 'react';
 import {
   Check,
+  CheckCircle2,
   ChevronRight,
   ClipboardList,
   FileText,
@@ -707,6 +708,7 @@ interface DocumentRequirementBuilderProps {
   onUpdateInstructions?: (id: string, instructions: string) => void;
   onUploadFile?: (id: string, file: File) => Promise<void>;
   onRemoveFile?: (id: string) => void;
+  isEmergencyPriority?: boolean;
 }
 
 export function DocumentRequirementBuilder({
@@ -716,12 +718,17 @@ export function DocumentRequirementBuilder({
   onAddCustomDoc,
   onUpdateInstructions,
   onUploadFile,
-  onRemoveFile
+  onRemoveFile,
+  isEmergencyPriority
 }: DocumentRequirementBuilderProps) {
   const [docName, setDocName] = React.useState('');
   const [docInstructions, setDocInstructions] = React.useState('');
   const [docReq, setDocReq] = React.useState(true);
   const [uploadingIds, setUploadingIds] = React.useState<Record<string, boolean>>({});
+
+  const hasEmergencyDoc = documents.some(
+    doc => doc.name.toLowerCase().includes('emergency') || doc.name.toLowerCase().includes('justification')
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -733,6 +740,36 @@ export function DocumentRequirementBuilder({
 
   return (
     <div className="space-y-4">
+      {isEmergencyPriority && (
+        hasEmergencyDoc ? (
+          <div role="status" aria-live="polite" className="p-3.5 sm:p-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" aria-hidden="true" />
+            <div className="text-xs">
+              <span className="font-bold text-emerald-950">Emergency Procurement Compliance Satisfied:</span>
+              <span className="text-emerald-800 ml-1">An emergency approval or justification document is included in your document checklist.</span>
+            </div>
+          </div>
+        ) : (
+          <div role="status" aria-live="polite" className="p-3.5 sm:p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <h4 className="text-xs font-bold text-amber-950">Emergency Procurement Priority Selected</h4>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  Because this procurement is marked as <strong>Emergency</strong> priority, an <strong>Emergency Approval Note</strong> or <strong>Justification Letter</strong> is recommended in the checklist.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onAddCustomDoc('Emergency Approval Note', true, 'Upload official emergency procurement approval note or PAC justification.')}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shrink-0 shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1 cursor-pointer"
+            >
+              + Add Emergency Approval Doc
+            </button>
+          </div>
+        )
+      )}
       <form onSubmit={handleSubmit} className="flex flex-col md:flex-row md:items-end justify-between gap-3 border border-slate-200 rounded-xl p-3 sm:p-4 bg-slate-50/50">
         <label className="w-full md:w-5/12 block space-y-1">
           <span className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Document Name</span>

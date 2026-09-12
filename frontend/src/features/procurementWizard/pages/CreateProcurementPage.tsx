@@ -1024,8 +1024,8 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     clarificationDeadline: nextWeekDateTime,
     preBidMeeting: false,
     preBidDate: '',
-    technicalOpeningDate: nextWeekDateTime,
-    financialOpeningDate: nextWeekDateTime,
+    technicalOpeningDate: '',
+    financialOpeningDate: '',
     bidValidityDate: nextFortnight,
     allowWithdrawal: true,
     allowRevision: true,
@@ -2787,7 +2787,35 @@ function BasicsStepForm({
         <Field label="Urgency priority">
           <select
             value={draft.basics.priority}
-            onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, priority: e.target.value as any } }))}
+            onChange={e => {
+              const newPriority = e.target.value as any;
+              updateDraft(c => {
+                let updatedDocs = c.requiredDocs;
+                if (newPriority === 'Emergency') {
+                  const hasEmergencyDoc = updatedDocs.some(
+                    d => d.name.toLowerCase().includes('emergency') || d.name.toLowerCase().includes('justification')
+                  );
+                  if (!hasEmergencyDoc) {
+                    updatedDocs = [
+                      ...updatedDocs,
+                      {
+                        id: `doc_emergency_${Date.now()}`,
+                        name: 'Emergency Approval Note',
+                        required: true,
+                        fileType: 'pdf',
+                        maxSize: 5,
+                        instructions: 'Upload official emergency procurement approval note or PAC justification.'
+                      }
+                    ];
+                  }
+                }
+                return {
+                  ...c,
+                  basics: { ...c.basics, priority: newPriority },
+                  requiredDocs: updatedDocs
+                };
+              });
+            }}
             className={inputClass}
           >
             <option value="Normal">Normal</option>
@@ -5434,7 +5462,31 @@ function ScheduleStepForm({
   const isRateContract = isRateContractMethod(draft.type);
 
   const updateSchedule = (key: keyof Draft['schedule'], val: any) => {
-    updateDraft(c => ({ ...c, schedule: { ...c.schedule, [key]: val } }));
+    updateDraft(c => {
+      const nextSchedule = { ...c.schedule, [key]: val };
+      if (key === 'clarificationAllowed' && !val) {
+        nextSchedule.clarificationDeadline = '';
+      }
+      if (key === 'packetType' && val === 'Single') {
+        if (!c.basics.isTechnicalEvaluationNeeded) {
+          nextSchedule.technicalOpeningDate = '';
+        }
+        nextSchedule.financialOpeningDate = '';
+      }
+      if (key === 'validityDays' || key === 'submissionDate') {
+        const days = key === 'validityDays' ? Number(val) : Number(c.schedule.validityDays || 90);
+        const subDate = key === 'submissionDate' ? String(val) : String(c.schedule.submissionDate);
+        if (subDate && days > 0) {
+          try {
+            const d = new Date(subDate);
+            if (!isNaN(d.getTime())) {
+              nextSchedule.bidValidityDate = new Date(d.getTime() + days * 86400000).toISOString().slice(0, 10);
+            }
+          } catch {}
+        }
+      }
+      return { ...c, schedule: nextSchedule };
+    });
   };
   const getMinutesBetween = (start: string, end: string): number => {
     if (!start || !end) return 0;
@@ -6431,6 +6483,7 @@ function DocumentsStepForm({
       onUpdateInstructions={handleUpdateDocInstructions}
       onUploadFile={handleUploadFile}
       onRemoveFile={handleRemoveFile}
+      isEmergencyPriority={draft.basics.priority === 'Emergency'}
     />
   );
 }
@@ -7142,8 +7195,33 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     marketResearchOnly: draft.basics.marketResearchOnly,
   });
 
+  const isClarificationAllowed = Boolean(draft.schedule.clarificationAllowed);
+  const cleanBidValidityDate = (draft.schedule.submissionDate && draft.schedule.validityDays)
+    ? (() => {
+        try {
+          const d = new Date(draft.schedule.submissionDate);
+          if (!isNaN(d.getTime())) {
+            return new Date(d.getTime() + Number(draft.schedule.validityDays) * 86400000).toISOString().slice(0, 10);
+          }
+        } catch {}
+        return draft.schedule.bidValidityDate;
+      })()
+    : draft.schedule.bidValidityDate;
+
+  const cleanSchedule = {
+    ...draft.schedule,
+    clarificationAllowed: isClarificationAllowed,
+    clarificationDeadline: isClarificationAllowed ? (draft.schedule.clarificationDeadline || null) : null,
+    technicalOpeningDate: isTechnicalNeeded ? (draft.schedule.technicalOpeningDate || null) : null,
+    financialOpeningDate: isTwoPacket ? (draft.schedule.financialOpeningDate || null) : null,
+    bidValidityDate: cleanBidValidityDate,
+  };
+
+  const isQcbsChosen = chosenEvaluationMethod.toLowerCase().includes('qcbs') || chosenEvaluationMethod.toLowerCase().includes('weighted');
+
   const payloadJson = {
     ...draft,
+    schedule: cleanSchedule,
     allowReverseAuction: hasReverseAuction,
     serviceDetails: {
       ...draft.serviceDetails,
@@ -7154,6 +7232,10 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
       ...draft.evaluation,
       method: chosenEvaluationMethod,
       evaluationMethod: chosenEvaluationMethod,
+      techWeight: isQcbsChosen ? draft.evaluation.techWeight : null,
+      commWeight: isQcbsChosen ? draft.evaluation.commWeight : null,
+      qcbsRatio: isQcbsChosen ? (draft.evaluation as any).qcbsRatio : null,
+      minQualifyingMarks: isQcbsChosen ? draft.evaluation.minQualifyingMarks : null,
     },
     limitedTenderJustification: draft.limitedTenderJustification || draft.basics.justification || draft.internal.justification || '',
     rfqType: draft.rfqType,

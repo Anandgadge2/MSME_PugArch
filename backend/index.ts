@@ -63,6 +63,7 @@ import {
 } from './src/services/financial-workflow.service.js';
 import { idempotencyKeyFromRequest, withIdempotency } from './src/services/idempotency.service.js';
 import paymentRoutes from './src/modules/payments/payment.routes.js';
+import { seedBannersIfEmpty } from './src/services/banner-seed.service.js';
 import {
   approveMilestone,
   completeMilestone,
@@ -3734,28 +3735,13 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
       if (!requiredDocs.includes(docType)) requiredDocs.push(docType);
     };
 
-    if (!isHerShg && Array.isArray(regDetails.selectedDocuments)) {
-      for (const docType of regDetails.selectedDocuments) {
-        if (typeof docType === 'string' && docType.trim()) addRequiredDoc(docType.trim());
-      }
-    }
-
     if (!isHerShg) {
       addRequiredDoc('udyam_certificate');
     }
 
-    if (!isHerShg && (profile.isStartup || String(profile.organizationType || regDetails.businessType).toLowerCase() === 'startup')) {
-      addRequiredDoc('dipp_certificate');
-    }
-
-    const hasGstin = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('GST_REGISTERED');
+    const hasGstin = (Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('GST_REGISTERED')) || Boolean(regDetails.gstin);
     if (!isHerShg && hasGstin) {
       addRequiredDoc('gst_certificate');
-    }
-
-    const hasNsic = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('NSIC_REGISTERED');
-    if (!isHerShg && hasNsic) {
-      addRequiredDoc('nsic_certificate');
     }
 
     if (!isHerShg && (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber)) {
@@ -3784,7 +3770,13 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
           pancopy: ['pancopy', 'pancard', 'pancardgrouprepresentative'],
           pancardgrouprepresentative: ['pancopy', 'pancard', 'pancardgrouprepresentative'],
           udyamcertificate: ['udyamcertificate', 'udyamregistrationcertificate'],
-          udyamregistrationcertificate: ['udyamcertificate', 'udyamregistrationcertificate']
+          udyamregistrationcertificate: ['udyamcertificate', 'udyamregistrationcertificate'],
+          isocertificate: ['isocertificate', 'isocertification', 'isocertified', 'iso'],
+          isocertified: ['isocertificate', 'isocertification', 'isocertified', 'iso'],
+          nsiccertificate: ['nsiccertificate', 'nsicregistrationcertificate', 'nsicregistered', 'nsic'],
+          nsicregistrationcertificate: ['nsiccertificate', 'nsicregistrationcertificate', 'nsicregistered', 'nsic'],
+          itr3years: ['itr3years', 'incometaxreturns', 'incometaxreturnsoflast3years', 'itr'],
+          dippcertificate: ['dippcertificate', 'dippregistrationcertificate', 'dipp', 'startupcertificate']
         };
         return (aliases[normR] || []).includes(normU) || (aliases[normU] || []).includes(normR);
       });
@@ -3842,6 +3834,7 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
         bank_passbook: 'Bank Passbook / Cancelled Cheque',
         udyam_certificate: 'Udyam Certificate',
         nsic_certificate: 'NSIC Registration Certificate',
+        iso_certificate: 'ISO Certificate',
         itr_3_years: 'Income Tax Returns of Last 3 Years',
         aadhaar_card: 'Aadhaar of Authorized Person',
         business_registration_proof: 'Business Registration Proof (CIN/Shop Act)',
@@ -6790,6 +6783,11 @@ export async function startServer() {
   startListening(PORT);
 
   const databaseAvailable = await checkStartupDatabaseConnection();
+  if (databaseAvailable) {
+    void seedBannersIfEmpty().catch((err: any) => {
+      logger.warn({ context: 'BannerSeeder', err: err?.message || err }, 'Banner auto-seed check skipped or failed');
+    });
+  }
   
   const auctionFinalizerInterval = setInterval(() => {
     void finalizeEndedAuctionsJob().catch(logAuctionFinalizerFailure);

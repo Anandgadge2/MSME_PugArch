@@ -1672,8 +1672,8 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
       remarks: 'Created from guided procurement wizard',
       startTime: config.auctionStartDateTime,
       endTime: config.auctionEndDateTime,
-      status: 'active',
-      statusEnum: 'LIVE'
+      status: (config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' || Boolean(config.triggerConfiguration?.preBidStageRequired) || (config.auctionStartDateTime && new Date(config.auctionStartDateTime).getTime() > Date.now())) ? 'pending' : 'active',
+      statusEnum: (config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' || Boolean(config.triggerConfiguration?.preBidStageRequired) || (config.auctionStartDateTime && new Date(config.auctionStartDateTime).getTime() > Date.now())) ? 'SCHEDULED' : 'LIVE'
     }
   });
 
@@ -1782,8 +1782,8 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   const canonicalMethod = String(draftBody.canonicalMethod || requirement.canonicalMethod || methodSlug.toUpperCase()).toUpperCase();
   const isLimitedRfq = methodSlug === 'rfq' && String(payload.rfqType || '').toUpperCase() === 'LIMITED';
   const bidType = isLimitedRfq ? 'LIMITED_TENDER' : canonicalMethod;
-  const startDate = rateContractConfig.periodStartDate || tender.bidStartDate || schedule.bidStartDate || schedule.publishDate || requirement.createdAt || new Date();
-  const endDate = rateContractConfig.periodEndDate || requirement.requiredBy || tender.bidClosingDate || schedule.submissionDate || schedule.bidClosingDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const startDate = rateContractConfig.periodStartDate || schedule.publishDate || schedule.submissionStartDate || schedule.bidStartDate || tender.bidStartDate || requirement.createdAt || new Date();
+  const endDate = rateContractConfig.periodEndDate || schedule.submissionDate || schedule.submissionDeadline || schedule.bidClosingDate || tender.bidClosingDate || requirement.requiredBy || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   const existing = await db.procurementBid.findFirst({
     where: {
@@ -1831,7 +1831,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     isEmdRequired: Boolean(terms.emdRequired || tender.emdRequired),
     emdAmount: terms.emdAmount || tender.emdAmount || null,
     documentFee: tender.documentFee || null,
-    allowClarification: true,
+    allowClarification: schedule.clarificationAllowed !== false && schedule.clarificationAllowed !== 'false' && schedule.allowClarifications !== false,
     allowReverseAuction: methodSlug === 'bid-with-reverse-auction' || Boolean(payload.allowReverseAuction || payload.basics?.isReverseAuctionNeeded || payload.rules?.auctionConfig || payload.auctionConfig),
     allowBoq: methodSlug === 'boq-based-bid',
     packetType: String(schedule.packetType || '').toLowerCase().includes('two') || methodSlug === 'two-packet-bid' ? 'TWO_PACKET' : 'SINGLE_PACKET',
@@ -2439,28 +2439,13 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
       if (!requiredDocs.includes(docType)) requiredDocs.push(docType);
     };
 
-    if (!isShg && Array.isArray(regDetails.selectedDocuments)) {
-      for (const docType of regDetails.selectedDocuments) {
-        if (typeof docType === 'string' && docType.trim()) addRequiredDoc(docType.trim());
-      }
-    }
-
     if (!isShg) {
       addRequiredDoc('udyam_certificate');
     }
 
-    if (!isShg && (profile.isStartup || String(profile.organizationType || regDetails.businessType).toLowerCase() === 'startup')) {
-      addRequiredDoc('dipp_certificate');
-    }
-
-    const hasGstin = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('GST_REGISTERED');
+    const hasGstin = (Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('GST_REGISTERED')) || Boolean(regDetails.gstin);
     if (!isShg && hasGstin) {
       addRequiredDoc('gst_certificate');
-    }
-
-    const hasNsic = Array.isArray(profile.registrationTypes) && profile.registrationTypes.includes('NSIC_REGISTERED');
-    if (!isShg && hasNsic) {
-      addRequiredDoc('nsic_certificate');
     }
 
     if (!isShg && (regDetails.verificationMethod === 'Aadhaar' || regDetails.aadhaarNumber)) {
@@ -2481,9 +2466,21 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
         if (normU === normR) return true;
         const aliases: Record<string, string[]> = {
           bankpassbook: ['bankpassbook', 'bankpassbookcancelledcheque'],
+          bankpassbookcancelledcheque: ['bankpassbook', 'bankpassbookcancelledcheque'],
           leaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard', 'aadhaarcard'],
+          groupleaderaadhaar: ['leaderaadhaar', 'groupleaderaadhaar', 'groupleaderaadhaarcard', 'aadhaarcard'],
           registrationcertificate: ['registrationcertificate', 'shgregistrationcertificate'],
-          udyamcertificate: ['udyamcertificate', 'udyamregistrationcertificate']
+          shgregistrationcertificate: ['registrationcertificate', 'shgregistrationcertificate'],
+          pancopy: ['pancopy', 'pancard', 'pancardgrouprepresentative'],
+          pancardgrouprepresentative: ['pancopy', 'pancard', 'pancardgrouprepresentative'],
+          udyamcertificate: ['udyamcertificate', 'udyamregistrationcertificate'],
+          udyamregistrationcertificate: ['udyamcertificate', 'udyamregistrationcertificate'],
+          isocertificate: ['isocertificate', 'isocertification', 'isocertified', 'iso'],
+          isocertified: ['isocertificate', 'isocertification', 'isocertified', 'iso'],
+          nsiccertificate: ['nsiccertificate', 'nsicregistrationcertificate', 'nsicregistered', 'nsic'],
+          nsicregistrationcertificate: ['nsiccertificate', 'nsicregistrationcertificate', 'nsicregistered', 'nsic'],
+          itr3years: ['itr3years', 'incometaxreturns', 'incometaxreturnsoflast3years', 'itr'],
+          dippcertificate: ['dippcertificate', 'dippregistrationcertificate', 'dipp', 'startupcertificate']
         };
         return (aliases[normR] || []).includes(normU) || (aliases[normU] || []).includes(normR);
       });
@@ -2518,6 +2515,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
         aadhaar_card: 'Aadhaar of Authorized Person',
         business_registration_proof: 'Business Registration Proof (CIN/Shop Act)',
         dipp_certificate: 'DIPP Certificate',
+        iso_certificate: 'ISO Certificate',
         itr_3_years: 'Income Tax Returns of Last 3 Years',
         nsic_certificate: 'NSIC Registration Certificate',
         leader_aadhaar: 'Group Leader Aadhaar Card',

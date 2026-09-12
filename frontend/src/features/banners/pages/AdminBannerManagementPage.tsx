@@ -13,8 +13,12 @@ import {
   Sparkles,
   Trash2,
   UploadCloud,
-  X
+  X,
+  AlertCircle,
+  CheckCircle2,
+  Scissors
 } from 'lucide-react';
+import { validateBannerFile, validateBannerUrl, cropImageTo16by9, BANNER_ASPECT_RATIO } from '../utils/bannerValidation';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, LoadingState } from '../../shared/FeatureStates';
@@ -114,6 +118,10 @@ export default function AdminBannerManagementPage() {
   const [editingBanner, setEditingBanner] = useState<BannerRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [validationError, setValidationError] = useState('');
+  const [validationSuccess, setValidationSuccess] = useState('');
+  const [pendingInvalidFile, setPendingInvalidFile] = useState<File | null>(null);
+  const [isCropping, setIsCropping] = useState(false);
 
   const query = useQuery({
     queryKey: ['admin-banners', statusFilter],
@@ -177,6 +185,9 @@ export default function AdminBannerManagementPage() {
     setForm(initialForm);
     setIsModalOpen(true);
     setMessage('');
+    setValidationError('');
+    setValidationSuccess('');
+    setPendingInvalidFile(null);
   };
 
   const openEditModal = (banner: BannerRecord) => {
@@ -197,18 +208,15 @@ export default function AdminBannerManagementPage() {
     });
     setIsModalOpen(true);
     setMessage('');
+    setValidationError('');
+    setValidationSuccess('');
+    setPendingInvalidFile(null);
   };
 
-  const uploadImageFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setMessage('Please upload a valid JPG, PNG, WEBP, or SVG image.');
-      return;
-    }
-
+  const executeUpload = async (file: File, ratioInfo: string) => {
     setUploading(true);
     setMessage('');
+    setValidationError('');
     try {
       const optimized = await compressImage(file, 1920, 1080, 0.85);
       const body = new FormData();
@@ -226,17 +234,54 @@ export default function AdminBannerManagementPage() {
       if (!publicUrl) throw new Error('Upload completed but no image URL was returned.');
 
       setForm(prev => ({ ...prev, imageUrl: publicUrl }));
+      setValidationSuccess(`Verified 16:9 Banner (${ratioInfo}) uploaded successfully to GCP Storage!`);
       setMessage('Image uploaded directly to GCP Storage!');
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to upload banner image');
+      setValidationError(err instanceof Error ? err.message : 'Unable to upload banner image');
     } finally {
       setUploading(false);
-      event.target.value = '';
     }
   };
 
-  const handleFormSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const uploadImageFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setValidationError('');
+    setValidationSuccess('');
+    setPendingInvalidFile(null);
+
+    // Compulsory 16:9 aspect ratio and resolution validation
+    const check = await validateBannerFile(file);
+    if (!check.valid) {
+      setValidationError(check.error || 'Invalid banner aspect ratio.');
+      setPendingInvalidFile(file);
+      event.target.value = '';
+      return;
+    }
+
+    await executeUpload(file, `${check.width}×${check.height}px (16:9)`);
+    event.target.value = '';
+  };
+
+  const handleAutoCropAndUpload = async () => {
+    if (!pendingInvalidFile) return;
+    setIsCropping(true);
+    setValidationError('');
+    try {
+      const cropped = await cropImageTo16by9(pendingInvalidFile);
+      setPendingInvalidFile(null);
+      await executeUpload(cropped, 'Auto-cropped to 1920×1080px (16:9)');
+    } catch (err: any) {
+      setValidationError(err instanceof Error ? err.message : 'Failed to auto-crop image to 16:9');
+    } finally {
+      setIsCropping(false);
+    }
+  };
+
+  const handleFormSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setValidationError('');
     if (!form.title.trim()) {
       setMessage('Headline Title is required.');
       return;
@@ -245,6 +290,16 @@ export default function AdminBannerManagementPage() {
       setMessage('Please upload a banner image or provide an image URL.');
       return;
     }
+
+    // Compulsory 16:9 aspect ratio check for manual URL input
+    if (form.imageUrl.trim().startsWith('http')) {
+      const urlCheck = await validateBannerUrl(form.imageUrl.trim());
+      if (!urlCheck.valid) {
+        setValidationError(urlCheck.error || 'Image URL does not match compulsory 16:9 aspect ratio.');
+        return;
+      }
+    }
+
     saveMutation.mutate(form);
   };
 
@@ -379,16 +434,66 @@ export default function AdminBannerManagementPage() {
             {/* Scrollable Form Body */}
             <form onSubmit={handleFormSubmit} className="flex flex-1 flex-col overflow-hidden">
               <div className="flex-1 space-y-3.5 overflow-y-auto p-5">
+                {/* Compulsory 16:9 Aspect Ratio Guideline Box */}
+                <div className="rounded-xl border border-blue-200/80 bg-blue-50/70 p-3 text-xs">
+                  <div className="flex items-center gap-1.5 font-black text-[#12335f]">
+                    <Sparkles className="h-4 w-4 text-amber-500" />
+                    <span>Compulsory Aspect Ratio: 16:9 (1920 × 1080 px)</span>
+                  </div>
+                  <p className="mt-1 text-[11px] font-medium text-slate-600 leading-relaxed">
+                    All marketplace hero banners must strictly have a <strong>16:9 widescreen aspect ratio</strong> (recommended 1920×1080 px, minimum 1280×720 px). Images with other aspect ratios will be blocked to ensure every banner displays at the exact same size.
+                  </p>
+                </div>
+
+                {/* Validation Error Alert with Auto-Crop Option */}
+                {validationError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50/95 p-3.5 text-xs text-red-900 shadow-sm animate-in fade-in">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                      <div className="space-y-2 flex-1">
+                        <p className="font-bold text-red-950 leading-snug">{validationError}</p>
+                        {pendingInvalidFile && (
+                          <div className="flex items-center gap-2 pt-1">
+                            <Button
+                              type="button"
+                              onClick={handleAutoCropAndUpload}
+                              disabled={isCropping || uploading}
+                              size="sm"
+                              className="h-8 gap-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-sm"
+                            >
+                              <Scissors className="h-3.5 w-3.5" />
+                              <span>{isCropping ? 'Cropping to 16:9...' : 'Auto-Crop to 16:9 (1920×1080) & Upload'}</span>
+                            </Button>
+                            <span className="text-[10px] text-red-700 font-semibold">Center-crops to exact 16:9 widescreen</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Validation Success Feedback */}
+                {validationSuccess && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 text-xs text-emerald-900 flex items-center gap-2 animate-in fade-in">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span className="font-bold">{validationSuccess}</span>
+                  </div>
+                )}
+
                 {/* Image Preview & Upload Section */}
                 <div>
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                      Banner Image (GCP Cloud Storage)
+                      Banner Image Preview (16:9 Widescreen)
                     </span>
                     {form.imageUrl && (
                       <button
                         type="button"
-                        onClick={() => setForm(prev => ({ ...prev, imageUrl: '' }))}
+                        onClick={() => {
+                          setForm(prev => ({ ...prev, imageUrl: '' }));
+                          setValidationSuccess('');
+                          setValidationError('');
+                        }}
                         className="text-[11px] font-bold text-red-600 hover:underline"
                       >
                         Remove Image
@@ -396,8 +501,8 @@ export default function AdminBannerManagementPage() {
                     )}
                   </div>
                   
-                  {/* Compact Preview Box */}
-                  <div className="relative h-32 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-inner">
+                  {/* Exact 16:9 Preview Box */}
+                  <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-inner">
                     {form.imageUrl ? (
                       <img
                         src={imageSrc(form.imageUrl)}
@@ -407,13 +512,17 @@ export default function AdminBannerManagementPage() {
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
-                        <ImagePlus className="h-7 w-7 text-slate-500" />
-                        <span className="text-[11px] font-bold">No image selected</span>
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-slate-400 p-4 text-center">
+                        <ImagePlus className="h-8 w-8 text-slate-500" />
+                        <span className="text-xs font-bold">No 16:9 image selected</span>
+                        <span className="text-[10px] text-slate-500">Requires 16:9 aspect ratio (1920 × 1080 px)</span>
                       </div>
                     )}
                     {form.imageUrl && (
-                      <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-r from-black/85 via-black/45 to-transparent p-3">
+                      <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-r from-black/85 via-black/45 to-transparent p-3.5">
+                        <span className="self-start mb-1 px-2 py-0.5 rounded-full bg-emerald-500/80 text-[9px] font-black text-white uppercase tracking-wider">
+                          16:9 Verified
+                        </span>
                         <h4 className="line-clamp-1 max-w-md text-xs font-black leading-tight text-white drop-shadow-sm">
                           {form.title || 'Headline Title Preview'}
                         </h4>
@@ -586,12 +695,12 @@ export default function AdminBannerManagementPage() {
 
 
 const FALLBACK_BANNER_IMAGES = [
-  'https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?w=1920&q=90&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1920&q=90&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1606744824163-985d376605aa?w=1920&q=90&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=1920&q=90&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=1920&q=90&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1920&q=90&auto=format&fit=crop',
+  'https://storage.googleapis.com/jsgsmile1/banners/jharsuguda-steel-industry.jpg',
+  'https://storage.googleapis.com/jsgsmile1/banners/odisha-handicraft-shg.jpg',
+  'https://storage.googleapis.com/jsgsmile1/banners/vedanta-industrial-hub.jpg',
+  'https://storage.googleapis.com/jsgsmile1/banners/thermal-power-plant.jpg',
+  'https://storage.googleapis.com/jsgsmile1/banners/empowering-local-msmes.jpg',
+  'https://storage.googleapis.com/jsgsmile1/banners/digital-procurement.jpg',
 ];
 
 function BannerAdminCard({
@@ -628,16 +737,15 @@ function BannerAdminCard({
               src={src}
               alt={banner.title}
               referrerPolicy="no-referrer"
-              crossOrigin="anonymous"
               onError={() => {
                 setHasError(true);
-                setSrc(fallbackUrl);
+                setSrc(imageSrc(fallbackUrl));
               }}
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
             />
           ) : fallbackUrl ? (
             <img
-              src={fallbackUrl}
+              src={imageSrc(fallbackUrl)}
               alt={banner.title}
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
             />

@@ -1,12 +1,13 @@
 import { ChangeEvent, FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Clock, ImagePlus, Link as LinkIcon, UploadCloud, AlignLeft, FileText, Sparkles, RefreshCw, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Clock, ImagePlus, Link as LinkIcon, UploadCloud, AlignLeft, FileText, Sparkles, RefreshCw, AlertCircle, Scissors } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { api, BASE_URL, readJsonResponse, unwrapApiData } from '../../../lib/api';
 import { compressImage } from '../../../lib/compress';
 import { cn } from '../../../lib/utils';
 import { bannerApi } from '../api';
+import { validateBannerFile, validateBannerUrl, cropImageTo16by9, BANNER_ASPECT_RATIO } from '../utils/bannerValidation';
 
 type UploadState = {
   fileId: number | null;
@@ -38,6 +39,10 @@ export function OrganizationBannerUploadCard() {
   const [uploading, setUploading] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
   const [previewError, setPreviewError] = useState(false);
+  const [validationError, setValidationError] = useState('');
+  const [validationSuccess, setValidationSuccess] = useState('');
+  const [pendingInvalidFile, setPendingInvalidFile] = useState<File | null>(null);
+  const [isCropping, setIsCropping] = useState(false);
   
   // Controlled form states for Live Banner Simulation
   const [title, setTitle] = useState('');
@@ -64,20 +69,13 @@ export function OrganizationBannerUploadCard() {
     onError: err => setMessage((err as Error).message)
   });
 
-  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setMessage('Please upload a valid JPG, PNG, or WebP banner image.');
-      event.target.value = '';
-      return;
-    }
-
+  const executeUpload = async (file: File, ratioInfo: string) => {
     setUploading(true);
     setMessage('');
+    setValidationError('');
     setPreviewError(false);
     try {
-      const optimized = await compressImage(file, 1920, 600, 0.82);
+      const optimized = await compressImage(file, 1920, 1080, 0.85);
       const body = new FormData();
       body.append('file', optimized);
       const token = localStorage.getItem('token');
@@ -95,22 +93,68 @@ export function OrganizationBannerUploadCard() {
 
       setUpload({ fileId, url, name: json?.file?.originalName || optimized.name });
       setImageUrl('');
-      setMessage('Image optimized and uploaded successfully. Preview your slide below before submitting.');
+      setValidationSuccess(`Verified 16:9 Banner (${ratioInfo}) uploaded successfully!`);
+      setMessage('Image verified and uploaded. Preview your 16:9 slide below before submitting.');
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to upload banner image');
+      setValidationError(err instanceof Error ? err.message : 'Unable to upload banner image');
     } finally {
       setUploading(false);
-      event.target.value = '';
     }
   };
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setValidationError('');
+    setValidationSuccess('');
+    setPendingInvalidFile(null);
+
+    // Compulsory 16:9 Aspect Ratio & Resolution Validation
+    const check = await validateBannerFile(file);
+    if (!check.valid) {
+      setValidationError(check.error || 'Invalid banner aspect ratio.');
+      setPendingInvalidFile(file);
+      event.target.value = '';
+      return;
+    }
+
+    await executeUpload(file, `${check.width}×${check.height}px (16:9)`);
+    event.target.value = '';
+  };
+
+  const handleAutoCropAndUpload = async () => {
+    if (!pendingInvalidFile) return;
+    setIsCropping(true);
+    setValidationError('');
+    try {
+      const cropped = await cropImageTo16by9(pendingInvalidFile);
+      setPendingInvalidFile(null);
+      await executeUpload(cropped, 'Auto-cropped to 1920×1080px (16:9)');
+    } catch (err: any) {
+      setValidationError(err instanceof Error ? err.message : 'Failed to auto-crop image to 16:9');
+    } finally {
+      setIsCropping(false);
+    }
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setValidationError('');
     const url = imageUrl.trim();
 
     if (!url && !upload.fileId) {
       setMessage('Upload a banner image or enter a valid URL before submitting.');
       return;
+    }
+
+    // Compulsory 16:9 check for manual URL input
+    if (url && url.startsWith('http')) {
+      const check = await validateBannerUrl(url);
+      if (!check.valid) {
+        setValidationError(check.error || 'The entered image URL does not match compulsory 16:9 aspect ratio.');
+        return;
+      }
     }
 
     bannerUpload.mutate({
@@ -283,9 +327,51 @@ export function OrganizationBannerUploadCard() {
               />
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold leading-relaxed text-slate-500 border-l-4 border-l-[#12335f]">
-              Recommended size: <strong className="text-slate-700">1920 x 600 px</strong>. Keep text readable on mobile and leave space around logos.
+            {/* Compulsory 16:9 Requirement Box */}
+            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-slate-700 space-y-1">
+              <div className="flex items-center gap-1.5 font-black text-[#12335f]">
+                <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
+                <span>Compulsory Aspect Ratio: 16:9 (1920 × 1080 px)</span>
+              </div>
+              <p className="text-[11px] font-medium leading-relaxed text-slate-600">
+                All marketplace hero banners must strictly adhere to a <strong>16:9 widescreen ratio</strong> (ideal 1920×1080 px, minimum 1280×720 px). Images with other aspect ratios will be blocked to ensure every banner displays at the exact same size.
+              </p>
             </div>
+
+            {/* Validation Error Alert with Auto-Crop Option */}
+            {validationError && (
+              <div className="rounded-xl border border-red-200 bg-red-50/95 p-3.5 text-xs text-red-900 shadow-sm animate-in fade-in">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                  <div className="space-y-2 flex-1">
+                    <p className="font-bold text-red-950 leading-snug">{validationError}</p>
+                    {pendingInvalidFile && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <Button
+                          type="button"
+                          onClick={handleAutoCropAndUpload}
+                          disabled={isCropping || uploading}
+                          size="sm"
+                          className="h-8 gap-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-sm"
+                        >
+                          <Scissors className="h-3.5 w-3.5" />
+                          <span>{isCropping ? 'Cropping to 16:9...' : 'Auto-Crop to 16:9 (1920×1080) & Upload'}</span>
+                        </Button>
+                        <span className="text-[10px] text-red-700 font-semibold">Center-crops to exact 16:9 widescreen</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Validation Success Feedback */}
+            {validationSuccess && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 text-xs text-emerald-900 flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span className="font-bold">{validationSuccess}</span>
+              </div>
+            )}
 
             <Button
               type="submit"
@@ -307,7 +393,7 @@ export function OrganizationBannerUploadCard() {
           {/* Right Side Simulator and Guide Cards */}
           <div className="space-y-4">
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm">
-              <div className="relative aspect-[16/7] w-full overflow-hidden sm:aspect-[16/6]">
+              <div className="relative aspect-[16/9] w-full overflow-hidden">
                 {preview && !previewError ? (
                   <img
                     src={preview}

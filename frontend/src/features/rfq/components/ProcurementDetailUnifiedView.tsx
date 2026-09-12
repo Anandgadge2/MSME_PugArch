@@ -253,10 +253,24 @@ function asArray(val: any): any[] {
   return [val];
 }
 
+function hasExplicitDateTime(val?: string | Date | null): boolean {
+  if (!val) return false;
+  if (typeof val === 'string') {
+    const s = val.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    if (/T00:00:00(\.000)?(Z|[+-]00:00)?$/i.test(s)) return false;
+    return s.includes('T') || s.includes(':');
+  }
+  if (val instanceof Date) {
+    return !(val.getUTCHours() === 0 && val.getUTCMinutes() === 0 && val.getUTCSeconds() === 0 && val.getUTCMilliseconds() === 0);
+  }
+  return false;
+}
+
 function formatDateString(
   dateVal?: string | Date | null,
-  includeTime: boolean = false,
-  defaultMidnightTime: 'endOfDay' | 'startOfDay' = 'endOfDay'
+  includeTime?: boolean,
+  defaultMidnightTime?: 'endOfDay' | 'startOfDay'
 ) {
   if (!dateVal) return null;
   try {
@@ -266,14 +280,20 @@ function formatDateString(
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
     const month = months[d.getMonth()];
     const year = d.getFullYear();
-    if (!includeTime) return `${day} ${month} ${year}`;
+
+    const shouldIncludeTime = includeTime !== undefined ? includeTime : hasExplicitDateTime(dateVal);
+    if (!shouldIncludeTime) return `${day} ${month} ${year}`;
+
+    const isDateOnlyStr = typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim());
     const isMidnightUtc = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
+    if (isDateOnlyStr || (isMidnightUtc && !defaultMidnightTime)) {
+      return `${day} ${month} ${year}`;
+    }
     let hoursNum: number;
     let minutesStr: string;
-    if (isMidnightUtc) {
+    if (isMidnightUtc && defaultMidnightTime) {
       if (defaultMidnightTime === 'startOfDay') {
-        hoursNum = 0;
-        minutesStr = '00';
+        return `${day} ${month} ${year}`;
       } else {
         hoursNum = 23;
         minutesStr = '59';
@@ -286,7 +306,7 @@ function formatDateString(
     let h12 = hoursNum % 12;
     if (h12 === 0) h12 = 12;
     const hoursFormatted = String(h12).padStart(2, '0');
-    return `${day} ${month} ${year} , ${hoursFormatted}:${minutesStr} ${ampm}`;
+    return `${day} ${month} ${year}, ${hoursFormatted}:${minutesStr} ${ampm}`;
   } catch {
     return String(dateVal);
   }
@@ -384,8 +404,9 @@ function parseDateValue(dateVal?: string | Date | null): Date | null {
   if (!dateVal) return null;
   const d = new Date(dateVal);
   if (isNaN(d.getTime())) return null;
+  const isDateOnlyStr = typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim());
   const isMidnightUtc = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
-  if (isMidnightUtc) {
+  if (isMidnightUtc || isDateOnlyStr) {
     const endOfDay = new Date(d.getTime());
     endOfDay.setHours(23, 59, 59, 999);
     return endOfDay;
@@ -2058,6 +2079,8 @@ export interface ProcurementDetailUnifiedViewProps {
   ownResponse?: any;
   emdAmount?: number;
   isEmdRequired?: boolean;
+  packetType?: string;
+  allowClarification?: boolean;
   backRoute?: string;
   backRouteLabel?: string;
   onBack?: () => void;
@@ -2680,7 +2703,60 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.deadlineDate
   );
 
-  const clarificationDateValue = firstPresent(
+  // Clarification window resolution: Check whether bidder clarifications are allowed
+  const isClarificationAllowed = (() => {
+    // 1. Explicit false/no in schedule
+    if (schedule.clarificationAllowed === false || schedule.clarificationAllowed === 'false' || schedule.clarificationAllowed === 0 || schedule.clarificationAllowed === 'No' || schedule.clarificationAllowed === 'no') {
+      return false;
+    }
+    // 2. Explicit false/no in rules
+    if (rules.clarificationAllowed === false || rules.clarificationAllowed === 'false' || rules.clarificationAllowed === 0 || rules.clarificationAllowed === 'No' || rules.clarificationAllowed === 'no') {
+      return false;
+    }
+    // 3. Explicit false in payload root
+    if (payload.clarificationAllowed === false || payload.clarificationAllowed === 'false') {
+      return false;
+    }
+    // 4. Props override if false
+    if ((props as any).allowClarification === false || (props as any).allowClarification === 'false') {
+      return false;
+    }
+    // 5. Positive indicators
+    if (schedule.clarificationAllowed === true || schedule.clarificationAllowed === 'true' || schedule.clarificationAllowed === 'Yes' || schedule.clarificationAllowed === 'yes') {
+      return true;
+    }
+    if (rules.clarificationAllowed === true || rules.clarificationAllowed === 'true' || rules.clarificationAllowed === 'Yes' || rules.clarificationAllowed === 'yes') {
+      return true;
+    }
+    if ((props as any).allowClarification === true) {
+      return true;
+    }
+    // For RFQ, if not explicitly enabled, clarifications are disabled by default
+    return !isRfqType;
+  })();
+
+  // Packet & Opening Evaluation checks
+  const rawPacketType = String(
+    firstPresent(
+      props.packetType,
+      schedule.packetType,
+      payload.packetType,
+      tender.packetType,
+      'Single'
+    )
+  ).toUpperCase();
+
+  const isTwoPacket = rawPacketType.includes('TWO') || rawPacketType === '2';
+  const isTechnicalEvaluationNeeded = Boolean(
+    basics.isTechnicalEvaluationNeeded ||
+    payload.isTechnicalEvaluationNeeded ||
+    tender.isTechnicalEvaluationNeeded ||
+    isTwoPacket
+  );
+  const hasTechnicalOpening = isTechnicalEvaluationNeeded;
+  const hasFinancialOpening = isTwoPacket;
+
+  const clarificationDateValue = isClarificationAllowed ? firstPresent(
     schedule.clarificationEndDate,
     schedule.clarificationDeadline,
     tender.clarificationEndDate,
@@ -2689,14 +2765,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     schedule.preBidMeetingDate,
     tender.preBidDate,
     tender.preBidMeetingDate
-  );
+  ) : undefined;
 
-  const technicalDateValue = firstPresent(
+  const technicalDateValue = hasTechnicalOpening ? firstPresent(
     tender.technicalEvaluationDate,
     schedule.technicalOpeningDate,
     props.technicalDate,
     props.technicalOpeningDate
-  );
+  ) : undefined;
 
   const presentationDateValue = firstPresent(
     schedule.presentationDate,
@@ -2704,13 +2780,13 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.presentationDate
   );
 
-  const financialDateValue = firstPresent(
+  const financialDateValue = hasFinancialOpening ? firstPresent(
     tender.financialEvaluationDate,
     schedule.financialOpeningDate,
     schedule.finalEvaluationDate,
     props.financialDate,
     props.financialOpeningDate
-  );
+  ) : undefined;
 
   const awardDateValue = firstPresent(
     tender.awardDate,
@@ -2728,14 +2804,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     publishedDateValue
   );
 
-  const clarificationDeadlineValue = firstPresent(
+  const clarificationDeadlineValue = isClarificationAllowed ? firstPresent(
     schedule.clarificationDeadline,
     schedule.clarificationEndDate,
     schedule.clarificationDate,
     tender.clarificationDeadline,
     tender.clarificationEndDate,
     props.clarificationDate
-  );
+  ) : undefined;
 
   const preBidDateValue = firstPresent(
     schedule.preBidMeetingDate,
@@ -2782,21 +2858,20 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.bidValidityDate
   );
 
-  const bidValidityDateComputed = bidValidityDateValue
-    ? bidValidityDateValue
-    : (closingDateValue ? (() => {
-        try {
-          const cDate = new Date(closingDateValue);
-          if (!isNaN(cDate.getTime())) {
-            const daysToAdd = Number(rawValidityDays) || 90;
-            const computed = new Date(cDate.getTime() + daysToAdd * 86_400_000);
-            return computed.toISOString();
-          }
-        } catch {}
-        return undefined;
-      })() : undefined);
+  const bidValidityDateComputed = (() => {
+    if (closingDateValue && rawValidityDays) {
+      try {
+        const cDate = new Date(closingDateValue);
+        if (!isNaN(cDate.getTime())) {
+          const daysToAdd = Number(rawValidityDays) || 90;
+          return new Date(cDate.getTime() + daysToAdd * 86_400_000).toISOString();
+        }
+      } catch {}
+    }
+    return bidValidityDateValue;
+  })();
 
-  const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue, true, 'startOfDay') : (props.publishedDate ? formatDateString(props.publishedDate, true, 'startOfDay') : 'N/A');
+  const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue) : (props.publishedDate ? formatDateString(props.publishedDate) : 'N/A');
   const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue, true, 'endOfDay') : (props.closingDate ? formatDateString(props.closingDate, true, 'endOfDay') : 'N/A');
   const clarificationDateFormatted = clarificationDateValue ? formatDateString(clarificationDateValue, true) : (props.clarificationDate ? formatDateString(props.clarificationDate, true) : 'N/A');
   const clarificationDeadlineFormatted = clarificationDeadlineValue ? formatDateString(clarificationDeadlineValue, true) : (clarificationDateFormatted !== 'N/A' ? clarificationDateFormatted : undefined);
@@ -2805,9 +2880,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const financialDateFormatted = financialDateValue ? formatDateString(financialDateValue, true) : (props.financialDate || props.financialOpeningDate ? formatDateString(props.financialDate || props.financialOpeningDate, true) : 'N/A');
   const awardDateFormatted = awardDateValue ? formatDateString(awardDateValue, true) : (props.awardDate ? formatDateString(props.awardDate, true) : 'N/A');
   const submissionStartDateFormatted = submissionStartDateValue ? formatDateString(submissionStartDateValue, true) : publishedDateFormatted;
-  const requiredByDateFormatted = requiredByDateValue ? formatDateString(requiredByDateValue) : undefined;
+  const requiredByDateFormatted = requiredByDateValue ? formatDateString(requiredByDateValue, false) : undefined;
   const preBidDateFormatted = preBidDateValue ? formatDateString(preBidDateValue, true) : undefined;
-  const bidValidityDateFormatted = bidValidityDateComputed ? formatDateString(bidValidityDateComputed) : undefined;
+  const bidValidityDateFormatted = bidValidityDateComputed ? formatDateString(bidValidityDateComputed, false) : undefined;
 
   const deliveryLocation = firstPresent(
     props.deliveryLocation && props.deliveryLocation !== '—' && props.deliveryLocation !== 'N/A' && props.deliveryLocation !== 'Delivery location not specified' ? props.deliveryLocation : undefined,
@@ -2997,13 +3072,20 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         'No'
       );
 
-  const qcbsRatio = firstPresent(
+  const isQcbsMethod = Boolean(
+    evaluationMethod && (
+      evaluationMethod.toLowerCase().includes('qcbs') ||
+      evaluationMethod.toLowerCase().includes('weighted')
+    )
+  );
+
+  const qcbsRatio = isQcbsMethod ? firstPresent(
     evaluation.qcbsRatio,
     payload.qcbsRatio,
     rules.qcbsRatio,
     (evaluation.techWeight && evaluation.commWeight ? `${evaluation.techWeight}:${evaluation.commWeight}` : undefined),
     (payload.techWeight && payload.commWeight ? `${payload.techWeight}:${payload.commWeight}` : undefined)
-  );
+  ) : undefined;
 
   const passingScore = firstPresent(
     evaluation.passingScore,
@@ -3228,7 +3310,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     { id: 'scope_docs', label: 'Scope & Documents', icon: FileText, count: documents.length },
     { id: 'terms_schedule', label: 'Terms & Schedule', icon: CalendarDays },
     { id: 'evaluation', label: 'Evaluation & Controls', icon: ClipboardCheck },
-    { id: 'clarifications', label: isRfqType ? 'Clarifications & Quotations' : 'Clarifications & Proposals', icon: MessageSquare, count: (props.totalClarifications || 0) + (isBuyerOrAdmin ? (submittedParticipations.length || 0) : 0) },
+    { id: 'clarifications', label: isClarificationAllowed ? (isRfqType ? 'Clarifications & Quotations' : 'Clarifications & Proposals') : (isRfqType ? 'Quotations' : 'Proposals'), icon: isClarificationAllowed ? MessageSquare : ClipboardList, count: (isClarificationAllowed ? (props.totalClarifications || 0) : 0) + (isBuyerOrAdmin ? (submittedParticipations.length || 0) : 0) },
   ];
 
   const defaultSubmitBtnLabel = props.hasSubmittedProposal
@@ -3539,6 +3621,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     <PropertyItem label="Sub Category" value={subCategory} />
                   )}
                   <PropertyItem label="Published Date" value={publishedDateFormatted} />
+                  {submissionStartDateValue && submissionStartDateFormatted !== publishedDateFormatted && (
+                    <PropertyItem label="Submission Start" value={submissionStartDateFormatted} />
+                  )}
                   <PropertyItem label="Submission Deadline" value={closingDateFormatted} />
                   {/* Delivery Location - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
                   {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
@@ -3572,10 +3657,10 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             <TimelineRibbon
               dates={[
                 { label: 'Published', value: publishedDateFormatted, icon: Calendar, tone: 'emerald' },
-                { label: 'Clarification', value: clarificationDateFormatted, icon: Info, tone: 'sky' },
+                ...(isClarificationAllowed && clarificationDateFormatted !== 'N/A' ? [{ label: 'Clarification', value: clarificationDateFormatted, icon: Info, tone: 'sky' as Tone }] : []),
                 { label: 'Submission', value: closingDateFormatted, icon: Clock, tone: 'rose' },
-                { label: 'Technical Opening', value: technicalDateFormatted, icon: ClipboardCheck, tone: 'indigo' },
-                { label: 'Financial Opening', value: financialDateFormatted, icon: IndianRupee, tone: 'amber' },
+                ...(hasTechnicalOpening && technicalDateFormatted !== 'N/A' ? [{ label: 'Technical Opening', value: technicalDateFormatted, icon: ClipboardCheck, tone: 'indigo' as Tone }] : []),
+                ...(hasFinancialOpening && financialDateFormatted !== 'N/A' ? [{ label: 'Financial Opening', value: financialDateFormatted, icon: IndianRupee, tone: 'amber' as Tone }] : []),
                 { label: 'Award Status', value: awardDateFormatted, icon: ShieldCheck, tone: 'slate' },
               ]}
             />
@@ -3696,11 +3781,17 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     <PropertyGrid columns={3}>
                       <PropertyItem label="Publish Date" value={publishedDateFormatted} />
                       <PropertyItem label="Submission Start Date" value={submissionStartDateFormatted} />
-                      <PropertyItem label="Clarification Deadline" value={firstPresent(schedule.clarificationDeadline, schedule.clarificationEndDate, clarificationDeadlineFormatted, props.clarificationDate)} />
+                      {isClarificationAllowed && (
+                        <PropertyItem label="Clarification Deadline" value={clarificationDeadlineFormatted || 'N/A'} />
+                      )}
                       <PropertyItem label="Submission Deadline" value={closingDateFormatted} highlight />
-                      <PropertyItem label="Technical Opening Date" value={firstPresent(schedule.technicalOpeningDate, tender.technicalEvaluationDate, props.technicalOpeningDate, technicalDateFormatted)} />
-                      <PropertyItem label="Financial Opening Date" value={firstPresent(schedule.financialOpeningDate, tender.financialEvaluationDate, props.financialOpeningDate, financialDateFormatted)} />
-                      <PropertyItem label="Bid Validity Date" value={firstPresent(schedule.bidValidityDate, tender.bidValidityDate, schedule.bidValidityDeadline, bidValidityDateFormatted)} />
+                      {hasTechnicalOpening && (
+                        <PropertyItem label="Technical Opening Date" value={technicalDateFormatted || 'N/A'} />
+                      )}
+                      {hasFinancialOpening && (
+                        <PropertyItem label="Financial Opening Date" value={financialDateFormatted || 'N/A'} />
+                      )}
+                      <PropertyItem label="Bid Validity Date" value={bidValidityDateFormatted || 'N/A'} />
                       <PropertyItem label="Validity Days" value={validityDaysDisplay} />
                       {requiredByDateFormatted && (
                         <PropertyItem label="Required By Date" value={requiredByDateFormatted} />
@@ -3727,7 +3818,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                       { label: 'Show Seller Rank', value: firstPresent(rules.showSellerRank, schedule.showSellerRank, 'Yes') },
                       { label: 'Allow Withdrawal', value: firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal, 'Yes') },
                       { label: 'Show Lowest Price', value: firstPresent(rules.showLowestPrice, schedule.showLowestPrice, 'Yes') },
-                      { label: 'Clarification Allowed', value: firstPresent(schedule.clarificationAllowed, rules.clarificationAllowed, 'Yes') },
+                      { label: 'Clarification Allowed', value: isClarificationAllowed ? 'Yes' : 'No' },
                       { label: 'Minimum Bidders', value: firstPresent(rules.minimumBidders, schedule.minimumBidders, '3') },
                       { label: 'Pre-Bid Meeting', value: firstPresent(schedule.preBidMeeting, schedule.preBidMeetingDate, 'No') },
                     ]}
@@ -3779,8 +3870,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 <PropertyGrid columns={4}>
                   <PropertyItem label="Evaluation Method" value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')} highlight />
                   {requireDemo && requireDemo !== 'No' && <PropertyItem label="Require Demo" value={formatPrimitiveValue(requireDemo)} />}
-                  {hasDetailData(qcbsRatio) && <PropertyItem label="QCBS Ratio" value={qcbsRatio} />}
-                  {hasDetailData(passingScore) && <PropertyItem label="Passing Score" value={passingScore} />}
+                  {isQcbsMethod && hasDetailData(qcbsRatio) && <PropertyItem label="QCBS Ratio" value={qcbsRatio} />}
+                  {(isQcbsMethod || isTechEvalNeeded) && hasDetailData(passingScore) && <PropertyItem label="Passing Score" value={passingScore} />}
                 </PropertyGrid>
               </div>
             </DataCard>
@@ -3986,8 +4077,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               />
             )}
 
-            {
-              /* Determine clarification kind: Rate Contract and Limited Tender typically use requirement-based clarifications */
+            {isClarificationAllowed && (
               (() => {
                 const clarKind = props.clarificationKind
                   ?? (props.procurementType === 'RATE_CONTRACT' || props.procurementType === 'LIMITED_TENDER' ? 'requirement' : 'quote-request');
@@ -4002,7 +4092,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   />
                 );
               })()
-            }
+            )}
           </div>
         )}
 

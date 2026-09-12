@@ -23,7 +23,7 @@ import {
 } from '../utils/procurementDisplay';
 import { cn } from '../../../lib/utils';
 import { formatRefId } from '../../../utils/refIdUtils';
-import { formatDate } from '../../shared/format';
+import { formatDisplayDate } from '../../shared/format';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 function BuyerLogoIcon({ name, logoUrl }: { name?: string; logoUrl?: string | null }) {
@@ -157,8 +157,11 @@ function mapTender(t: MarketplaceTender): OpportunityData {
 }
 
 function mapBid(b: MarketplaceBid): OpportunityData {
-    const status = getProcurementStatus({ status: b.status || b.lifecycleStage || b.approvalStatus, dueDate: b.endDate });
-    const days = Math.max(0, Math.ceil((new Date(b.endDate || '').getTime() - Date.now()) / 86400000));
+    const rawDeadline = (b as any).schedule?.submissionDate || (b as any).schedule?.submissionDeadline || (b as any).technicalPacket?.schedule?.submissionDate || (b as any).technicalPacket?.schedule?.submissionDeadline || b.endDate;
+    const rawStartDate = (b as any).schedule?.publishDate || (b as any).schedule?.submissionStartDate || (b as any).technicalPacket?.schedule?.publishDate || (b as any).technicalPacket?.schedule?.submissionStartDate || b.startDate || b.createdAt;
+    const status = getProcurementStatus({ status: b.status || b.lifecycleStage || b.approvalStatus, dueDate: rawDeadline });
+    const deadlineMs = new Date(rawDeadline || '').getTime();
+    const days = isNaN(deadlineMs) ? 0 : Math.max(0, Math.ceil((deadlineMs - Date.now()) / 86400000));
     const isTenderActivity = b.sourceModel === 'TENDER';
     return {
         id: b.id,
@@ -170,8 +173,8 @@ function mapBid(b: MarketplaceBid): OpportunityData {
         budget: b.estimatedValue ?? null,
         buyerName: b.buyerOrganizationName || 'Verified Buyer',
         location: [b.district, b.state].filter(Boolean).join(', ') || b.deliveryLocation || 'Jharsuguda, Odisha',
-        startDate: b.startDate || b.createdAt,
-        endDate: b.endDate,
+        startDate: rawStartDate,
+        endDate: rawDeadline,
         isTender: false,
         link: isTenderActivity && b.sourceId ? `/tenders?tender=${b.sourceId}` : `/bids/${b.bidNumber}`,
         daysRemaining: days,
@@ -400,11 +403,11 @@ function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: numbe
                 </span>
             </td>
             <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-600 text-xs font-semibold whitespace-nowrap">
-                {item.startDate ? formatDate(item.startDate) : 'N/A'}
+                {item.startDate ? formatDisplayDate(item.startDate) : 'N/A'}
             </td>
             <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-800 text-xs whitespace-nowrap">
                 <div className="space-y-0.5">
-                    <p className="font-extrabold text-slate-900">{item.endDate ? formatDate(item.endDate) : 'N/A'}</p>
+                    <p className="font-extrabold text-slate-900">{item.endDate ? formatDisplayDate(item.endDate) : 'N/A'}</p>
                     <span className={cn(
                         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
                         deadlineAlert
@@ -484,8 +487,11 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
         const mappedTenders = tenders.map(mapTender);
         const mappedBids = bids.map(mapBid);
         const mappedRequirements = (requirements || []).map((r: any) => {
-            const status = getProcurementStatus({ status: r.status, dueDate: r.endDate || r.lastDate || r.requiredBy });
-            const days = Math.max(0, Math.ceil((new Date(r.endDate || r.lastDate || r.requiredBy || '').getTime() - Date.now()) / 86400000));
+            const rawDeadline = r.payload?.schedule?.submissionDate || r.payload?.schedule?.submissionDeadline || r.endDate || r.lastDate || r.requiredBy;
+            const rawStartDate = r.payload?.schedule?.publishDate || r.payload?.schedule?.submissionStartDate || r.startDate || r.createdAt;
+            const status = getProcurementStatus({ status: r.status, dueDate: rawDeadline });
+            const deadlineMs = new Date(rawDeadline || '').getTime();
+            const days = isNaN(deadlineMs) ? 0 : Math.max(0, Math.ceil((deadlineMs - Date.now()) / 86400000));
             // Detect method from data fields, falling back to parsing it from the description
             let method = String(r.canonicalMethod || r.procurementMethod || '').toUpperCase();
             if (!method) {
@@ -532,8 +538,8 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                 budget: r.estimatedValue || r.budgetMin || null,
                 buyerName: r.buyerOrganization?.organizationName || r.buyerOrganizationName || r.buyerName || 'Verified Buyer',
                 location: r.deliveryLocation || r.location || 'Jharsuguda, Odisha',
-                startDate: r.startDate || r.createdAt,
-                endDate: r.endDate || r.lastDate || r.requiredBy,
+                startDate: rawStartDate,
+                endDate: rawDeadline,
                 isTender: false,
                 link,
                 daysRemaining: days,
@@ -691,7 +697,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             width: 'w-28',
             cell: (item) => (
                 <span className="text-slate-600 text-xs font-semibold whitespace-nowrap">
-                    {item.startDate ? formatDate(item.startDate) : 'N/A'}
+                    {item.startDate ? formatDisplayDate(item.startDate) : 'N/A'}
                 </span>
             )
         },
@@ -705,7 +711,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                 const deadlineAlert = item.statusCode === 'CLOSING_TODAY' || item.statusCode === 'CLOSING_SOON' || item.daysRemaining <= 7;
                 return (
                     <div className="space-y-0.5 whitespace-nowrap text-xs">
-                        <p className="font-extrabold text-slate-900">{item.endDate ? formatDate(item.endDate) : 'N/A'}</p>
+                        <p className="font-extrabold text-slate-900">{item.endDate ? formatDisplayDate(item.endDate) : 'N/A'}</p>
                         <span className={cn(
                             "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
                             deadlineAlert

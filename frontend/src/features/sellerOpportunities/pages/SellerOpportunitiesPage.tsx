@@ -43,7 +43,7 @@ import { fetchRateContracts } from '../../rateContract/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode } from '../../shared/hooks';
-import { formatDate as formatSharedDate } from '../../shared/format';
+import { formatDisplayDate as formatSharedDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
@@ -89,9 +89,9 @@ interface SellerOpportunity {
 
 const DEFAULT_PAGE_SIZE = 10;
 
-const formatDate = (value?: string) => {
+const formatDate = (value?: string | Date | null, forceTime = false) => {
   if (!value) return 'Not set';
-  const formatted = formatSharedDate(value);
+  const formatted = formatSharedDate(value, { forceTime });
   return formatted === '—' ? 'Not set' : formatted;
 };
 
@@ -835,8 +835,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           nextAction: '',
           isInvitation: auction.visibilityMode === 'INVITED_SELLERS_ONLY' || auction.isInvited || auction.invitedSellers?.some((v: any) => (v?.sellerOrgId || v) === user?.organizationId),
           detailRows: [
-            { label: 'Auction start', value: formatDate(auction.startTime) },
-            { label: 'Auction end', value: formatDate(auction.endTime) },
+            { label: 'Auction start', value: formatDate(auction.startTime, true) },
+            { label: 'Auction end', value: formatDate(auction.endTime, true) },
             { label: 'Start price', value: formatMoney(toNumber(auction.startPrice)) },
             { label: 'Current L1', value: auction.currentLowestAmount ? formatMoney(toNumber(auction.currentLowestAmount)) : 'Not available' },
             { label: 'Minimum decrement', value: auction.minDecrementAmount ? formatMoney(toNumber(auction.minDecrementAmount)) : 'Not shown' },

@@ -89,6 +89,9 @@ const SELLER_ONBOARDING_DOCUMENT_TYPES = new Set([
   "itr_3_years",
   "nsic",
   "nsic_certificate",
+  "iso",
+  "iso_certificate",
+  "iso_certified",
   "uploaded_files",
   "other",
 ]);
@@ -117,6 +120,12 @@ const DOCUMENT_LABELS: Record<string, string> = {
   registration_certificate: "SHG_REGISTRATION_CERTIFICATE",
   training_certificate: "TRAINING_SKILL_CERTIFICATE",
   product_photos: "PRODUCT_PHOTOS_CATALOGUE",
+  iso: "ISO_CERTIFICATE",
+  iso_certificate: "ISO_CERTIFICATE",
+  iso_certified: "ISO_CERTIFICATE",
+  nsic_certificate: "NSIC_CERTIFICATE",
+  dipp_certificate: "DIPP_CERTIFICATE",
+  itr_3_years: "ITR_3_YEARS"
 };
 
 const getDocumentLabel = (key: string) =>

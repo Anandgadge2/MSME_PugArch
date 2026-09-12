@@ -1822,7 +1822,7 @@ router.get('/master-admin/organizations/:id/documents', ...masterOnly, wrap(asyn
     }
   };
 
-  const CORE_ONBOARDING_TYPES = new Set(['PAN_COPY', 'PAN', 'GST_CERTIFICATE', 'GST', 'UDYAM_CERTIFICATE', 'UDYAM', 'BANK_PASSBOOK', 'CHEQUE', 'ADDRESS_PROOF', 'INCORPORATION_CERTIFICATE', 'DIPP_CERTIFICATE', 'NSIC_CERTIFICATE']);
+  const CORE_ONBOARDING_TYPES = new Set(['PAN_COPY', 'PAN', 'GST_CERTIFICATE', 'GST', 'UDYAM_CERTIFICATE', 'UDYAM', 'BANK_PASSBOOK', 'CHEQUE', 'ADDRESS_PROOF', 'INCORPORATION_CERTIFICATE', 'DIPP_CERTIFICATE', 'NSIC_CERTIFICATE', 'ISO_CERTIFICATE', 'ISO']);
 
   // Add SellerDocuments first for precise documentType labels (PAN, GST, Udyam, etc.)
   for (const sd of sellerDocs) {
@@ -1882,6 +1882,7 @@ router.get('/master-admin/organizations/:id/documents', ...masterOnly, wrap(asyn
     else if (nameUpper.includes('INCORPORATION')) docType = 'INCORPORATION_CERTIFICATE';
     else if (nameUpper.includes('NSIC')) docType = 'NSIC_CERTIFICATE';
     else if (nameUpper.includes('DIPP') || nameUpper.includes('STARTUP')) docType = 'DIPP_CERTIFICATE';
+    else if (nameUpper.includes('ISO')) docType = 'ISO_CERTIFICATE';
     else docType = (asset.entityType || 'DOCUMENT').toUpperCase().replace(/[\s-]+/g, '_');
 
     const isCoreDoc = CORE_ONBOARDING_TYPES.has(docType);
