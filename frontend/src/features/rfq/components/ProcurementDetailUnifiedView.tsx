@@ -2255,6 +2255,7 @@ export interface ProcurementDetailUnifiedViewProps {
   deliveryTerms?: string;
   description?: string;
   payload?: any;
+  rateContractConfig?: any;
   documents?: DisplayDocument[];
   items?: any[];
   requiredDocuments?: any;
