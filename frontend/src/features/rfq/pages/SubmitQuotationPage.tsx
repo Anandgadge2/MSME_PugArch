@@ -422,24 +422,27 @@ export default function SubmitQuotationPage() {
         }
       }
 
-      // 2. Standard RFQ Marketplace Requirements Flow
+      // 2, 3, 4: Concurrent Resolution for RFQ / Procurement Bid / Quote Request
+      const [marketSettled, bidSettled, quoteSettled] = await Promise.allSettled([
+        getApi<any>(`/api/marketplace/requirements/${requirementId}`),
+        getApi<any>(`/api/procurement-bids/${encodeURIComponent(String(requirementId))}`),
+        getApi<any>(`/api/quote-requests/${requirementId}`)
+      ]);
+
       let marketplaceResult: { requirement: any; ownResponse: any } | null = null;
-      try {
-        const data = await getApi<any>(`/api/marketplace/requirements/${requirementId}`);
+      if (marketSettled.status === 'fulfilled') {
+        const data = marketSettled.value;
         if (data && (data.requirement || data.id)) {
           marketplaceResult = {
             requirement: data.requirement || data,
             ownResponse: normalizeOwnResponse(data.ownResponse || data.myResponse || data.response || null),
           };
         }
-      } catch (err) {
-        // Fallback to procurement bid endpoint if marketplace requirement route fails
       }
 
-      // 3. Procurement Bid Flow
       let bidResult: { requirement: any; ownResponse: any } | null = null;
-      try {
-        const bidData = await getApi<any>(`/api/procurement-bids/${encodeURIComponent(String(requirementId))}`);
+      if (bidSettled.status === 'fulfilled') {
+        const bidData = bidSettled.value;
         if (bidData) {
           const userParticipation = findSellerParticipation(bidData, user);
           const ownResponseData = participationToOwnResponse(userParticipation);
@@ -486,14 +489,11 @@ export default function SubmitQuotationPage() {
             ownResponse: ownResponseData,
           };
         }
-      } catch (e) {
-        // Ignore fallback error
       }
 
-      // 4. Quote Request Flow
       let quoteRequestResult: { requirement: any; ownResponse: any } | null = null;
-      try {
-        const quoteData = await getApi<any>(`/api/quote-requests/${requirementId}`);
+      if (quoteSettled.status === 'fulfilled') {
+        const quoteData = quoteSettled.value;
         if (quoteData && (quoteData.id || quoteData.subject)) {
           const myResponse = Array.isArray(quoteData.quoteResponses)
             ? (quoteData.quoteResponses.find((r: any) => r.sellerId === Number(user?.id)) || quoteData.quoteResponses[0])
@@ -528,8 +528,6 @@ export default function SubmitQuotationPage() {
             }) : null
           };
         }
-      } catch (err) {
-        // Ignore fallback error
       }
 
       if (marketplaceResult || bidResult || quoteRequestResult) {

@@ -2415,11 +2415,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const linkedAuctionQuery = useQuery({
     queryKey: ['linked-reverse-auction', targetId],
     queryFn: () => reverseAuctionApi.getByProcurement(targetId),
-    staleTime: 5000,
+    staleTime: 30000,
     refetchInterval: (query) => {
       const data = query.state.data;
+      if (!data) return false;
       const status = String(data?.statusEnum || data?.status || '').toUpperCase();
-      return status === 'LIVE' ? 3000 : 15000;
+      return status === 'LIVE' ? 3000 : false;
     },
     enabled: Boolean(targetId)
   });
@@ -2495,29 +2496,19 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       const idsToTry = Array.from(new Set([targetId, numericId > 0 ? String(numericId) : null].filter(Boolean) as string[]));
 
       for (const idToken of idsToTry) {
-        try {
-          const reqRes: any = await getApi(`/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`, true);
-          const reqItems = extractArray(reqRes);
-          if (reqItems.length > 0) return reqItems.map(normalizeItem);
-        } catch { }
+        const candidateResults = await Promise.allSettled([
+          getApi(`/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`, true),
+          getApi(`/api/buyer/procurement-bids/${encodeURIComponent(idToken)}/participants`, true),
+          procurementBidApi.detail(idToken),
+          getApi(`/api/marketplace/requirements/${encodeURIComponent(idToken)}/responses`, true)
+        ]);
 
-        try {
-          const directRes: any = await getApi(`/api/buyer/procurement-bids/${encodeURIComponent(idToken)}/participants`, true);
-          const directItems = extractArray(directRes);
-          if (directItems.length > 0) return directItems.map(normalizeItem);
-        } catch { }
-
-        try {
-          const bidRes: any = await procurementBidApi.detail(idToken);
-          const bidItems = extractArray(bidRes);
-          if (bidItems.length > 0) return bidItems.map(normalizeItem);
-        } catch { }
-
-        try {
-          const genRes: any = await getApi(`/api/marketplace/requirements/${encodeURIComponent(idToken)}/responses`, true);
-          const genItems = extractArray(genRes);
-          if (genItems.length > 0) return genItems.map(normalizeItem);
-        } catch { }
+        for (const r of candidateResults) {
+          if (r.status === 'fulfilled' && r.value) {
+            const items = extractArray(r.value);
+            if (items.length > 0) return items.map(normalizeItem);
+          }
+        }
       }
 
       return [];

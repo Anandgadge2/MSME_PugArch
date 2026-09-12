@@ -8581,7 +8581,19 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
 
         const approvedSellersAndShgPromise = db.user.findMany({
           where: { role: { in: ['seller', 'shg'] }, onboardingStatus: 'approved_for_procurement', ...globalWhere, ...userRoleWhere },
-          include: { organization: true }
+          select: {
+            id: true,
+            role: true,
+            businessType: true,
+            organizationType: true,
+            registrationDetails: true,
+            profile: true,
+            organization: {
+              select: {
+                organizationType: true
+              }
+            }
+          }
         });
 
         const aggregatesPromise = (async () => {

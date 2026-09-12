@@ -423,8 +423,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       };
     },
     enabled: user?.role === 'seller' || user?.role === 'shg' || isShgAccount,
-    staleTime: 30000,
-    refetchInterval: 15000,
+    staleTime: 60000,
+    refetchInterval: 60000,
   });
 
   const counts = countsData || {};

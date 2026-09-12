@@ -323,10 +323,29 @@ const recalculateRanks = async (tx: any, auctionId: number) => {
   }
 };
 
+const procurementAuctionCache = new Map<string, { data: any; expiresAt: number }>();
+export const invalidateProcurementAuctionCache = (procurementId?: string | number) => {
+  if (procurementId) {
+    procurementAuctionCache.delete(String(procurementId));
+    procurementAuctionCache.delete(`RFQ-${procurementId}`);
+    procurementAuctionCache.delete(`REQ-${procurementId}`);
+  } else {
+    procurementAuctionCache.clear();
+  }
+};
+
 router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
     const rawId = String(req.params.procurementId || '').trim();
     const numId = Number(rawId);
+
+    const cached = procurementAuctionCache.get(rawId);
+    if (cached && cached.expiresAt > Date.now()) {
+      if (cached.data === null) {
+        return apiResponse.success(res, null, 200, 'No auction linked to this procurement');
+      }
+      return apiResponse.success(res, cached.data);
+    }
 
     // 1. Direct match by referenceNo or auctionCode first (prevents integer ID cross-contamination between bids & requirements)
     let auction = await db.auction.findFirst({
@@ -398,11 +417,15 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
     }
 
     if (!auction) {
+      procurementAuctionCache.set(rawId, { data: null, expiresAt: Date.now() + 30_000 });
       return apiResponse.success(res, null, 200, 'No auction linked to this procurement');
     }
 
     const effective = await withEffectiveStatus(auction);
-    return apiResponse.success(res, maskSensitive(effective));
+    const result = maskSensitive(effective);
+    const isLive = String(effective.statusEnum || effective.status || '').toUpperCase() === 'LIVE';
+    procurementAuctionCache.set(rawId, { data: result, expiresAt: Date.now() + (isLive ? 5_000 : 30_000) });
+    return apiResponse.success(res, result);
   } catch (error: any) {
     return apiResponse.error(res, 500, error.message || 'Error looking up auction', 'AUCTION_LOOKUP_ERROR');
   }
