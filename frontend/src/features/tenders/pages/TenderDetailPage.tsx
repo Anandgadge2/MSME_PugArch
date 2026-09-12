@@ -266,7 +266,7 @@ export default function TenderDetailPage() {
   });
   const tenderIdString = tender.tenderId || 'N/A';
   const title = validTenderTitle ? String(validTenderTitle).trim() : (tenderIdString !== 'N/A' ? `Tender #${tenderIdString}` : 'Procurement Tender');
-  const publishedDateFormatted = formatDateString(tender.publishedAt);
+  const publishedDateFormatted = formatDateString(tender.publishedAt, true);
   const closesAtFormatted = formatDateString(tender.closesAt, true);
   const orgName = tender.buyer?.buyerProfile?.organizationName || tender.buyer?.name || 'N/A';
 
@@ -385,7 +385,7 @@ export default function TenderDetailPage() {
       technicalDate={schedule.technicalOpeningDate ? formatDateString(schedule.technicalOpeningDate, true) : undefined}
       financialDate={schedule.financialOpeningDate ? formatDateString(schedule.financialOpeningDate, true) : undefined}
       bidValidityDate={schedule.bidValidityDate ? formatDateString(schedule.bidValidityDate) : undefined}
-      requiredByDate={basics.requiredByDate ? formatDateString(basics.requiredByDate) : ((tender as any).deliveryDate ? formatDateString((tender as any).deliveryDate) : undefined)}
+      requiredByDate={basics.requiredByDate ? formatDateString(basics.requiredByDate, true) : ((tender as any).deliveryDate ? formatDateString((tender as any).deliveryDate, true) : undefined)}
       category={tender.category}
       procurementMethod={tender.visibility === 'LIMITED' ? 'Limited Tender' : 'Open Tender'}
       buyingType={basics.buyingType || 'Goods'}

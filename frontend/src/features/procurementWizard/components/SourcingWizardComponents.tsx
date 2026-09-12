@@ -521,12 +521,18 @@ export function BOQTable({
                   />
                 </td>
                 <td className="px-3 py-1">
-                  <input
-                    type="number"
-                    value={row.taxPercent || ''}
+                  <select
+                    value={row.taxPercent ?? 18}
                     onChange={e => onChange(idx, 'taxPercent', Number(e.target.value || 0))}
-                    className={tableInput}
-                  />
+                    className={cn(tableInput, 'cursor-pointer')}
+                    aria-label="GST Slab"
+                  >
+                    <option value={0}>0%</option>
+                    <option value={5}>5%</option>
+                    <option value={12}>12%</option>
+                    <option value={18}>18%</option>
+                    <option value={28}>28%</option>
+                  </select>
                 </td>
                 <td className="px-3 py-1 text-right font-black text-slate-900">
                   {formatCurrency(row.total)}
@@ -1219,6 +1225,29 @@ interface ProcurementSummaryPanelProps {
   docsCount: number;
 }
 
+function formatDateTimeDisplay(val?: string) {
+  if (!val) return 'N/A';
+  try {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return val;
+    const day = String(d.getDate()).padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    const isDateOnlyStr = typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val.trim());
+    if (isDateOnlyStr) return `${day} ${month} ${year}`;
+    const hoursNum = d.getHours();
+    const minutesStr = String(d.getMinutes()).padStart(2, '0');
+    const ampm = hoursNum >= 12 ? 'PM' : 'AM';
+    let h12 = hoursNum % 12;
+    if (h12 === 0) h12 = 12;
+    const hoursFormatted = String(h12).padStart(2, '0');
+    return `${day} ${month} ${year}, ${hoursFormatted}:${minutesStr} ${ampm}`;
+  } catch {
+    return val;
+  }
+}
+
 export function ProcurementSummaryPanel({
   title,
   buyerType,
@@ -1238,7 +1267,7 @@ export function ProcurementSummaryPanel({
       <SummaryItem label="Sourcing Method" value={method ? method.replace(/_/g, ' ') : 'N/A'} />
       <SummaryItem label="Estimated Budget" value={formatCurrency(estimatedValue)} />
       <SummaryItem label="Priority Level" value={priority || 'Normal'} />
-      <SummaryItem label="Required By" value={requiredBy || 'N/A'} />
+      <SummaryItem label="Required By Date & Time" value={formatDateTimeDisplay(requiredBy)} />
       <SummaryItem label="Line Items" value={`${itemsCount} line items scheduled`} />
       <SummaryItem label="Delivery Location" value={location || 'N/A'} className="sm:col-span-2 xl:col-span-2" />
       <SummaryItem label="Invited Bidders" value={`${suppliersCount} suppliers invited`} />
