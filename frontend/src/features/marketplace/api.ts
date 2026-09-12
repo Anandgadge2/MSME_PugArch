@@ -268,6 +268,7 @@ export interface BuyerRequirement {
     methodSlug?: string | null;
     procurementMethodLabel?: string | null;
     estimatedValue?: number | string | null;
+    discloseEstimatedCost?: boolean;
     currency?: string | null;
     items?: BuyerRequirementItem[];
     itemSummary?: string | null;

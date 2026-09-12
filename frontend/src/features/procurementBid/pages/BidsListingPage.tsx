@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   Clock,
   Info,
-  Search
+  Search,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { BidCard, EmptyState, PageShell, ProcurementEmptyState, ProcurementErrorState, ProcurementHero, ProcurementLoadingState, StatusBadge } from '../components';
@@ -98,7 +99,8 @@ export default function BidsListingPage() {
     const live = bids.filter(b => b.status === 'Open' || b.status === 'Closing Soon').length;
     const closed = bids.filter(b => b.status === 'Closed' || b.status === 'Under Evaluation').length;
     const participated = bids.filter(b => b.participated).length;
-    return { total, live, closed, participated };
+    const confidentialCount = bids.filter(b => b.discloseEstimatedCost === false).length;
+    return { total, live, closed, participated, confidentialCount };
   }, [bids]);
 
   const isTenderBid = (bid: ProcurementBid) => bid.sourceModel === 'TENDER';
@@ -174,9 +176,17 @@ export default function BidsListingPage() {
       if (category !== 'All' && bid.category !== category) return false;
       if (location !== 'All' && !bid.location.includes(location)) return false;
       if (buyerType !== 'All' && bid.buyerType !== buyerType) return false;
-      if (bidValue === 'Below 10L' && bid.estimatedValue >= 1000000) return false;
-      if (bidValue === '10L to 25L' && (bid.estimatedValue < 1000000 || bid.estimatedValue > 2500000)) return false;
-      if (bidValue === 'Above 25L' && bid.estimatedValue <= 2500000) return false;
+      if (bidValue !== 'All') {
+        const isConf = bid.discloseEstimatedCost === false || bid.estimatedValue == null;
+        if (isConf) {
+          if (bidValue === 'Confidential') return true;
+          return false;
+        }
+        if (bidValue === 'Confidential') return false;
+        if (bidValue === 'Below 10L' && bid.estimatedValue >= 1000000) return false;
+        if (bidValue === '10L to 25L' && (bid.estimatedValue < 1000000 || bid.estimatedValue > 2500000)) return false;
+        if (bidValue === 'Above 25L' && bid.estimatedValue <= 2500000) return false;
+      }
       if (participation === 'Participated' && !bid.participated) return false;
       if (participation === 'Not participated' && bid.participated) return false;
       if (closingDate === 'Next 7 days') {
@@ -192,7 +202,10 @@ export default function BidsListingPage() {
         if (sortKey === 'buyer') return bid.buyerName;
         if (sortKey === 'category') return bid.category;
         if (sortKey === 'status') return bid.status;
-        if (sortKey === 'value') return bid.estimatedValue || 0;
+        if (sortKey === 'value') {
+          if (bid.discloseEstimatedCost === false) return -1;
+          return bid.estimatedValue || 0;
+        }
         if (sortKey === 'startDate') return new Date(bid.startDate || 0).getTime();
         return new Date(bid.endDate || 0).getTime();
       };
@@ -278,9 +291,19 @@ export default function BidsListingPage() {
       width: 'w-32',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
-      cell: (bid) => (
-        <span className="text-xs font-black text-[#0b2447]">{money(bid.estimatedValue)}</span>
-      )
+      cell: (bid) => {
+        const isDisclosed = bid.discloseEstimatedCost === true || user?.role === 'buyer' || user?.role === 'admin';
+        if (!isDisclosed) {
+          return (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600">
+              Confidential <Lock className="h-3 w-3 text-slate-400 inline" />
+            </span>
+          );
+        }
+        return (
+          <span className="text-xs font-black text-[#0b2447]">{money(bid.estimatedValue)}</span>
+        );
+      }
     },
     {
       key: 'endDate',
@@ -333,7 +356,7 @@ export default function BidsListingPage() {
         ['Category', category, setCategory, ['All', 'Safety Equipment', 'Repair and Maintenance', 'IT Hardware and Software', 'Furniture']],
         ['Location', location, setLocation, ['All', 'Jharsuguda', 'Raigarh', 'Bhubaneswar', 'Sambalpur']],
         ['Buyer type', buyerType, setBuyerType, ['All', 'Large Industry', 'MSME Buyer', 'Government Buyer', 'Private Enterprise', 'PSU Buyer']],
-        ['Bid value', bidValue, setBidValue, ['All', 'Below 10L', '10L to 25L', 'Above 25L']],
+        ['Bid value', bidValue, setBidValue, ['All', 'Below 10L', '10L to 25L', 'Above 25L', 'Confidential']],
         ['Closing date', closingDate, setClosingDate, ['All', 'Next 7 days']],
         ['Participation', participation, setParticipation, ['All', 'Participated', 'Not participated']],
       ].map(([label, value, setter, options]) => (
@@ -375,7 +398,7 @@ export default function BidsListingPage() {
           <KpiCard
             label="Live / Active"
             value={kpis.live}
-            subtext="Accepting bids"
+            subtext={kpis.confidentialCount > 0 ? `Accepting bids (${kpis.confidentialCount} sealed)` : 'Accepting bids'}
             icon={CheckCircle2}
             tone="green"
             active={status === 'Open'}
@@ -561,7 +584,15 @@ export default function BidsListingPage() {
                         </div>
                         <div className="rounded-lg border border-slate-100 bg-white p-3 shadow-sm">
                           <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Estimated Value</p>
-                          <p className="mt-1 text-xs font-black text-emerald-700">{money(detailedBid.estimatedValue)}</p>
+                          <p className="mt-1 text-xs font-black text-emerald-700">
+                            {detailedBid.discloseEstimatedCost === false && user?.role !== 'buyer' && user?.role !== 'admin' ? (
+                              <span className="inline-flex items-center gap-1 text-slate-600 font-bold">
+                                Confidential <Lock className="h-3 w-3 text-slate-400" />
+                              </span>
+                            ) : (
+                              money(detailedBid.estimatedValue)
+                            )}
+                          </p>
                         </div>
                         <div className="rounded-lg border border-slate-100 bg-white p-3 shadow-sm">
                           <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Bid Type</p>

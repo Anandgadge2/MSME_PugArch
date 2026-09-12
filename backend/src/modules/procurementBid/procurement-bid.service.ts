@@ -669,6 +669,14 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
   const packetMeta = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket as any : {};
   const linkedRequirementId = Number(packetMeta.sourceRequirementId || packetMeta.requirementId || packetMeta.linkedRequirementId || 0) || null;
 
+  const discloseEstimatedCost = Boolean(
+    bid.discloseEstimatedCost ??
+    packetMeta.discloseEstimatedCost ??
+    packetMeta.basics?.discloseEstimatedCost ??
+    packetMeta.wizardData?.basics?.discloseEstimatedCost ??
+    false
+  );
+
   // Buyer packet & requirement documents are part of the tender pack sellers must respond to.
   // Filter out only internal buyer approval documents (e.g. budget sanctions) for sellers.
   const internalBuyerDocTypes = ['BUDGET_SANCTION', 'ADMINISTRATIVE_APPROVAL', 'PAC_CERTIFICATE', 'COMPETENT_AUTHORITY_APPROVAL', 'PRICE_REASONABILITY'];
@@ -725,7 +733,10 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     procurementType: bid.procurementType,
     quantity: moneyNumber(bid.quantity),
     unit: bid.unit,
-    estimatedValue: moneyNumber(bid.estimatedValue),
+    estimatedValue: (isBuyerOwner || isAdmin || discloseEstimatedCost || financialOpenStatuses.includes(bid.status))
+      ? moneyNumber(bid.estimatedValue)
+      : null,
+    discloseEstimatedCost,
     deliveryLocation: bid.deliveryLocation,
     state: bid.state,
     district: bid.district,

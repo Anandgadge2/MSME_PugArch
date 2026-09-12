@@ -1611,8 +1611,9 @@ const nextRateContractCode = () => `RC-${Math.floor(10000 + Math.random() * 9000
 const createAuctionForSubmittedProcurement = async (req: AuthRequest, requirement: any, draftBody: z.infer<typeof procurementDraftBody>) => {
   const methodSlug = methodSlugForDraft(draftBody);
   const payload = (draftBody.payload || {}) as Record<string, any>;
-  const hasAuction = ['reverse-auction', 'bid-with-reverse-auction'].includes(methodSlug) ||
-    Boolean(payload.basics?.isReverseAuctionNeeded || payload.rules?.auctionConfig || payload.auctionConfig || payload.allowReverseAuction);
+  const isAuctionMethod = ['reverse-auction', 'bid-with-reverse-auction'].includes(methodSlug);
+  const isAuctionExplicitlyEnabled = payload.allowReverseAuction === true || (payload.basics?.isReverseAuctionNeeded === true && payload.allowReverseAuction !== false);
+  const hasAuction = isAuctionMethod || isAuctionExplicitlyEnabled;
   if (!hasAuction) return null;
 
   const existing = await db.auction.findFirst({ where: { linkedRequirementId: requirement.id } });
@@ -1832,7 +1833,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     emdAmount: terms.emdAmount || tender.emdAmount || null,
     documentFee: tender.documentFee || null,
     allowClarification: schedule.clarificationAllowed !== false && schedule.clarificationAllowed !== 'false' && schedule.allowClarifications !== false,
-    allowReverseAuction: methodSlug === 'bid-with-reverse-auction' || Boolean(payload.allowReverseAuction || payload.basics?.isReverseAuctionNeeded || payload.rules?.auctionConfig || payload.auctionConfig),
+    allowReverseAuction: ['bid-with-reverse-auction', 'reverse-auction'].includes(methodSlug) || payload.allowReverseAuction === true || (payload.basics?.isReverseAuctionNeeded === true && payload.allowReverseAuction !== false),
     allowBoq: methodSlug === 'boq-based-bid',
     packetType: String(schedule.packetType || '').toLowerCase().includes('two') || methodSlug === 'two-packet-bid' ? 'TWO_PACKET' : 'SINGLE_PACKET',
     visibility: deriveVisibility({ procurementType: canonicalMethod, bidType, technicalPacket: { vendors } }),

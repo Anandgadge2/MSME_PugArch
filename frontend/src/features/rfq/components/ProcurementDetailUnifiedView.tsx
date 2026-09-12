@@ -44,6 +44,7 @@ import {
   HelpCircle,
   Gavel,
   Ban,
+  Lock,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -561,7 +562,7 @@ function parseDateValue(dateVal?: string | Date | null): Date | null {
   return d;
 }
 
-function DeadlineCountdown({ targetDate }: { targetDate: Date | string }) {
+function DeadlineCountdown({ targetDate, label = 'Quote Due: ' }: { targetDate: Date | string; label?: string }) {
   const dateObj = useMemo(() => parseDateValue(targetDate), [targetDate]);
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number; isPassed: boolean }>({
     days: 0,
@@ -607,7 +608,7 @@ function DeadlineCountdown({ targetDate }: { targetDate: Date | string }) {
     <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-2xs">
       <Clock className="h-3 w-3 text-amber-600 animate-pulse" />
       <span className="font-mono">
-        <span className="text-amber-900/80 font-bold">Stage 1 Quote Due: </span>
+        <span className="text-amber-900/80 font-bold">{label}</span>
         {timeLeft.days > 0 ? `${timeLeft.days}d ` : ''}
         {String(timeLeft.hours).padStart(2, '0')}h {String(timeLeft.minutes).padStart(2, '0')}m {String(timeLeft.seconds).padStart(2, '0')}s left
       </span>
@@ -745,12 +746,14 @@ interface BuyerSideContextValue {
   isBuyer: boolean;
   isOpenTender: boolean;
   isLimitedTender: boolean;
+  shouldShowEstimatedCost?: boolean;
 }
 
 const BuyerSideContext = React.createContext<BuyerSideContextValue>({
   isBuyer: false,
   isOpenTender: false,
   isLimitedTender: false,
+  shouldShowEstimatedCost: false,
 });
 
 function PropertyItem({
@@ -1364,9 +1367,22 @@ function ScopeSummaryCard({
     }
   }
 
+  const ctx = React.useContext(BuyerSideContext);
+  const shouldShowCost = ctx.shouldShowEstimatedCost ?? ctx.isBuyer;
+
   const freeText = textParts.join(' ').trim();
   const effectiveUrgency = urgency || 'Normal';
   const isUrgent = String(effectiveUrgency).toLowerCase().includes('urgent');
+
+  const visibleKeyValues = parsedKeyValues.filter(kv => {
+    if (!shouldShowCost) {
+      const lk = kv.label.toLowerCase();
+      if (lk.includes('value') || lk.includes('price') || lk.includes('cost') || lk.includes('rate') || lk.includes('budget')) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-3">
@@ -1374,7 +1390,13 @@ function ScopeSummaryCard({
       <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50/80 p-3 border border-slate-150">
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs">
           <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">Estimated Value:</span>
-          <span className="text-xs font-bold text-emerald-700">{formatCurrency(estimatedValue)}</span>
+          {shouldShowCost ? (
+            <span className="text-xs font-bold text-emerald-700">{formatCurrency(estimatedValue)}</span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600">
+              Confidential <Lock className="h-3 w-3 text-slate-400" />
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs">
           <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">Urgency:</span>
@@ -1385,7 +1407,7 @@ function ScopeSummaryCard({
             {effectiveUrgency}
           </span>
         </div>
-        {parsedKeyValues.map((kv, idx) => (
+        {visibleKeyValues.map((kv, idx) => (
           <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs">
             <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">{kv.label}:</span>
             <span className="text-xs font-semibold text-slate-800">{kv.val}</span>
@@ -1626,6 +1648,8 @@ function LineItemsTable({
   defaultSubject?: string;
   isBuyer?: boolean;
 }) {
+  const ctx = React.useContext(BuyerSideContext);
+  const shouldShowCost = ctx.shouldShowEstimatedCost ?? ctx.isBuyer ?? isBuyer;
   const [viewingItemFiles, setViewingItemFiles] = useState<{ title: string; files: any[] } | null>(null);
   const list = asArray(items).filter(hasDetailData);
 
@@ -1710,6 +1734,13 @@ function LineItemsTable({
       width: 'w-28',
       align: 'right',
       cell: (item) => {
+        if (!shouldShowCost) {
+          return (
+            <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 whitespace-nowrap">
+              Confidential
+            </span>
+          );
+        }
         const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
         const rawRate = firstPresent(item.estimatedUnitPrice, item.unitPrice, item.estimatedRate, item.price, item.rate, item.targetRate, sp.estimatedUnitPrice, sp.unitPrice, sp.estimatedRate, sp.price, sp.rate);
         const rateNumber = (rawRate !== undefined && rawRate !== null && rawRate !== '' && !isNaN(Number(rawRate)) && Number(rawRate) > 0) ? Number(rawRate) : null;
@@ -1798,7 +1829,7 @@ function LineItemsTable({
         );
       },
     },
-  ], [defaultSubject]);
+  ], [defaultSubject, shouldShowCost]);
 
   if (!list.length) return null;
 
@@ -1889,6 +1920,8 @@ function BoqTableList({
   defaultCategory?: string;
   defaultEstimatedValue?: any;
 }) {
+  const ctx = React.useContext(BuyerSideContext);
+  const shouldShowCost = ctx.shouldShowEstimatedCost ?? ctx.isBuyer;
   const list = asArray(data).filter(hasDetailData);
 
   const columns = useMemo<ColumnDef<any>[]>(() => [
@@ -1925,6 +1958,9 @@ function BoqTableList({
       key: 'estimatedRate',
       header: 'Est. Rate',
       cell: (item) => {
+        if (!shouldShowCost) {
+          return <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 whitespace-nowrap">Confidential</span>;
+        }
         const rawRate = firstPresent(item.estimatedRate, item.rate, item.unitPrice, item.price, item.estimatedPrice);
         const rate = (rawRate !== undefined && rawRate !== null && rawRate !== '' && rawRate !== '-')
           ? rawRate
@@ -1944,6 +1980,9 @@ function BoqTableList({
       key: 'total',
       header: 'Total',
       cell: (item) => {
+        if (!shouldShowCost) {
+          return <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 whitespace-nowrap">Confidential</span>;
+        }
         const rawTotal = firstPresent(item.total, item.amount, item.totalPrice, item.estimatedTotal);
         const total = (rawTotal !== undefined && rawTotal !== null && rawTotal !== '' && rawTotal !== '-')
           ? rawTotal
@@ -1951,7 +1990,7 @@ function BoqTableList({
         return <span className="font-bold text-slate-900">{total !== '-' ? (typeof total === 'number' ? formatCurrency(total) : formatPrimitiveValue(total)) : '-'}</span>;
       },
     },
-  ], [defaultCategory, defaultSubject, defaultEstimatedValue]);
+  ], [defaultCategory, defaultSubject, defaultEstimatedValue, shouldShowCost]);
 
   if (!list.length) return null;
 
@@ -2190,6 +2229,7 @@ export interface ProcurementDetailUnifiedViewProps {
   department?: string;
   buyer?: any;
   estimatedValue?: number | string;
+  discloseEstimatedCost?: boolean;
   deadlineDate?: Date | string | null;
   createdAt?: Date | string | null;
   publishedDate?: string;
@@ -2550,6 +2590,40 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const serviceDetails = props.serviceDetails || payload.serviceDetails || {};
   const buyerProfile = props.buyer?.buyerProfile || {};
   const buyerOrg = props.buyer?.buyerOrganization || props.buyer?.organization || {};
+
+  const discloseEstimatedCost = Boolean(
+    props.discloseEstimatedCost ??
+    payload?.discloseEstimatedCost ??
+    basics?.discloseEstimatedCost ??
+    payload?.basics?.discloseEstimatedCost ??
+    false
+  );
+
+  const statusUpper = String(props.status || '').toUpperCase();
+  const isPostBiddingStage = [
+    'FINANCIAL_EVALUATION',
+    'L1_GENERATED',
+    'AWARD_RECOMMENDED',
+    'AWARDED',
+    'CLOSED',
+    'COMPLETED'
+  ].includes(statusUpper);
+
+  const shouldShowEstimatedCost = Boolean(
+    isBuyerSide ||
+    isBuyerOrAdmin ||
+    discloseEstimatedCost ||
+    isPostBiddingStage
+  );
+
+  const allowsReverseAuction = Boolean(
+    (props as any)?.allowReverseAuction ??
+    payload?.allowReverseAuction ??
+    rules?.allowReverseAuction ??
+    basics?.isReverseAuctionNeeded ??
+    payload?.basics?.isReverseAuctionNeeded ??
+    ['REVERSE_AUCTION', 'BID_WITH_REVERSE_AUCTION'].includes(String(props.procurementMethod || props.procurementType || '').toUpperCase())
+  );
 
   const documents = props.documents || [];
   const requiredDocuments = firstPresent(
@@ -3503,9 +3577,22 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       value: closingDateFormatted || 'N/A',
       icon: Clock,
       tone: 'rose' as Tone,
-      subtext: linkedAuction ? 'Stage 1 initial quotation cutoff' : 'Bidding window closing'
+      subtext: (linkedAuction && allowsReverseAuction) ? 'Stage 1 initial quotation cutoff' : 'Bidding window closing'
     },
-    { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' },
+    shouldShowEstimatedCost
+      ? { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' }
+      : {
+          label: 'Estimated Value',
+          value: (
+            <span className="inline-flex items-center gap-1.5 text-slate-700 font-bold">
+              <span>Confidential</span>
+              <Lock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+            </span>
+          ),
+          icon: Lock,
+          tone: 'slate' as Tone,
+          subtext: 'Competitive bidding (sealed)'
+        },
     { label: 'Buyer Contact', value: formatPrimitiveValue(buyerContactPerson, 'buyerContact'), icon: PhoneCall, tone: 'amber' as Tone, subtext: buyerPhoneNum || 'Procurement officer' },
     { label: 'Evaluation', value: formatPrimitiveValue(evaluationMethod, 'evaluationMethod'), icon: ClipboardCheck, tone: 'violet' as Tone, subtext: 'Selection criteria' },
     ...(isBuyerOrAdmin ? [{ label: 'Responses', value: Math.max(props.participantsCount || 0, submittedParticipations.length).toLocaleString('en-IN'), icon: Users, tone: 'sky' as Tone, subtext: isRfqType ? 'Quotations submitted' : 'Proposals submitted' }] : []),
@@ -3551,7 +3638,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               `Method: ${procurementMethod}`,
               `Deadline: ${closingDateFormatted}`,
               // `EMD Required: ${props.isEmdRequired ? formatCurrency(props.emdAmount || 0) : 'Nil'}`, // Commented out as requested
-              `Estimated Value: ${formatCurrency(props.estimatedValue)}`,
+              `Estimated Value: ${shouldShowEstimatedCost ? formatCurrency(props.estimatedValue) : 'Confidential (Competitive Bidding)'}`,
             ],
           },
         ],
@@ -3567,10 +3654,10 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           it.itemName || it.name || it.description || `Item ${i + 1}`,
           String(it.quantity || it.qty || 1),
           it.unit || 'Units',
-          it.estimatedPrice || it.unitPrice || it.price ? formatCurrency(it.estimatedPrice || it.unitPrice || it.price) : '—',
+          shouldShowEstimatedCost ? (it.estimatedPrice || it.unitPrice || it.price ? formatCurrency(it.estimatedPrice || it.unitPrice || it.price) : '—') : 'Confidential',
           it.gstRate || it.gst ? `${it.gstRate || it.gst}%` : 'Standard',
         ]),
-        financials: { grandTotal: Number(props.estimatedValue || 0) },
+        financials: shouldShowEstimatedCost ? { grandTotal: Number(props.estimatedValue || 0) } : undefined,
         terms: [
           `Payment Terms: ${paymentTerms}`,
           `Delivery Terms: ${props.deliveryTerms || 'Standard'}`,
@@ -3587,7 +3674,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   };
 
   return (
-    <BuyerSideContext.Provider value={{ isBuyer: isBuyerSide, isOpenTender: isBuyerOpenTender, isLimitedTender: isBuyerLimitedTender }}>
+    <BuyerSideContext.Provider value={{
+      isBuyer: isBuyerSide,
+      isOpenTender: isBuyerOpenTender,
+      isLimitedTender: isBuyerLimitedTender,
+      shouldShowEstimatedCost,
+    }}>
       <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6 lg:px-8">
         {/* Navigation Breadcrumb & Back Button */}
@@ -3641,7 +3733,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         )}
 
         {/* Live Reverse Auction Banner for Sellers */}
-        {!isBuyerSide && linkedAuction && ['LIVE', 'SCHEDULED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
+        {!isBuyerSide && linkedAuction && allowsReverseAuction && ['LIVE', 'SCHEDULED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
           <SellerLiveAuctionBanner
             auctionId={linkedAuction.id}
             procurementTitle={resolvedSubject}
@@ -3662,7 +3754,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     {formatPrimitiveValue(buyerOrgName, 'organization')}
                   </span>
                 )}
-                {props.deadlineDate && <DeadlineCountdown targetDate={props.deadlineDate} />}
+                {props.deadlineDate && (
+                  <DeadlineCountdown
+                    targetDate={props.deadlineDate}
+                    label={(linkedAuction && allowsReverseAuction) ? 'Stage 1 Quote Due: ' : 'Quote Due: '}
+                  />
+                )}
                 {props.hasSubmittedProposal && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
                     <ShieldCheck className="h-3 w-3" />

@@ -836,7 +836,13 @@ export default function BidParticipationPage() {
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-slate-500">Value:</span>
-                <span className="font-semibold text-slate-900">{money(bid.estimatedValue)}</span>
+                {bid.discloseEstimatedCost === false ? (
+                  <span className="inline-flex items-center gap-1 font-semibold text-slate-600">
+                    Confidential <Lock className="h-3 w-3 text-slate-400" />
+                  </span>
+                ) : (
+                  <span className="font-semibold text-slate-900">{money(bid.estimatedValue)}</span>
+                )}
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-slate-500">Closing:</span>

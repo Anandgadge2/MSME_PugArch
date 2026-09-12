@@ -68,6 +68,7 @@ export interface ProcurementBid {
   deliveryLocation: string;
   quantity: string;
   estimatedValue: number;
+  discloseEstimatedCost?: boolean;
   startDate: string;
   endDate: string;
   status: BidStatus;
