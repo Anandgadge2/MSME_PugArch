@@ -1099,9 +1099,24 @@ export default function SubmitQuotationPage() {
       const match = restoreSaved
         ? (savedDocs.find(d => String(d?.name || d?.documentType || '').toLowerCase().trim() === doc.name.toLowerCase().trim()) || savedDocs[idx])
         : null;
+      const uniqueId = `doc-init-${idx}-${match?.fileAssetId || match?.id || Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       return match?.fileAssetId || match?.fileUrl || match?.url
-        ? { ...doc, fileAssetId: match.fileAssetId || match.id, fileName: match.fileName || match.name || doc.name, fileUrl: match.fileUrl || match.url || '', status: 'done', progress: 100 }
-        : { ...doc, status: 'empty', progress: 0 };
+        ? {
+            ...doc,
+            id: uniqueId,
+            fileAssetId: match.fileAssetId || match.id,
+            fileName: match.fileName || match.name || doc.name,
+            fileUrl: match.fileUrl || match.url || '',
+            status: 'done' as const,
+            progress: 100,
+            taggedAs: doc.name
+          }
+        : {
+            ...doc,
+            id: uniqueId,
+            status: 'empty' as const,
+            progress: 0
+          };
     }));
 
     setLineQuotes(itemsList.map((item, idx) => {
@@ -1207,28 +1222,34 @@ export default function SubmitQuotationPage() {
         }
       }
 
-      const tempId = `doc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      setDocUploads(prev => [
-        ...prev.filter(d => d.status !== 'empty'),
-        {
-          name: autoTag || file.name,
-          required: false,
-          fileName: file.name,
-          fileSize: file.size,
-          status: 'uploading',
-          progress: 20,
-          taggedAs: autoTag,
-          id: tempId
-        } as any
-      ]);
+      const tempId = `doc-upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      setDocUploads(prev => {
+        // If an upload already exists for this exact targetTag, replace it so we never duplicate tags or filenames
+        const filtered = autoTag
+          ? prev.filter(d => d.status !== 'empty' && (d.taggedAs || d.name)?.toLowerCase().trim() !== autoTag.toLowerCase().trim())
+          : prev.filter(d => d.status !== 'empty');
+        return [
+          ...filtered,
+          {
+            name: autoTag || file.name,
+            required: false,
+            fileName: file.name,
+            fileSize: file.size,
+            status: 'uploading' as const,
+            progress: 25,
+            taggedAs: autoTag,
+            id: tempId
+          }
+        ];
+      });
 
       try {
         const result = await uploadFile(file, percent => {
-          setDocUploads(prev => prev.map((item: any) => item.id === tempId ? { ...item, progress: percent } : item));
+          setDocUploads(prev => prev.map(item => item.id === tempId ? { ...item, progress: percent } : item));
         });
-        setDocUploads(prev => prev.map((item: any) => item.id === tempId ? {
+        setDocUploads(prev => prev.map(item => item.id === tempId ? {
           ...item,
-          status: 'done',
+          status: 'done' as const,
           progress: 100,
           fileAssetId: result.id || null,
           fileUrl: result.url || '',
@@ -1239,9 +1260,9 @@ export default function SubmitQuotationPage() {
         setErrors(prev => { const n = { ...prev }; delete n.requestedDocs; return n; });
         toast.success(`${file.name} uploaded successfully`);
       } catch (err: any) {
-        setDocUploads(prev => prev.map((item: any) => item.id === tempId ? {
+        setDocUploads(prev => prev.map(item => item.id === tempId ? {
           ...item,
-          status: 'error',
+          status: 'error' as const,
           error: err?.message || 'Upload failed'
         } : item));
         toast.error(`Failed to upload ${file.name}: ${err?.message || 'Unknown error'}`);
@@ -1249,11 +1270,10 @@ export default function SubmitQuotationPage() {
     }
   }, [isReadOnly, requestedDocs, docUploads]);
 
-  const handleTagDocument = (docIdentifier: string, taggedName: string) => {
+  const handleTagDocument = (docId: string, taggedName: string) => {
     if (isReadOnly) return;
     setDocUploads(prev => prev.map(item => {
-      const isMatch = (item.id && item.id === docIdentifier) || (item.fileName && item.fileName === docIdentifier);
-      if (isMatch) {
+      if (item.id === docId) {
         return {
           ...item,
           taggedAs: taggedName,
@@ -1265,12 +1285,9 @@ export default function SubmitQuotationPage() {
     setErrors(prev => { const n = { ...prev }; delete n.requestedDocs; return n; });
   };
 
-  const handleRemoveDocument = (docIdentifier: string) => {
+  const handleRemoveDocument = (docId: string) => {
     if (isReadOnly) return;
-    setDocUploads(prev => prev.filter(item => {
-      const isMatch = (item.id && item.id === docIdentifier) || (item.fileName && item.fileName === docIdentifier);
-      return !isMatch;
-    }));
+    setDocUploads(prev => prev.filter(item => item.id !== docId));
   };
 
   const updateLineQuote = (index: number, patch: Partial<LineQuote>) => {
@@ -2404,17 +2421,26 @@ export default function SubmitQuotationPage() {
                     BUYER-REQUIRED DOCUMENTS CHECKLIST
                   </p>
                   <div className="space-y-2">
-                    {requestedDocs.map(doc => {
+                    {requestedDocs.map((doc, docIdx) => {
                       const isCovered = coveredDocNames.has(doc.name.trim().toLowerCase());
+                      const isDocUploading = docUploads.some(
+                        d => d.status === 'uploading' && (d.taggedAs || d.name)?.trim().toLowerCase() === doc.name.trim().toLowerCase()
+                      );
+
                       return (
-                        <div key={doc.name} className="flex items-center justify-between gap-2.5 text-xs font-semibold bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                        <div
+                          key={`checklist-${doc.name}-${docIdx}`}
+                          className="flex items-center justify-between gap-2.5 text-xs font-semibold bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs"
+                        >
                           <div className="flex items-center gap-2.5 min-w-0">
-                            {isCovered ? (
+                            {isDocUploading ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-[#12335f] shrink-0" />
+                            ) : isCovered ? (
                               <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                             ) : (
                               <Circle className="h-4 w-4 text-slate-300 shrink-0" />
                             )}
-                            <span className={cn("truncate", isCovered ? 'text-slate-800 font-bold' : 'text-slate-700 font-medium')}>
+                            <span className={cn("truncate", isCovered ? 'text-slate-800 font-bold' : isDocUploading ? 'text-[#12335f] font-bold' : 'text-slate-700 font-medium')}>
                               {doc.name}
                             </span>
                             {doc.required && (
@@ -2422,27 +2448,47 @@ export default function SubmitQuotationPage() {
                                 Required
                               </span>
                             )}
-                            {isCovered && (
+                            {isDocUploading && (
+                              <span className="text-[9px] font-bold text-[#12335f] bg-[#12335f]/10 px-2 py-0.5 rounded border border-[#12335f]/20 shrink-0 animate-pulse">
+                                Uploading...
+                              </span>
+                            )}
+                            {isCovered && !isDocUploading && (
                               <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
                                 Uploaded & Tagged
                               </span>
                             )}
                           </div>
                           {!isReadOnly && (
-                            <label className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-[#12335f] bg-[#12335f]/5 text-[#12335f] text-xs font-bold hover:bg-[#12335f] hover:text-white transition shadow-2xs cursor-pointer shrink-0">
-                              <Upload className="h-3.5 w-3.5" />
-                              <span>{isCovered ? 'Replace' : 'Upload'}</span>
-                              <input
-                                type="file"
-                                accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
-                                className="hidden"
-                                onChange={e => {
-                                  if (e.target.files?.length) {
-                                    handleUploadFiles(e.target.files, doc.name);
-                                  }
-                                  e.target.value = '';
-                                }}
-                              />
+                            <label className={cn(
+                              "inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-bold transition shadow-2xs cursor-pointer shrink-0",
+                              isDocUploading
+                                ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none"
+                                : "border-[#12335f] bg-[#12335f]/5 text-[#12335f] hover:bg-[#12335f] hover:text-white"
+                            )}>
+                              {isDocUploading ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  <span>Uploading...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="h-3.5 w-3.5" />
+                                  <span>{isCovered ? 'Replace' : 'Upload'}</span>
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
+                                    className="hidden"
+                                    disabled={isDocUploading}
+                                    onChange={e => {
+                                      if (e.target.files?.length) {
+                                        handleUploadFiles(e.target.files, doc.name);
+                                      }
+                                      e.target.value = '';
+                                    }}
+                                  />
+                                </>
+                              )}
                             </label>
                           )}
                         </div>
@@ -2495,35 +2541,52 @@ export default function SubmitQuotationPage() {
             {docUploads.filter(d => d.status !== 'empty').length > 0 && (
               <div className="space-y-2.5">
                 {docUploads.filter(d => d.status !== 'empty').map((item: any, idx: number) => {
-                  const docKey = item.id || item.fileName || `doc-${idx}`;
+                  const docKey = item.id || `doc-${idx}-${item.fileName || 'file'}`;
+                  const isUploading = item.status === 'uploading';
                   return (
                     <div
-                      key={docKey}
+                      key={`uploaded-doc-${docKey}-${idx}`}
                       className="rounded-xl border border-slate-200/90 bg-white p-3.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shadow-2xs transition hover:shadow-xs"
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-[#12335f]">
-                          <FileText className="h-5 w-5" />
+                        <div className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                          isUploading ? "bg-indigo-100 text-[#12335f] animate-pulse" : "bg-indigo-50 text-[#12335f]"
+                        )}>
+                          {isUploading ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <FileText className="h-5 w-5" />
+                          )}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-bold text-slate-900 truncate">
                             {item.fileName || item.name}
                           </p>
-                          <p className="text-[11px] font-medium text-slate-500 mt-0.5">
-                            {item.fileSize ? `${formatBytes(item.fileSize)} - ` : ''}
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {item.fileSize ? (
+                              <span className="text-[11px] font-medium text-slate-500">{formatBytes(item.fileSize)}</span>
+                            ) : null}
                             {item.status === 'done' ? (
-                              <span className="text-emerald-600 font-bold">ready</span>
-                            ) : item.status === 'uploading' ? (
-                              <span className="text-[#12335f] font-semibold">Uploading {item.progress}%</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span>Uploaded</span>
+                              </span>
+                            ) : isUploading ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#12335f]">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                <span>Uploading {item.progress}%...</span>
+                              </span>
                             ) : (
-                              <span className="text-red-600 font-semibold">{item.error || 'Upload error'}</span>
+                              <span className="text-[11px] font-bold text-red-600">{item.error || 'Upload error'}</span>
                             )}
-                          </p>
-                          {item.status === 'uploading' && (
-                            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                          </div>
+                          {/* Progress bar visible at the time of uploading only */}
+                          {isUploading && (
+                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                               <div
                                 className="h-full rounded-full bg-[#12335f] transition-all duration-300"
-                                style={{ width: `${item.progress}%` }}
+                                style={{ width: `${Math.max(item.progress, 15)}%` }}
                               />
                             </div>
                           )}
@@ -2532,10 +2595,10 @@ export default function SubmitQuotationPage() {
 
                       <div className="flex items-center gap-2 shrink-0">
                         {/* Tag dropdown select */}
-                        {!isReadOnly && item.status !== 'uploading' && (
+                        {!isReadOnly && !isUploading && (
                           <select
                             value={item.taggedAs || ''}
-                            onChange={e => handleTagDocument(docKey, e.target.value)}
+                            onChange={e => handleTagDocument(item.id || docKey, e.target.value)}
                             className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs transition focus:border-[#12335f] focus:outline-hidden"
                             title="Tag as required document..."
                           >
@@ -2548,7 +2611,7 @@ export default function SubmitQuotationPage() {
                         )}
 
                         {/* Action Buttons: Preview & Remove */}
-                        {(item.fileUrl || item.url) && (
+                        {(item.fileUrl || item.url) && !isUploading && (
                           <button
                             type="button"
                             onClick={() => handlePreviewDocument(item)}
@@ -2557,10 +2620,10 @@ export default function SubmitQuotationPage() {
                             <Eye className="h-3.5 w-3.5" /> Preview
                           </button>
                         )}
-                        {!isReadOnly && (
+                        {!isReadOnly && !isUploading && (
                           <button
                             type="button"
-                            onClick={() => handleRemoveDocument(docKey)}
+                            onClick={() => handleRemoveDocument(item.id || docKey)}
                             className="inline-flex h-9 items-center gap-1 rounded-lg border border-red-200 bg-white px-3 text-xs font-bold text-red-600 hover:bg-red-50 shadow-2xs transition cursor-pointer"
                           >
                             <Trash2 className="h-3.5 w-3.5" /> Remove
