@@ -5,6 +5,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
 import { formatRefId } from '../../../utils/refIdUtils';
 import {
+  Plus,
   ChevronRight,
   ChevronLeft,
   Loader2,
@@ -33,7 +34,7 @@ import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { getCookieValue } from '../../../lib/auth';
-import { BASE_URL } from '../../../lib/api';
+import { BASE_URL, api } from '../../../lib/api';
 import { EmdCard, EmdInfo, isEmdApplicable } from '../components/EmdCard';
 import { EmdPaymentModal } from '../components/EmdPaymentModal';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
@@ -59,46 +60,41 @@ const authHeaders = (): Record<string, string> => {
   return headers;
 };
 
-const uploadFile = (file: File, onProgress?: (percent: number) => void): Promise<{ id: number; url: string }> =>
-  new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('entityType', 'quotation');
+const uploadFile = async (
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<{ id: number; url: string }> => {
+  if (onProgress) onProgress(20);
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('entityType', 'quotation');
 
-    xhr.open('POST', `${BASE_URL}/api/upload`, true);
-    xhr.withCredentials = true;
-
-    for (const [key, value] of Object.entries(authHeaders())) {
-      xhr.setRequestHeader(key, value);
-    }
-
-    xhr.upload.addEventListener('progress', (event) => {
-      if (!event.lengthComputable || !onProgress) return;
-      onProgress(Math.round((event.loaded / event.total) * 100));
+  try {
+    if (onProgress) onProgress(45);
+    const res = await api.fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
     });
 
-    xhr.onreadystatechange = () => {
-      if (xhr.readyState !== 4) return;
-      let body: any = {};
-      try {
-        body = xhr.responseText ? JSON.parse(xhr.responseText) : {};
-        if (body?.data) body = body.data;
-      } catch {
-        // ignore
-      }
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve({ id: body.id || body.fileAssetId, url: body.url || body.fileUrl || '' });
-      } else {
-        reject(new Error(body?.message || body?.error || `Upload failed (${xhr.status})`));
-      }
-    };
+    if (onProgress) onProgress(80);
 
-    xhr.onerror = () => reject(new Error('Network error during upload'));
-    xhr.ontimeout = () => reject(new Error('Upload timed out'));
-    xhr.onabort = () => reject(new Error('Upload aborted'));
-    xhr.send(formData);
-  });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => null);
+      throw new Error(errBody?.message || errBody?.error || `Upload failed (${res.status})`);
+    }
+
+    const body = await res.json();
+    const data = body?.data || body;
+    const url = data?.url || data?.signedUrl || (data?.fileId ? `/api/files/${data.fileId}/view` : (data?.file?.id ? `/api/files/${data.file.id}/view` : ''));
+    const id = data?.fileId || data?.file?.id || data?.id || Date.now();
+
+    if (onProgress) onProgress(100);
+    return { id: Number(id) || Date.now(), url: String(url || '') };
+  } catch (err: any) {
+    if (onProgress) onProgress(0);
+    throw err;
+  }
+};
 
 const formatCurrency = (val?: number | string) => {
   if (!val) return '—';
@@ -136,7 +132,7 @@ type RequestedDocUpload = {
 // Seller's quote against each buyer line item.
 type LineQuote = {
   itemName: string;
-  quantity: number;
+  quantity: number | string;
   unitOfMeasure: string;
   unitPrice: string;
   gstPercent: string;
@@ -1114,8 +1110,8 @@ export default function SubmitQuotationPage() {
         : null;
       return {
         itemName: item.itemName,
-        quantity: Number(item.quantity) || 0,
-        unitOfMeasure: item.unitOfMeasure || 'Nos',
+        quantity: match?.quantity != null ? match.quantity : (item.quantity != null ? item.quantity : 1),
+        unitOfMeasure: match?.unitOfMeasure || item?.unitOfMeasure || 'Nos',
         unitPrice: match?.unitPrice != null ? String(match.unitPrice) : '',
         gstPercent: match?.gstPercent != null ? String(match.gstPercent) : '18',
         makeBrand: match?.makeBrand || match?.brand || '',
@@ -1139,14 +1135,16 @@ export default function SubmitQuotationPage() {
         qty += lineQty;
       }
     });
-    return { total: Math.round(total * 100) / 100, qty, priced };
+    return { total: Math.round(total * 100) / 100, qty: Math.round(qty * 100) / 100, priced };
   }, [lineQuotes]);
 
   React.useEffect(() => {
-    if (isSubmittedQuote || lineTotals.priced === 0 || lineTotals.priced < lineQuotes.length) return;
-    setOfferedPrice(String(lineTotals.total));
-    setOfferedQuantity(String(lineTotals.qty));
-  }, [isSubmittedQuote, lineTotals, lineQuotes.length]);
+    if (isSubmittedQuote || lineTotals.priced === 0) return;
+    if (!offeredPrice || Number(offeredPrice) === 0) {
+      setOfferedPrice(String(lineTotals.total));
+      setOfferedQuantity(String(lineTotals.qty));
+    }
+  }, [isSubmittedQuote, lineTotals.priced, lineTotals.total, lineTotals.qty, offeredPrice]);
 
   // Assemble the structured submission payload persisted as RequirementResponse.responseData.
   // Function declaration (hoisted) so saveDraft, defined earlier in the component, can call it.
@@ -1186,7 +1184,7 @@ export default function SubmitQuotationPage() {
     return { documents: docs, lineItems: lines };
   }
 
-  const handleUploadFiles = useCallback(async (files: FileList | File[]) => {
+  const handleUploadFiles = useCallback(async (files: FileList | File[], targetTag?: string) => {
     if (isReadOnly) return;
     const fileList = Array.from(files);
     for (const file of fileList) {
@@ -1195,14 +1193,16 @@ export default function SubmitQuotationPage() {
         continue;
       }
       const fileNameLower = file.name.toLowerCase();
-      let autoTag = '';
-      for (const req of requestedDocs) {
-        const reqLower = req.name.toLowerCase();
-        if (fileNameLower.includes(reqLower) || (reqLower.includes('pan') && fileNameLower.includes('pan')) || (reqLower.includes('gst') && fileNameLower.includes('gst')) || (reqLower.includes('bank') && fileNameLower.includes('bank'))) {
-          const alreadyTagged = docUploads.some(d => d.status === 'done' && (d.taggedAs || d.name)?.toLowerCase() === reqLower);
-          if (!alreadyTagged) {
-            autoTag = req.name;
-            break;
+      let autoTag = targetTag || '';
+      if (!autoTag) {
+        for (const req of requestedDocs) {
+          const reqLower = req.name.toLowerCase();
+          if (fileNameLower.includes(reqLower) || (reqLower.includes('pan') && fileNameLower.includes('pan')) || (reqLower.includes('gst') && fileNameLower.includes('gst')) || (reqLower.includes('bank') && fileNameLower.includes('bank'))) {
+            const alreadyTagged = docUploads.some(d => d.status === 'done' && (d.taggedAs || d.name)?.toLowerCase() === reqLower);
+            if (!alreadyTagged) {
+              autoTag = req.name;
+              break;
+            }
           }
         }
       }
@@ -1216,7 +1216,7 @@ export default function SubmitQuotationPage() {
           fileName: file.name,
           fileSize: file.size,
           status: 'uploading',
-          progress: 0,
+          progress: 20,
           taggedAs: autoTag,
           id: tempId
         } as any
@@ -1232,35 +1232,71 @@ export default function SubmitQuotationPage() {
           progress: 100,
           fileAssetId: result.id || null,
           fileUrl: result.url || '',
-          url: result.url || ''
+          url: result.url || '',
+          taggedAs: autoTag || item.taggedAs,
+          name: autoTag || item.name || file.name
         } : item));
         setErrors(prev => { const n = { ...prev }; delete n.requestedDocs; return n; });
-        toast.success(`${file.name} uploaded`);
+        toast.success(`${file.name} uploaded successfully`);
       } catch (err: any) {
         setDocUploads(prev => prev.map((item: any) => item.id === tempId ? {
           ...item,
           status: 'error',
           error: err?.message || 'Upload failed'
         } : item));
-        toast.error(`Failed to upload ${file.name}`);
+        toast.error(`Failed to upload ${file.name}: ${err?.message || 'Unknown error'}`);
       }
     }
   }, [isReadOnly, requestedDocs, docUploads]);
 
-  const handleTagDocument = (index: number, taggedName: string) => {
+  const handleTagDocument = (docIdentifier: string, taggedName: string) => {
     if (isReadOnly) return;
-    setDocUploads(prev => prev.map((item, i) => i === index ? { ...item, taggedAs: taggedName, name: taggedName || item.fileName || item.name } : item));
+    setDocUploads(prev => prev.map(item => {
+      const isMatch = (item.id && item.id === docIdentifier) || (item.fileName && item.fileName === docIdentifier);
+      if (isMatch) {
+        return {
+          ...item,
+          taggedAs: taggedName,
+          name: taggedName || item.fileName || item.name
+        };
+      }
+      return item;
+    }));
     setErrors(prev => { const n = { ...prev }; delete n.requestedDocs; return n; });
   };
 
-  const handleRemoveDocument = (index: number) => {
+  const handleRemoveDocument = (docIdentifier: string) => {
     if (isReadOnly) return;
-    setDocUploads(prev => prev.filter((_, i) => i !== index));
+    setDocUploads(prev => prev.filter(item => {
+      const isMatch = (item.id && item.id === docIdentifier) || (item.fileName && item.fileName === docIdentifier);
+      return !isMatch;
+    }));
   };
 
   const updateLineQuote = (index: number, patch: Partial<LineQuote>) => {
     if (isReadOnly) return;
     setLineQuotes(prev => prev.map((line, i) => i === index ? { ...line, ...patch } : line));
+  };
+
+  const handleAddCustomLine = () => {
+    if (isReadOnly) return;
+    setLineQuotes(prev => [
+      ...prev,
+      {
+        itemName: `Additional Item / Service #${prev.length + 1}`,
+        quantity: 1,
+        unitOfMeasure: 'Nos',
+        unitPrice: '',
+        gstPercent: '18',
+        makeBrand: '',
+        remarks: ''
+      }
+    ]);
+  };
+
+  const handleRemoveCustomLine = (index: number) => {
+    if (isReadOnly) return;
+    setLineQuotes(prev => prev.filter((_, i) => i !== index));
   };
 
   const handlePreviewDocument = (item: any) => {
@@ -1771,7 +1807,7 @@ export default function SubmitQuotationPage() {
                     step="0.01"
                     value={offeredPrice}
                     onChange={e => { setOfferedPrice(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.offeredPrice; return n; }); }}
-                    disabled={isReadOnly || (lineQuotes.length > 0)}
+                    disabled={isReadOnly}
                     placeholder="e.g. 150000"
                     className={cn(
                       "peer h-11 w-full rounded-xl border pl-9 pr-16 text-xs font-bold text-slate-900 outline-none transition disabled:bg-slate-50 disabled:text-slate-500",
@@ -1789,10 +1825,24 @@ export default function SubmitQuotationPage() {
                   </div>
                 </div>
                 {fieldError('offeredPrice')}
-                {lineQuotes.length > 0 && (
-                  <p className="mt-1.5 text-[11px] text-slate-500 font-medium">
-                    Automatically calculated from Item-Wise Quotation lines (priced: {lineTotals.priced}/{lineQuotes.length}).
-                  </p>
+                {lineTotals.total > 0 && (
+                  <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
+                    <span className="text-slate-500 font-medium">
+                      Item-wise total: <strong className="text-slate-800 font-bold">₹{lineTotals.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong>
+                    </span>
+                    {String(lineTotals.total) !== String(offeredPrice) && !isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOfferedPrice(String(lineTotals.total));
+                          setErrors(prev => { const n = { ...prev }; delete n.offeredPrice; return n; });
+                        }}
+                        className="text-[#12335f] hover:underline font-bold cursor-pointer shrink-0"
+                      >
+                        Sync with Item-Wise Total
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -1809,10 +1859,10 @@ export default function SubmitQuotationPage() {
                     id="quotation-quantity"
                     type="number"
                     min="0"
-                    step="1"
+                    step="any"
                     value={offeredQuantity}
                     onChange={e => { setOfferedQuantity(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.offeredQuantity; return n; }); }}
-                    disabled={isReadOnly || (lineQuotes.length > 0)}
+                    disabled={isReadOnly}
                     placeholder={`e.g. ${maxQuantity || 100}`}
                     className={cn(
                       "w-full rounded-xl border h-11 pl-9 pr-4 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none transition disabled:bg-slate-50 disabled:text-slate-500",
@@ -1820,9 +1870,23 @@ export default function SubmitQuotationPage() {
                     )}
                   />
                 </div>
-                <p className="mt-1.5 text-[11px] text-slate-400 font-medium">
-                  {itemsList.length > 0 ? `Requirement includes ${itemsList.length} item(s). Specify total quantity you can supply.` : 'Specify total supply quantity.'}
-                </p>
+                <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
+                  <p className="text-slate-400 font-medium truncate">
+                    {itemsList.length > 0 ? `Requirement includes ${itemsList.length} item(s).` : 'Specify total supply quantity.'}
+                  </p>
+                  {lineTotals.qty > 0 && String(lineTotals.qty) !== String(offeredQuantity) && !isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOfferedQuantity(String(lineTotals.qty));
+                        setErrors(prev => { const n = { ...prev }; delete n.offeredQuantity; return n; });
+                      }}
+                      className="text-[#12335f] hover:underline font-bold cursor-pointer shrink-0"
+                    >
+                      Sync ({lineTotals.qty})
+                    </button>
+                  )}
+                </div>
                 {fieldError('offeredQuantity')}
               </div>
             </div>
@@ -2094,18 +2158,45 @@ export default function SubmitQuotationPage() {
                   Price every line item individually. The totals automatically fill your offered price and quantity.
                 </p>
               </div>
-              {lineQuotes.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                    <span className="text-slate-500 font-medium">Priced: </span>
-                    <span className="font-bold text-slate-900">{lineTotals.priced} / {lineQuotes.length}</span>
-                  </div>
-                  <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                    <span className="text-slate-600 font-medium">Subtotal (incl. GST): </span>
-                    <span className="font-black text-[#12335f]">₹{lineTotals.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              )}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {lineQuotes.length > 0 && (
+                  <>
+                    <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                      <span className="text-slate-500 font-medium">Priced: </span>
+                      <span className="font-bold text-slate-900">{lineTotals.priced} / {lineQuotes.length}</span>
+                    </div>
+                    <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                      <span className="text-slate-600 font-medium">Subtotal (incl. GST): </span>
+                      <span className="font-black text-[#12335f]">₹{lineTotals.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                    </div>
+                    {!isReadOnly && lineTotals.total > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOfferedPrice(String(lineTotals.total));
+                          setOfferedQuantity(String(lineTotals.qty));
+                          toast.success('Synced line totals to Quotation Details');
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-[#12335f]/10 text-[#12335f] hover:bg-[#12335f] hover:text-white transition text-xs font-bold shadow-2xs cursor-pointer"
+                      >
+                        Apply to Main Quote
+                      </button>
+                    )}
+                  </>
+                )}
+                {!isReadOnly && (
+                  <Button
+                    type="button"
+                    onClick={handleAddCustomLine}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-lg border-dashed border-slate-300 hover:border-[#12335f] text-[#12335f] bg-white px-3 text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Add Item</span>
+                  </Button>
+                )}
+              </div>
             </div>
 
             {lineQuotes.length === 0 ? (
@@ -2144,15 +2235,52 @@ export default function SubmitQuotationPage() {
                       return (
                         <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-4 py-3 text-xs font-bold text-slate-900">
-                            {line.itemName}
-                            {itemsList[idx]?.description && (
-                              <p className="mt-0.5 text-[10px] font-medium text-slate-500 line-clamp-1">{itemsList[idx].description}</p>
+                            {idx < itemsList.length ? (
+                              <>
+                                {line.itemName}
+                                {itemsList[idx]?.description && (
+                                  <p className="mt-0.5 text-[10px] font-medium text-slate-500 line-clamp-1">{itemsList[idx].description}</p>
+                                )}
+                              </>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={line.itemName}
+                                  onChange={e => updateLineQuote(idx, { itemName: e.target.value })}
+                                  disabled={isReadOnly}
+                                  placeholder="Item Name / Service"
+                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+                                />
+                                {!isReadOnly && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveCustomLine(idx)}
+                                    className="text-red-500 hover:text-red-700 p-1 cursor-pointer shrink-0"
+                                    title="Remove item"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-xs font-bold text-slate-800 text-right tabular-nums whitespace-nowrap">
-                            <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200">
-                              {line.quantity} <span className="text-[9px] font-semibold text-slate-500 uppercase">{line.unitOfMeasure}</span>
-                            </span>
+                          <td className="px-4 py-2 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={line.quantity}
+                                onChange={e => updateLineQuote(idx, { quantity: e.target.value })}
+                                disabled={isReadOnly}
+                                placeholder="1"
+                                className="h-8 w-24 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+                              />
+                              <span className="text-[10px] font-bold text-slate-500 uppercase shrink-0 min-w-[28px] text-left">
+                                {line.unitOfMeasure || 'Nos'}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-4 py-2 text-right">
                             <input
@@ -2279,19 +2407,43 @@ export default function SubmitQuotationPage() {
                     {requestedDocs.map(doc => {
                       const isCovered = coveredDocNames.has(doc.name.trim().toLowerCase());
                       return (
-                        <div key={doc.name} className="flex items-center gap-2.5 text-xs font-semibold">
-                          {isCovered ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                          ) : (
-                            <Circle className="h-4 w-4 text-slate-300 shrink-0" />
-                          )}
-                          <span className={isCovered ? 'text-slate-800 font-bold' : 'text-slate-600 font-medium'}>
-                            {doc.name}
-                          </span>
-                          {doc.required && (
-                            <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
-                              Required
+                        <div key={doc.name} className="flex items-center justify-between gap-2.5 text-xs font-semibold bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {isCovered ? (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                            ) : (
+                              <Circle className="h-4 w-4 text-slate-300 shrink-0" />
+                            )}
+                            <span className={cn("truncate", isCovered ? 'text-slate-800 font-bold' : 'text-slate-700 font-medium')}>
+                              {doc.name}
                             </span>
+                            {doc.required && (
+                              <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 shrink-0">
+                                Required
+                              </span>
+                            )}
+                            {isCovered && (
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
+                                Uploaded & Tagged
+                              </span>
+                            )}
+                          </div>
+                          {!isReadOnly && (
+                            <label className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-[#12335f] bg-[#12335f]/5 text-[#12335f] text-xs font-bold hover:bg-[#12335f] hover:text-white transition shadow-2xs cursor-pointer shrink-0">
+                              <Upload className="h-3.5 w-3.5" />
+                              <span>{isCovered ? 'Replace' : 'Upload'}</span>
+                              <input
+                                type="file"
+                                accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
+                                className="hidden"
+                                onChange={e => {
+                                  if (e.target.files?.length) {
+                                    handleUploadFiles(e.target.files, doc.name);
+                                  }
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
                           )}
                         </div>
                       );
@@ -2342,79 +2494,82 @@ export default function SubmitQuotationPage() {
             {/* Card 3: Uploaded Files List with Dropdown Tagging */}
             {docUploads.filter(d => d.status !== 'empty').length > 0 && (
               <div className="space-y-2.5">
-                {docUploads.filter(d => d.status !== 'empty').map((item: any, idx: number) => (
-                  <div
-                    key={item.id || idx}
-                    className="rounded-xl border border-slate-200/90 bg-white p-3.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shadow-2xs transition hover:shadow-xs"
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-[#12335f]">
-                        <FileText className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-slate-900 truncate">
-                          {item.fileName || item.name}
-                        </p>
-                        <p className="text-[11px] font-medium text-slate-500 mt-0.5">
-                          {item.fileSize ? `${formatBytes(item.fileSize)} - ` : ''}
-                          {item.status === 'done' ? (
-                            <span className="text-emerald-600 font-bold">ready</span>
-                          ) : item.status === 'uploading' ? (
-                            <span className="text-[#12335f] font-semibold">Uploading {item.progress}%</span>
-                          ) : (
-                            <span className="text-red-600 font-semibold">{item.error || 'Upload error'}</span>
+                {docUploads.filter(d => d.status !== 'empty').map((item: any, idx: number) => {
+                  const docKey = item.id || item.fileName || `doc-${idx}`;
+                  return (
+                    <div
+                      key={docKey}
+                      className="rounded-xl border border-slate-200/90 bg-white p-3.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shadow-2xs transition hover:shadow-xs"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-[#12335f]">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-900 truncate">
+                            {item.fileName || item.name}
+                          </p>
+                          <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                            {item.fileSize ? `${formatBytes(item.fileSize)} - ` : ''}
+                            {item.status === 'done' ? (
+                              <span className="text-emerald-600 font-bold">ready</span>
+                            ) : item.status === 'uploading' ? (
+                              <span className="text-[#12335f] font-semibold">Uploading {item.progress}%</span>
+                            ) : (
+                              <span className="text-red-600 font-semibold">{item.error || 'Upload error'}</span>
+                            )}
+                          </p>
+                          {item.status === 'uploading' && (
+                            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full bg-[#12335f] transition-all duration-300"
+                                style={{ width: `${item.progress}%` }}
+                              />
+                            </div>
                           )}
-                        </p>
-                        {item.status === 'uploading' && (
-                          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                            <div
-                              className="h-full rounded-full bg-[#12335f] transition-all duration-300"
-                              style={{ width: `${item.progress}%` }}
-                            />
-                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Tag dropdown select */}
+                        {!isReadOnly && item.status !== 'uploading' && (
+                          <select
+                            value={item.taggedAs || ''}
+                            onChange={e => handleTagDocument(docKey, e.target.value)}
+                            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs transition focus:border-[#12335f] focus:outline-hidden"
+                            title="Tag as required document..."
+                          >
+                            <option value="">Tag as required document...</option>
+                            {requestedDocs.map(req => (
+                              <option key={req.name} value={req.name}>{req.name}</option>
+                            ))}
+                            <option value="Other">Other / Optional Document</option>
+                          </select>
+                        )}
+
+                        {/* Action Buttons: Preview & Remove */}
+                        {(item.fileUrl || item.url) && (
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewDocument(item)}
+                            className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer"
+                          >
+                            <Eye className="h-3.5 w-3.5" /> Preview
+                          </button>
+                        )}
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDocument(docKey)}
+                            className="inline-flex h-9 items-center gap-1 rounded-lg border border-red-200 bg-white px-3 text-xs font-bold text-red-600 hover:bg-red-50 shadow-2xs transition cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Remove
+                          </button>
                         )}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {/* Tag dropdown select */}
-                      {!isReadOnly && item.status !== 'uploading' && (
-                        <select
-                          value={item.taggedAs || ''}
-                          onChange={e => handleTagDocument(idx, e.target.value)}
-                          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs transition focus:border-[#12335f] focus:outline-hidden"
-                          title="Tag as required document..."
-                        >
-                          <option value="">Tag as required document...</option>
-                          {requestedDocs.map(req => (
-                            <option key={req.name} value={req.name}>{req.name}</option>
-                          ))}
-                          <option value="Other">Other / Optional Document</option>
-                        </select>
-                      )}
-
-                      {/* Action Buttons: Preview & Remove */}
-                      {(item.fileUrl || item.url) && (
-                        <button
-                          type="button"
-                          onClick={() => handlePreviewDocument(item)}
-                          className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer"
-                        >
-                          <Eye className="h-3.5 w-3.5" /> Preview
-                        </button>
-                      )}
-                      {!isReadOnly && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveDocument(idx)}
-                          className="inline-flex h-9 items-center gap-1 rounded-lg border border-red-200 bg-white px-3 text-xs font-bold text-red-600 hover:bg-red-50 shadow-2xs transition cursor-pointer"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Remove
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
