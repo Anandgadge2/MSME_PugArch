@@ -33,7 +33,7 @@ function SortableHeaderBase<T extends string = string>({
       onClick={() => onSort(field)}
       title={title || `Sort by ${label}`}
       className={cn(
-        'inline-flex items-center gap-1.5 text-[10px] lg:text-xs font-black uppercase tracking-wider transition-colors',
+        'inline-flex items-center gap-1.5 text-[10px] lg:text-xs font-black uppercase tracking-wider transition-colors whitespace-nowrap',
         align === 'right' && 'justify-end w-full text-right',
         align === 'center' && 'justify-center w-full text-center',
         align === 'left' && 'justify-start text-left',
@@ -42,7 +42,7 @@ function SortableHeaderBase<T extends string = string>({
       )}
       aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
-      <span>{label}</span>
+      <span className="whitespace-nowrap">{label}</span>
       {active ? (
         direction === 'asc' ? (
           <ArrowUp className="h-3 w-3 lg:h-3.5 lg:w-3.5 shrink-0 text-[#12335f]" />

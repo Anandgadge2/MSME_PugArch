@@ -44,7 +44,7 @@ import { fetchRateContracts } from '../../rateContract/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode } from '../../shared/hooks';
-import { formatDisplayDate as formatSharedDate, hasExplicitTime } from '../../shared/format';
+import { formatDate as formatPureDate, formatTime, formatDisplayDate as formatSharedDate, hasExplicitTime, formatCleanLocation } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
@@ -363,18 +363,8 @@ const formatBuyerType = (type?: string): string => {
 
 const formatLocation = (loc?: string): string => {
   if (!loc) return 'Location not specified';
-  let cleaned = loc.trim();
-  if (!cleaned || cleaned.toLowerCase() === 'location not specified') {
-    return 'Location not specified';
-  }
-  cleaned = cleaned
-    .replace(/\bundefined\b/gi, '')
-    .replace(/\bnull\b/gi, '')
-    .replace(/^,\s*|,\s*$/g, '')
-    .replace(/,\s*,+/g, ',')
-    .trim();
-  if (!cleaned) return 'Location not specified';
-  return cleaned;
+  const cleaned = formatCleanLocation(loc);
+  return cleaned || 'Location not specified';
 };
 
 function CountdownTimer({ endDate }: { endDate?: string }) {
@@ -1341,10 +1331,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Type',
       sortable: true,
       sortKey: 'type',
-      width: 'w-28',
+      width: 'w-[10.5%]',
       cell: (item) => (
         <span className={cn(
-          "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border whitespace-nowrap",
+          "inline-flex items-center rounded-md px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider border whitespace-nowrap shrink-0",
           item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
           item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
           item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
@@ -1360,24 +1350,27 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Title & Reference',
       sortable: true,
       sortKey: 'title',
-      width: 'w-80',
+      width: 'w-[24%]',
       cell: (item) => (
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+            <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
               {item.sourceRef}
             </span>
             {item.category && (
-              <span className="text-[9px] font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+              <span
+                className="text-[9px] font-bold text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200/60 truncate max-w-[150px]"
+                title={item.category}
+              >
                 {item.category}
               </span>
             )}
           </div>
-          <p className="text-xs font-bold text-slate-900 leading-snug line-clamp-2">
+          <p className="text-xs font-bold text-slate-900 leading-snug line-clamp-2" title={item.title}>
             {item.title}
           </p>
           {cleanOpportunitySummary(item.description) && (
-            <p className="text-[10px] font-semibold text-slate-400 line-clamp-1">
+            <p className="text-[10px] font-semibold text-slate-400 line-clamp-1" title={cleanOpportunitySummary(item.description)}>
               {cleanOpportunitySummary(item.description)}
             </p>
           )}
@@ -1389,55 +1382,95 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Buyer & Location',
       sortable: true,
       sortKey: 'buyer',
-      width: 'w-64',
-      cell: (item) => (
-        <div className="space-y-1">
-          <p className="text-xs font-bold text-slate-900 leading-tight">
-            {item.buyer?.trim() || 'Buyer details controlled'}
-          </p>
-          <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
-            <MapPin className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
-            <span>{formatLocation(item.location)}</span>
+      width: 'w-[16%]',
+      cell: (item) => {
+        const cleanLoc = formatLocation(item.location || item.deliveryLocation);
+        return (
+          <div className="space-y-0.5 min-w-0">
+            <p className="text-xs font-bold text-slate-900 leading-tight truncate" title={item.buyer?.trim()}>
+              {item.buyer?.trim() || 'Buyer details controlled'}
+            </p>
+            <div
+              className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 truncate cursor-default hover:text-slate-800 transition-colors"
+              title={item.location || item.deliveryLocation || cleanLoc}
+            >
+              <MapPin className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
+              <span className="truncate">{cleanLoc}</span>
+            </div>
           </div>
-        </div>
-      )
+        );
+      }
     },
     {
       key: 'publishedAt',
       header: 'Published Date',
       sortable: true,
       sortKey: 'publishedAt',
-      width: 'w-32',
-      cell: (item) => (
-        <span className="text-xs font-bold text-slate-600">
-          {formatDate(item.publishedAt)}
-        </span>
-      )
+      width: 'w-[11%]',
+      cell: (item) => {
+        const raw = item.publishedAt || item.createdAt;
+        if (!raw) return <span className="text-xs font-semibold text-slate-400">—</span>;
+        const hasTime = hasExplicitTime(raw);
+        return (
+          <div className="flex flex-col whitespace-nowrap leading-tight">
+            <span className="text-xs font-bold text-slate-700">
+              {formatPureDate(raw)}
+            </span>
+            {hasTime && (
+              <span className="text-[10px] font-semibold text-slate-400 mt-0.5">
+                {formatTime(raw)}
+              </span>
+            )}
+          </div>
+        );
+      }
     },
     {
       key: 'closingDate',
       header: 'Closing Date',
       sortable: true,
       sortKey: 'closingDate',
-      width: 'w-36',
+      width: 'w-[12%]',
       cell: (item) => {
         const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
-        return isLiveAuction ? (
-          <div className="space-y-1">
-            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-emerald-600 tracking-wider">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-              Live
-            </span>
-            <div className="block leading-none">
-              <CountdownTimer endDate={item.closingDate} />
+        if (isLiveAuction) {
+          return (
+            <div className="space-y-1 whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-emerald-600 tracking-wider">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                Live
+              </span>
+              <div className="block leading-none font-mono text-xs font-black text-rose-600">
+                <CountdownTimer endDate={item.closingDate} />
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-0.5">
-            <span className="font-bold text-slate-700 block">{formatDate(item.closingDate)}</span>
-            <span className="text-[9px] font-black text-amber-600 uppercase tracking-wider block">
-              {getDaysLeftText(item.closingDate)}
+          );
+        }
+
+        const raw = item.closingDate;
+        if (!raw) return <span className="text-xs font-semibold text-slate-400">—</span>;
+        const hasTime = hasExplicitTime(raw);
+        const daysLeft = getDaysLeftText(raw);
+        const isClosed = daysLeft.toLowerCase().includes('closed') || isClosedStatus(item.status);
+
+        return (
+          <div className="flex flex-col whitespace-nowrap leading-tight space-y-0.5">
+            <span className="text-xs font-bold text-slate-700">
+              {formatPureDate(raw)}
             </span>
+            {hasTime && (
+              <span className="text-[10px] font-semibold text-slate-400">
+                {formatTime(raw)}
+              </span>
+            )}
+            {daysLeft && (
+              <span className={cn(
+                "text-[9px] font-black uppercase tracking-wider block mt-0.5",
+                isClosed ? "text-rose-600" : "text-amber-600"
+              )}>
+                {daysLeft}
+              </span>
+            )}
           </div>
         );
       }
@@ -1447,14 +1480,15 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Est. Value',
       sortable: true,
       sortKey: 'estimatedValue',
-      width: 'w-40',
+      width: 'w-[11%]',
       cell: (item) => {
         const isDisclosed = item.discloseEstimatedCost === true || item.type === 'Reverse Auction';
         if (!isDisclosed) {
           return (
-            <div className="space-y-0.5">
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600">
-                Confidential <Lock className="h-3 w-3 text-slate-400 inline" />
+            <div className="space-y-0.5 whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700">
+                <span>Confidential</span>
+                <Lock className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
               </span>
               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
                 Competitive Bidding
@@ -1463,7 +1497,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           );
         }
         return (
-          <div className="space-y-0.5">
+          <div className="space-y-0.5 whitespace-nowrap">
             <span className="text-xs font-extrabold text-slate-900 block">
               {formatMoney(item.estimatedValue)}
             </span>
@@ -1479,16 +1513,18 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       key: 'actions',
       header: 'Action',
       align: 'right',
-      width: 'w-32',
+      width: 'w-[12%]',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
       cell: (item) => (
-        <Link
-          href={item.detailsHref}
-          className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-[#12335f] px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-[#0b2445] transition-all duration-200"
-        >
-          View Details
-        </Link>
+        <div className="flex items-center justify-end whitespace-nowrap">
+          <Link
+            href={item.detailsHref}
+            className="inline-flex h-8 items-center justify-center rounded-lg bg-[#12335f] px-3 text-center text-xs font-bold text-white shadow-xs hover:bg-[#0b2445] active:scale-95 transition-all duration-200 shrink-0"
+          >
+            View Details
+          </Link>
+        </div>
       )
     }
   ], []);
@@ -1586,7 +1622,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   ], []);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 pb-12 pt-4">
+    <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-12 pt-4">
       {/* Title Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -2029,6 +2065,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               columns={tableColumns}
               keyExtractor={(item) => item.id}
               showSrNo={true}
+              srNoHeader="#"
+              srNoWidth="w-[3.5%]"
               page={page}
               pageSize={pageSize}
               total={filtered.length}
@@ -2038,7 +2076,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               sortDirection={sortDirection}
               onSort={(field) => handleSort(field as any)}
               paginationLabel="opportunities"
-              minWidth="min-w-[950px]"
+              minWidth="w-full"
             />
           )}
         </div>

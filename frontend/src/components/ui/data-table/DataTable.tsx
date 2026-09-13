@@ -177,7 +177,7 @@ export function DataTable<T>({
                 <th
                   scope="col"
                   className={cn(
-                    "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500",
+                    "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap",
                     srNoWidth
                   )}
                 >

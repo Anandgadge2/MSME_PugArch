@@ -125,6 +125,15 @@ export const maskEmail = (email?: string | null): string => {
   return `${visible}${'*'.repeat(Math.max(1, local.length - visible.length))}@${domain}`;
 };
 
+const toTitleCase = (s: string): string => {
+  if (!s) return '';
+  return s
+    .toLowerCase()
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+};
+
 /**
  * Intelligently cleans and extracts concise City, State from full consignee addresses
  * e.g. "Office Delivery Address: Plot No. 888, Satyajyoti Nagar, Panchpada, Town Unit-9, Jharsuguda, Odisha - 768204. Contact: Snehal Kolhe (8835155245)"
@@ -133,38 +142,51 @@ export const maskEmail = (email?: string | null): string => {
 export const formatCleanLocation = (raw?: string | null): string => {
   if (!raw) return '';
   let str = String(raw).trim();
-  if (!str || str === '—') return '';
+  if (!str || str === '—' || str.toLowerCase() === 'location not specified') return '';
 
   // Strip prefixes like "Office Delivery Address:", "Delivery Location:", etc.
   str = str.replace(/^(?:Office\s+(?:Delivery\s+)?Address|Delivery\s+Location|Delivery\s+Address|Consignee\s+Location|Address)\s*:\s*/i, '');
   // Strip contact suffixes like "Contact: Snehal Kolhe (8835155245)" or ". Contact: ..."
   str = str.replace(/(?:\.?\s*(?:Contact|Phone|Tel|Mobile)\s*:\s*.*)$/i, '');
+  str = str.replace(/\bundefined\b/gi, '').replace(/\bnull\b/gi, '');
 
   str = str.trim();
   if (!str) return '';
 
-  // If already concise (e.g. "All India", "Pune", "Delhi")
+  // If already concise and without commas (e.g. "All India", "Pune", "Delhi")
   if (str.length <= 25 && !str.includes(',')) {
-    return str;
+    return toTitleCase(str);
   }
 
   // Split by comma
-  const segments = str.split(',').map(s => s.trim()).filter(Boolean);
+  const rawSegments = str.split(',').map(s => s.trim()).filter(Boolean);
+
+  // Deduplicate consecutive identical segments (e.g. ["Jharsuguda", "Jharsuguda", "ODISHA"] -> ["Jharsuguda", "ODISHA"])
+  const segments: string[] = [];
+  for (const seg of rawSegments) {
+    if (segments.length === 0 || segments[segments.length - 1].toLowerCase() !== seg.toLowerCase()) {
+      segments.push(seg);
+    }
+  }
 
   if (segments.length === 0) return str;
   if (segments.length === 1) {
     // Strip pincode e.g. "Jharsuguda - 768204" -> "Jharsuguda"
-    return segments[0].replace(/\s*-\s*\d{6}$/, '').replace(/\s+\d{6}$/, '').trim();
+    const cleanSingle = segments[0].replace(/\s*-\s*\d{6}$/, '').replace(/\s+\d{6}$/, '').trim();
+    return toTitleCase(cleanSingle);
   }
 
-  // Last segment often contains State + Pincode (e.g. "Odisha - 768204" or "Maharashtra")
+  // Last segment often contains State + Pincode (e.g. "Odisha - 768204" or "ODISHA")
   const lastSeg = segments[segments.length - 1];
   const secondLastSeg = segments[segments.length - 2];
 
   // Clean pincode from state
-  const cleanState = lastSeg.replace(/\s*-\s*\d{6}$/, '').replace(/\s+\d{6}$/, '').trim();
+  let cleanState = lastSeg.replace(/\s*-\s*\d{6}$/, '').replace(/\s+\d{6}$/, '').trim();
   // Clean town/city from second to last (strip any plot/unit prefix if mixed)
-  const cleanCity = secondLastSeg.replace(/^(?:Town|Unit|Sector|Ward|Phase)\s*[-#0-9]*\s*/i, '').trim() || secondLastSeg;
+  let cleanCity = secondLastSeg.replace(/^(?:Town|Unit|Sector|Ward|Phase)\s*[-#0-9]*\s*/i, '').trim() || secondLastSeg;
+
+  cleanState = toTitleCase(cleanState);
+  cleanCity = toTitleCase(cleanCity);
 
   // If the last segment looks like a valid state or region, return "City, State"
   if (cleanCity && cleanState && cleanCity.toLowerCase() !== cleanState.toLowerCase()) {
@@ -175,6 +197,6 @@ export const formatCleanLocation = (raw?: string | null): string => {
   }
 
   // Fallback: take last 2 cleaned segments
-  const fallback = segments.slice(-2).join(', ').replace(/\s*-\s*\d{6}$/, '').replace(/\s+\d{6}$/, '').trim();
+  const fallback = segments.slice(-2).map(toTitleCase).join(', ').replace(/\s*-\s*\d{6}$/, '').replace(/\s+\d{6}$/, '').trim();
   return fallback.length > 35 ? fallback.slice(0, 32) + '...' : fallback;
 };
