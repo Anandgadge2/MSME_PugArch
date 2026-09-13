@@ -2925,37 +2925,38 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   );
 
   const publishedDateValue = (() => {
+    // Determine authentic live creation/approval time
+    const createdTimestamp = props.createdAt;
+    const tCreated = createdTimestamp ? new Date(createdTimestamp).getTime() : NaN;
+
+    // Check candidate published dates
+    const rawPublish = props.publishedDate || schedule.publishDate || tender.publishDate;
+    if (rawPublish && Number.isFinite(tCreated)) {
+      const tPub = new Date(rawPublish).getTime();
+      if (Number.isFinite(tPub)) {
+        // If the candidate publish date is in the future relative to creation (+ 1 min), honor it as scheduled publish.
+        // If it is in the past or earlier than creation (e.g. 5:44 AM form draft vs 5:06 PM live creation),
+        // the authentic live publication time is createdTimestamp!
+        if (tPub > tCreated + 60000) {
+          return rawPublish;
+        }
+        return createdTimestamp;
+      }
+    }
+
     // 1. If explicit time is present on the primary published date candidates
     if (hasExplicitDateTime(props.publishedDate)) return props.publishedDate;
     if (hasExplicitDateTime(schedule.publishDate)) return schedule.publishDate;
     if (hasExplicitDateTime(tender.publishDate)) return tender.publishDate;
 
-    // 2. If a date-only publishDate was specified, see if createdAt matches the same date
-    const rawPublish = schedule.publishDate || tender.publishDate || props.publishedDate;
-    if (rawPublish && props.createdAt && hasExplicitDateTime(props.createdAt)) {
-      try {
-        const dPub = new Date(rawPublish);
-        const dCreated = new Date(props.createdAt);
-        if (!isNaN(dPub.getTime()) && !isNaN(dCreated.getTime())) {
-          if (
-            dPub.getFullYear() === dCreated.getFullYear() &&
-            dPub.getMonth() === dCreated.getMonth() &&
-            dPub.getDate() === dCreated.getDate()
-          ) {
-            return props.createdAt;
-          }
-        }
-      } catch {}
-    }
-
-    // 3. If createdAt has explicit time
+    // 2. If createdAt has explicit time
     if (hasExplicitDateTime(props.createdAt)) return props.createdAt;
 
-    // 4. Fallback to first present publication or creation date
+    // 3. Fallback to first present publication or creation date
     return firstPresent(
+      props.publishedDate,
       schedule.publishDate,
       tender.publishDate,
-      props.publishedDate,
       props.createdAt
     );
   })();

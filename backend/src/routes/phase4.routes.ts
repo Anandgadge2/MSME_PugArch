@@ -1810,7 +1810,11 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   const canonicalMethod = String(draftBody.canonicalMethod || requirement.canonicalMethod || methodSlug.toUpperCase()).toUpperCase();
   const isLimitedRfq = methodSlug === 'rfq' && String(payload.rfqType || '').toUpperCase() === 'LIMITED';
   const bidType = isLimitedRfq ? 'LIMITED_TENDER' : canonicalMethod;
-  const startDate = rateContractConfig.periodStartDate || schedule.publishDate || schedule.submissionStartDate || schedule.bidStartDate || tender.bidStartDate || requirement.createdAt || new Date();
+  const creationTime = requirement.createdAt ? new Date(requirement.createdAt) : new Date();
+  const rawPublishCandidate = schedule.publishDate || schedule.submissionStartDate || schedule.bidStartDate || tender.bidStartDate || null;
+  const parsedStartDate = rateContractConfig.periodStartDate ? new Date(rateContractConfig.periodStartDate) : (rawPublishCandidate ? new Date(rawPublishCandidate) : null);
+  const isFutureScheduled = parsedStartDate && !isNaN(parsedStartDate.getTime()) && parsedStartDate.getTime() > (creationTime.getTime() + 60000);
+  const effectiveStartDate = isFutureScheduled ? parsedStartDate : creationTime;
   const endDate = rateContractConfig.periodEndDate || schedule.submissionDate || schedule.submissionDeadline || schedule.bidClosingDate || tender.bidClosingDate || requirement.requiredBy || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   const existing = await db.procurementBid.findFirst({
@@ -1847,13 +1851,14 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     state: buyer?.organization?.state || null,
     district: buyer?.organization?.district || null,
     pincode: buyer?.organization?.pincode || null,
-    startDate: new Date(startDate),
+    startDate: effectiveStartDate,
     endDate: new Date(endDate),
     technicalOpeningDate: tender.technicalEvaluationDate ? new Date(tender.technicalEvaluationDate) : null,
     financialOpeningDate: tender.financialEvaluationDate ? new Date(tender.financialEvaluationDate) : null,
     bidValidityDate: tender.bidValidityDate ? new Date(tender.bidValidityDate) : null,
     status: 'OPEN',
     approvalStatus: 'APPROVED',
+    approvedAt: creationTime,
     lifecycleStage: 'SELLER_PARTICIPATION',
     evaluationMethod: payload.evaluation?.evaluationMethod || payload.evaluation?.method || payload.evaluationMethod || payload.rules?.evaluationMethod || payload.evaluation?.quotationFormat || 'L1',
     isEmdRequired: Boolean(terms.emdRequired || tender.emdRequired),
@@ -1866,6 +1871,10 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     visibility: deriveVisibility({ procurementType: canonicalMethod, bidType, technicalPacket: { vendors } }),
     technicalPacket: {
       ...payload,
+      schedule: {
+        ...schedule,
+        publishDate: effectiveStartDate.toISOString(),
+      },
       sourceRequirementId: requirement.id,
       requirementId: requirement.id,
       requirementNumber: requirement.requirementNumber,

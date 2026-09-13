@@ -73,6 +73,10 @@ export interface ProcurementBid {
   endDate: string;
   rawStartDate?: string | null;
   rawEndDate?: string | null;
+  publishedAt?: string | null;
+  approvedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   status: BidStatus;
   approvalStatus?: string;
   lifecycleStage?: string;

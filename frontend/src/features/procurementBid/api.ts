@@ -352,7 +352,23 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   const reqDocs = raw.requiredDocuments?.length ? raw.requiredDocuments : (pkt?.requiredDocs || []);
 
   // Important dates
-  const rawStartDate = raw.startDate || schedule.publishDate || schedule.submissionStartDate || raw.createdAt || null;
+  const candidatePublish = raw.publishedAt || raw.approvedAt || raw.startDate || schedule.publishDate || null;
+  let authenticPublishedAt = raw.createdAt || raw.startDate || null;
+  if (candidatePublish && raw.createdAt) {
+    const tCandidate = new Date(candidatePublish).getTime();
+    const tCreated = new Date(raw.createdAt).getTime();
+    if (Number.isFinite(tCandidate) && Number.isFinite(tCreated)) {
+      if (tCandidate > tCreated + 60000) {
+        authenticPublishedAt = candidatePublish;
+      } else {
+        authenticPublishedAt = raw.approvedAt || raw.createdAt;
+      }
+    }
+  } else if (candidatePublish) {
+    authenticPublishedAt = candidatePublish;
+  }
+
+  const rawStartDate = authenticPublishedAt || raw.startDate || schedule.publishDate || raw.createdAt || null;
   const rawEndDate = raw.endDate || schedule.submissionDate || schedule.submissionDeadline || null;
   const startDate = String(rawStartDate || new Date().toISOString()).slice(0, 10);
   const endDate = String(rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
@@ -380,6 +396,10 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     endDate,
     rawStartDate,
     rawEndDate,
+    publishedAt: authenticPublishedAt,
+    approvedAt: raw.approvedAt || null,
+    createdAt: raw.createdAt || undefined,
+    updatedAt: raw.updatedAt || undefined,
     status: (raw.awards && raw.awards.length > 0) || (participations && participations.some((p: any) => String(p.finalStatus || p.resultStatus || '').toUpperCase().includes('AWARD')))
       ? 'Awarded'
       : toUiStatus(raw.status),

@@ -58,20 +58,20 @@ import { Skeleton } from '../../../components/ui/skeleton';
 import { cn } from '../../../lib/utils';
 import { getApi, postApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
-import { formatDate, formatDateTime as formatSharedDateTime } from '../../shared/format';
+import { formatDate, formatTime, formatDateTime as formatSharedDateTime } from '../../shared/format';
 import { DataTable, type ColumnDef, type SortDirection } from '../../../components/ui/data-table';
 import { useQuery } from '@tanstack/react-query';
 import { sellerRoutes, buyerRoutes } from '@/lib/routes';
 import { CancelProcurementModal, type CancelTargetProcurement } from '../components/CancelProcurementModal';
 
 const procurementSkeletonColumns: ColumnDef<any>[] = [
-  { key: 'type', header: 'Type', width: 'w-32', cell: () => null },
-  { key: 'title', header: 'Title & Reference', width: 'w-96', cell: () => null },
-  { key: 'status', header: 'Status', width: 'w-36', cell: () => null },
-  { key: 'estimatedValue', header: 'Est. Value', width: 'w-36', cell: () => null },
-  { key: 'category', header: 'Category & Location', width: 'w-44', cell: () => null },
-  { key: 'updatedAt', header: 'Updated', width: 'w-32', cell: () => null },
-  { key: 'action', header: 'Action', align: 'right', width: 'w-32', cell: () => null }
+  { key: 'type', header: 'Type', width: 'w-28', cell: () => null },
+  { key: 'title', header: 'Title & Reference', width: 'w-72', cell: () => null },
+  { key: 'status', header: 'Status', width: 'w-28', cell: () => null },
+  { key: 'estimatedValue', header: 'Est. Value', width: 'w-32', cell: () => null },
+  { key: 'category', header: 'Category & Location', width: 'w-48', cell: () => null },
+  { key: 'updatedAt', header: 'Updated', width: 'w-44', cell: () => null },
+  { key: 'action', header: 'Action', align: 'right', width: 'w-56', cell: () => null }
 ];
 
 function ProcurementsTableSkeleton() {
@@ -83,7 +83,7 @@ function ProcurementsTableSkeleton() {
       skeletonRows={6}
       showSrNo={true}
       srNoHeader="Sr. No."
-      minWidth="min-w-[950px]"
+      minWidth="min-w-[1200px]"
       keyExtractor={(_, idx) => idx}
     />
   );
@@ -761,7 +761,7 @@ export default function MyProcurementsPage() {
       header: 'Type',
       sortable: true,
       sortKey: 'type',
-      width: 'w-32',
+      width: 'w-28',
       cell: (p: any) => {
         const typeVal = getConsolidatedType(p);
         const TypeIcon = getTypeIcon(typeVal);
@@ -781,7 +781,7 @@ export default function MyProcurementsPage() {
       header: 'Title & Reference',
       sortable: true,
       sortKey: 'title',
-      width: 'w-96',
+      width: 'w-72',
       cell: (p: any) => (
         <div className="space-y-1">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -805,7 +805,7 @@ export default function MyProcurementsPage() {
       header: 'Status',
       sortable: true,
       sortKey: 'status',
-      width: 'w-36',
+      width: 'w-28',
       cell: (p: any) => (
         <span className={cn(
           'inline-flex whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border',
@@ -824,7 +824,7 @@ export default function MyProcurementsPage() {
       header: 'Est. Value',
       sortable: true,
       sortKey: 'estimatedValue',
-      width: 'w-36',
+      width: 'w-32',
       cell: (p: any) => (
         <span className="text-xs font-extrabold text-slate-900 block">
           {formatCurrency(p.estimatedValue)}
@@ -836,7 +836,7 @@ export default function MyProcurementsPage() {
       header: 'Category & Location',
       sortable: true,
       sortKey: 'category',
-      width: 'w-44',
+      width: 'w-48',
       cell: (p: any) => (
         <div className="space-y-1">
           <span title={p.category || '—'} className="text-xs font-bold text-slate-600 line-clamp-1">{p.category || '—'}</span>
@@ -854,20 +854,25 @@ export default function MyProcurementsPage() {
       header: 'Updated',
       sortable: true,
       sortKey: 'updatedAt',
-      width: 'w-32',
+      width: 'w-44',
       cell: (p: any) => (
-        <span className="text-xs font-bold text-slate-500">
-          {formatDateTime(p.updatedAt)}
-        </span>
+        <div className="flex flex-col whitespace-nowrap leading-tight">
+          <span className="text-xs font-bold text-slate-700">
+            {formatDate(p.updatedAt || p.createdAt)}
+          </span>
+          <span className="text-[10px] font-semibold text-slate-400 mt-0.5">
+            {formatTime(p.updatedAt || p.createdAt)}
+          </span>
+        </div>
       )
     },
     {
       key: 'action',
       header: 'Action',
       align: 'right',
-      width: 'w-32',
+      width: 'w-56',
       cell: (p: any) => (
-        <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-end gap-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
           {isProcurementCancellable(p) && (
             <Button
               type="button"
@@ -875,10 +880,10 @@ export default function MyProcurementsPage() {
               variant="outline"
               onClick={e => handleOpenCancelModal(p, e)}
               title={p.statusGroup === 'pending_approval' ? 'Withdraw Request' : 'Cancel Procurement'}
-              className="h-8 px-2.5 rounded-lg border-slate-200 text-rose-600 hover:bg-rose-50 hover:border-rose-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+              className="h-8 px-2.5 rounded-lg border border-slate-200 text-rose-600 hover:bg-rose-50 hover:border-rose-200 text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
-              <Ban className="h-3.5 w-3.5" />
-              <span className="hidden xl:inline">
+              <Ban className="h-3.5 w-3.5 shrink-0" />
+              <span>
                 {p.statusGroup === 'pending_approval' ? 'Withdraw' : 'Cancel'}
               </span>
             </Button>
@@ -887,7 +892,7 @@ export default function MyProcurementsPage() {
             type="button"
             size="sm"
             onClick={e => openDetail(p, e)}
-            className="inline-flex h-8 min-w-[90px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none cursor-pointer"
+            className="inline-flex h-8 min-w-[95px] items-center justify-center rounded-lg bg-blue-600 px-3 text-center text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all duration-200 border-none shrink-0 cursor-pointer"
           >
             View Details
           </Button>
@@ -1089,7 +1094,7 @@ export default function MyProcurementsPage() {
               keyExtractor={(p: any) => `${p.type}-${p.id}`}
               showSrNo={true}
               srNoHeader="Sr. No."
-              minWidth="min-w-[950px]"
+              minWidth="min-w-[1200px]"
               sortKey={sortKey}
               sortDirection={sortDir}
               onSort={(field) => handleSort(field as SortKey)}

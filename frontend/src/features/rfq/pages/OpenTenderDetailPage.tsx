@@ -169,8 +169,19 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
         estimatedValue={bid.estimatedValue || reqObj.estimatedValue || basics.estimatedValue}
         discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? basics.discloseEstimatedCost ?? false)}
         deadlineDate={schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate}
-        createdAt={bid.startDate || bid.createdAt || reqObj.createdAt}
-        publishedDate={formatDateString(schedule.publishDate || bid.rawStartDate || bid.startDate || reqObj.createdAt)}
+        createdAt={reqObj.createdAt || bid.createdAt || bid.startDate}
+        publishedDate={(() => {
+          const tCreated = reqObj.createdAt || bid.createdAt;
+          const rawPub = schedule.publishDate || schedule.publishedDate;
+          if (rawPub && tCreated) {
+            const pubMs = new Date(rawPub).getTime();
+            const crMs = new Date(tCreated).getTime();
+            if (Number.isFinite(pubMs) && Number.isFinite(crMs) && pubMs > crMs + 60000) {
+              return formatDateString(rawPub);
+            }
+          }
+          return formatDateString(reqObj.approvedAt || reqObj.publishedAt || bid.publishedAt || bid.approvedAt || tCreated || bid.rawStartDate || bid.startDate);
+        })()}
         closingDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
         clarificationDate={schedule.clarificationDeadline || schedule.clarificationEndDate ? formatDateString(schedule.clarificationDeadline || schedule.clarificationEndDate, true) : undefined}
         technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate, true)}

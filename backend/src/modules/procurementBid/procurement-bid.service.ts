@@ -799,6 +799,8 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     eligibilityCriteria: bid.eligibilityCriteria || [],
     requiredDocuments: bid.requiredDocuments || [],
     rejectedReason: isAdmin || isBuyerOwner ? bid.rejectedReason : undefined,
+    approvedAt: bid.approvedAt || null,
+    publishedAt: bid.approvedAt || bid.createdAt || bid.startDate,
     createdAt: bid.createdAt,
     updatedAt: bid.updatedAt,
     buyer: bid.buyer ? {

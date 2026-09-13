@@ -582,26 +582,25 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     });
     return withTime || valid[0];
   };
+  const createdCandidate = reqObj?.createdAt || rawBid?.createdAt || null;
+  const approvedCandidate = reqObj?.approvedAt || rawBid?.approvedAt || rawBid?.publishedAt || null;
+  const formPublishCandidate = preferReq
+    ? (reqObj?.payload?.schedule?.publishDate || rawBid?.technicalPacket?.schedule?.publishDate)
+    : (rawBid?.technicalPacket?.schedule?.publishDate || reqObj?.payload?.schedule?.publishDate);
+
+  const published = (() => {
+    const tCreated = createdCandidate ? new Date(createdCandidate).getTime() : NaN;
+    if (formPublishCandidate && Number.isFinite(tCreated)) {
+      const tPub = new Date(formPublishCandidate).getTime();
+      if (Number.isFinite(tPub) && tPub > tCreated + 60000) {
+        return formPublishCandidate;
+      }
+    }
+    return approvedCandidate || createdCandidate || formPublishCandidate || rawBid?.startDate || null;
+  })();
   const submissionStartDate = preferReq
-    ? (reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate)
-    : (rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate);
-  const published  = preferReq
-    ? resolvePublishedCandidate(
-        reqObj?.payload?.schedule?.publishDate,
-        rawBid?.technicalPacket?.schedule?.publishDate,
-        reqObj?.approvedAt,
-        rawBid?.startDate,
-        reqObj?.createdAt,
-        rawBid?.createdAt
-      )
-    : resolvePublishedCandidate(
-        rawBid?.technicalPacket?.schedule?.publishDate,
-        reqObj?.payload?.schedule?.publishDate,
-        rawBid?.startDate,
-        reqObj?.approvedAt,
-        rawBid?.createdAt,
-        reqObj?.createdAt
-      );
+    ? (reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || published)
+    : (rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || published);
   const location   = preferReq ? (reqObj?.location || reqObj?.deliveryLocation || rawBid?.deliveryLocation || '—') : (rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—');
   const buyerOrg   = preferReq ? (reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || reqObj?.buyerName || rawBid?.buyerOrganizationName || '—') : (rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—');
   const buyerType  = preferReq ? (reqObj?.buyerType || reqObj?.buyerOrganization?.type || rawBid?.buyerType || 'Private Buyer') : (rawBid?.buyerType || rawBid?.technicalPacket?.basics?.buyerType || 'Private Buyer');

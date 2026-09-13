@@ -569,11 +569,24 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
 
   const itemsList = extractItems();
 
+  const authenticPublishDate = (() => {
+    const tCreated = rcData.createdAt;
+    const rawPub = schedule.publishDate;
+    if (rawPub && tCreated) {
+      const pubMs = new Date(rawPub).getTime();
+      const crMs = new Date(tCreated).getTime();
+      if (Number.isFinite(pubMs) && Number.isFinite(crMs) && pubMs > crMs + 60000) {
+        return rawPub;
+      }
+    }
+    return rcData.approvedAt || rcData.publishedAt || tCreated || rawPub || rcData.startDate;
+  })();
+
   /* ── Timeline Events (all available dates) ── */
   const allTimelineEvents = [
-    { label: 'PUBLISHING DATE', value: formatDateString(schedule.publishDate || rcData.createdAt) },
+    { label: 'PUBLISHING DATE', value: formatDateString(authenticPublishDate) },
     { label: 'BID SUBMISSION START', value: formatDateString(schedule.submissionStartDate || rcData.startDate) },
-    { label: 'CLARIFICATION START', value: formatDateString(schedule.clarificationAllowed ? (schedule.publishDate || rcData.createdAt) : null) },
+    { label: 'CLARIFICATION START', value: formatDateString(schedule.clarificationAllowed ? authenticPublishDate : null) },
     { label: 'CLARIFICATION END', value: formatDateString(schedule.clarificationDeadline) },
     { label: 'PRE-BID MEETING', value: formatDateString(schedule.preBidDate) },
     { label: 'BID SUBMISSION END', value: formatDateString(schedule.submissionDate || rcData.deadlineDate || rcData.endDate, true), red: true },
@@ -584,7 +597,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   ].filter(e => e.value !== null);
 
   /* ── Contract Stepper ── */
-  const publishedDate = formatDateString(schedule.publishDate || rcData.createdAt) || '—';
+  const publishedDate = formatDateString(authenticPublishDate) || '—';
   const closesAt = formatDateString(schedule.submissionDate || rcData.deadlineDate || rcData.endDate, true) || '—';
 
   const timelineSteps = [

@@ -579,13 +579,22 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           const pubB = opportunity.publishedAt || '';
           let bestPublishedAt = pubA || pubB;
           if (pubA && pubB) {
-            const tsA = new Date(pubA).getTime();
-            const tsB = new Date(pubB).getTime();
-            if (Number.isFinite(tsA) && Number.isFinite(tsB)) {
-              // The published date cannot be later than creation; pick the earlier authentic publish date
-              bestPublishedAt = tsA <= tsB ? pubA : pubB;
-            } else {
+            const hasExplicitA = hasExplicitTime(pubA);
+            const hasExplicitB = hasExplicitTime(pubB);
+            if (hasExplicitA && !hasExplicitB) {
               bestPublishedAt = pubA;
+            } else if (!hasExplicitA && hasExplicitB) {
+              bestPublishedAt = pubB;
+            } else {
+              const tsA = new Date(pubA).getTime();
+              const tsB = new Date(pubB).getTime();
+              if (Number.isFinite(tsA) && Number.isFinite(tsB)) {
+                // A procurement cannot go live before it was created.
+                // Pick the authentic live publication timestamp (later between draft initialization and actual publish)
+                bestPublishedAt = tsA >= tsB ? pubA : pubB;
+              } else {
+                bestPublishedAt = pubA || pubB;
+              }
             }
           }
 
@@ -711,7 +720,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           href,
           detailsHref,
           sourceRef: bid.id || `BID-${bid.sourceId || ''}`,
-          publishedAt: bid.publishedAt || bid.createdAt || bid.rawStartDate || bid.startDate,
+          publishedAt: bid.publishedAt || bid.approvedAt || bid.createdAt || bid.rawStartDate || bid.startDate,
           createdAt: bid.createdAt,
           quantity: bid.quantity,
           description: bid.description,
@@ -838,7 +847,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           href: responseHref,
           detailsHref: detailHref,
           sourceRef: formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'REQ', req.sourceId || req.id, req.requirementNumber, req.procurementMethod || req.canonicalMethod || opportunityType),
-          publishedAt: req.approvedAt || req.createdAt,
+          publishedAt: req.approvedAt || req.publishedAt || req.createdAt,
           createdAt: req.createdAt,
           quantity: formatQuantity(req.quantity, req.unit),
           description: req.description,
