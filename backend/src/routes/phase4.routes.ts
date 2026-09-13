@@ -10757,6 +10757,17 @@ export interface BuyerProcurementsDataResult {
   };
 }
 
+const cleanOpportunitySummary = (desc?: string | null): string => {
+  if (!desc) return '';
+  let text = String(desc).replace(/\r/g, '');
+  text = text.replace(/Sourcing Method:\s*[^|\n]*/gi, '');
+  text = text.replace(/Value:\s*(?:INR|Rs\.?|₹)?\s*[\d,.]*[^|\n]*/gi, '');
+  text = text.replace(/Urgency:\s*[^|\n]*/gi, '');
+  text = text.replace(/[\n\r|]+/g, ' ').replace(/\s+/g, ' ').trim();
+  text = text.replace(/^[-:|,.\s]+|[-:|,.\s]+$/g, '').trim();
+  return text;
+};
+
 export async function getBuyerProcurementsData(
   buyerId: number,
   buyerOrgId: number = -1,
@@ -10998,7 +11009,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       methodLabel: METHOD_LABEL_MAP[bidTypeSlug] || bidTypeSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
       estimatedValue: Number(fd?.basicDetails?.estimatedValue || fd?.estimatedValue || step3.estimatedValue || 0),
       category: fd?.basicDetails?.category || fd?.category || step4.productCategory || step4.serviceCategory || '',
-      description: fd?.basicDetails?.description || fd?.description || step4.productDescription || step4.scopeOfWork || '',
+      description: cleanOpportunitySummary(fd?.basicDetails?.description || fd?.description || step4.productDescription || step4.scopeOfWork || ''),
       deliveryLocation: fd?.basicDetails?.deliveryLocation || fd?.deliveryLocation || step5.singleConsignee?.location || '',
       startDate: fd?.basicDetails?.startDate || fd?.startDate || '',
       endDate: fd?.basicDetails?.endDate || fd?.endDate || '',
@@ -11033,7 +11044,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       itemName: b.title,
       quantity: String(b.quantity || ''),
       unitOfMeasure: b.unit || '',
-      description: b.description || ''
+      description: cleanOpportunitySummary(b.description || '')
     }];
 
     const eligibilityCriteria = b.eligibilityCriteria || [];
@@ -11056,7 +11067,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
 
       estimatedValue: Number(b.estimatedValue || 0),
       category: b.category || '',
-      description: b.description || '',
+      description: cleanOpportunitySummary(b.description || ''),
       deliveryLocation: b.deliveryLocation || '',
       startDate: b.startDate?.toISOString?.() || '',
       endDate: b.endDate?.toISOString?.() || '',
@@ -11461,7 +11472,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       methodLabel: METHOD_LABEL_MAP[methodSlug] || methodSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
       estimatedValue: Number(r.estimatedValue || payload.basics?.estimatedValue || 0),
       category: (r as any).category?.name || payload.basics?.category || '',
-      description: r.description || payload.basics?.description || '',
+      description: cleanOpportunitySummary(r.description || payload.basics?.description || ''),
       deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || (r as any).deliveryLocation || '',
       startDate: '',
       endDate: '',
@@ -11622,7 +11633,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       methodLabel: 'Rate Contract',
       estimatedValue: Number(contract.value || srcReq?.estimatedValue || 0),
       category: metadata.contractCategory || srcReq?.category?.name || srcPayload.basics?.category || '',
-      description: metadata.contractDescription || srcReq?.description || srcPayload.basics?.description || '',
+      description: cleanOpportunitySummary(metadata.contractDescription || srcReq?.description || srcPayload.basics?.description || ''),
       deliveryLocation: metadata.deliverySla || srcPayload.basics?.deliveryLocation || (srcReq as any)?.deliveryLocation || '',
       startDate: contract.startDate?.toISOString?.() || '',
       endDate: contract.endDate?.toISOString?.() || '',
@@ -11678,7 +11689,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       methodLabel: 'Reverse Auction',
       estimatedValue: Number(a.startPrice || a.basePrice || 0),
       category: a.category || '',
-      description: a.description || '',
+      description: cleanOpportunitySummary(a.description || ''),
       deliveryLocation: '',
       startDate: a.startTime?.toISOString?.() || '',
       endDate: a.endTime?.toISOString?.() || '',
@@ -11697,7 +11708,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
         itemName: a.title || 'Reverse Auction Sourcing',
         quantity: '1',
         unitOfMeasure: 'Nos',
-        description: a.description || ''
+        description: cleanOpportunitySummary(a.description || '')
       }],
       paymentTerms: '',
       eligibilityCriteria: [],

@@ -58,7 +58,7 @@ import { Skeleton } from '../../../components/ui/skeleton';
 import { cn } from '../../../lib/utils';
 import { getApi, postApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
-import { formatDate, formatTime, formatDateTime as formatSharedDateTime, formatCleanLocation } from '../../shared/format';
+import { formatDate, formatTime, formatDateTime as formatSharedDateTime, formatCleanLocation, cleanOpportunitySummary } from '../../shared/format';
 import { DataTable, type ColumnDef, type SortDirection } from '../../../components/ui/data-table';
 import { useQuery } from '@tanstack/react-query';
 import { sellerRoutes, buyerRoutes } from '@/lib/routes';
@@ -783,23 +783,26 @@ export default function MyProcurementsPage() {
       sortable: true,
       sortKey: 'title',
       width: 'w-[24.5%]',
-      cell: (p: any) => (
-        <div className="space-y-0.5 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1 py-0.2 rounded">
-              {p.referenceNumber}
-            </span>
-          </div>
-          <p title={p.title} className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
-            {p.title}
-          </p>
-          {p.description && (
-            <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">
-              {p.description}
+      cell: (p: any) => {
+        const cleanDesc = cleanOpportunitySummary(p.description);
+        return (
+          <div className="space-y-0.5 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1 py-0.2 rounded">
+                {p.referenceNumber}
+              </span>
+            </div>
+            <p title={p.title} className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+              {p.title}
             </p>
-          )}
-        </div>
-      )
+            {cleanDesc ? (
+              <p title={cleanDesc} className="text-[10px] font-semibold text-slate-400 line-clamp-1">
+                {cleanDesc}
+              </p>
+            ) : null}
+          </div>
+        );
+      }
     },
     {
       key: 'status',
@@ -1156,7 +1159,11 @@ export default function MyProcurementsPage() {
                       {/* Source Ref & Category */}
                       <div className="text-[11px] text-slate-500 font-bold space-y-1 mb-4">
                         {p.category && <p title={p.category} className="line-clamp-1">Category: {p.category}</p>}
-                        {p.description && <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
+                        {cleanOpportunitySummary(p.description) && (
+                          <p title={cleanOpportunitySummary(p.description)} className="text-[10px] font-semibold text-slate-400 line-clamp-1">
+                            {cleanOpportunitySummary(p.description)}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -1310,7 +1317,11 @@ function ProcurementCard({ p, openDetail }: { p: any; openDetail: (p: any, e?: R
         {/* Source Ref & Category */}
         <div className="text-[11px] text-slate-500 font-bold space-y-1">
           {p.category && <p title={p.category} className="line-clamp-1">Category: {p.category}</p>}
-          {p.description && <p title={p.description} className="text-[10px] font-semibold text-slate-400 line-clamp-1">{p.description}</p>}
+          {cleanOpportunitySummary(p.description) && (
+            <p title={cleanOpportunitySummary(p.description)} className="text-[10px] font-semibold text-slate-400 line-clamp-1">
+              {cleanOpportunitySummary(p.description)}
+            </p>
+          )}
         </div>
       </div>
 
@@ -1398,8 +1409,8 @@ const formatDisplayValue = (val: string, label?: string) => {
       .join(' ');
   }
   if (val.includes('Sourcing Method:')) {
-    const parsed = parseDescription(val);
-    return `Sourcing Method: ${parsed.method || '—'}\nValue: ${parsed.value || '—'}\nUrgency: ${parsed.urgency || '—'}`;
+    const clean = cleanOpportunitySummary(val);
+    return clean || '—';
   }
   return val;
 };

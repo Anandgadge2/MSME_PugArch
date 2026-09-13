@@ -200,3 +200,19 @@ export const formatCleanLocation = (raw?: string | null): string => {
   const fallback = segments.slice(-2).map(toTitleCase).join(', ').replace(/\s*-\s*\d{6}$/, '').replace(/\s+\d{6}$/, '').trim();
   return fallback.length > 35 ? fallback.slice(0, 32) + '...' : fallback;
 };
+
+/**
+ * Strips synthetic wizard boilerplate like:
+ * "Sourcing Method: RFQ Value: INR 4,56,000 Urgency: Urgent"
+ * from procurement descriptions so only authentic user-provided text remains.
+ */
+export const cleanOpportunitySummary = (desc?: string | null): string => {
+  if (!desc) return '';
+  let text = String(desc).replace(/\r/g, '');
+  text = text.replace(/Sourcing Method:\s*[^|\n]*/gi, '');
+  text = text.replace(/Value:\s*(?:INR|Rs\.?|₹)?\s*[\d,.]*[^|\n]*/gi, '');
+  text = text.replace(/Urgency:\s*[^|\n]*/gi, '');
+  text = text.replace(/[\n\r|]+/g, ' ').replace(/\s+/g, ' ').trim();
+  text = text.replace(/^[-:|,.\s]+|[-:|,.\s]+$/g, '').trim();
+  return text;
+};
