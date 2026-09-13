@@ -176,7 +176,10 @@ export function DataTable<T>({
               {showSrNo && (
                 <th
                   scope="col"
-                  className="p-3 text-[10px] font-black uppercase tracking-wider text-slate-500"
+                  className={cn(
+                    "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500",
+                    srNoWidth
+                  )}
                 >
                   {srNoHeader}
                 </th>
@@ -204,7 +207,8 @@ export function DataTable<T>({
                     key={col.key}
                     scope="col"
                     className={cn(
-                      "p-3 text-[10px] font-black uppercase tracking-wider text-slate-500",
+                      "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500",
+                      col.width,
                       col.align === 'right' && 'text-right',
                       col.align === 'center' && 'text-center',
                       col.headerClassName
@@ -246,7 +250,7 @@ export function DataTable<T>({
                   )}
                 >
                   {showSrNo && (
-                    <td className="p-3 font-mono text-xs text-slate-500">
+                    <td className={cn("py-3 px-2 sm:px-2.5 font-mono text-xs text-slate-500", srNoWidth)}>
                       {String(rowIndex).padStart(2, '0')}
                     </td>
                   )}
@@ -254,7 +258,8 @@ export function DataTable<T>({
                     <td
                       key={col.key}
                       className={cn(
-                        "p-3 align-middle",
+                        "py-3 px-2 sm:px-2.5 align-middle",
+                        col.width,
                         col.align === 'right' && 'text-right',
                         col.align === 'center' && 'text-center',
                         col.cellClassName

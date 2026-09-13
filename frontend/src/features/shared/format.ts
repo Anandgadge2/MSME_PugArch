@@ -124,3 +124,57 @@ export const maskEmail = (email?: string | null): string => {
   const visible = local.slice(0, Math.min(2, local.length));
   return `${visible}${'*'.repeat(Math.max(1, local.length - visible.length))}@${domain}`;
 };
+
+/**
+ * Intelligently cleans and extracts concise City, State from full consignee addresses
+ * e.g. "Office Delivery Address: Plot No. 888, Satyajyoti Nagar, Panchpada, Town Unit-9, Jharsuguda, Odisha - 768204. Contact: Snehal Kolhe (8835155245)"
+ * -> "Jharsuguda, Odisha"
+ */
+export const formatCleanLocation = (raw?: string | null): string => {
+  if (!raw) return '';
+  let str = String(raw).trim();
+  if (!str || str === '—') return '';
+
+  // Strip prefixes like "Office Delivery Address:", "Delivery Location:", etc.
+  str = str.replace(/^(?:Office\s+(?:Delivery\s+)?Address|Delivery\s+Location|Delivery\s+Address|Consignee\s+Location|Address)\s*:\s*/i, '');
+  // Strip contact suffixes like "Contact: Snehal Kolhe (8835155245)" or ". Contact: ..."
+  str = str.replace(/(?:\.?\s*(?:Contact|Phone|Tel|Mobile)\s*:\s*.*)$/i, '');
+
+  str = str.trim();
+  if (!str) return '';
+
+  // If already concise (e.g. "All India", "Pune", "Delhi")
+  if (str.length <= 25 && !str.includes(',')) {
+    return str;
+  }
+
+  // Split by comma
+  const segments = str.split(',').map(s => s.trim()).filter(Boolean);
+
+  if (segments.length === 0) return str;
+  if (segments.length === 1) {
+    // Strip pincode e.g. "Jharsuguda - 768204" -> "Jharsuguda"
+    return segments[0].replace(/\s*-\s*\d{6}$/, '').replace(/\s+\d{6}$/, '').trim();
+  }
+
+  // Last segment often contains State + Pincode (e.g. "Odisha - 768204" or "Maharashtra")
+  const lastSeg = segments[segments.length - 1];
+  const secondLastSeg = segments[segments.length - 2];
+
+  // Clean pincode from state
+  const cleanState = lastSeg.replace(/\s*-\s*\d{6}$/, '').replace(/\s+\d{6}$/, '').trim();
+  // Clean town/city from second to last (strip any plot/unit prefix if mixed)
+  const cleanCity = secondLastSeg.replace(/^(?:Town|Unit|Sector|Ward|Phase)\s*[-#0-9]*\s*/i, '').trim() || secondLastSeg;
+
+  // If the last segment looks like a valid state or region, return "City, State"
+  if (cleanCity && cleanState && cleanCity.toLowerCase() !== cleanState.toLowerCase()) {
+    // Check if cleanCity is not just a building number
+    if (!/^(?:Plot|Flat|Shop|Door|Survey|House|Office)\b/i.test(cleanCity)) {
+      return `${cleanCity}, ${cleanState}`;
+    }
+  }
+
+  // Fallback: take last 2 cleaned segments
+  const fallback = segments.slice(-2).join(', ').replace(/\s*-\s*\d{6}$/, '').replace(/\s+\d{6}$/, '').trim();
+  return fallback.length > 35 ? fallback.slice(0, 32) + '...' : fallback;
+};
