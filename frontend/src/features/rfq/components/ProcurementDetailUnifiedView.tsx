@@ -1012,8 +1012,10 @@ function PolicyRulesMatrix({
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       {rules.map((rule, idx) => {
-        const valStr = String(rule.value || '').trim();
-        const isYes = ['yes', 'true', '1', 'enabled'].includes(valStr.toLowerCase());
+        const valStr = typeof rule.value === 'boolean'
+          ? (rule.value ? 'Yes' : 'No')
+          : String(rule.value !== null && rule.value !== undefined ? rule.value : '').trim();
+        const isYes = ['yes', 'true', '1', 'enabled', 'scheduled'].includes(valStr.toLowerCase());
         const isNo = ['no', 'false', '0', 'disabled'].includes(valStr.toLowerCase());
         const Icon = rule.icon || (isYes ? CheckCircle2 : Info);
 
@@ -2916,7 +2918,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     if (hasExplicitDateTime(props.publishedDate)) return props.publishedDate;
     if (hasExplicitDateTime(schedule.publishDate)) return schedule.publishDate;
     if (hasExplicitDateTime(tender.publishDate)) return tender.publishDate;
-    if (hasExplicitDateTime(schedule.submissionStartDate)) return schedule.submissionStartDate;
 
     // 2. If a date-only publishDate was specified, see if createdAt matches the same date
     const rawPublish = schedule.publishDate || tender.publishDate || props.publishedDate;
@@ -2939,14 +2940,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     // 3. If createdAt has explicit time
     if (hasExplicitDateTime(props.createdAt)) return props.createdAt;
 
-    // 4. Fallback to first present value
+    // 4. Fallback to first present publication or creation date
     return firstPresent(
       schedule.publishDate,
       tender.publishDate,
       props.publishedDate,
-      props.createdAt,
-      schedule.submissionStartDate,
-      tender.bidStartDate
+      props.createdAt
     );
   })();
 
@@ -3673,6 +3672,84 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     }
   };
 
+  const isPreBidConfigured = Boolean(
+    preBidDateFormatted ||
+    schedule.preBidMeeting === true ||
+    schedule.preBidMeeting === 'true' ||
+    schedule.preBidMeeting === 'Yes' ||
+    (schedule.preBidMeetingDate && schedule.preBidMeetingDate !== '—' && schedule.preBidMeetingDate !== 'N/A')
+  );
+
+  const msmePrefRaw = vendors.msmePreference !== undefined ? vendors.msmePreference : payload.msmePreference;
+  const msmePrefVal = msmePrefRaw !== undefined ? ((msmePrefRaw === false || msmePrefRaw === 'No' || msmePrefRaw === 'false' || msmePrefRaw === 0) ? 'No' : 'Yes') : 'Yes';
+
+  const localPrefRaw = vendors.localVendorPreference !== undefined ? vendors.localVendorPreference : payload.localVendorPreference;
+  const localPrefVal = localPrefRaw !== undefined ? ((localPrefRaw === true || localPrefRaw === 'Yes' || localPrefRaw === 'true' || localPrefRaw === 1) ? 'Yes' : 'No') : 'No';
+
+  const resolveRuleBool = (val: any, fallback = 'Yes') => {
+    if (val === true || val === 'true' || val === 'Yes' || val === 'yes' || val === 1) return 'Yes';
+    if (val === false || val === 'false' || val === 'No' || val === 'no' || val === 0) return 'No';
+    if (val !== undefined && val !== null && String(val).trim().length > 0) return String(val).trim();
+    return fallback;
+  };
+
+  const biddingRules = useMemo(() => {
+    if (isBuyerSide) {
+      return [
+        { label: 'Auto Close', value: resolveRuleBool(firstPresent(rules.autoClose, schedule.autoClose), 'Yes') },
+        { label: 'Allow Revision', value: resolveRuleBool(firstPresent(rules.allowRevision, schedule.allowRevision), 'Yes') },
+        { label: 'Show Seller Rank', value: resolveRuleBool(firstPresent(rules.showSellerRank, schedule.showSellerRank), 'Yes') },
+        { label: 'Allow Withdrawal', value: resolveRuleBool(firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal), 'Yes') },
+        { label: 'Show Lowest Price', value: resolveRuleBool(firstPresent(rules.showLowestPrice, schedule.showLowestPrice), 'Yes') },
+        { label: 'Clarification Allowed', value: isClarificationAllowed ? 'Yes' : 'No' },
+        { label: 'Minimum Bidders', value: String(firstPresent(rules.minimumBidders, schedule.minimumBidders, '3')) },
+        { label: 'Pre-Bid Meeting', value: isPreBidConfigured ? 'Yes' : 'No' },
+        { label: 'MSME Preference', value: msmePrefVal },
+        { label: 'Exclude Blacklisted', value: 'Yes' },
+        { label: 'Local Vendor Preference', value: localPrefVal },
+      ];
+    }
+
+    // Non-buyer side (Sellers, Public, SHGs, Bidders):
+    // Exclude internal buyer controls: Exclude Blacklisted, Minimum Bidders, Auto Close, and unconfigured Pre-Bid Meeting
+    const list: Array<{ label: string; value: string; icon?: IconComponent }> = [
+      { label: 'Allow Revision', value: resolveRuleBool(firstPresent(rules.allowRevision, schedule.allowRevision), 'Yes') },
+      { label: 'Allow Withdrawal', value: resolveRuleBool(firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal), 'Yes') },
+      { label: 'Clarification Allowed', value: isClarificationAllowed ? 'Yes' : 'No' },
+      { label: 'MSME Preference', value: msmePrefVal },
+    ];
+
+    const showRankVal = resolveRuleBool(firstPresent(rules.showSellerRank, schedule.showSellerRank), 'Yes');
+    const showLowestVal = resolveRuleBool(firstPresent(rules.showLowestPrice, schedule.showLowestPrice), 'Yes');
+
+    if (allowsReverseAuction || isRateContractType || showRankVal === 'Yes') {
+      list.push({ label: 'Show Seller Rank', value: showRankVal });
+    }
+    if (allowsReverseAuction || isRateContractType || showLowestVal === 'Yes') {
+      list.push({ label: 'Show Lowest Price', value: showLowestVal });
+    }
+
+    if (isPreBidConfigured) {
+      list.push({ label: 'Pre-Bid Meeting', value: 'Scheduled' });
+    }
+
+    if (localPrefVal === 'Yes') {
+      list.push({ label: 'Local Vendor Preference', value: 'Yes' });
+    }
+
+    return list;
+  }, [
+    isBuyerSide,
+    rules,
+    schedule,
+    isClarificationAllowed,
+    isPreBidConfigured,
+    msmePrefVal,
+    localPrefVal,
+    allowsReverseAuction,
+    isRateContractType,
+  ]);
+
   return (
     <BuyerSideContext.Provider value={{
       isBuyer: isBuyerSide,
@@ -4126,22 +4203,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     <ShieldCheck className="h-4 w-4 text-emerald-600" />
                     Bidding Rules &amp; Policy Matrix
                   </h3>
-                  <PolicyRulesMatrix
-                    rules={[
-                      { label: 'Auto Close', value: firstPresent(rules.autoClose, schedule.autoClose, 'Yes') },
-                      { label: 'Allow Revision', value: firstPresent(rules.allowRevision, schedule.allowRevision, 'Yes') },
-                      { label: 'Show Seller Rank', value: firstPresent(rules.showSellerRank, schedule.showSellerRank, 'Yes') },
-                      { label: 'Allow Withdrawal', value: firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal, 'Yes') },
-                      { label: 'Show Lowest Price', value: firstPresent(rules.showLowestPrice, schedule.showLowestPrice, 'Yes') },
-                      { label: 'Clarification Allowed', value: isClarificationAllowed ? 'Yes' : 'No' },
-                      { label: 'Minimum Bidders', value: firstPresent(rules.minimumBidders, schedule.minimumBidders, '3') },
-                      { label: 'Pre-Bid Meeting', value: firstPresent(schedule.preBidMeeting, schedule.preBidMeetingDate, 'No') },
-                      { label: 'MSME Preference', value: (vendors.msmePreference !== undefined ? vendors.msmePreference : payload.msmePreference) !== undefined ? ((vendors.msmePreference ?? payload.msmePreference) ? 'Yes' : 'No') : 'Yes' },
-                      { label: 'Exclude Blacklisted', value: (vendors.excludeBlacklisted !== undefined ? vendors.excludeBlacklisted : payload.excludeBlacklisted) !== undefined ? ((vendors.excludeBlacklisted ?? payload.excludeBlacklisted) ? 'Yes' : 'No') : 'Yes' },
-                      { label: 'Local Vendor Preference', value: (vendors.localVendorPreference !== undefined ? vendors.localVendorPreference : payload.localVendorPreference) !== undefined ? ((vendors.localVendorPreference ?? payload.localVendorPreference) ? 'Yes' : 'No') : 'Yes' },
-                    ]}
-                  />
-                  {(payload.limitedTenderJustification || rules.limitedTenderJustification) && (
+                  <PolicyRulesMatrix rules={biddingRules} />
+                  {isBuyerSide && (payload.limitedTenderJustification || rules.limitedTenderJustification) && (
                     <div className="rounded-xl border-l-4 border-amber-500 bg-amber-50/60 p-3.5 border border-amber-200/80 text-xs font-semibold text-amber-900">
                       <span className="font-black uppercase tracking-wider block text-[10px] text-amber-700 mb-0.5">Tender Justification:</span>
                       {payload.limitedTenderJustification || rules.limitedTenderJustification}

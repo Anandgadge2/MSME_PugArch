@@ -577,7 +577,17 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
           const pubA = existing.publishedAt || '';
           const pubB = opportunity.publishedAt || '';
-          const bestPublishedAt = hasExplicitTime(pubB) ? pubB : (hasExplicitTime(pubA) ? pubA : (pubB || pubA));
+          let bestPublishedAt = pubA || pubB;
+          if (pubA && pubB) {
+            const tsA = new Date(pubA).getTime();
+            const tsB = new Date(pubB).getTime();
+            if (Number.isFinite(tsA) && Number.isFinite(tsB)) {
+              // The published date cannot be later than creation; pick the earlier authentic publish date
+              bestPublishedAt = tsA <= tsB ? pubA : pubB;
+            } else {
+              bestPublishedAt = pubA;
+            }
+          }
 
           const closeA = existing.closingDate || '';
           const closeB = opportunity.closingDate || '';
@@ -701,7 +711,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           href,
           detailsHref,
           sourceRef: bid.id || `BID-${bid.sourceId || ''}`,
-          publishedAt: bid.rawStartDate || bid.startDate || bid.createdAt,
+          publishedAt: bid.publishedAt || bid.createdAt || bid.rawStartDate || bid.startDate,
           createdAt: bid.createdAt,
           quantity: bid.quantity,
           description: bid.description,
@@ -946,7 +956,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           href: sellerRoutes.auctionLive(auction.id),
           detailsHref: sellerRoutes.detail('REVERSE_AUCTION', auction.id),
           sourceRef: auction.auctionCode || `RA-${auction.id}`,
-          publishedAt: auction.startTime,
+          publishedAt: auction.createdAt || auction.publishedAt || auction.startTime,
           createdAt: auction.createdAt || auction.startTime,
           description: auction.description,
           documents,
@@ -1008,8 +1018,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             ? sellerRoutes.detail('RATE_CONTRACT', meta.requirementId)
             : sellerRoutes.detail('RATE_CONTRACT', rc.id),
           sourceRef: refNo,
-          publishedAt: rc.startDate || rc.createdAt,
-          createdAt: rc.createdAt,
+          publishedAt: rc.createdAt || rc.publishedAt || rc.startDate,
+          createdAt: rc.createdAt || rc.startDate,
           quantity: meta.minimumOrderQuantity ? `${meta.minimumOrderQuantity} min qty` : undefined,
           description: meta.contractDescription || rc.title,
           documents: meta.contractDocument ? [meta.contractDocument.fileName] : [],
