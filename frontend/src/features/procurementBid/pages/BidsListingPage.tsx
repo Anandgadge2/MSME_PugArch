@@ -190,8 +190,12 @@ export default function BidsListingPage() {
       if (participation === 'Participated' && !bid.participated) return false;
       if (participation === 'Not participated' && bid.participated) return false;
       if (closingDate === 'Next 7 days') {
-        const diff = (new Date(`${bid.endDate}T00:00:00`).getTime() - Date.now()) / 86400000;
-        if (diff > 7) return false;
+        const raw = bid.rawEndDate || bid.endDate;
+        const endTimestamp = raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)
+          ? new Date(`${raw}T23:59:59`).getTime()
+          : new Date(raw || 0).getTime();
+        const diff = (endTimestamp - Date.now()) / 86400000;
+        if (diff < 0 || diff > 7) return false;
       }
       return true;
     });
@@ -206,8 +210,8 @@ export default function BidsListingPage() {
           if (bid.discloseEstimatedCost === false) return -1;
           return bid.estimatedValue || 0;
         }
-        if (sortKey === 'startDate') return new Date(bid.startDate || 0).getTime();
-        return new Date(bid.endDate || 0).getTime();
+        if (sortKey === 'startDate') return new Date(bid.rawStartDate || bid.startDate || 0).getTime();
+        return new Date(bid.rawEndDate || bid.endDate || 0).getTime();
       };
       const av = valueFor(a);
       const bv = valueFor(b);

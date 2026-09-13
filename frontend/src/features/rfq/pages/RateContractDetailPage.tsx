@@ -658,6 +658,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         orgName={orgName}
         buyer={{ name: contactName, email: buyerEmail, mobile: buyerMobile, buyerProfile: rcData.buyerOrganization || rcData.buyer?.buyerProfile }}
         estimatedValue={rcData.estimatedValue}
+        discloseEstimatedCost={Boolean(rcData.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? payload.basics?.discloseEstimatedCost ?? false)}
         deadlineDate={periodEnd || rcData.deadlineDate}
         createdAt={periodStart || rcData.createdAt}
         publishedDate={periodStart ? (formatDateString(periodStart) || undefined) : undefined}

@@ -48,6 +48,14 @@ export interface StartReverseAuctionModalProps {
   initialLowestQuote?: number;
   submittedVendors: SubmittedVendorItem[];
   onAuctionStarted: (auction: any) => void;
+  auctionDefaults?: {
+    minDecrementAmount?: number;
+    autoExtensionEnabled?: boolean;
+    extensionTriggerMinutes?: number;
+    extensionDurationMinutes?: number;
+    maximumExtensions?: number;
+    durationMinutes?: number;
+  };
 }
 
 export default function StartReverseAuctionModal({
@@ -58,6 +66,7 @@ export default function StartReverseAuctionModal({
   initialLowestQuote = 0,
   submittedVendors = [],
   onAuctionStarted,
+  auctionDefaults,
 }: StartReverseAuctionModalProps) {
   // Vendor selection states - all initially selected unless explicitly marked disqualified
   const [selectedVendorKeys, setSelectedVendorKeys] = useState<Set<number>>(() => {
@@ -82,18 +91,20 @@ export default function StartReverseAuctionModal({
 
   // Form states
   const [startType, setStartType] = useState<'NOW' | 'SCHEDULED'>('NOW');
-  const [durationMinutes, setDurationMinutes] = useState<number>(15);
+  const [durationMinutes, setDurationMinutes] = useState<number>(auctionDefaults?.durationMinutes ?? 15);
   const [scheduledStartTime, setScheduledStartTime] = useState<string>(() => {
     const d = new Date(Date.now() + 10 * 60 * 1000);
     return d.toISOString().slice(0, 16);
   });
   const [minDecrement, setMinDecrement] = useState<number>(() => {
-    return Math.max(500, Math.round(computedLowestQuote * 0.01));
+    return auctionDefaults?.minDecrementAmount && auctionDefaults.minDecrementAmount > 0 
+      ? auctionDefaults.minDecrementAmount 
+      : Math.max(500, Math.round(computedLowestQuote * 0.01));
   });
-  const [autoExtensionEnabled, setAutoExtensionEnabled] = useState<boolean>(true);
-  const [extensionWindow, setExtensionWindow] = useState<number>(3);
-  const [extensionMinutes, setExtensionMinutes] = useState<number>(3);
-  const [maxExtensions, setMaxExtensions] = useState<number>(5);
+  const [autoExtensionEnabled, setAutoExtensionEnabled] = useState<boolean>(auctionDefaults?.autoExtensionEnabled ?? true);
+  const [extensionWindow, setExtensionWindow] = useState<number>(auctionDefaults?.extensionTriggerMinutes ?? 3);
+  const [extensionMinutes, setExtensionMinutes] = useState<number>(auctionDefaults?.extensionDurationMinutes ?? 3);
+  const [maxExtensions, setMaxExtensions] = useState<number>(auctionDefaults?.maximumExtensions ?? 5);
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 

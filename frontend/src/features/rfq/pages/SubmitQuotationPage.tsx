@@ -32,7 +32,7 @@ import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCookieValue } from '../../../lib/auth';
 import { BASE_URL, api } from '../../../lib/api';
 import { EmdCard, EmdInfo, isEmdApplicable } from '../components/EmdCard';
@@ -293,6 +293,14 @@ const participationToOwnResponse = (participation: any) => {
   });
 };
 
+const isBelongingToUser = (resp: any, currentUser: any) => {
+  if (!resp || !currentUser) return false;
+  const sellerId = resp.sellerId || resp.seller?.id || resp.sellerUserId || resp.userId;
+  const orgId = resp.organizationId || resp.sellerOrganizationId || resp.seller?.organizationId;
+  return (currentUser.id && String(sellerId || '') === String(currentUser.id)) ||
+    (currentUser.organizationId && String(orgId || '') === String(currentUser.organizationId));
+};
+
 const chooseOwnResponse = (primary: any, fallback: any) => {
   const normalizedPrimary = normalizeOwnResponse(primary);
   const normalizedFallback = normalizeOwnResponse(fallback);
@@ -363,6 +371,73 @@ export default function SubmitQuotationPage() {
     }, 50);
   };
 
+  const queryClient = useQueryClient();
+
+  const cachedBidData = React.useMemo(() => {
+    if (isMarketplaceQuoteFlow || !requirementId) return undefined;
+    const strId = String(requirementId);
+    const numId = Number(requirementId);
+
+    const candidates = [
+      queryClient.getQueryData<any>(['procurement-bid', strId]),
+      queryClient.getQueryData<any>(['procurement-bid', numId]),
+      queryClient.getQueryData<any>(['rfq-detail-bid', strId]),
+      queryClient.getQueryData<any>(['rfq-detail-bid', numId]),
+      queryClient.getQueryData<any>(['rfq-detail-req', strId]),
+      queryClient.getQueryData<any>(['rfq-detail-req', numId]),
+      queryClient.getQueryData<any>(['marketplace-requirement-rc-detail', strId]),
+      queryClient.getQueryData<any>(['marketplace-requirement-rc-detail', numId]),
+    ];
+
+    for (const cand of candidates) {
+      if (!cand) continue;
+      const bidData = cand.data || cand.requirement || cand;
+      if (bidData && (bidData.bidNumber || bidData.title || bidData.subject || bidData.id)) {
+        const userParticipation = findSellerParticipation(bidData, user);
+        const rawCandResp = cand.ownResponse || cand.myResponse;
+        const verifiedCandResp = isBelongingToUser(rawCandResp, user) ? rawCandResp : null;
+        const ownResponseData = participationToOwnResponse(userParticipation) || normalizeOwnResponse(verifiedCandResp);
+        return {
+          requirement: {
+            id: bidData.bidNumber || bidData.id || requirementId,
+            procurementBidId: bidData.id,
+            procurementBidNumber: bidData.bidNumber,
+            sourceId: bidData.sourceId,
+            sourceModel: bidData.sourceModel,
+            procurementType: bidData.procurementType,
+            procurementMethod: bidData.procurementMethod,
+            bidType: bidData.bidType || bidData.procurementType,
+            type: bidData.type || bidData.procurementType,
+            sourcingMethod: bidData.sourcingMethod,
+            title: bidData.title || bidData.subject || 'Sourcing Requirement',
+            requirementNumber: bidData.bidNumber || bidData.requirementNumber || bidData.id,
+            buyerOrganization: bidData.buyerOrganization || { organizationName: bidData.buyerName },
+            lastDate: bidData.endDate || bidData.lastDate || bidData.requiredBy,
+            items: [
+              bidData.technicalPacket?.boqTable,
+              bidData.technicalPacket?.items,
+              bidData.technicalPacket?.boq,
+              bidData.payload?.boqTable,
+              bidData.payload?.items,
+              bidData.boqTable,
+              bidData.items,
+            ].reduce((best: any[], cand: any) => (Array.isArray(cand) && cand.length > best.length ? cand : best), []),
+            documents: bidData.documents || [],
+            payload: bidData.technicalPacket || bidData.payload,
+            requiredDocuments: bidData.requiredDocuments,
+            estimatedValue: bidData.estimatedValue || bidData.budgetMax,
+            quantity: bidData.quantity,
+            unit: bidData.unit,
+            status: bidData.status,
+            description: bidData.description,
+          },
+          ownResponse: ownResponseData,
+        };
+      }
+    }
+    return undefined;
+  }, [requirementId, isMarketplaceQuoteFlow, queryClient, user]);
+
   const { data: queryData, isLoading, error } = useQuery({
     queryKey: ['marketplace-requirement-quotation', isMarketplaceQuoteFlow ? `conv-${conversationId}` : requirementId, user?.id, user?.organizationId],
     queryFn: async () => {
@@ -381,7 +456,12 @@ export default function SubmitQuotationPage() {
               'Buyer Organization';
 
             const firstMsg = conv.messages?.find((m: any) => m.senderId !== Number(user?.id))?.content || conv.messages?.[0]?.content || '';
-            const existingQuote = conv.quoteRequest?.quoteResponses?.find((r: any) => r.sellerId === Number(user?.id)) || conv.quoteRequest?.quoteResponses?.[0];
+            const existingQuote = conv.quoteRequest?.quoteResponses?.find((r: any) => {
+              const sellerId = r.sellerId || r.seller?.id || r.sellerUserId;
+              const orgId = r.organizationId || r.sellerOrganizationId || r.seller?.organizationId;
+              return (user?.id && String(sellerId || '') === String(user.id)) ||
+                (user?.organizationId && String(orgId || '') === String(user.organizationId));
+            }) || null;
 
             const parsedItems = parseQuoteRequestItems(conv.subject, firstMsg || conv.quoteRequest?.message);
 
@@ -422,26 +502,91 @@ export default function SubmitQuotationPage() {
         }
       }
 
-      // 2, 3, 4: Concurrent Resolution for RFQ / Procurement Bid / Quote Request
-      const [marketSettled, bidSettled, quoteSettled] = await Promise.allSettled([
-        getApi<any>(`/api/marketplace/requirements/${requirementId}`),
-        getApi<any>(`/api/procurement-bids/${encodeURIComponent(String(requirementId))}`),
-        getApi<any>(`/api/quote-requests/${requirementId}`)
-      ]);
+      // 2, 3, 4: Targeted Resolution for RFQ / Procurement Bid / Quote Request
+      const isTenderOrBidToken = typeof requirementId === 'string' && /^(TND|TENDER|RFQ|RFP|LTND|RC|RATE|JSG|REQ)-/i.test(requirementId.trim());
 
       let marketplaceResult: { requirement: any; ownResponse: any } | null = null;
+      let bidResult: { requirement: any; ownResponse: any } | null = null;
+      let quoteRequestResult: { requirement: any; ownResponse: any } | null = null;
+
+      if (isTenderOrBidToken || procRespondMatch) {
+        // FAST PATH for Procurement Bids / Tenders / RFQs / Rate Contracts:
+        try {
+          const bidData = await getApi<any>(`/api/procurement-bids/${encodeURIComponent(String(requirementId))}`);
+          if (bidData) {
+            const userParticipation = findSellerParticipation(bidData, user);
+            const ownResponseData = participationToOwnResponse(userParticipation);
+
+            bidResult = {
+              requirement: {
+                id: bidData.bidNumber || bidData.id || requirementId,
+                procurementBidId: bidData.id,
+                procurementBidNumber: bidData.bidNumber,
+                sourceId: bidData.sourceId,
+                sourceModel: bidData.sourceModel,
+                procurementType: bidData.procurementType,
+                procurementMethod: bidData.procurementMethod,
+                bidType: bidData.bidType || bidData.procurementType,
+                type: bidData.type || bidData.procurementType,
+                sourcingMethod: bidData.sourcingMethod,
+                title: bidData.title,
+                requirementNumber: bidData.bidNumber || bidData.id,
+                buyerOrganization: bidData.buyerOrganization || { organizationName: bidData.buyerName },
+                lastDate: bidData.endDate,
+                items: [
+                  bidData.technicalPacket?.boqTable,
+                  bidData.technicalPacket?.items,
+                  bidData.technicalPacket?.boq,
+                  bidData.technicalPacket?.wizardData?.boqTable,
+                  bidData.technicalPacket?.wizardData?.items,
+                  bidData.payload?.boqTable,
+                  bidData.payload?.items,
+                  bidData.payload?.boq,
+                  bidData.payload?.wizardData?.boqTable,
+                  bidData.payload?.wizardData?.items,
+                  bidData.boqTable,
+                  bidData.items,
+                ].reduce((best: any[], cand: any) => (Array.isArray(cand) && cand.length > best.length ? cand : best), []),
+                documents: bidData.documents || [],
+                payload: bidData.technicalPacket || bidData.payload,
+                requiredDocuments: bidData.requiredDocuments,
+                estimatedValue: bidData.estimatedValue,
+                quantity: bidData.quantity,
+                unit: bidData.unit,
+                status: bidData.status,
+                description: bidData.description,
+              },
+              ownResponse: ownResponseData,
+            };
+            return {
+              requirement: bidResult.requirement,
+              ownResponse: bidResult.ownResponse,
+            };
+          }
+        } catch {
+          // Fall through to marketplace requirement lookup
+        }
+      }
+
+      // Concurrent resolution when not resolved via fast path
+      const [marketSettled, bidSettled] = await Promise.allSettled([
+        getApi<any>(`/api/marketplace/requirements/${requirementId}`),
+        !bidResult ? getApi<any>(`/api/procurement-bids/${encodeURIComponent(String(requirementId))}`) : Promise.resolve(null)
+      ]);
+
       if (marketSettled.status === 'fulfilled') {
         const data = marketSettled.value;
         if (data && (data.requirement || data.id)) {
+          const rawResp = data.ownResponse || data.myResponse;
+          const verifiedResp = isBelongingToUser(rawResp, user) ? rawResp : null;
           marketplaceResult = {
             requirement: data.requirement || data,
-            ownResponse: normalizeOwnResponse(data.ownResponse || data.myResponse || data.response || null),
+            ownResponse: normalizeOwnResponse(verifiedResp),
           };
         }
       }
 
-      let bidResult: { requirement: any; ownResponse: any } | null = null;
-      if (bidSettled.status === 'fulfilled') {
+      if (!bidResult && bidSettled.status === 'fulfilled') {
         const bidData = bidSettled.value;
         if (bidData) {
           const userParticipation = findSellerParticipation(bidData, user);
@@ -491,42 +636,52 @@ export default function SubmitQuotationPage() {
         }
       }
 
-      let quoteRequestResult: { requirement: any; ownResponse: any } | null = null;
-      if (quoteSettled.status === 'fulfilled') {
-        const quoteData = quoteSettled.value;
-        if (quoteData && (quoteData.id || quoteData.subject)) {
-          const myResponse = Array.isArray(quoteData.quoteResponses)
-            ? (quoteData.quoteResponses.find((r: any) => r.sellerId === Number(user?.id)) || quoteData.quoteResponses[0])
-            : null;
-          const parsedItems = parseQuoteRequestItems(quoteData.subject, quoteData.message);
-          quoteRequestResult = {
-            requirement: {
-              id: quoteData.id,
-              isQuoteRequestEntity: true,
-              title: quoteData.subject,
-              subject: quoteData.subject,
-              description: quoteData.message,
-              estimatedValue: quoteData.estimatedValue,
-              buyerOrganization: quoteData.buyer?.buyerProfile?.organizationName ? { organizationName: quoteData.buyer.buyerProfile.organizationName } : { organizationName: quoteData.buyer?.name || 'Buyer' },
-              items: parsedItems.length > 0 ? parsedItems : [{
-                itemName: cleanItemName(quoteData.subject) || 'Requested Product/Service',
-                quantity: 1,
-                unitOfMeasure: 'Nos',
-                description: quoteData.message || ''
-              }],
-              requiredDocuments: ['GST Certificate', 'Detailed Price Breakup'],
-              documents: quoteData.requestDocAsset ? [quoteData.requestDocAsset] : []
-            },
-            ownResponse: myResponse ? normalizeOwnResponse({
-              id: myResponse.id,
-              status: myResponse.status,
-              offeredPrice: myResponse.totalAmount,
-              deliveryTimeline: myResponse.deliveryDays ? `${myResponse.deliveryDays} Days` : '',
-              terms: myResponse.notes || '',
-              message: myResponse.notes || '',
-              attachmentUrl: myResponse.documentUrl
-            }) : null
-          };
+      // Query quote-requests only if explicitly indicated or purely numeric ID
+      if (quoteRequestIdParam || (!marketplaceResult && !bidResult && /^\d+$/.test(String(requirementId)))) {
+        const qId = quoteRequestIdParam ? Number(quoteRequestIdParam) : requirementId;
+        try {
+          const quoteData = await getApi<any>(`/api/quote-requests/${qId}`);
+          if (quoteData && (quoteData.id || quoteData.subject)) {
+            const myResponse = Array.isArray(quoteData.quoteResponses)
+              ? (quoteData.quoteResponses.find((r: any) => {
+                  const sellerId = r.sellerId || r.seller?.id || r.sellerUserId;
+                  const orgId = r.organizationId || r.sellerOrganizationId || r.seller?.organizationId;
+                  return (user?.id && String(sellerId || '') === String(user.id)) ||
+                    (user?.organizationId && String(orgId || '') === String(user.organizationId));
+                }) || null)
+              : null;
+            const parsedItems = parseQuoteRequestItems(quoteData.subject, quoteData.message);
+            quoteRequestResult = {
+              requirement: {
+                id: quoteData.id,
+                isQuoteRequestEntity: true,
+                title: quoteData.subject,
+                subject: quoteData.subject,
+                description: quoteData.message,
+                estimatedValue: quoteData.estimatedValue,
+                buyerOrganization: quoteData.buyer?.buyerProfile?.organizationName ? { organizationName: quoteData.buyer.buyerProfile.organizationName } : { organizationName: quoteData.buyer?.name || 'Buyer' },
+                items: parsedItems.length > 0 ? parsedItems : [{
+                  itemName: cleanItemName(quoteData.subject) || 'Requested Product/Service',
+                  quantity: 1,
+                  unitOfMeasure: 'Nos',
+                  description: quoteData.message || ''
+                }],
+                requiredDocuments: ['GST Certificate', 'Detailed Price Breakup'],
+                documents: quoteData.requestDocAsset ? [quoteData.requestDocAsset] : []
+              },
+              ownResponse: myResponse ? normalizeOwnResponse({
+                id: myResponse.id,
+                status: myResponse.status,
+                offeredPrice: myResponse.totalAmount,
+                deliveryTimeline: myResponse.deliveryDays ? `${myResponse.deliveryDays} Days` : '',
+                terms: myResponse.notes || '',
+                message: myResponse.notes || '',
+                attachmentUrl: myResponse.documentUrl
+              }) : null
+            };
+          }
+        } catch {
+          // Ignore quote request failure
         }
       }
 
@@ -539,6 +694,8 @@ export default function SubmitQuotationPage() {
       return null;
     },
     enabled: (isMarketplaceQuoteFlow && !!conversationId) || (!isMarketplaceQuoteFlow && !!requirementId),
+    initialData: cachedBidData,
+    staleTime: 60_000,
   });
 
   const rfqData: any = queryData?.requirement
@@ -581,7 +738,7 @@ export default function SubmitQuotationPage() {
       const r = await getApi<any>(`/api/emd/status?requirementId=${targetReqId ?? ''}`);
       return r?.data ?? r;
     },
-    enabled: user?.role === 'seller' && !!targetReqId,
+    enabled: user?.role === 'seller' && !!targetReqId && Boolean(rfqData?.isEmdRequired && Number(rfqData?.emdAmount) > 0),
   });
 
   const emdInfo: EmdInfo | null = React.useMemo(() => {
@@ -688,9 +845,28 @@ export default function SubmitQuotationPage() {
     }
 
     const keysToCheck = Array.from(new Set([requirementId, targetReqId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
-    const hasLocalSubmission = typeof window !== 'undefined' && keysToCheck.some(k => Boolean(localStorage.getItem(`rfq_submitted_${k}`)));
+    const currentUserId = user?.id ? String(user.id) : null;
+    let hasLocalSubmission = false;
+    if (typeof window !== 'undefined') {
+      keysToCheck.forEach(k => {
+        try { localStorage.removeItem(`rfq_submitted_${k}`); } catch {}
+      });
+      if (currentUserId) {
+        hasLocalSubmission = keysToCheck.some(k => {
+          try {
+            const item = localStorage.getItem(`rfq_submitted_${currentUserId}_${k}`);
+            if (!item) return false;
+            const parsed = JSON.parse(item);
+            return !parsed.userId || String(parsed.userId) === currentUserId;
+          } catch {
+            return false;
+          }
+        });
+      }
+    }
 
-    if (isFinalSubmittedResponse(ownResponse) || hasLocalSubmission) {
+    const isOwnSubmitted = isFinalSubmittedResponse(ownResponse) && isBelongingToUser(ownResponse, user);
+    if (isOwnSubmitted || hasLocalSubmission) {
       setSubmitted(true);
       setDeclared(true);
       toast.info('Loaded your submitted quotation from the server.');
@@ -698,7 +874,7 @@ export default function SubmitQuotationPage() {
       setSubmitted(false);
       toast.info('Restored your draft quotation from the server.');
     }
-  }, [ownResponse, requirementId, targetReqId, searchParams]);
+  }, [ownResponse, requirementId, targetReqId, searchParams, user?.id]);
 
   // Use the canonical token from fetched data; RFQ bid numbers are resolved server-side.
   const resolvedId = isMarketplaceQuoteFlow ? (conversationId || rfqData?.conversationId) : (rfqData?.id || requirementId);
@@ -753,12 +929,14 @@ export default function SubmitQuotationPage() {
     : isRfp ? 'RFPs'
     : 'RFQs';
 
-  const procurementBackRoute = isMarketplaceQuoteFlow ? `/seller/messages?conversationId=${conversationId}`
-    : isLimitedTender ? '/seller/opportunities/invitations'
-    : isOpenTender ? '/seller/opportunities/open-tenders'
-    : isRateContract ? '/seller/opportunities/rate-contracts'
-    : isRfp ? '/seller/opportunities/rfps'
-    : '/seller/opportunities/rfqs';
+  const rolePrefix = user?.role === 'shg' ? '/shg' : '/seller';
+
+  const procurementBackRoute = isMarketplaceQuoteFlow ? `${rolePrefix}/messages?conversationId=${conversationId}`
+    : isLimitedTender ? `${rolePrefix}/opportunities/invitations`
+    : isOpenTender ? `${rolePrefix}/opportunities/open-tenders`
+    : isRateContract ? `${rolePrefix}/opportunities/rate-contracts`
+    : isRfp ? `${rolePrefix}/opportunities/rfps`
+    : `${rolePrefix}/opportunities/rfqs`;
 
   const submitActionHeaderLabel = isSubmittedQuote
     ? (isMarketplaceQuoteFlow ? 'Submitted Product Quotation' : isRfp ? 'Submitted Proposal' : isRateContract ? 'Submitted Rate Quotation' : isOpenTender ? 'Submitted Quotation' : 'Submitted Quotation')
@@ -1459,7 +1637,9 @@ export default function SubmitQuotationPage() {
       }
       localStorage.removeItem(`rfq_draft_${requirementId || conversationId}`);
       if (typeof window !== 'undefined') {
+        const currentUserId = user?.id ? String(user.id) : null;
         const submitCache = {
+          userId: user?.id,
           status: 'SUBMITTED',
           submittedAt: new Date().toISOString(),
           offeredPrice: payload.offeredPrice,
@@ -1472,7 +1652,13 @@ export default function SubmitQuotationPage() {
         };
         const keysToCache = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
         keysToCache.forEach(k => {
-          try { localStorage.setItem(`rfq_submitted_${k}`, JSON.stringify(submitCache)); } catch {}
+          try {
+            if (currentUserId) {
+              localStorage.setItem(`rfq_submitted_${currentUserId}_${k}`, JSON.stringify(submitCache));
+            }
+            // Clean up legacy un-scoped key to avoid polluting other accounts
+            localStorage.removeItem(`rfq_submitted_${k}`);
+          } catch {}
         });
       }
       setSubmitted(true);
@@ -1481,7 +1667,13 @@ export default function SubmitQuotationPage() {
       if (err?.message?.includes('already submitted') || err?.code === 'REQUIREMENT_RESPONSE_EXISTS' || err?.status === 409) {
         setSubmitted(true);
         if (typeof window !== 'undefined' && resolvedId) {
-          try { localStorage.setItem(`rfq_submitted_${resolvedId}`, JSON.stringify({ status: 'SUBMITTED', submittedAt: new Date().toISOString() })); } catch {}
+          const currentUserId = user?.id ? String(user.id) : null;
+          try {
+            if (currentUserId) {
+              localStorage.setItem(`rfq_submitted_${currentUserId}_${resolvedId}`, JSON.stringify({ userId: user?.id, status: 'SUBMITTED', submittedAt: new Date().toISOString() }));
+            }
+            localStorage.removeItem(`rfq_submitted_${resolvedId}`);
+          } catch {}
         }
         toast.info('You have already submitted your quotation for this procurement.');
       } else {
@@ -1492,20 +1684,34 @@ export default function SubmitQuotationPage() {
     }
   };
 
-  const handleBackToRfq = () => {
+  const navigateTo = useCallback((url: string) => {
+    try {
+      router.push(url);
+    } catch {
+      window.location.href = url;
+    }
+  }, [router]);
+
+  const handleBackToRfq = useCallback(() => {
+    const rolePrefix = user?.role === 'shg' ? '/shg' : '/seller';
     if (isMarketplaceQuoteFlow || rfqData?.isMarketplaceQuote) {
       const targetConvId = conversationId || rfqData?.conversationId;
-      window.location.href = `/seller/messages?conversationId=${targetConvId}`;
+      navigateTo(`${rolePrefix}/messages?conversationId=${targetConvId}`);
       return;
     }
-    if (isRfp) {
-      window.location.href = `/seller/procurement/rfp/${requirementId}`;
+    const targetId = requirementId || rfqData?.requirementNumber || rfqData?.id || extractedPathId;
+    if (isOpenTender) {
+      navigateTo(`${rolePrefix}/procurement/open-tender/${encodeURIComponent(String(targetId))}`);
+    } else if (isLimitedTender) {
+      navigateTo(`${rolePrefix}/procurement/limited-tender/${encodeURIComponent(String(targetId))}`);
+    } else if (isRfp) {
+      navigateTo(`${rolePrefix}/procurement/rfp/${encodeURIComponent(String(targetId))}`);
     } else if (isRateContract) {
-      window.location.href = `/seller/procurement/rate-contract/${requirementId}`;
+      navigateTo(`${rolePrefix}/procurement/rate-contract/${encodeURIComponent(String(targetId))}`);
     } else {
-      window.location.href = `/seller/procurement/rfq/${requirementId}`;
+      navigateTo(`${rolePrefix}/procurement/rfq/${encodeURIComponent(String(targetId))}`);
     }
-  };
+  }, [user?.role, isMarketplaceQuoteFlow, rfqData, conversationId, requirementId, extractedPathId, isOpenTender, isLimitedTender, isRfp, isRateContract, navigateTo]);
 
   if (!requirementId && !conversationId) {
     return (
@@ -1514,7 +1720,7 @@ export default function SubmitQuotationPage() {
           <AlertTriangle className="mx-auto h-12 w-12 text-red-400" />
           <h2 className="mt-4 text-lg font-black text-red-800">Invalid Quotation Request</h2>
           <p className="mt-2 text-sm text-red-600">No requirement or conversation ID provided.</p>
-          <Button onClick={() => window.location.href = '/seller/opportunities'} className="mt-4 bg-[#12335f] text-white">
+          <Button onClick={() => navigateTo(rolePrefix === '/shg' ? '/shg/opportunities' : '/seller/opportunities')} className="mt-4 bg-[#12335f] text-white">
             Back to Opportunities
           </Button>
         </div>
@@ -1557,70 +1763,46 @@ export default function SubmitQuotationPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 px-4 py-6 md:px-8 pb-12">
-      {isSubmittedQuote && (
-        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-            <div>
-              <h3 className="text-sm font-black text-emerald-800">You have already submitted your quotation for this procurement.</h3>
-              <p className="text-xs font-semibold text-emerald-700 mt-0.5">
-                Your submitted quotation details are displayed below in read-only mode.
-              </p>
-            </div>
-          </div>
-          <Button onClick={handleBackToRfq} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-9 text-xs font-black uppercase shadow-sm shrink-0">
-            Back to Requirement
-          </Button>
-        </div>
-      )}
-      {!isSubmittedQuote && isClosed && (
-        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-slate-500" />
-            <div>
-              <h3 className="text-sm font-black text-slate-800">Requirement {rfqData?.status}</h3>
-              <p className="text-xs font-semibold text-slate-500">This requirement is no longer accepting new quotations.</p>
-            </div>
-          </div>
-          <Button onClick={handleBackToRfq} className="bg-slate-600 hover:bg-slate-700 text-white rounded-xl h-9 text-xs font-black uppercase shadow-sm">
-            Back to Requirement
-          </Button>
-        </div>
-      )}
-
       {/* Navigation & Breadcrumb */}
       <div className="flex flex-wrap items-center gap-3">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => {
-            if (typeof window !== 'undefined' && window.history.length > 1) {
-              router.back();
-            } else {
-              handleBackToRfq();
-            }
-          }}
-          className="h-8 gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors"
+          onClick={handleBackToRfq}
+          className="h-8 gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors cursor-pointer"
+          aria-label={backButtonLabelText}
         >
           <ArrowLeft className="h-4 w-4 text-slate-500" />
-          <span>Back</span>
+          <span>{backButtonLabelText}</span>
         </Button>
 
-        <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 bg-white border border-slate-200/80 rounded-xl px-4 py-1.5 shadow-2xs">
-          <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = '/seller/opportunities'}>
+        <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 bg-white border border-slate-200/80 rounded-xl px-4 py-1.5 shadow-2xs" aria-label="Breadcrumb">
+          <button
+            type="button"
+            className="hover:text-indigo-600 cursor-pointer transition-colors"
+            onClick={() => navigateTo(rolePrefix === '/shg' ? '/shg/opportunities' : '/seller/opportunities')}
+          >
             Opportunities
-          </span>
+          </button>
           <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <span className="hover:text-indigo-600 cursor-pointer transition-colors" onClick={() => window.location.href = procurementBackRoute}>
+          <button
+            type="button"
+            className="hover:text-indigo-600 cursor-pointer transition-colors"
+            onClick={() => navigateTo(procurementBackRoute)}
+          >
             {procurementTypePluralLabel}
-          </span>
+          </button>
           <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <span className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700" onClick={handleBackToRfq}>
+          <button
+            type="button"
+            className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700"
+            onClick={handleBackToRfq}
+          >
             {rfqNumber}
-          </span>
+          </button>
           <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100">
+          <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100" aria-current="page">
             {submitActionHeaderLabel}
           </span>
         </nav>
@@ -1656,46 +1838,38 @@ export default function SubmitQuotationPage() {
               </div>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleBackToRfq}
-            className="h-9 rounded-lg border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-all flex items-center gap-1.5 shrink-0"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> {backButtonLabelText}
-          </Button>
         </div>
       </section>
 
-      {/* ── Submitted Quotation Banner ── */}
-      {isSubmittedQuote && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-extrabold text-emerald-950">Quotation Submitted</h3>
-                <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-850">
-                  {submittedStatus(ownResponse) || 'SUBMITTED'}
-                </span>
-              </div>
-              <p className="text-xs font-medium text-emerald-800 mt-0.5">
-                You have already submitted your quotation for this procurement. Your response is locked and currently under review by the buyer.
-              </p>
-            </div>
+      {/* ── Status Banner (Submitted or Closed) ── */}
+      {isSubmittedQuote ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-xs flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold">
+            <CheckCircle2 className="h-5 w-5" />
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleBackToRfq}
-            className="h-9 px-4 text-xs font-bold bg-white text-emerald-900 border-emerald-300 hover:bg-emerald-100/60 rounded-lg shrink-0 shadow-2xs"
-          >
-            {backButtonLabelText}
-          </Button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-extrabold text-emerald-950">Quotation Submitted</h3>
+              <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-850">
+                {submittedStatus(ownResponse) || 'SUBMITTED'}
+              </span>
+            </div>
+            <p className="text-xs font-medium text-emerald-800 mt-0.5">
+              You have already submitted your quotation for this procurement. Your response is locked and currently under review by the buyer.
+            </p>
+          </div>
         </div>
-      )}
+      ) : isClosed ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-xs flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-500 text-white font-bold">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-black text-slate-800">Requirement {rfqData?.status}</h3>
+            <p className="text-xs font-semibold text-slate-500 mt-0.5">This requirement is no longer accepting new quotations.</p>
+          </div>
+        </div>
+      ) : null}
 
       {/* ── Navigation Tabs Bar (Portal Theme) ── */}
       <div className="sticky top-4 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-1.5 shadow-xs" role="tablist" aria-label="Quotation Sections">
@@ -2762,7 +2936,7 @@ export default function SubmitQuotationPage() {
                     <div>
                       <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800">Quotation Submitted</h2>
                       <p className="mt-1 text-xs font-semibold text-slate-600">
-                        This quotation is locked and shown exactly as submitted${submittedAtDisplay ? ` on ${submittedAtDisplay}` : ''}.
+                        {`This quotation is locked and shown exactly as submitted${submittedAtDisplay ? ` on ${submittedAtDisplay}` : ''}.`}
                       </p>
                     </div>
                   </div>
@@ -2770,9 +2944,10 @@ export default function SubmitQuotationPage() {
                     type="button"
                     variant="outline"
                     onClick={handleBackToRfq}
-                    className="rounded-xl border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 w-full sm:w-auto cursor-pointer"
+                    className="rounded-xl border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 w-full sm:w-auto cursor-pointer flex items-center gap-1.5"
                   >
-                    Back to Requirement
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    <span>{backButtonLabelText}</span>
                   </Button>
                 </>
               ) : (

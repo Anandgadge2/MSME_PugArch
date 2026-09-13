@@ -262,11 +262,12 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
           buyerProfile: bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization,
         }}
         estimatedValue={bid.estimatedValue || reqObj.estimatedValue || basics.estimatedValue}
-        deadlineDate={bid.endDate || reqObj.lastDate || schedule.submissionDate || schedule.submissionDeadline}
+        discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? basics.discloseEstimatedCost ?? false)}
+        deadlineDate={schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate}
         createdAt={bid.startDate || bid.createdAt || reqObj.createdAt}
-        publishedDate={formatDateString(schedule.publishDate || schedule.publishedDate || bid.startDate || reqObj.createdAt)}
-        closingDate={formatDateString(bid.endDate || reqObj.lastDate || schedule.submissionDate || schedule.submissionDeadline, true)}
-        clarificationDate={formatDateString(schedule.clarificationDeadline || schedule.clarificationDate, true)}
+        publishedDate={formatDateString(schedule.publishDate || schedule.publishedDate || bid.rawStartDate || bid.startDate || reqObj.createdAt)}
+        closingDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
+        clarificationDate={schedule.clarificationDeadline || schedule.clarificationDate ? formatDateString(schedule.clarificationDeadline || schedule.clarificationDate, true) : undefined}
         technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate, true)}
         financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate, true)}
         awardDate={formatDateString(tender.awardDate || schedule.awardDate || schedule.awardingDate, true)}

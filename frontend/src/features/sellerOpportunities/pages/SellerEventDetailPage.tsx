@@ -167,6 +167,7 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       orgName={bid.buyerOrganization?.organizationName || bid.buyer?.name}
       buyer={bid.buyer}
       estimatedValue={bid.estimatedValue}
+      discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? (bid.technicalPacket as any)?.discloseEstimatedCost ?? false)}
       deadlineDate={bid.endDate}
       createdAt={bid.startDate || (bid as any).createdAt}
       publishedDate={bid.startDate ? String(bid.startDate) : undefined}

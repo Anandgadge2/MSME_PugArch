@@ -167,11 +167,12 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
           buyerProfile: bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization,
         }}
         estimatedValue={bid.estimatedValue || reqObj.estimatedValue || basics.estimatedValue}
-        deadlineDate={bid.endDate || reqObj.lastDate || schedule.submissionDate}
+        discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? basics.discloseEstimatedCost ?? false)}
+        deadlineDate={schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate}
         createdAt={bid.startDate || bid.createdAt || reqObj.createdAt}
-        publishedDate={formatDateString(schedule.publishDate || bid.startDate || reqObj.createdAt)}
-        closingDate={formatDateString(bid.endDate || reqObj.lastDate || schedule.submissionDate, true)}
-        clarificationDate={formatDateString(schedule.clarificationDeadline, true)}
+        publishedDate={formatDateString(schedule.publishDate || bid.rawStartDate || bid.startDate || reqObj.createdAt)}
+        closingDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
+        clarificationDate={schedule.clarificationDeadline || schedule.clarificationEndDate ? formatDateString(schedule.clarificationDeadline || schedule.clarificationEndDate, true) : undefined}
         technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate, true)}
         financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate, true)}
         category={bid.category?.name || bid.category || reqObj.category?.name || basics.category}

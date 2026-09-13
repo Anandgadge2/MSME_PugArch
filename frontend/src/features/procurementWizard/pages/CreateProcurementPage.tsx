@@ -5885,15 +5885,26 @@ function ScheduleStepForm({
             <Field label="Auction Mode" required>
               <input value={draft.auctionConfig.auctionMode} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
             </Field>
-            <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
-              <input type="datetime-local" value={draft.auctionConfig.startDateTime} onChange={e => updateAuction('startDateTime', e.target.value)} className={controlClass(fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.'))} />
-            </Field>
-            <Field label="Auction End DateTime" required error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}>
-              <input type="datetime-local" value={draft.auctionConfig.endDateTime} onChange={e => updateAuction('endDateTime', e.target.value)} className={controlClass(fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.'))} />
-            </Field>
-            <Field label="Auction Duration (Minutes)" required error={fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.')}>
-              <input type="number" min={1} value={draft.auctionConfig.durationMinutes || ''} onChange={e => updateAuction('durationMinutes', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.'))} />
-            </Field>
+            {isReverseAuctionMethod(draft.type) ? (
+              <>
+                <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
+                  <input type="datetime-local" value={draft.auctionConfig.startDateTime} onChange={e => updateAuction('startDateTime', e.target.value)} className={controlClass(fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.'))} />
+                </Field>
+                <Field label="Auction End DateTime" required error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}>
+                  <input type="datetime-local" value={draft.auctionConfig.endDateTime} onChange={e => updateAuction('endDateTime', e.target.value)} className={controlClass(fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.'))} />
+                </Field>
+                <Field label="Auction Duration (Minutes)" required error={fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.')}>
+                  <input type="number" min={1} value={draft.auctionConfig.durationMinutes || ''} onChange={e => updateAuction('durationMinutes', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.'))} />
+                </Field>
+              </>
+            ) : (
+              <div className="sm:col-span-2 flex items-center gap-2.5 p-3 rounded-xl bg-blue-50 border border-blue-200 text-[11px] text-blue-900 font-semibold">
+                <svg className="h-4 w-4 shrink-0 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                <span>
+                  <strong>Follow-on Auction (SAP Ariba Pattern):</strong> The live auction start time and duration will be configured when you launch Stage 2 from the &quot;Proposals&quot; tab — after evaluating sealed bids. The auction ceiling will automatically lock to the lowest qualified bid (L1).
+                </span>
+              </div>
+            )}
             <Field label="Starting Bid Price" required error={fieldError(showErrors && draft.auctionConfig.startingBidPrice <= 0, 'Starting bid price must be greater than 0.')}>
               <input type="number" min={0} value={draft.auctionConfig.startingBidPrice || ''} onChange={e => updateAuction('startingBidPrice', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.startingBidPrice <= 0, 'Starting bid price must be greater than 0.'))} />
             </Field>
@@ -6881,9 +6892,9 @@ function EvaluationBasisForm({
             </div>
 
             <div className="flex items-center gap-2 p-2.5 rounded-lg bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 font-semibold">
-              <Info className="h-4 w-4 shrink-0 text-indigo-700" />
+              <Info className="h-4 w-4 shrink-0 text-indigo-700" aria-hidden="true" />
               <span>
-                The live auction schedule, duration, and optional terms document can be fine-tuned under <strong>Step 5 (Timeline & Rules)</strong>.
+                <strong>How it works:</strong> The reverse auction will be launched as a follow-on event after you evaluate Stage 1 sealed proposals. The rules you configure here (decrement step, rank visibility, anti-sniping) will be used as defaults. You can adjust the start time, duration, and vendor selection when launching from the Proposals tab.
               </span>
             </div>
           </div>
@@ -7004,14 +7015,25 @@ function PreviewPublishForm({
         <Field label="Approval Workflow">
           <select
             value={draft.approval.workflow || (draft.schedule.packetType === 'Two' ? 'Two-Stage (Technical + Financial)' : 'Single Stage (Commercial Only)')}
-            onChange={e => updateDraft(c => ({ ...c, approval: { ...c.approval, workflow: e.target.value } }))}
+            onChange={e => {
+              const val = e.target.value;
+              const isTwo = val.includes('Two-Stage');
+              updateDraft(c => ({
+                ...c,
+                approval: { ...c.approval, workflow: val },
+                schedule: { ...c.schedule, packetType: isTwo ? 'Two' : 'Single' }
+              }));
+            }}
             className={inputClass}
           >
             <option value="Single Stage (Commercial Only)">Single Stage (Commercial Only)</option>
             <option value="Two-Stage (Technical + Financial)">Two-Stage (Technical + Financial)</option>
-            <option value="Finance + Procurement Dual Review">Finance + Procurement Dual Review</option>
-            <option value="Department Head Sanction">Department Head Sanction</option>
           </select>
+          <p className="text-[10px] text-slate-500 font-semibold mt-1">
+            {draft.schedule.packetType === 'Two'
+              ? 'Two-Stage: Technical bids are evaluated and qualified first before unsealing commercial price bids.'
+              : 'Single Stage: Direct commercial evaluation; price bids are unsealed immediately upon deadline closure.'}
+          </p>
         </Field>
       </div>
 
@@ -7187,9 +7209,13 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   };
 
   const hasReverseAuction = isReverseAuctionMethod(draft.type) || Boolean(draft.basics.isReverseAuctionNeeded);
+  const isStandaloneRA = isReverseAuctionMethod(draft.type);
   const auctionConfigPayload = hasReverseAuction ? {
     ...draft.auctionConfig,
-    procurementMethod: isReverseAuctionMethod(draft.type) ? 'REVERSE_AUCTION' : 'BID_WITH_REVERSE_AUCTION',
+    // For hybrid follow-on methods, omit start/end dates — they will be set
+    // when the buyer launches Stage 2 from the Proposals tab after evaluation
+    ...(isStandaloneRA ? {} : { startDateTime: undefined, endDateTime: undefined }),
+    procurementMethod: isStandaloneRA ? 'REVERSE_AUCTION' : 'BID_WITH_REVERSE_AUCTION',
     auctionTitle: draft.auctionConfig.auctionTitle || title,
     auctionDescription: draft.auctionConfig.auctionDescription || draft.basics.justification || basics.description,
     auctionCategory: draft.auctionConfig.auctionCategory || draft.basics.category,

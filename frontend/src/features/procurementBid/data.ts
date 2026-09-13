@@ -71,6 +71,8 @@ export interface ProcurementBid {
   discloseEstimatedCost?: boolean;
   startDate: string;
   endDate: string;
+  rawStartDate?: string | null;
+  rawEndDate?: string | null;
   status: BidStatus;
   approvalStatus?: string;
   lifecycleStage?: string;

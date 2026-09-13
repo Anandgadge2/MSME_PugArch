@@ -53,27 +53,60 @@ export default function ClarificationPanel({ quoteRequestId, kind = 'quote-reque
   const submitQuestion = () => {
     const text = question.trim();
     if (text.length < 3) {
-      toast.error('Question must be at least 3 characters.');
+      toast.error('Question Too Short', {
+        description: 'Question must be at least 3 characters.',
+      });
       return;
     }
     ask.mutate({ question: text, visibility }, {
-      onSuccess: () => { setQuestion(''); toast.success('Question sent to the buyer.'); },
-      onError: (err: any) => toast.error(err?.message || 'Failed to send question.'),
+      onSuccess: () => {
+        setQuestion('');
+        toast.success('Question Submitted', {
+          description: 'Your question has been sent to the buyer and posted to the clarification thread.',
+        });
+      },
+      onError: (err: any) => {
+        const rawMsg = err?.message || 'Failed to send question.';
+        const isClosed = rawMsg.toLowerCase().includes('clarification window has closed') ||
+          rawMsg.toLowerCase().includes('deadline') ||
+          err?.code === 'CLARIFICATION_DEADLINE_PASSED' ||
+          err?.code === 'REQUIREMENT_DEADLINE_PASSED';
+        if (isClosed) {
+          toast.error('Clarification Window Closed', {
+            description: rawMsg,
+            duration: 6000,
+          });
+        } else {
+          toast.error('Unable to Send Question', {
+            description: rawMsg,
+            duration: 5000,
+          });
+        }
+      },
     });
   };
 
   const submitReply = (clarId: number) => {
     const text = (replyDrafts[clarId] || '').trim();
     if (text.length < 1) {
-      toast.error('Reply cannot be empty.');
+      toast.error('Empty Response', {
+        description: 'Reply cannot be empty.',
+      });
       return;
     }
     reply.mutate({ clarId, response: text }, {
       onSuccess: () => {
         setReplyDrafts(prev => { const n = { ...prev }; delete n[clarId]; return n; });
-        toast.success('Reply sent.');
+        toast.success('Reply Published', {
+          description: 'Your answer has been sent to the seller and recorded on the tender.',
+        });
       },
-      onError: (err: any) => toast.error(err?.message || 'Failed to send reply.'),
+      onError: (err: any) => {
+        toast.error('Unable to Send Reply', {
+          description: err?.message || 'Failed to send reply. Please try again.',
+          duration: 5000,
+        });
+      },
     });
   };
 

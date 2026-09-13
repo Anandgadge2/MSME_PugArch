@@ -44,7 +44,7 @@ import { fetchRateContracts } from '../../rateContract/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode } from '../../shared/hooks';
-import { formatDisplayDate as formatSharedDate } from '../../shared/format';
+import { formatDisplayDate as formatSharedDate, hasExplicitTime } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
 import { KpiCard } from '../../shared/KpiCard';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
@@ -74,6 +74,7 @@ interface SellerOpportunity {
   sourceRef: string;
   isInvitation?: boolean;
   publishedAt?: string;
+  createdAt?: string;
   quantity?: string;
   description?: string;
   documents?: string[];
@@ -121,6 +122,35 @@ const toNumber = (value: unknown) => {
 };
 
 /**
+ * Accurately resolves the closing timestamp for any date string.
+ * For pure calendar dates (YYYY-MM-DD), sets the deadline to the end of that day (23:59:59.999)
+ * so opportunities do not prematurely expire at UTC midnight (05:30 AM IST).
+ */
+export const getClosingTimestamp = (closingDate?: string | Date | null): number | null => {
+  if (!closingDate) return null;
+  if (closingDate instanceof Date) return Number.isFinite(closingDate.getTime()) ? closingDate.getTime() : null;
+  const s = String(closingDate).trim();
+  if (!s) return null;
+
+  // Pure calendar date: YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+  }
+
+  // UTC midnight zero timestamp (e.g. 2026-09-13T00:00:00.000Z) without explicit time
+  if (/T00:00:00(\.000)?(Z|[+-]00:00)?$/i.test(s)) {
+    const parsed = new Date(s);
+    if (!Number.isNaN(parsed.getTime())) {
+      return new Date(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate(), 23, 59, 59, 999).getTime();
+    }
+  }
+
+  const parsed = new Date(s);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+};
+
+/**
  * Helper to identify closed / dead / concluded opportunity status
  */
 const isClosedStatus = (status?: string) => {
@@ -134,8 +164,8 @@ const isClosedStatus = (status?: string) => {
 const isOpenOpportunity = (item: SellerOpportunity, now: number) => {
   if (isClosedStatus(item.status)) return false;
   if (item.closingDate) {
-    const diff = (new Date(item.closingDate).getTime() - now) / 86400000;
-    if (diff < 0) return false;
+    const closingTime = getClosingTimestamp(item.closingDate);
+    if (closingTime !== null && closingTime < now) return false;
   }
   return true;
 };
@@ -146,7 +176,9 @@ const isOpenOpportunity = (item: SellerOpportunity, now: number) => {
 const isClosingSoonOpportunity = (item: SellerOpportunity, now: number) => {
   if (!isOpenOpportunity(item, now)) return false;
   if (!item.closingDate) return false;
-  const diff = (new Date(item.closingDate).getTime() - now) / 86400000;
+  const closingTime = getClosingTimestamp(item.closingDate);
+  if (closingTime === null) return false;
+  const diff = (closingTime - now) / 86400000;
   return diff >= 0 && diff <= 7;
 };
 
@@ -173,8 +205,8 @@ const isUnderEvaluationOpportunity = (item: SellerOpportunity, now: number) => {
   const stat = String(item.status || '').toLowerCase();
   if (stat.includes('eval') || stat.includes('review') || stat.includes('shortlist') || stat.includes('technical')) return true;
   if (item.closingDate) {
-    const diff = (new Date(item.closingDate).getTime() - now) / 86400000;
-    if (diff < 0 && !stat.includes('awarded') && !stat.includes('cancelled') && !stat.includes('completed')) {
+    const closingTime = getClosingTimestamp(item.closingDate);
+    if (closingTime !== null && closingTime < now && !stat.includes('awarded') && !stat.includes('cancelled') && !stat.includes('completed')) {
       return true;
     }
   }
@@ -236,7 +268,34 @@ const getSubRouteType = (): OpportunityType | '' => {
   return '';
 };
 
+export const getPublishedTimestamp = (opp: Partial<SellerOpportunity> | null | undefined): number => {
+  if (!opp) return 0;
+  const raw = opp.publishedAt || opp.createdAt;
+  if (!raw) return 0;
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+
 let globalOpportunitiesCache: SellerOpportunity[] | null = null;
+
+const getInitialOpportunitiesCache = (): SellerOpportunity[] => {
+  if (globalOpportunitiesCache && globalOpportunitiesCache.length > 0) {
+    return globalOpportunitiesCache;
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = sessionStorage.getItem('seller_opportunities_cached_list');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          globalOpportunitiesCache = parsed;
+          return parsed;
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return [];
+};
 
 const isSameOpportunities = (a: SellerOpportunity[] | null, b: SellerOpportunity[]) => {
   if (!a) return false;
@@ -263,9 +322,21 @@ const formatCurrency = (value: number | string | null | undefined) => {
 
 const getDaysLeftText = (closingDate?: string) => {
   if (!closingDate) return '';
-  const diff = (new Date(closingDate).getTime() - Date.now()) / 86400000;
-  if (diff < 0) return 'Closed';
-  const days = Math.ceil(diff);
+  const closingTime = getClosingTimestamp(closingDate);
+  if (closingTime === null) return '';
+  const diffMs = closingTime - Date.now();
+  if (diffMs < 0) return 'Closed';
+
+  const diffHours = diffMs / (1000 * 60 * 60);
+  if (diffHours < 24) {
+    const hours = Math.floor(diffHours);
+    if (hours >= 1) {
+      return `${hours} hr${hours > 1 ? 's' : ''} left`;
+    }
+    const mins = Math.max(1, Math.floor(diffMs / (1000 * 60)));
+    return `${mins} min${mins > 1 ? 's' : ''} left`;
+  }
+  const days = Math.ceil(diffMs / 86400000);
   return `${days} Day${days > 1 ? 's' : ''} Left`;
 };
 
@@ -338,8 +409,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [items, setItems] = useState<SellerOpportunity[]>(() => globalOpportunitiesCache || []);
-  const [loading, setLoading] = useState(() => !globalOpportunitiesCache);
+  const [items, setItems] = useState<SellerOpportunity[]>(() => getInitialOpportunitiesCache());
+  const [loading, setLoading] = useState(() => getInitialOpportunitiesCache().length === 0);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -363,6 +434,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const [category, setCategory] = useState('');
   const [valueRange, setValueRange] = useState('');
   const [buyerFilter, setBuyerFilter] = useState('');
+  const [sortOption, setSortOption] = useState<'newest' | 'closing_soon' | 'value_high' | 'value_low' | 'title_asc'>('newest');
   const [sortField, setSortField] = useState<'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue' | ''>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [nowMs] = useState(() => Date.now());
@@ -376,10 +448,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   }, []);
 
   const handleStartDateChange = (val: string) => {
-    if (val && val > todayStr) {
-      toast.warning('Future dates are not allowed');
-      return;
-    }
     setStartDate(val);
     if (endDate && val && val > endDate) {
       setEndDate(val);
@@ -388,10 +456,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   };
 
   const handleEndDateChange = (val: string) => {
-    if (val && val > todayStr) {
-      toast.warning('Future dates are not allowed');
-      return;
-    }
     setEndDate(val);
     if (startDate && val && val < startDate) {
       setStartDate(val);
@@ -420,9 +484,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const load = React.useCallback((forceFresh = false) => {
     let alive = true;
     if (forceFresh) {
-      setLoading(true);
       globalOpportunitiesCache = null;
-      setItems([]);
+      if (items.length === 0) {
+        setLoading(true);
+      }
     }
 
     const dedupeAndSort = (opportunities: SellerOpportunity[]): SellerOpportunity[] => {
@@ -510,6 +575,14 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           const discloseB = opportunity.discloseEstimatedCost;
           const bestDisclose = discloseB !== undefined ? discloseB : discloseA;
 
+          const pubA = existing.publishedAt || '';
+          const pubB = opportunity.publishedAt || '';
+          const bestPublishedAt = hasExplicitTime(pubB) ? pubB : (hasExplicitTime(pubA) ? pubA : (pubB || pubA));
+
+          const closeA = existing.closingDate || '';
+          const closeB = opportunity.closingDate || '';
+          const bestClosingDate = hasExplicitTime(closeB) ? closeB : (hasExplicitTime(closeA) ? closeA : (closeB || closeA));
+
           deduped[existingIndex] = {
             ...existing,
             title: bestTitle,
@@ -518,22 +591,37 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             location: bestLoc,
             estimatedValue: bestVal,
             discloseEstimatedCost: bestDisclose,
+            publishedAt: bestPublishedAt,
+            closingDate: bestClosingDate,
             href: existing.href || opportunity.href,
             detailsHref: existing.detailsHref || opportunity.detailsHref,
+            events: (existing.events && existing.events.length > 0) ? existing.events : opportunity.events,
           };
         }
       });
 
-      return deduped.sort((a, b) => new Date(a.closingDate || 0).getTime() - new Date(b.closingDate || 0).getTime());
+      return deduped.sort((a, b) => {
+        const pubA = getPublishedTimestamp(a);
+        const pubB = getPublishedTimestamp(b);
+        if (pubB !== pubA) return pubB - pubA;
+        return (getClosingTimestamp(a.closingDate) || 0) - (getClosingTimestamp(b.closingDate) || 0);
+      });
     };
 
     const applyChunk = (newOpportunities: SellerOpportunity[]) => {
-      if (!alive || !newOpportunities.length) return;
-      setItems(prev => {
-        const sorted = dedupeAndSort([...prev, ...newOpportunities]);
-        globalOpportunitiesCache = sorted;
-        return sorted;
-      });
+      if (!alive) return;
+      if (newOpportunities.length > 0) {
+        setItems(prev => {
+          const sorted = dedupeAndSort([...prev, ...newOpportunities]);
+          globalOpportunitiesCache = sorted;
+          if (typeof window !== 'undefined') {
+            try {
+              sessionStorage.setItem('seller_opportunities_cached_list', JSON.stringify(sorted.slice(0, 100)));
+            } catch { /* ignore quota */ }
+          }
+          return sorted;
+        });
+      }
       setLoading(false);
     };
 
@@ -604,7 +692,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           buyer: bid.buyerName,
           category: bid.category,
           location: bid.location || bid.deliveryLocation || [bid.district, bid.state].filter(Boolean).join(', ') || 'Location not specified',
-          closingDate: bid.endDate,
+          closingDate: bid.rawEndDate || bid.endDate,
           estimatedValue: toNumber(bid.estimatedValue),
           discloseEstimatedCost: Boolean(bid.discloseEstimatedCost ?? bid.payload?.discloseEstimatedCost ?? bid.payload?.basics?.discloseEstimatedCost ?? false),
           eligibility: bid.participated ? 'Already participated' : 'Check documents',
@@ -613,7 +701,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           href,
           detailsHref,
           sourceRef: bid.id || `BID-${bid.sourceId || ''}`,
-          publishedAt: bid.startDate,
+          publishedAt: bid.rawStartDate || bid.startDate || bid.createdAt,
+          createdAt: bid.createdAt,
           quantity: bid.quantity,
           description: bid.description,
           documents,
@@ -634,7 +723,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             { label: 'Participants', value: bid.participantsCount !== undefined ? Number(bid.participantsCount).toLocaleString('en-IN') : 'Not shown' },
             { label: 'Technical status', value: bid.technicalStatus || 'Pending' },
           ],
-          events: opportunityEvents(bid.status, bid.startDate),
+          events: opportunityEvents(bid.status, bid.rawStartDate || bid.startDate || bid.createdAt),
         };
         opportunity.nextAction = nextActionFor(opportunity);
         next.push(opportunity);
@@ -658,7 +747,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const isReqPrivate = req.visibility === 'VERIFIED_SELLERS_ONLY' || req.visibility === 'INVITED_SUPPLIERS' || ['LIMITED_TENDER', 'REPEAT_ORDER'].includes(reqMethod);
         
         if (isReqPrivate) {
-          const isInvited = reqInvites.includes(user?.id) || reqInvites.includes(user?.organizationId) || req.responsesCount > 0;
+          const isInvited = reqInvites.includes(user?.id) || (user?.organizationId && reqInvites.includes(user?.organizationId));
           if (!isInvited) return;
         }
 
@@ -704,6 +793,25 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const responseHref = linkedBidId 
           ? (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', linkedBidId) : `/bids/${linkedBidId}/participate`)
           : (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', canonicalReqId) : detailHref);
+
+        const isReqParticipated = Boolean(
+          req.hasParticipated ||
+          req.myParticipation ||
+          req.ownResponse ||
+          (user?.id && (
+            (Array.isArray(req.participations) && req.participations.some((p: any) => Number(p.sellerId || p.sellerUserId) === Number(user.id))) ||
+            (Array.isArray(req.responses) && req.responses.some((r: any) => Number(r.sellerUserId || r.sellerId) === Number(user.id)))
+          ))
+        );
+
+        const defaultReqAction = opportunityType === 'Rate Contract'
+          ? 'Submit Rate'
+          : opportunityType === 'RFP'
+          ? 'Submit Proposal'
+          : opportunityType === 'Open Tender' || opportunityType === 'Limited Tender'
+          ? 'Participate'
+          : 'Submit Quotation';
+
         const opportunity: SellerOpportunity = {
           id: `req-${req.id}`,
           type: opportunityType,
@@ -714,13 +822,14 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           closingDate: req.lastDate || req.requiredBy,
           estimatedValue: toNumber(req.budgetMax || req.estimatedValue),
           discloseEstimatedCost: Boolean(req.discloseEstimatedCost ?? req.payload?.discloseEstimatedCost ?? req.payload?.basics?.discloseEstimatedCost ?? false),
-          eligibility: req.verifiedSellersOnly ? 'Verified sellers only' : 'All eligible sellers',
+          eligibility: isReqParticipated ? 'Already participated' : (req.verifiedSellersOnly ? 'Verified sellers only' : 'All eligible sellers'),
           status: req.status || 'OPEN',
-          actionLabel: req.responsesCount > 0 ? 'View Response' : (opportunityType === 'Rate Contract' ? 'Submit Rate' : 'Submit Quotation'),
+          actionLabel: isReqParticipated ? 'Track Status' : defaultReqAction,
           href: responseHref,
           detailsHref: detailHref,
           sourceRef: formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'REQ', req.sourceId || req.id, req.requirementNumber, req.procurementMethod || req.canonicalMethod || opportunityType),
           publishedAt: req.approvedAt || req.createdAt,
+          createdAt: req.createdAt,
           quantity: formatQuantity(req.quantity, req.unit),
           description: req.description,
           documents,
@@ -739,7 +848,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             { label: 'Delivery Location', value: req.deliveryLocation || req.location || 'Not specified' },
             { label: 'Visibility', value: req.visibility || 'Public' },
           ],
-          events: opportunityEvents(req.status, req.createdAt),
+          events: opportunityEvents(req.status, req.approvedAt || req.createdAt),
         };
         opportunity.nextAction = nextActionFor(opportunity);
         next.push(opportunity);
@@ -757,7 +866,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const isQrPrivate = qr.visibility === 'PRIVATE' || qr.visibility === 'INVITED_SUPPLIERS';
         if (isQrPrivate) {
           const invitedSellers = Array.isArray(qr.invitedSellers) ? qr.invitedSellers : [];
-          const isInvited = invitedSellers.includes(user?.id) || invitedSellers.includes(user?.organizationId) || qr.responsesCount > 0;
+          const isInvited = invitedSellers.includes(user?.id) || (user?.organizationId && invitedSellers.includes(user?.organizationId));
           if (!isInvited) return;
         }
 
@@ -789,6 +898,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           detailsHref: sellerRoutes.detail('RFQ', qr.id),
           sourceRef: qr.quoteNumber || `RFQ-${qr.id}`,
           publishedAt: qr.createdAt,
+          createdAt: qr.createdAt,
           quantity: qr.quantity,
           description: qr.description,
           documents,
@@ -837,6 +947,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           detailsHref: sellerRoutes.detail('REVERSE_AUCTION', auction.id),
           sourceRef: auction.auctionCode || `RA-${auction.id}`,
           publishedAt: auction.startTime,
+          createdAt: auction.createdAt || auction.startTime,
           description: auction.description,
           documents,
           responseCount: auction.participantsCount || auction.invitedSellersCount,
@@ -898,6 +1009,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             : sellerRoutes.detail('RATE_CONTRACT', rc.id),
           sourceRef: refNo,
           publishedAt: rc.startDate || rc.createdAt,
+          createdAt: rc.createdAt,
           quantity: meta.minimumOrderQuantity ? `${meta.minimumOrderQuantity} min qty` : undefined,
           description: meta.contractDescription || rc.title,
           documents: meta.contractDocument ? [meta.contractDocument.fileName] : [],
@@ -1021,17 +1133,26 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       }
 
       if (startDate || endDate) {
-        const rawDate = item.publishedAt || item.closingDate;
-        if (!rawDate) return false;
-        const d = new Date(rawDate);
-        if (Number.isNaN(d.getTime())) return false;
-        const itemYear = d.getFullYear();
-        const itemMonth = String(d.getMonth() + 1).padStart(2, '0');
-        const itemDay = String(d.getDate()).padStart(2, '0');
-        const itemDateStr = `${itemYear}-${itemMonth}-${itemDay}`;
+        const pubTs = getPublishedTimestamp(item);
+        const closeTs = getClosingTimestamp(item.closingDate);
 
-        if (startDate && itemDateStr < startDate) return false;
-        if (endDate && itemDateStr > endDate) return false;
+        if (startDate) {
+          const [sy, sm, sd] = startDate.split('-').map(Number);
+          const startBoundary = new Date(sy, sm - 1, sd, 0, 0, 0, 0).getTime();
+          const isPublishedAfter = pubTs > 0 && pubTs >= startBoundary;
+          const isClosingAfter = closeTs !== null && closeTs >= startBoundary;
+          if (!isPublishedAfter && !isClosingAfter) return false;
+        }
+
+        if (endDate) {
+          const [ey, em, ed] = endDate.split('-').map(Number);
+          const endBoundary = new Date(ey, em - 1, ed, 23, 59, 59, 999).getTime();
+          if (closeTs !== null) {
+            if (closeTs > endBoundary) return false;
+          } else if (pubTs > 0 && pubTs > endBoundary) {
+            return false;
+          }
+        }
       }
 
       return true;
@@ -1129,9 +1250,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           if (isConfB) return -1;
           valA = Number(valA) || 0;
           valB = Number(valB) || 0;
-        } else if (sortField === 'publishedAt' || sortField === 'closingDate') {
-          valA = valA ? new Date(valA).getTime() : 0;
-          valB = valB ? new Date(valB).getTime() : 0;
+        } else if (sortField === 'publishedAt') {
+          valA = getPublishedTimestamp(a);
+          valB = getPublishedTimestamp(b);
+        } else if (sortField === 'closingDate') {
+          valA = getClosingTimestamp(a.closingDate) ?? Infinity;
+          valB = getClosingTimestamp(b.closingDate) ?? Infinity;
         } else {
           valA = String(valA || '').toLowerCase();
           valB = String(valB || '').toLowerCase();
@@ -1141,13 +1265,40 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
         return 0;
       });
+    } else {
+      list.sort((a, b) => {
+        if (sortOption === 'newest') {
+          const pubDiff = getPublishedTimestamp(b) - getPublishedTimestamp(a);
+          if (pubDiff !== 0) return pubDiff;
+          return (getClosingTimestamp(a.closingDate) || 0) - (getClosingTimestamp(b.closingDate) || 0);
+        }
+        if (sortOption === 'closing_soon') {
+          const closeA = getClosingTimestamp(a.closingDate) ?? Infinity;
+          const closeB = getClosingTimestamp(b.closingDate) ?? Infinity;
+          return closeA - closeB;
+        }
+        if (sortOption === 'value_high') {
+          const valA = (a.discloseEstimatedCost === false && a.type !== 'Reverse Auction') ? -1 : (Number(a.estimatedValue) || 0);
+          const valB = (b.discloseEstimatedCost === false && b.type !== 'Reverse Auction') ? -1 : (Number(b.estimatedValue) || 0);
+          return valB - valA;
+        }
+        if (sortOption === 'value_low') {
+          const valA = (a.discloseEstimatedCost === false && a.type !== 'Reverse Auction') ? Infinity : (Number(a.estimatedValue) || 0);
+          const valB = (b.discloseEstimatedCost === false && b.type !== 'Reverse Auction') ? Infinity : (Number(b.estimatedValue) || 0);
+          return valA - valB;
+        }
+        if (sortOption === 'title_asc') {
+          return (a.title || '').localeCompare(b.title || '');
+        }
+        return 0;
+      });
     }
 
     return list;
-  }, [baseFiltered, kpiFilter, sortField, sortDirection, nowMs]);
+  }, [baseFiltered, kpiFilter, sortField, sortDirection, sortOption, nowMs]);
 
   // Reset KPI filter and pagination when filters change (render-pass adjustment, no cascading renders)
-  const filterKey = `${query}|${type}|${status}|${location}|${startDate}|${endDate}|${category}|${buyerFilter}|${valueRange}`;
+  const filterKey = `${query}|${type}|${status}|${location}|${startDate}|${endDate}|${category}|${buyerFilter}|${valueRange}|${sortOption}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   const pageFilterKey = `${filterKey}|${viewMode}|${kpiFilter}`;
   const [prevPageFilterKey, setPrevPageFilterKey] = useState(pageFilterKey);
@@ -1334,6 +1485,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     setBuyerFilter('');
     setValueRange('');
     setKpiFilter('all');
+    setSortOption('newest');
     setSortField('');
     setSortDirection('asc');
     setPage(1);
@@ -1391,7 +1543,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     };
 
     items.forEach(item => {
-      if (!isClosedStatus(item.status)) {
+      if (isOpenOpportunity(item, nowMs)) {
         counts.all++;
         if (item.type && counts[item.type] !== undefined) {
           counts[item.type]++;
@@ -1402,7 +1554,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     });
 
     return counts;
-  }, [items]);
+  }, [items, nowMs]);
 
   const opportunityCategories: Array<{ label: string; typeVal: OpportunityType | ''; countKey: string; icon: any }> = useMemo(() => [
     { label: 'All Opportunities', typeVal: '', countKey: 'all', icon: Globe },
@@ -1534,7 +1686,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
         <ResponsiveFilterBar
           singleRowDesktop={false}
-          activeFilterCount={(query ? 1 : 0) + (type ? 1 : 0) + (status ? 1 : 0) + (category ? 1 : 0) + (buyerFilter ? 1 : 0) + (location ? 1 : 0) + (startDate ? 1 : 0) + (endDate ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
+          activeFilterCount={(query ? 1 : 0) + (type ? 1 : 0) + (status ? 1 : 0) + (category ? 1 : 0) + (buyerFilter ? 1 : 0) + (location ? 1 : 0) + (startDate ? 1 : 0) + (endDate ? 1 : 0) + (sortOption !== 'newest' ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -1629,6 +1781,27 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 </select>
               </div>
 
+              {/* Sort Filter Dropdown */}
+              <div className="w-full sm:w-auto sm:min-w-[130px] sm:max-w-[165px]">
+                <select
+                  value={sortOption}
+                  onChange={e => {
+                    setSortOption(e.target.value as any);
+                    setSortField('');
+                    setPage(1);
+                  }}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  aria-label="Sort opportunities"
+                  title="Sort opportunities"
+                >
+                  <option value="newest">Newest First (Latest)</option>
+                  <option value="closing_soon">Closing Soonest</option>
+                  <option value="value_high">Highest Value</option>
+                  <option value="value_low">Lowest Value</option>
+                  <option value="title_asc">Title (A–Z)</option>
+                </select>
+              </div>
+
               {/* Unified Date Range Group (From - To) */}
               <div className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 hover:border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/10 transition-colors shadow-xs w-full sm:w-auto">
                 <Calendar className="h-3.5 w-3.5 text-slate-400 mr-1.5 shrink-0" />
@@ -1637,7 +1810,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                   id="filter-start-date"
                   type="date"
                   value={startDate}
-                  max={endDate && endDate <= todayStr ? endDate : todayStr}
+                  max={todayStr}
+                  onClick={e => (e.target as any).showPicker?.()}
                   onChange={e => handleStartDateChange(e.target.value)}
                   className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[110px]"
                   aria-label="Start date (From)"
@@ -1650,16 +1824,27 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                   type="date"
                   value={endDate}
                   min={startDate || undefined}
-                  max={todayStr}
+                  onClick={e => (e.target as any).showPicker?.()}
                   onChange={e => handleEndDateChange(e.target.value)}
                   className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[110px]"
-                  aria-label="End date (To)"
-                  title="End Date (Published on or before)"
+                  aria-label="Procurement end date (To)"
+                  title="Procurement End Date (Closing deadline on or before)"
                 />
+                {(startDate || endDate) && (
+                  <button
+                    type="button"
+                    onClick={() => { setStartDate(''); setEndDate(''); setPage(1); }}
+                    className="ml-1 p-0.5 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
+                    title="Clear date filter"
+                    aria-label="Clear date filter"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Reset Trigger */}
-              {(query || type || status || category || buyerFilter || location || startDate || endDate || kpiFilter !== 'all') && (
+              {(query || type || status || category || buyerFilter || location || startDate || endDate || sortOption !== 'newest' || kpiFilter !== 'all') && (
                 <Button
                   type="button"
                   variant="outline"
@@ -1701,7 +1886,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {pageRows.map((item, index) => {
                 const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
-                const isClosingSoon = item.closingDate && (new Date(item.closingDate).getTime() - nowMs) <= 2 * 86400000 && (new Date(item.closingDate).getTime() - nowMs) >= 0;
+                const closingTime = item.closingDate ? getClosingTimestamp(item.closingDate) : null;
+                const isClosingSoon = closingTime !== null && (closingTime - nowMs) <= 2 * 86400000 && (closingTime - nowMs) >= 0;
                 return (
                   <div
                     key={item.id}

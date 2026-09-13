@@ -2459,49 +2459,53 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
             buyerOrderBy = [{ lastDate: 'asc' }];
         }
 
-        const [buyerRequirements, buyerTotal, legacyRequirements, legacyTotal] = await Promise.all([
-            db.buyerRequirement.findMany({ where, orderBy: buyerOrderBy, take: pageSize * page, select: publicRequirementListSelect }),
-            db.buyerRequirement.count({ where }),
-            db.requirement.findMany({ where: legacyWhere, orderBy: [{ requiredBy: 'asc' }, { updatedAt: 'desc' }], take: pageSize * page, select: publicLegacyRequirementSelect }).catch(() => []),
-            db.requirement.count({ where: legacyWhere }).catch(() => 0)
-        ]);
+        const cacheKey = `cache:marketplace:requirements:${req.user?.id || 'anon'}:${JSON.stringify(req.query)}`;
+        const cachedResult = await getOrSetCache(cacheKey, async () => {
+            const [buyerRequirements, buyerTotal, legacyRequirements, legacyTotal] = await Promise.all([
+                db.buyerRequirement.findMany({ where, orderBy: buyerOrderBy, take: pageSize * page, select: publicRequirementListSelect }),
+                db.buyerRequirement.count({ where }),
+                db.requirement.findMany({ where: legacyWhere, orderBy: [{ requiredBy: 'asc' }, { updatedAt: 'desc' }], take: pageSize * page, select: publicLegacyRequirementSelect }).catch(() => []),
+                db.requirement.count({ where: legacyWhere }).catch(() => 0)
+            ]);
 
-        const currentUserId = req.user?.id ? Number(req.user.id) : null;
-        const filteredLegacy = (legacyRequirements || []).filter((reqItem: any) => {
-            const method = reqItem.canonicalMethod || reqItem.procurementMethod || '';
-            const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
-            const isLimitedRfq = method.toUpperCase() === 'RFQ' && reqItem.payload && typeof reqItem.payload === 'object' && (reqItem.payload as any).rfqType === 'LIMITED';
-            
-            if (isRestricted || isLimitedRfq) {
-                if (!currentUserId) return false;
-                const invited = Array.isArray((reqItem.payload as any)?.vendors?.invitedSellers) ? (reqItem.payload as any).vendors.invitedSellers : [];
-                return invited.includes(currentUserId);
-            }
-            return true;
-        });
+            const currentUserId = req.user?.id ? Number(req.user.id) : null;
+            const filteredLegacy = (legacyRequirements || []).filter((reqItem: any) => {
+                const method = reqItem.canonicalMethod || reqItem.procurementMethod || '';
+                const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
+                const isLimitedRfq = method.toUpperCase() === 'RFQ' && reqItem.payload && typeof reqItem.payload === 'object' && (reqItem.payload as any).rfqType === 'LIMITED';
+                
+                if (isRestricted || isLimitedRfq) {
+                    if (!currentUserId) return false;
+                    const invited = Array.isArray((reqItem.payload as any)?.vendors?.invitedSellers) ? (reqItem.payload as any).vendors.invitedSellers : [];
+                    return invited.includes(currentUserId);
+                }
+                return true;
+            });
 
-        const decoratedBuyer = buyerRequirements.map(decorateRequirement);
-        const buyerTitles = new Set(decoratedBuyer.map((b: any) => (b.title || '').trim().toLowerCase()));
-        const decoratedLegacy = filteredLegacy
-            .map(mapLegacyRequirementToPublic)
-            .filter((l: any) => !buyerTitles.has((l.title || '').trim().toLowerCase()));
+            const decoratedBuyer = buyerRequirements.map(decorateRequirement);
+            const buyerTitles = new Set(decoratedBuyer.map((b: any) => (b.title || '').trim().toLowerCase()));
+            const decoratedLegacy = filteredLegacy
+                .map(mapLegacyRequirementToPublic)
+                .filter((l: any) => !buyerTitles.has((l.title || '').trim().toLowerCase()));
 
-        const combined = [
-            ...decoratedBuyer,
-            ...decoratedLegacy
-        ].sort((a: any, b: any) => {
-            if (rawSort === 'latest') {
-                return new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime();
-            }
-            if (rawSort === 'deadline') {
+            const combined = [
+                ...decoratedBuyer,
+                ...decoratedLegacy
+            ].sort((a: any, b: any) => {
+                if (rawSort === 'latest') {
+                    return new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime();
+                }
+                if (rawSort === 'deadline') {
+                    return new Date(a.lastDate || 0).getTime() - new Date(b.lastDate || 0).getTime();
+                }
+                const urgent = Number(Boolean(b.isUrgent)) - Number(Boolean(a.isUrgent));
+                if (urgent) return urgent;
                 return new Date(a.lastDate || 0).getTime() - new Date(b.lastDate || 0).getTime();
-            }
-            const urgent = Number(Boolean(b.isUrgent)) - Number(Boolean(a.isUrgent));
-            if (urgent) return urgent;
-            return new Date(a.lastDate || 0).getTime() - new Date(b.lastDate || 0).getTime();
-        });
-        const total = buyerTotal + decoratedLegacy.length;
-        return ok(res, { requirements: combined.slice(skip, skip + pageSize), total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+            });
+            const total = buyerTotal + decoratedLegacy.length;
+            return { requirements: combined.slice(skip, skip + pageSize), total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+        }, 30);
+        return ok(res, cachedResult);
     } catch (error) {
         if (error instanceof z.ZodError) {
             return apiResponse.error(res, 400, error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '), 'VALIDATION_ERROR');
@@ -3448,73 +3452,33 @@ const findRequirementRecord = async (idParam: string | number) => {
     const numId = isNum ? Number(token) : null;
 
     if (numId && numId > 0) {
-        const req = await db.buyerRequirement.findUnique({
-            where: { id: numId },
-            select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
-        });
-        if (req) return req;
+        const [req, bid] = await Promise.all([
+            db.buyerRequirement.findUnique({
+                where: { id: numId },
+                select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
+            }).catch(() => null),
+            db.procurementBid.findUnique({
+                where: { id: numId },
+                select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
+            }).catch(() => null)
+        ]);
 
-        const bid = await db.procurementBid.findUnique({
-            where: { id: numId },
-            select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
-        });
+        if (req) return req;
         if (bid) {
-            const tp: any = bid.technicalPacket || {};
-            const sourceRequirementId = tp.sourceRequirementId || tp.sourceId || tp.requirementId;
-            if (sourceRequirementId) {
-                const srcReq = await db.buyerRequirement.findUnique({
-                    where: { id: Number(sourceRequirementId) },
-                    select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
-                });
-                if (srcReq) return srcReq;
-            }
             return {
                 id: bid.id,
                 title: bid.title,
                 lastDate: bid.endDate,
                 status: bid.status,
                 createdById: bid.buyerId,
-                buyerOrganizationId: bid.buyerOrganizationId
-            };
-        }
-
-        const contract = await db.contract.findFirst({
-            where: {
-                OR: [
-                    { id: numId },
-                    { metadata: { path: ['requirementId'], equals: numId } },
-                    { metadata: { path: ['requirementId'], equals: String(numId) } }
-                ]
-            }
-        }).catch(() => null);
-        if (contract) {
-            const meta = (contract.metadata || {}) as any;
-            const refNum = meta.requirementNumber || contract.contractNumber;
-            if (refNum || contract.title) {
-                const matchedBid = await db.procurementBid.findFirst({
-                    where: { OR: [{ bidNumber: refNum }, { title: contract.title }] },
-                    select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true }
-                });
-                if (matchedBid) return { id: matchedBid.id, title: matchedBid.title, lastDate: matchedBid.endDate, status: matchedBid.status, createdById: matchedBid.buyerId, buyerOrganizationId: matchedBid.buyerOrganizationId };
-                const matchedReq = await db.buyerRequirement.findFirst({
-                    where: { title: contract.title },
-                    select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
-                });
-                if (matchedReq) return matchedReq;
-            }
-            return {
-                id: contract.id,
-                title: contract.title,
-                lastDate: contract.endDate,
-                status: contract.status,
-                createdById: meta.buyerId || 1,
-                buyerOrganizationId: meta.buyerOrganizationId || null
+                buyerOrganizationId: bid.buyerOrganizationId,
+                payload: bid.technicalPacket || {}
             };
         }
 
         const legacy = await db.requirement.findUnique({
             where: { id: numId },
-            select: { id: true, title: true, createdById: true }
+            select: { id: true, title: true, createdById: true, payload: true }
         }).catch(() => null);
         if (legacy) {
             return {
@@ -3523,7 +3487,8 @@ const findRequirementRecord = async (idParam: string | number) => {
                 lastDate: null,
                 status: 'PUBLISHED',
                 createdById: legacy.createdById,
-                buyerOrganizationId: null
+                buyerOrganizationId: null,
+                payload: legacy.payload || {}
             };
         }
     }
@@ -3533,52 +3498,49 @@ const findRequirementRecord = async (idParam: string | number) => {
         token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : (token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token)
     ];
 
-    const bid = await db.procurementBid.findFirst({
-        where: {
-            OR: tokenVariants.flatMap(t => [
-                { bidNumber: t },
-                { bidNumber: `REQ-${t}` },
-                { bidNumber: `RFQ-${t}` }
-            ])
-        }
-    });
+    const [bid, legacyMatch] = await Promise.all([
+        db.procurementBid.findFirst({
+            where: {
+                OR: tokenVariants.flatMap(t => [
+                    { bidNumber: t },
+                    { bidNumber: `REQ-${t}` },
+                    { bidNumber: `RFQ-${t}` }
+                ])
+            },
+            select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
+        }).catch(() => null),
+        db.requirement.findFirst({
+            where: {
+                OR: tokenVariants.flatMap(t => [
+                    { requirementNumber: t },
+                    { requirementNumber: `REQ-${t}` },
+                    { requirementNumber: `RFQ-${t}` }
+                ])
+            },
+            select: { id: true, title: true, createdById: true, payload: true }
+        }).catch(() => null)
+    ]);
+
     if (bid) {
-        const tp: any = (bid as any).technicalPacket || {};
-        const sourceRequirementId = tp.sourceRequirementId || tp.sourceId || tp.requirementId;
-        if (sourceRequirementId) {
-            const reqRecord = await db.buyerRequirement.findUnique({
-                where: { id: Number(sourceRequirementId) },
-                select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
-            });
-            if (reqRecord) return reqRecord;
-        }
         return {
             id: bid.id,
             title: bid.title,
             lastDate: bid.endDate,
             status: bid.status,
             createdById: bid.buyerId,
-            buyerOrganizationId: bid.buyerOrganizationId
+            buyerOrganizationId: bid.buyerOrganizationId,
+            payload: bid.technicalPacket || {}
         };
     }
-
-    const contract = await db.contract.findFirst({
-        where: {
-            OR: tokenVariants.flatMap(t => [
-                { contractNumber: t },
-                { contractNumber: `RC-${t}` }
-            ])
-        }
-    });
-    if (contract) {
-        const meta = (contract.metadata || {}) as any;
+    if (legacyMatch) {
         return {
-            id: contract.id,
-            title: contract.title,
-            lastDate: contract.endDate,
-            status: contract.status,
-            createdById: meta.buyerId || 1,
-            buyerOrganizationId: meta.buyerOrganizationId || null
+            id: legacyMatch.id,
+            title: legacyMatch.title,
+            lastDate: null,
+            status: 'PUBLISHED',
+            createdById: legacyMatch.createdById,
+            buyerOrganizationId: null,
+            payload: legacyMatch.payload || {}
         };
     }
 
@@ -3592,8 +3554,31 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
         const id = requirement.id;
         const body = requirementClarificationAskBody.parse(req.body);
 
-        if (requirement.lastDate && new Date(requirement.lastDate) < new Date()) {
-            return apiResponse.error(res, 400, 'The clarification window has closed for this requirement.', 'REQUIREMENT_DEADLINE_PASSED');
+        const sched = (requirement.payload as any)?.schedule;
+        const rawClarDeadline = sched?.clarificationDeadline || sched?.clarificationEndDate;
+        const rawSubmissionDeadline = sched?.submissionDate || sched?.submissionDeadline || requirement.lastDate || requirement.endDate;
+
+        // Allow clarifications up to the later of clarification deadline and submission deadline, as long as the tender is open
+        let effectiveClarDeadline: Date | null = null;
+        if (rawClarDeadline && rawSubmissionDeadline) {
+            const d1 = new Date(rawClarDeadline);
+            const d2 = new Date(rawSubmissionDeadline);
+            const t1 = !isNaN(d1.getTime()) ? d1.getTime() : 0;
+            const t2 = !isNaN(d2.getTime()) ? d2.getTime() : 0;
+            effectiveClarDeadline = new Date(Math.max(t1, t2));
+        } else if (rawClarDeadline) {
+            effectiveClarDeadline = new Date(rawClarDeadline);
+        } else if (rawSubmissionDeadline) {
+            effectiveClarDeadline = new Date(rawSubmissionDeadline);
+        }
+
+        if (effectiveClarDeadline && !isNaN(effectiveClarDeadline.getTime())) {
+            if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+                effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+            }
+            if (effectiveClarDeadline.getTime() < Date.now()) {
+                return apiResponse.error(res, 400, 'The clarification window has closed for this requirement.', 'REQUIREMENT_DEADLINE_PASSED');
+            }
         }
         // Sellers ask; the buyer owner may also post (their message doubles as an announcement).
         if (req.user?.role !== 'seller' && !isRequirementOwner(req, requirement)) {
@@ -3610,20 +3595,22 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
             }
         });
 
-        // Notify the buyer owner (best-effort).
+        // Notify the buyer owner asynchronously (best-effort, non-blocking for fast response).
         if (requirement.createdById && requirement.createdById !== Number(req.user?.id)) {
-            try {
-                const { notificationService } = await import('../services/notification.service.js');
-                await notificationService.notifyNow(requirement.createdById, {
-                    title: 'New Clarification Question',
-                    message: `Regarding "${requirement.title}": ${body.question.substring(0, 100)}${body.question.length > 100 ? '…' : ''}`,
-                    type: 'requirement_clarification',
-                    priority: 'medium',
-                    redirectUrl: `/marketplace/requirements/${id}`
-                });
-            } catch (notifyError) {
-                console.warn('[Requirement Clarification] notify failed', notifyError);
-            }
+            setImmediate(async () => {
+                try {
+                    const { notificationService } = await import('../services/notification.service.js');
+                    await notificationService.notifyNow(requirement.createdById, {
+                        title: 'New Clarification Question',
+                        message: `Regarding "${requirement.title}": ${body.question.substring(0, 100)}${body.question.length > 100 ? '…' : ''}`,
+                        type: 'requirement_clarification',
+                        priority: 'medium',
+                        redirectUrl: `/marketplace/requirements/${id}`
+                    });
+                } catch (notifyError) {
+                    console.warn('[Requirement Clarification] notify failed', notifyError);
+                }
+            });
         }
 
         return res.status(201).json({ success: true, data: clarification });

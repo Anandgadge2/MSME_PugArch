@@ -240,8 +240,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const bidPacket: any = (bidData as any)?.technicalPacket && typeof (bidData as any).technicalPacket === 'object'
     ? (bidData as any).technicalPacket
     : {};
+  const activeBidId = (bidData as any)?.id || (initialData as any)?.id;
   const linkedRequirementId = bidPacket.sourceRequirementId || bidPacket.requirementId || bidPacket.linkedRequirementId || (bidData as any)?.sourceId;
-  const targetReqId = requirementId || (reqData as any)?.requirement?.id || linkedRequirementId || requestId;
+  const targetReqId = requirementId || (reqData as any)?.requirement?.id || activeBidId || requestId || linkedRequirementId;
 
   const { data: ownResponseQueryData } = useQuery({
     queryKey: ['rfq-own-response', targetReqId, requestId],
@@ -276,15 +277,17 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     : null;
 
   const localSubmittedResponse = React.useMemo(() => {
-    if (typeof window === 'undefined' || !user || user.role !== 'seller') return null;
+    if (typeof window === 'undefined' || !user || user.role !== 'seller' || !user.id) return null;
     const keys = [targetReqId, requirementId, requestId, (rawBid as any)?.id, (rawBid as any)?.bidNumber].filter(Boolean);
     for (const k of keys) {
       try {
-        const item = localStorage.getItem(`rfq_submitted_${k}`);
+        const item = localStorage.getItem(`rfq_submitted_${user.id}_${k}`);
         if (item) {
           const parsed = JSON.parse(item);
           if (parsed && parsed.status && String(parsed.status).toUpperCase() !== 'DRAFT') {
-            return parsed;
+            if (!parsed.userId || String(parsed.userId) === String(user.id)) {
+              return parsed;
+            }
           }
         }
       } catch {
@@ -388,6 +391,11 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   });
 
   const sellerResponses = React.useMemo(() => {
+    // Sealed Bidding Strict Confidentiality: Sellers must strictly NEVER see other sellers' quotations
+    if (user?.role === 'seller') {
+      return ownParticipation ? [ownParticipation] : [];
+    }
+
     const rawList = [
       ...(Array.isArray(buyerResponsesData) ? buyerResponsesData : []),
       ...(Array.isArray(reqData?.responses) ? reqData.responses : []),
@@ -1059,7 +1067,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       procurementType={derivedProcurementType}
       procurementLabel={derivedProcurementLabel}
       backRouteLabel={derivedBackRouteLabel}
-      id={targetReqId || requestId || 'RFQ'}
+      id={rawBid?.id || reqObj?.id || targetReqId || requestId || 'RFQ'}
       displayId={ref}
       subject={title}
       status={status}
@@ -1067,6 +1075,15 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       orgName={buyerOrg}
       buyer={{ name: contact, email, mobile, buyerProfile: reqObj?.buyerOrganization || rawBid?.buyerOrganization || rawBid?.buyer?.buyerProfile }}
       estimatedValue={value}
+      discloseEstimatedCost={Boolean(
+        rawBid?.discloseEstimatedCost ??
+        reqObj?.discloseEstimatedCost ??
+        reqObj?.payload?.discloseEstimatedCost ??
+        reqObj?.payload?.basics?.discloseEstimatedCost ??
+        rawBid?.technicalPacket?.discloseEstimatedCost ??
+        rawBid?.technicalPacket?.basics?.discloseEstimatedCost ??
+        false
+      )}
       deadlineDate={deadline}
       createdAt={reqObj?.createdAt || rawBid?.createdAt || published}
       publishedDate={published ? fmtDate(published, true) : undefined}
@@ -1115,14 +1132,14 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
       cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Request' : 'Cancel RFQ'}
       clarificationKind={requirementId || (rawBid?.sourceModel === 'REQUIREMENT') ? 'requirement' : 'quote-request'}
-      clarificationEntityId={requirementId || rawBid?.sourceId || targetReqId || requestId}
+      clarificationEntityId={rawBid?.id || reqObj?.id || requirementId || requestId || targetReqId}
     />
     {canCancel && (
       <CancelProcurementModal
         isOpen={cancelModalOpen}
         onClose={() => setCancelModalOpen(false)}
         procurement={{
-          id: Number(targetReqId || requestId || rawBid?.id || reqObj?.id),
+          id: Number(rawBid?.id || reqObj?.id || targetReqId || requestId),
           type: requirementId || rawBid?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'bid_tender',
           title: title,
           referenceNumber: ref,

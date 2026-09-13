@@ -117,12 +117,36 @@ const isSellerVerified = (user: any) => {
   return Boolean(user.sellerProfile?.verificationStatusEnum === 'VERIFIED' || user.sellerProfile?.panVerified || user.sellerProfile?.isUdyamCertified);
 };
 
-const isBidClosed = (bid: ProcurementBid) => bid.status === 'Closed' || new Date(`${bid.endDate}T23:59:59`).getTime() < Date.now();
+const parseBidEndDate = (dateStr?: string) => {
+  if (!dateStr) return null;
+  const s = String(dateStr).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+  }
+  const parsed = new Date(s).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const isBidClosed = (bid: ProcurementBid) => {
+  const stat = String(bid.status || '').toLowerCase();
+  if (stat.includes('closed') || stat.includes('awarded') || stat.includes('cancelled')) return true;
+  const endTime = parseBidEndDate(bid.rawEndDate || bid.endDate);
+  return endTime !== null && endTime < Date.now();
+};
 
 const daysLeft = (date: string) => {
-  const days = Math.ceil((new Date(`${date}T23:59:59`).getTime() - Date.now()) / 86400000);
-  if (days <= 0) return 'Closed';
-  if (days === 1) return '1 day left';
+  const endTime = parseBidEndDate(date);
+  if (!endTime) return 'Closed';
+  const diffMs = endTime - Date.now();
+  if (diffMs <= 0) return 'Closed';
+  const days = Math.ceil(diffMs / 86400000);
+  if (days === 1) {
+    const hours = Math.ceil(diffMs / 3600000);
+    if (hours <= 24) return `${hours} hr(s) left`;
+    return '1 day left';
+  }
   return `${days} days left`;
 };
 

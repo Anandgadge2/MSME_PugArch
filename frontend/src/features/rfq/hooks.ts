@@ -114,7 +114,17 @@ export const useAskClarification = (id: number | string | undefined, kind: Clari
             (kind === 'requirement'
                 ? askRequirementClarification(id as any, question, visibility)
                 : askClarification(id as any, question, visibility)),
-        onSuccess: () => { void qc.invalidateQueries({ queryKey: [...CLARIFICATION_KEY, kind, id || '0'] }); }
+        onSuccess: (newClar: any) => {
+            if (newClar && typeof newClar === 'object') {
+                const item = newClar?.data ?? newClar;
+                qc.setQueryData([...CLARIFICATION_KEY, kind, id || '0'], (old: any[] = []) => {
+                    const list = Array.isArray(old) ? old : [];
+                    if (item.id && list.some(c => c.id === item.id)) return list;
+                    return [...list, item];
+                });
+            }
+            void qc.invalidateQueries({ queryKey: [...CLARIFICATION_KEY, kind, id || '0'] });
+        }
     });
 };
 
@@ -125,6 +135,15 @@ export const useReplyClarification = (id: number | string | undefined, kind: Cla
             (kind === 'requirement'
                 ? replyRequirementClarification(id as any, clarId, response)
                 : replyClarification(id as any, clarId, response)),
-        onSuccess: () => { void qc.invalidateQueries({ queryKey: [...CLARIFICATION_KEY, kind, id || '0'] }); }
+        onSuccess: (updatedClar: any) => {
+            if (updatedClar && typeof updatedClar === 'object') {
+                const item = updatedClar?.data ?? updatedClar;
+                qc.setQueryData([...CLARIFICATION_KEY, kind, id || '0'], (old: any[] = []) => {
+                    const list = Array.isArray(old) ? old : [];
+                    return list.map(c => (c.id === item.id ? { ...c, ...item } : c));
+                });
+            }
+            void qc.invalidateQueries({ queryKey: [...CLARIFICATION_KEY, kind, id || '0'] });
+        }
     });
 };
