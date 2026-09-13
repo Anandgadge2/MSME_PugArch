@@ -27,6 +27,8 @@ import {
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
+import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
+import { SupplierAgreementPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
 import type { DocumentPreview } from '../../../lib/files';
 import { getDocumentPreviewMode } from '../../../lib/files';
 import { useAuth } from '../../../hooks/useAuth';
@@ -1898,6 +1900,8 @@ function SubmitStep({
   onPayClick?: () => void;
   procurementType?: string | null;
 }) {
+  const [complianceAgreed, setComplianceAgreed] = useState(false);
+
   return (
     <div className={panelClass + " p-6 text-center space-y-6"}>
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-50">
@@ -1942,7 +1946,23 @@ function SubmitStep({
       )}
 
       {!submitted && (
-        <div className="mt-6 flex flex-col items-center justify-center gap-2.5 sm:gap-3">
+        <div className="mt-4 flex flex-col items-center justify-center gap-4">
+          <div className="w-full max-w-2xl mx-auto text-left">
+            <ComplianceConsentCard
+              title="MSME Registration & Supplier Participation Agreement"
+              subtitle="Statutory supplier undertaking governing commercial offers, bid authenticity, and delivery commitment."
+              pdfFile="MSME_Registration_Supplier_Participation_Agreement.pdf"
+              accepted={complianceAgreed}
+              onAcceptedChange={setComplianceAgreed}
+              checkboxLabel="I certify bid authenticity & agree to the MSME Supplier Participation Agreement"
+              checkboxDescription="I formally declare that all technical specifications, rates, and delivery schedules submitted in this bid are firm and legally binding under the MSME Supplier Participation Agreement of JSG SMILE."
+              readerHeightClassName="h-[240px] sm:h-[280px]"
+              showPolicyLibrary
+            >
+              <SupplierAgreementPolicyContent />
+            </ComplianceConsentCard>
+          </div>
+
           {isEmdActive && !isEmdPaid && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 max-w-md text-left text-xs text-amber-900 font-medium flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
@@ -1953,7 +1973,7 @@ function SubmitStep({
           )}
           <button
             onClick={onSubmit}
-            disabled={!canSubmit || submitting || (isEmdActive && !isEmdPaid)}
+            disabled={!canSubmit || submitting || !complianceAgreed || (isEmdActive && !isEmdPaid)}
             className="inline-flex h-12 items-center justify-center gap-2 rounded-xl px-8 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
             style={{ backgroundColor: 'var(--bid-primary)' }}
           >

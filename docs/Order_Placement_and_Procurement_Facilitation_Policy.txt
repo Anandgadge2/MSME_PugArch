@@ -1,0 +1,253 @@
+ORDER PLACEMENT & PROCUREMENT FACILITATION 
+POLICY 
+JSG SMILE – Jharsuguda Supplier & MSME Integrated Local Exchange 
+Website: www.jsgsmile.in 
+Effective Date: [DD/MM/YYYY] 
+ 
+1. PURPOSE 
+This Order Placement & Procurement Facilitation Policy (“Policy”) establishes the 
+procedures, responsibilities, and guidelines governing the placement, acceptance, 
+execution, tracking, and completion of procurement transactions through JSG SMILE 
+(www.jsgsmile.in). 
+The objective of this Policy is to facilitate transparent, efficient, and accountable 
+procurement transactions between registered Buyers and Suppliers/MSMEs operating 
+within Jharsuguda District. 
+ 
+2. NATURE OF THE PORTAL 
+2.1 JSG SMILE is a procurement facilitation platform. 
+2.2 The Portal enables: 
+• Product and service discovery. 
+• Requirement posting. 
+• RFQ generation. 
+• Quotation submission. 
+• Purchase order creation. 
+• Transaction tracking. 
+• Payment tracking. 
+• Supplier-Buyer communication. 
+2.3 The Portal does not: 
+• Act as Buyer. 
+• Act as Supplier. 
+• Enter into commercial contracts. 
+• Negotiate pricing. 
+• Guarantee order fulfillment. 
+• Guarantee delivery. 
+• Guarantee payments. 
+ 
+3. ELIGIBILITY FOR ORDER PLACEMENT 
+Orders may be placed only by: 
+• Verified Buyers registered on the Portal. 
+• Authorized representatives of registered organizations. 
+• Users possessing valid procurement authority within their organizations. 
+The Portal may request additional authorization documents before permitting order 
+placement. 
+ 
+4. PROCUREMENT WORKFLOW 
+The procurement process on JSG SMILE may consist of the following stages: 
+Stage 1: Requirement Identification 
+Buyer identifies procurement requirement. 
+Stage 2: Supplier Discovery 
+Buyer identifies suitable Suppliers through: 
+• Portal search. 
+• Product listings. 
+• Category browsing. 
+• Supplier profiles. 
+Stage 3: Request for Quotation (RFQ)  
+Buyer may issue RFQ containing: 
+• Product specifications. 
+• Service requirements. 
+• Quantity. 
+• Delivery location. 
+• Delivery timeline. 
+• Commercial terms. 
+Stage 4: Quotation Submission 
+Suppliers submit quotations containing: 
+• Pricing. 
+• Delivery schedule. 
+• Technical compliance. 
+• Validity period. 
+• Commercial conditions. 
+Stage 5: Evaluation 
+Buyer independently evaluates quotations. 
+Stage 6: Order Placement 
+Buyer places order through the Portal. 
+Stage 7: Order Acceptance 
+Supplier accepts or declines the order. 
+Stage 8: Delivery 
+Supplier delivers products/services. 
+Stage 9: Confirmation 
+Buyer confirms delivery and acceptance. 
+Stage 10: Settlement 
+Payment settlement is initiated in accordance with applicable policies. 
+ 
+5. ORDER CREATION 
+An order may include: 
+• Order Number 
+• Buyer Information 
+• Supplier Information 
+• Product/Service Details 
+• Quantity 
+• Unit Price 
+• Total Value 
+• Taxes 
+• Delivery Terms 
+• Payment Terms 
+• Special Conditions 
+Orders shall be generated electronically through the Portal. 
+ 
+6. ORDER ACCEPTANCE 
+6.1 Suppliers shall review all order details before acceptance. 
+6.2 Acceptance of an order constitutes the Supplier’s commitment to fulfill the order 
+according to agreed terms. 
+6.3 Suppliers may reject orders due to: 
+• Capacity limitations. 
+• Product unavailability. 
+• Regulatory restrictions. 
+• Commercial reasons. 
+6.4 Rejection of an order does not create liability for the Portal. 
+ 
+7. COMMERCIAL TERMS 
+Commercial terms including: 
+• Pricing 
+• Discounts 
+• Taxes 
+• Delivery charges 
+• Warranty conditions 
+• Service obligations 
+shall be determined solely between Buyer and Supplier. 
+The Portal shall not determine commercial terms. 
+ 
+8. DELIVERY REQUIREMENTS 
+The Supplier shall: 
+• Deliver within agreed timelines. 
+• Meet agreed specifications. 
+• Provide required documentation. 
+• Comply with applicable regulations. 
+The Buyer shall: 
+• Facilitate delivery acceptance. 
+• Conduct inspections where necessary. 
+• Provide timely acceptance or rejection. 
+ 
+9. DELIVERY CONFIRMATION 
+The Portal may support delivery confirmation through: 
+• Delivery Acknowledgement. 
+• Goods Receipt Confirmation. 
+• Service Completion Confirmation. 
+• Digital Acceptance Records. 
+• Electronic Sign-Off. 
+Such confirmations may be used for transaction tracking and settlement purposes. 
+ 
+10. ORDER MODIFICATION 
+Orders may be modified only upon mutual agreement between Buyer and Supplier. 
+Modifications may include: 
+• Quantity changes. 
+• Delivery schedule revisions. 
+• Scope changes. 
+• Commercial adjustments. 
+All modifications shall be electronically recorded where possible. 
+ 
+11. ORDER CANCELLATION 
+Orders may be cancelled: 
+• By mutual agreement. 
+• Due to non-performance. 
+• Due to force majeure events. 
+• Under applicable commercial agreements. 
+Cancellation consequences shall be governed by Buyer-Supplier agreements. 
+The Portal shall not determine cancellation penalties. 
+ 
+12. PAYMENT FACILITATION 
+Where enabled, JSG SMILE may provide integrated payment processing facilities through 
+authorized payment partners. 
+The Portal may: 
+• Track transaction status. 
+• Generate payment references. 
+• Record payment milestones. 
+• Facilitate settlement workflows. 
+The Portal does not act as a bank or financial institution. 
+ 
+13. T+1 SETTLEMENT FRAMEWORK 
+Subject to successful completion of transaction milestones: 
+1. Buyer confirms delivery or service completion. 
+2. Payment status is verified. 
+3. Settlement request is initiated. 
+4. Settlement may be processed on a T+1 basis. 
+Settlement timelines may vary due to: 
+• Bank holidays. 
+• Payment gateway processing. 
+• Compliance reviews. 
+• Technical issues. 
+• Regulatory requirements. 
+The Portal does not guarantee settlement timelines. 
+ 
+14. DISPUTED ORDERS 
+Disputes may include: 
+• Quality disputes. 
+• Quantity disputes. 
+• Delivery disputes. 
+• Payment disputes. 
+• Warranty disputes. 
+Such disputes shall be resolved directly between Buyer and Supplier. 
+The Portal may facilitate communication but shall not adjudicate disputes. 
+ 
+15. AUDIT TRAIL 
+The Portal may maintain records of: 
+• RFQs 
+• Quotations 
+• Orders 
+• Delivery confirmations 
+• Payment references 
+• User actions 
+Such records may be used for compliance, reporting, and audit purposes. 
+ 
+16. FRAUD PREVENTION 
+The Portal reserves the right to: 
+• Review suspicious orders. 
+• Request additional documentation. 
+• Suspend transactions. 
+• Restrict account access. 
+• Report unlawful activities to competent authorities. 
+ 
+17. NON-GUARANTEE OF ORDERS 
+The Portal does not guarantee: 
+• Receipt of quotations. 
+• Order awards. 
+• Supplier participation. 
+• Buyer participation. 
+• Business opportunities. 
+• Revenue generation. 
+All procurement decisions remain solely with participating Buyers and Suppliers. 
+ 
+18. DISCLAIMER 
+JSG SMILE is solely a facilitation platform. 
+District Administration Jharsuguda, District Industries Centre (DIC), Government of 
+Odisha, Technology Partner, Portal Operator, and their officers: 
+• Are not contracting parties. 
+• Are not responsible for procurement decisions. 
+• Do not guarantee fulfillment of orders. 
+• Do not guarantee product quality. 
+• Do not guarantee payment performance. 
+• Do not guarantee delivery performance. 
+ 
+19. LIMITATION OF LIABILITY 
+The Portal and associated stakeholders shall not be liable for: 
+• Failed transactions. 
+• Supplier defaults. 
+• Buyer defaults. 
+• Product defects. 
+• Delivery failures. 
+• Commercial losses. 
+• Indirect damages. 
+• Consequential damages. 
+Maximum liability shall be NIL to the fullest extent permitted under law. 
+ 
+20. GOVERNING LAW AND JURISDICTION 
+This Policy shall be governed by the laws of India. 
+Any disputes relating to this Policy shall be subject to the exclusive jurisdiction of 
+competent courts located in Odisha. 
+ 
+21. ACCEPTANCE 
+By placing, accepting, modifying, tracking, or completing any order through JSG SMILE 
+(www.jsgsmile.in), Buyers and Suppliers acknowledge that: 
+• They have read and understood this Policy. 
+• They agree to comply with all applicable Portal policies. 
+• They accept responsibility for their respective obligations. 
+• They acknowledge that the Portal acts solely as a facilitation platform. 

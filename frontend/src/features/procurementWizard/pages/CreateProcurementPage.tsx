@@ -50,6 +50,8 @@ import {
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
+import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
+import { OrderPlacementPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
 import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
@@ -1213,6 +1215,7 @@ export default function CreateProcurementPage() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [submittingDraft, setSubmittingDraft] = useState(false);
   const [triedNext, setTriedNext] = useState(false);
+  const [legalComplianceAccepted, setLegalComplianceAccepted] = useState(false);
   const [showItemDrawer, setShowItemDrawer] = useState(false);
   const [selectedItemForEdit, setSelectedItemForEdit] = useState<ItemRow | null>(null);
   const [hasAutofilled, setHasAutofilled] = useState(false);
@@ -2099,6 +2102,10 @@ export default function CreateProcurementPage() {
       }
       return;
     }
+    if (!legalComplianceAccepted) {
+      toast.error('Please read and accept the Order Placement & Procurement Facilitation Policy before publishing.');
+      return;
+    }
     setSubmittingDraft(true);
     try {
       const effectiveDraftId = draftIdRef.current || draft.id;
@@ -2375,6 +2382,8 @@ export default function CreateProcurementPage() {
                   draft={draft}
                   updateDraft={updateDraft}
                   readiness={readiness}
+                  complianceAccepted={legalComplianceAccepted}
+                  onComplianceAcceptedChange={setLegalComplianceAccepted}
                 />
               </SectionCard>
             )}
@@ -2389,6 +2398,7 @@ export default function CreateProcurementPage() {
                 onSubmit={submitProcurement}
                 isSaving={savingDraft}
                 isSubmitting={submittingDraft}
+                disableSubmit={activeStep === ALL_STEPS.length - 1 && !legalComplianceAccepted}
                 showSubmit={activeStep === ALL_STEPS.length - 1}
               />
             </div>
@@ -6949,11 +6959,15 @@ function EvaluationBasisForm({
 function PreviewPublishForm({
   draft,
   updateDraft,
-  readiness
+  readiness,
+  complianceAccepted,
+  onComplianceAcceptedChange,
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
   readiness: Array<{ label: string; ok: boolean; severity: 'error' | 'warning' | 'info' }>;
+  complianceAccepted: boolean;
+  onComplianceAcceptedChange: (accepted: boolean) => void;
 }) {
   // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   // const approvalHandoff = isGov
@@ -7085,6 +7099,22 @@ function PreviewPublishForm({
           placeholder="Enter remarks for the approval authority..."
         />
       </Field>
+
+      <div className="pt-2">
+        <ComplianceConsentCard
+          title="Order Placement & Procurement Facilitation Policy"
+          subtitle="Statutory compliance agreement governing RFQ publishing, bidding, delivery verification, and settlement."
+          pdfFile="Order_Placement_Procurement_Policy.pdf"
+          accepted={complianceAccepted}
+          onAcceptedChange={onComplianceAcceptedChange}
+          checkboxLabel="I certify compliance with procurement rules & accept the Order Placement & Procurement Facilitation Policy"
+          checkboxDescription="By checking this box, you formally confirm administrative and financial sanction, affirm that this requirement is not split to circumvent competitive bidding thresholds, and agree to be bound by the statutory procurement terms of JSG SMILE."
+          readerHeightClassName="h-[280px] sm:h-[320px]"
+          showPolicyLibrary
+        >
+          <OrderPlacementPolicyContent />
+        </ComplianceConsentCard>
+      </div>
     </div>
   );
 }

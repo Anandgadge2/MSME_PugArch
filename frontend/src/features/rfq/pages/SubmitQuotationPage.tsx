@@ -32,6 +32,8 @@ import {
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
+import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
+import { SupplierAgreementPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
 import { cn } from '../../../lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCookieValue } from '../../../lib/auth';
@@ -2915,23 +2917,25 @@ export default function SubmitQuotationPage() {
             </div>
 
             {!isSubmittedQuote && (
-              <>
-                <div className="flex items-start gap-3 pt-2">
-                  <input
-                    type="checkbox"
-                    id="declaration"
-                    checked={declared}
-                    disabled={isReadOnly}
-                    onChange={e => { setDeclared(e.target.checked); setErrors(prev => { const n = { ...prev }; delete n.declared; return n; }); }}
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/20 focus:ring-2 disabled:opacity-50 cursor-pointer"
-                  />
-                  <label htmlFor="declaration" className="text-xs font-medium text-slate-700 leading-relaxed cursor-pointer">
-                    I declare that the information provided in this quotation is accurate and complete. I understand that any false
-                    or misleading information may result in disqualification.
-                  </label>
-                </div>
+              <div className="pt-2">
+                <ComplianceConsentCard
+                  title="MSME Registration & Supplier Participation Agreement"
+                  subtitle="Statutory supplier undertaking governing commercial offers, bid authenticity, and delivery commitment."
+                  pdfFile="MSME_Registration_Supplier_Participation_Agreement.pdf"
+                  accepted={declared}
+                  onAcceptedChange={val => {
+                    setDeclared(val);
+                    setErrors(prev => { const n = { ...prev }; delete n.declared; return n; });
+                  }}
+                  checkboxLabel="I certify quotation authenticity & accept the MSME Supplier Participation Agreement"
+                  checkboxDescription="I hereby certify that the quoted rates, technical specifications, and delivery schedules are firm, binding, and compliant with the MSME Supplier Participation Agreement and platform policies of JSG SMILE."
+                  readerHeightClassName="h-[260px] sm:h-[300px]"
+                  showPolicyLibrary
+                >
+                  <SupplierAgreementPolicyContent />
+                </ComplianceConsentCard>
                 {fieldError('declared')}
-              </>
+              </div>
             )}
 
             <div className="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t border-slate-100 w-full">
@@ -2973,7 +2977,7 @@ export default function SubmitQuotationPage() {
                   <Button
                     type="button"
                     onClick={handleSubmit}
-                    disabled={submitting || isReadOnly || (isEmdActive && !isEmdPaid)}
+                    disabled={submitting || isReadOnly || !declared || (isEmdActive && !isEmdPaid)}
                     className="bg-[#12335f] hover:bg-[#07172e] text-white rounded-xl px-6 h-10 text-xs font-bold uppercase tracking-wider shadow-xs transition flex items-center gap-2 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {submitting ? (
