@@ -1077,7 +1077,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     setType(queryType);
   }
 
-  const typeOptions = useMemo(() => Array.from(new Set(items.map(item => item.type))).sort(), [items]);
   const locationOptions = useMemo(() => Array.from(new Set(items.map(item => item.location).filter((value): value is string => Boolean(value)))).sort(), [items]);
   const categoryOptions = useMemo(() => Array.from(new Set(items.map(item => item.category).filter((value): value is string => Boolean(value)))).sort(), [items]);
   const buyerOptions = useMemo(() => Array.from(new Set(items.map(item => item.buyer).filter((value): value is string => Boolean(value)))).sort(), [items]);
@@ -1738,71 +1737,58 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       </div>
 
       {/* ── Search + Filter + View Toggle Toolbar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-2.5 sm:p-3 shadow-sm">
         <ResponsiveFilterBar
-          singleRowDesktop={false}
-          activeFilterCount={(query ? 1 : 0) + (type ? 1 : 0) + (status ? 1 : 0) + (category ? 1 : 0) + (buyerFilter ? 1 : 0) + (location ? 1 : 0) + (startDate ? 1 : 0) + (endDate ? 1 : 0) + (sortOption !== 'newest' ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
+          singleRowDesktop={true}
+          searchWrapperClassName="w-44 sm:w-48 md:w-52 lg:w-56 shrink-0"
+          filtersClassName="flex-nowrap shrink-0"
+          activeFilterCount={(query ? 1 : 0) + (status ? 1 : 0) + (category ? 1 : 0) + (buyerFilter ? 1 : 0) + (location ? 1 : 0) + (startDate ? 1 : 0) + (endDate ? 1 : 0) + (sortOption !== 'newest' ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <input
                 value={query}
                 onChange={event => { setQuery(event.target.value); setPage(1); }}
-                placeholder="Search opportunities by title, ref no, buyer, category..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-9 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                placeholder="Search opportunities..."
+                className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-8.5 pr-8 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
               {query && (
                 <button
                   type="button"
                   onClick={() => { setQuery(''); setPage(1); }}
                   aria-label="Clear search input"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full transition-colors cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full transition-colors cursor-pointer"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-3 w-3" />
                 </button>
               )}
             </div>
           }
           filters={
             <>
-              {/* Type Dropdown */}
-              {!subRouteType && (
-                <div className="w-full sm:w-auto sm:min-w-[110px] sm:max-w-[135px]">
-                  <select
-                    value={type}
-                    onChange={e => { setType(e.target.value as OpportunityType | ''); setPage(1); }}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
-                    aria-label="Filter by type"
-                  >
-                    <option value="">All Types</option>
-                    {typeOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                  </select>
-                </div>
-              )}
-
               {/* Status Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[145px]">
+              <div className="w-full sm:w-auto sm:w-[110px] shrink-0">
                 <select
                   value={status}
                   onChange={e => { setStatus(e.target.value); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   aria-label="Filter by status"
                 >
                   <option value="">All Statuses</option>
                   <option value="LIVE">Live / Open</option>
-                  <option value="CLOSING_SOON">Closing Soon (≤7d)</option>
-                  <option value="PARTICIPATED">My Submissions</option>
-                  <option value="UNDER_EVALUATION">Under Evaluation</option>
-                  <option value="CLOSED">Closed / Concluded</option>
+                  <option value="CLOSING_SOON">Closing Soon</option>
+                  <option value="PARTICIPATED">Submissions</option>
+                  <option value="UNDER_EVALUATION">Evaluation</option>
+                  <option value="CLOSED">Closed</option>
                 </select>
               </div>
 
               {/* Category Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[120px] sm:max-w-[150px]">
+              <div className="w-full sm:w-auto sm:w-[115px] shrink-0">
                 <select
                   value={category}
                   onChange={e => { setCategory(e.target.value); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   aria-label="Filter by category"
                 >
                   <option value="">All Categories</option>
@@ -1811,11 +1797,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Buyer Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[140px]">
+              <div className="w-full sm:w-auto sm:w-[105px] shrink-0">
                 <select
                   value={buyerFilter}
                   onChange={e => { setBuyerFilter(e.target.value); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   aria-label="Filter by buyer"
                 >
                   <option value="">All Buyers</option>
@@ -1824,11 +1810,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Location Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[115px] sm:max-w-[140px]">
+              <div className="w-full sm:w-auto sm:w-[105px] shrink-0">
                 <select
                   value={location}
                   onChange={e => { setLocation(e.target.value); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   aria-label="Filter by location"
                 >
                   <option value="">All Locations</option>
@@ -1837,7 +1823,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Sort Filter Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[130px] sm:max-w-[165px]">
+              <div className="w-full sm:w-auto sm:w-[115px] shrink-0">
                 <select
                   value={sortOption}
                   onChange={e => {
@@ -1845,12 +1831,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                     setSortField('');
                     setPage(1);
                   }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   aria-label="Sort opportunities"
                   title="Sort opportunities"
                 >
-                  <option value="newest">Newest First (Latest)</option>
-                  <option value="closing_soon">Closing Soonest</option>
+                  <option value="newest">Newest First</option>
+                  <option value="closing_soon">Closing Soon</option>
                   <option value="value_high">Highest Value</option>
                   <option value="value_low">Lowest Value</option>
                   <option value="title_asc">Title (A–Z)</option>
@@ -1858,8 +1844,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Unified Date Range Group (From - To) */}
-              <div className="flex items-center h-10 rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 hover:border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/10 transition-colors shadow-xs w-full sm:w-auto">
-                <Calendar className="h-3.5 w-3.5 text-slate-400 mr-1.5 shrink-0" />
+              <div className="flex items-center h-9 rounded-xl border border-slate-200 bg-white px-2 hover:border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/10 transition-colors shadow-xs w-full sm:w-auto shrink-0">
+                <Calendar className="h-3.5 w-3.5 text-slate-400 mr-1 shrink-0" />
                 <span className="text-[10px] font-bold text-slate-400 mr-1 uppercase select-none shrink-0">From</span>
                 <input
                   id="filter-start-date"
@@ -1868,11 +1854,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                   max={todayStr}
                   onClick={e => (e.target as any).showPicker?.()}
                   onChange={e => handleStartDateChange(e.target.value)}
-                  className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[110px]"
+                  className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[92px] sm:w-[95px]"
                   aria-label="Start date (From)"
                   title="Start Date (Published on or after)"
                 />
-                <span className="text-slate-300 mx-1.5 font-bold select-none">–</span>
+                <span className="text-slate-300 mx-1 font-bold select-none">–</span>
                 <span className="text-[10px] font-bold text-slate-400 mr-1 uppercase select-none shrink-0">To</span>
                 <input
                   id="filter-end-date"
@@ -1881,7 +1867,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                   min={startDate || undefined}
                   onClick={e => (e.target as any).showPicker?.()}
                   onChange={e => handleEndDateChange(e.target.value)}
-                  className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[110px]"
+                  className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[92px] sm:w-[95px]"
                   aria-label="Procurement end date (To)"
                   title="Procurement End Date (Closing deadline on or before)"
                 />
@@ -1899,12 +1885,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Reset Trigger */}
-              {(query || type || status || category || buyerFilter || location || startDate || endDate || sortOption !== 'newest' || kpiFilter !== 'all') && (
+              {(query || status || category || buyerFilter || location || startDate || endDate || sortOption !== 'newest' || kpiFilter !== 'all') && (
                 <Button
                   type="button"
                   variant="outline"
                   onClick={reset}
-                  className="h-10 px-3.5 rounded-xl border-rose-200 bg-rose-50/70 text-xs font-extrabold text-rose-700 hover:bg-rose-100 flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
+                  className="h-9 px-2.5 rounded-xl border-rose-200 bg-rose-50/70 text-xs font-extrabold text-rose-700 hover:bg-rose-100 flex items-center gap-1 shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
                   aria-label="Reset all filters"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
@@ -1913,7 +1899,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               )}
             </>
           }
-          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+          endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />}
         />
       </div>
 
