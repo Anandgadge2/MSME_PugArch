@@ -1337,18 +1337,16 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
       if (bid.bidNumber) {
         const bn = String(bid.bidNumber).trim();
         targetBidNumbers.add(bn);
-        const digits = bn.match(/\d+/g);
-        if (digits) {
-          const num = Number(digits[digits.length - 1]);
+        if (/^\d+$/.test(bn)) {
+          const num = Number(bn);
           if (num > 0 && num <= 2147483647) targetReqIds.add(num);
         }
       }
       if (bid.requirementNumber) {
         const rn = String(bid.requirementNumber).trim();
         targetReqNumbers.add(rn);
-        const digits = rn.match(/\d+/g);
-        if (digits) {
-          const num = Number(digits[digits.length - 1]);
+        if (/^\d+$/.test(rn)) {
+          const num = Number(rn);
           if (num > 0 && num <= 2147483647) targetReqIds.add(num);
         }
       }

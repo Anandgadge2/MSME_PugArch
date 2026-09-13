@@ -858,33 +858,25 @@ export default function SubmitQuotationPage() {
 
     const keysToCheck = Array.from(new Set([requirementId, targetReqId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
     const currentUserId = user?.id ? String(user.id) : null;
-    let hasLocalSubmission = false;
     if (typeof window !== 'undefined') {
       keysToCheck.forEach(k => {
-        try { localStorage.removeItem(`rfq_submitted_${k}`); } catch {}
+        try {
+          localStorage.removeItem(`rfq_submitted_${k}`);
+          if (currentUserId) localStorage.removeItem(`rfq_submitted_${currentUserId}_${k}`);
+        } catch {}
       });
-      if (currentUserId) {
-        hasLocalSubmission = keysToCheck.some(k => {
-          try {
-            const item = localStorage.getItem(`rfq_submitted_${currentUserId}_${k}`);
-            if (!item) return false;
-            const parsed = JSON.parse(item);
-            return !parsed.userId || String(parsed.userId) === currentUserId;
-          } catch {
-            return false;
-          }
-        });
-      }
     }
 
     const isOwnSubmitted = isFinalSubmittedResponse(ownResponse) && isBelongingToUser(ownResponse, user);
-    if (isOwnSubmitted || hasLocalSubmission) {
+    if (isOwnSubmitted) {
       setSubmitted(true);
       setDeclared(true);
       toast.info('Loaded your submitted quotation from the server.');
     } else if (submittedStatus(ownResponse) === 'DRAFT') {
       setSubmitted(false);
       toast.info('Restored your draft quotation from the server.');
+    } else {
+      setSubmitted(false);
     }
   }, [ownResponse, requirementId, targetReqId, searchParams, user?.id]);
 
@@ -1226,20 +1218,37 @@ export default function SubmitQuotationPage() {
       seen.add(key);
       out.push({ name: label, required });
     };
-    const payloadDocs = rfqData?.payload?.documents || rfqData?.payload?.documentsRequested || rfqData?.payload?.technicalPacket?.documents;
-    if (Array.isArray(payloadDocs)) payloadDocs.forEach((d: any) => push(typeof d === 'string' ? d : d?.name || d?.documentType || d?.documentName, typeof d === 'object' ? d?.required !== false : true));
-    if (Array.isArray(rfqData?.requiredDocuments)) rfqData.requiredDocuments.forEach((d: any) => push(typeof d === 'string' ? d : d?.name, true));
-    if (Array.isArray(rfqData?.requestedDocuments)) rfqData.requestedDocuments.forEach((d: any) => push(typeof d === 'string' ? d : d?.name, true));
-    documents.forEach((d: any) => push(typeof d === 'string' ? d : d?.documentType || d?.name || d?.documentName, typeof d === 'object' ? d?.required === true : false));
 
-    // Default standard requested documents if none explicitly provided
-    if (out.length === 0 && rfqData) {
-      push('GST Certificate', true);
-      push('PAN Card', true);
-      push('Bank Details', true);
-      push('Technical Compliance Sheet', true);
-      push('Detailed Price Breakup', true);
-      push('Aadhar Card', true);
+    // 1. Authoritative: payload / technicalPacket documents array with explicit required flags
+    const payloadDocs = rfqData?.payload?.documents ||
+      rfqData?.payload?.documentsRequested ||
+      rfqData?.technicalPacket?.documents ||
+      rfqData?.payload?.technicalPacket?.documents;
+
+    if (Array.isArray(payloadDocs) && payloadDocs.length > 0) {
+      payloadDocs.forEach((d: any) => {
+        const name = typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName);
+        const isReq = typeof d === 'object' && d !== null ? Boolean(d?.required === true || d?.isRequired === true) : false;
+        push(name, isReq);
+      });
+    }
+
+    // 2. Attached requirement documents
+    if (Array.isArray(documents) && documents.length > 0) {
+      documents.forEach((d: any) => {
+        const name = typeof d === 'string' ? d : (d?.documentType || d?.name || d?.documentName);
+        push(name, typeof d === 'object' && d !== null ? Boolean(d?.required === true) : false);
+      });
+    }
+
+    // 3. Fallback requiredDocuments / requestedDocuments strings ONLY if payloadDocs didn't provide documents
+    if (out.length === 0) {
+      if (Array.isArray(rfqData?.requiredDocuments)) {
+        rfqData.requiredDocuments.forEach((d: any) => push(typeof d === 'string' ? d : d?.name, true));
+      }
+      if (Array.isArray(rfqData?.requestedDocuments)) {
+        rfqData.requestedDocuments.forEach((d: any) => push(typeof d === 'string' ? d : d?.name, true));
+      }
     }
 
     return out;
@@ -1650,43 +1659,26 @@ export default function SubmitQuotationPage() {
       localStorage.removeItem(`rfq_draft_${requirementId || conversationId}`);
       if (typeof window !== 'undefined') {
         const currentUserId = user?.id ? String(user.id) : null;
-        const submitCache = {
-          userId: user?.id,
-          status: 'SUBMITTED',
-          submittedAt: new Date().toISOString(),
-          offeredPrice: payload.offeredPrice,
-          offeredQuantity: payload.offeredQuantity,
-          deliveryTimeline: payload.deliveryTimeline,
-          message: payload.message,
-          terms: payload.terms,
-          attachmentUrl: payload.attachmentUrl,
-          responseData: payload.responseData,
-        };
-        const keysToCache = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
-        keysToCache.forEach(k => {
+        const keysToClear = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
+        keysToClear.forEach(k => {
           try {
-            if (currentUserId) {
-              localStorage.setItem(`rfq_submitted_${currentUserId}_${k}`, JSON.stringify(submitCache));
-            }
-            // Clean up legacy un-scoped key to avoid polluting other accounts
             localStorage.removeItem(`rfq_submitted_${k}`);
+            if (currentUserId) localStorage.removeItem(`rfq_submitted_${currentUserId}_${k}`);
           } catch {}
         });
       }
+      queryClient.invalidateQueries({ queryKey: ['rfq-detail-submit'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-opportunities'] });
+      queryClient.invalidateQueries({ queryKey: ['seller-opportunities'] });
       setSubmitted(true);
       toast.success('Your quotation has been submitted successfully.');
     } catch (err: any) {
       if (err?.message?.includes('already submitted') || err?.code === 'REQUIREMENT_RESPONSE_EXISTS' || err?.status === 409) {
         setSubmitted(true);
-        if (typeof window !== 'undefined' && resolvedId) {
-          const currentUserId = user?.id ? String(user.id) : null;
-          try {
-            if (currentUserId) {
-              localStorage.setItem(`rfq_submitted_${currentUserId}_${resolvedId}`, JSON.stringify({ userId: user?.id, status: 'SUBMITTED', submittedAt: new Date().toISOString() }));
-            }
-            localStorage.removeItem(`rfq_submitted_${resolvedId}`);
-          } catch {}
-        }
+        queryClient.invalidateQueries({ queryKey: ['rfq-detail-submit'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
         toast.info('You have already submitted your quotation for this procurement.');
       } else {
         toast.error(err?.message || 'Failed to submit quotation');
@@ -2605,7 +2597,7 @@ export default function SubmitQuotationPage() {
                   .filter(d => d.status === 'done' && (d.taggedAs || d.name))
                   .map(d => String(d.taggedAs || d.name).trim().toLowerCase())
               );
-              const missingReqList = requestedDocs.filter(req => !coveredDocNames.has(req.name.trim().toLowerCase()));
+              const missingReqList = requestedDocs.filter(req => req.required && !coveredDocNames.has(req.name.trim().toLowerCase()));
 
               return (
                 <div className="rounded-xl border border-slate-200/90 bg-slate-50/60 p-5 shadow-2xs">
@@ -2977,7 +2969,7 @@ export default function SubmitQuotationPage() {
                   <Button
                     type="button"
                     onClick={handleSubmit}
-                    disabled={submitting || isReadOnly || !declared || (isEmdActive && !isEmdPaid)}
+                    disabled={submitting || isReadOnly || !declared}
                     className="bg-[#12335f] hover:bg-[#07172e] text-white rounded-xl px-6 h-10 text-xs font-bold uppercase tracking-wider shadow-xs transition flex items-center gap-2 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {submitting ? (

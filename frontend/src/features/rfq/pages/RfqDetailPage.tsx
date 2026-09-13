@@ -582,24 +582,25 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     });
     return withTime || valid[0];
   };
+  const submissionStartDate = preferReq
+    ? (reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate)
+    : (rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate);
   const published  = preferReq
     ? resolvePublishedCandidate(
-        reqObj?.payload?.schedule?.submissionStartDate,
-        reqObj?.approvedAt,
-        reqObj?.createdAt,
-        rawBid?.startDate,
-        rawBid?.createdAt,
         reqObj?.payload?.schedule?.publishDate,
-        rawBid?.technicalPacket?.schedule?.publishDate
+        rawBid?.technicalPacket?.schedule?.publishDate,
+        reqObj?.approvedAt,
+        rawBid?.startDate,
+        reqObj?.createdAt,
+        rawBid?.createdAt
       )
     : resolvePublishedCandidate(
-        rawBid?.technicalPacket?.schedule?.submissionStartDate,
-        rawBid?.startDate,
-        rawBid?.createdAt,
-        reqObj?.approvedAt,
-        reqObj?.createdAt,
         rawBid?.technicalPacket?.schedule?.publishDate,
-        reqObj?.payload?.schedule?.publishDate
+        reqObj?.payload?.schedule?.publishDate,
+        rawBid?.startDate,
+        reqObj?.approvedAt,
+        rawBid?.createdAt,
+        reqObj?.createdAt
       );
   const location   = preferReq ? (reqObj?.location || reqObj?.deliveryLocation || rawBid?.deliveryLocation || '—') : (rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—');
   const buyerOrg   = preferReq ? (reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || reqObj?.buyerName || rawBid?.buyerOrganizationName || '—') : (rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—');
@@ -1087,6 +1088,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       deadlineDate={deadline}
       createdAt={reqObj?.createdAt || rawBid?.createdAt || published}
       publishedDate={published ? fmtDate(published, true) : undefined}
+      submissionStartDate={submissionStartDate ? fmtDate(submissionStartDate, true) : undefined}
       closingDate={deadline ? fmtDate(deadline, true) : undefined}
       clarificationDate={clarDeadline ? fmtDate(clarDeadline, true) : undefined}
       technicalDate={techOpen ? fmtDate(techOpen, true) : undefined}

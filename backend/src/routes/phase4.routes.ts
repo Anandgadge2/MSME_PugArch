@@ -10748,18 +10748,30 @@ export interface BuyerProcurementsDataResult {
   };
 }
 
-export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: number = -1): Promise<BuyerProcurementsDataResult> {
-  // Fetch logged in user's organization name
-  const buyerOrg = buyerOrgId > 0
-    ? await db.organization.findUnique({
-        where: { id: buyerOrgId },
-        select: { organizationName: true }
-      })
-    : null;
-  const loggedInOrgName = buyerOrg?.organizationName || '';
+export async function getBuyerProcurementsData(
+  buyerId: number,
+  buyerOrgId: number = -1,
+  bypassCache: boolean = false
+): Promise<BuyerProcurementsDataResult> {
+  const cacheKey = `cache:buyer:procurements:${buyerId}`;
+  if (bypassCache) {
+    await deleteCache(cacheKey).catch(() => undefined);
+  }
 
-  // ── Parallel data fetch ──
-  const [bidDrafts, procurementBids, procurementRequests, directPurchases, requirements, rateContracts, fileAssets, auctions, allApprovals] = await Promise.all([
+  return getOrSetCache(cacheKey, async () => {
+    return fetchFreshBuyerProcurementsData(buyerId, buyerOrgId);
+  }, 60);
+}
+
+async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: number = -1): Promise<BuyerProcurementsDataResult> {
+  // ── Parallel data fetch (concurrent, including buyer organization) ──
+  const [buyerOrg, bidDrafts, procurementBids, procurementRequests, directPurchases, requirements, rateContracts, fileAssets, auctions, allApprovals] = await Promise.all([
+    buyerOrgId > 0
+      ? db.organization.findUnique({
+          where: { id: buyerOrgId },
+          select: { organizationName: true }
+        })
+      : Promise.resolve(null),
     db.bidWizardDraft.findMany({
       where: { buyerId, draftStatus: 'DRAFT' },
       orderBy: { updatedAt: 'desc' },
@@ -10830,6 +10842,8 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       orderBy: [{ entityId: 'asc' }, { sequence: 'asc' }]
     })
   ]);
+
+  const loggedInOrgName = buyerOrg?.organizationName || '';
 
   const requirementAssets = fileAssets.reduce((acc: Record<number, any[]>, asset: any) => {
     const key = Number(asset.entityId);
@@ -11474,9 +11488,42 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
   }
 
   // 6) Rate Contracts
-  for (const contract of rateContracts) {
+  const buyerRateContracts = rateContracts.filter(c => {
+    const metadata = (c.metadata || {}) as any;
+    return Number(metadata.buyerId || 0) === buyerId;
+  });
+
+  const rcCandidateReqIds = new Set<number>();
+  const rcCandidateSupplierIds = new Set<number>();
+  for (const contract of buyerRateContracts) {
     const metadata = (contract.metadata || {}) as any;
-    if (Number(metadata.buyerId || 0) !== buyerId) continue;
+    const srcReq = requirements.find(r => r.id === Number(metadata.requirementId) || r.requirementNumber === metadata.requirementNumber);
+    if (srcReq?.id) rcCandidateReqIds.add(srcReq.id);
+    if (metadata.requirementId) rcCandidateReqIds.add(Number(metadata.requirementId));
+    for (const s of (metadata.selectedSuppliers || [])) {
+      const sid = Number(s.supplierId || s.id);
+      if (sid > 0) rcCandidateSupplierIds.add(sid);
+    }
+  }
+
+  const allRcResponses = (rcCandidateReqIds.size > 0 || rcCandidateSupplierIds.size > 0)
+    ? await db.requirementResponse.findMany({
+        where: {
+          OR: [
+            ...(rcCandidateReqIds.size > 0 ? [{ requirementId: { in: Array.from(rcCandidateReqIds) } }] : []),
+            ...(rcCandidateSupplierIds.size > 0 ? [{ sellerUserId: { in: Array.from(rcCandidateSupplierIds) } }] : []),
+            ...(rcCandidateSupplierIds.size > 0 ? [{ sellerOrganizationId: { in: Array.from(rcCandidateSupplierIds) } }] : [])
+          ]
+        },
+        include: {
+          sellerUser: { select: { id: true, name: true, email: true, mobile: true, role: true, organizationId: true } },
+          sellerOrganization: { select: { organizationName: true } }
+        }
+      }).catch(() => [])
+    : [];
+
+  for (const contract of buyerRateContracts) {
+    const metadata = (contract.metadata || {}) as any;
 
     // Deduplication check: Skip if this Rate Contract is already represented by a ProcurementBid or Requirement in `all`
     const isAlreadyAdded = all.some(item =>
@@ -11493,22 +11540,9 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
     const srcReq = requirements.find(r => r.id === Number(metadata.requirementId) || r.requirementNumber === metadata.requirementNumber);
     const srcPayload = (srcReq as any)?.payload || {};
 
-    // Query supplier responses / quotations linked to this rate contract or its source requirement
+    // Filter supplier responses from the pre-fetched batch
     const reqIds = Array.from(new Set([srcReq?.id, Number(metadata.requirementId || 0)].filter(Boolean) as number[]));
-    const selectedSupplierIds = (metadata.selectedSuppliers || []).map((s: any) => Number(s.supplierId || s.id)).filter(Boolean);
-    const allPossibleResponses = await db.requirementResponse.findMany({
-      where: {
-        OR: [
-          ...(reqIds.length > 0 ? [{ requirementId: { in: reqIds } }] : []),
-          ...(selectedSupplierIds.length > 0 ? [{ sellerUserId: { in: selectedSupplierIds } }] : []),
-          ...(selectedSupplierIds.length > 0 ? [{ sellerOrganizationId: { in: selectedSupplierIds } }] : [])
-        ]
-      },
-      include: {
-        sellerUser: { select: { id: true, name: true, email: true, mobile: true, role: true, organizationId: true } },
-        sellerOrganization: { select: { organizationName: true } }
-      }
-    }).catch(() => []);
+    const allPossibleResponses = allRcResponses;
 
     const rateContractItemNames = itemRateSchedule.map((i: any) => String(i.itemName || '').toLowerCase().trim()).filter(Boolean);
     const responses = allPossibleResponses.filter((r: any) => {
@@ -11703,9 +11737,10 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
 router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const buyerId = userId(req);
   const buyerOrgId = req.user?.organizationId || -1;
-  const { type, status, method, category, department, startDate, endDate, search, sortBy, sortDir } = req.query as Record<string, string | undefined>;
+  const { type, status, method, category, department, startDate, endDate, search, sortBy, sortDir, refresh } = req.query as Record<string, string | undefined>;
 
-  const { all, kpis } = await getBuyerProcurementsData(buyerId, buyerOrgId);
+  const bypassCache = refresh === 'true' || refresh === '1';
+  const { all, kpis } = await getBuyerProcurementsData(buyerId, buyerOrgId, bypassCache);
 
   let filtered = all;
   if (type) {
@@ -11783,7 +11818,7 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
     return String(va).localeCompare(String(vb)) * dir;
   });
 
-  ok(res, { kpis, procurements: filtered });
+  ok(res, { kpis, procurements: filtered, all: filtered });
 }));
 
 const cancelProcurementSchema = z.object({
@@ -11809,6 +11844,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
       throw new ApiError(403, 'You do not have permission to cancel this procurement request', 'FORBIDDEN');
     }
     const updated = await cancelProcurementRequest(id, pr.organizationId, buyerId, `${reason}${remarks ? ` - ${remarks}` : ''}`);
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Procurement request cancelled successfully', procurement: updated });
   }
 
@@ -11859,6 +11895,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     }
 
     await auditWrite(req, 'procurement_bid.cancelled', 'procurementBid', id, { reason, remarks });
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Procurement bid cancelled successfully', procurement: updated });
   }
 
@@ -11915,6 +11952,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     }
 
     await auditWrite(req, 'requirement.cancelled', 'requirement', id, { reason, remarks });
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Requirement cancelled successfully', procurement: updated });
   }
 
@@ -11948,6 +11986,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     );
 
     await auditWrite(req, 'direct_purchase.cancelled', 'directPurchase', id, { reason, remarks });
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Direct purchase cancelled successfully', procurement: updated });
   }
 
@@ -11973,6 +12012,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     });
 
     await auditWrite(req, 'reverse_auction.cancelled', 'auction', id, { reason, remarks });
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Reverse auction cancelled successfully', procurement: updated });
   }
 

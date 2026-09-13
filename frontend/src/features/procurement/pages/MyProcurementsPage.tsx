@@ -551,10 +551,13 @@ export default function MyProcurementsPage() {
   };
 
   /* ── Data Loading with React Query & Client SWR Caching ── */
-  const { data: queryData, isLoading: loading, refetch: loadData } = useQuery({
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+
+  const { data: queryData, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['buyerMyProcurements'],
     queryFn: async () => {
-      const result = await getApi<any>('/api/buyer/my-procurements');
+      const url = manualRefreshing ? '/api/buyer/my-procurements?refresh=true' : '/api/buyer/my-procurements';
+      const result = await getApi<any>(url);
       const payload = result || { kpis: null, procurements: [] };
       if (payload?.kpis) {
         setCachedProcurementsData(payload);
@@ -562,13 +565,33 @@ export default function MyProcurementsPage() {
       return payload;
     },
     initialData: getCachedProcurementsData,
-    staleTime: 10 * 1000,
-    refetchOnMount: true,
+    initialDataUpdatedAt: () => {
+      if (typeof window !== 'undefined') {
+        const raw = sessionStorage.getItem(CACHE_KEY) || localStorage.getItem(CACHE_KEY);
+        if (raw) return Date.now();
+      }
+      return 0;
+    },
+    staleTime: 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
+
+  const loadData = useCallback(async () => {
+    setManualRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setManualRefreshing(false);
+    }
+  }, [refetch]);
 
   const kpis = queryData?.kpis || initialKpis;
   const procurements = queryData?.procurements || [];
-  const isKpisLoading = loading && !queryData?.kpis;
+  const hasExistingData = Boolean(queryData?.kpis && Array.isArray(queryData.procurements));
+  const showSkeleton = isLoading && !hasExistingData;
+  const isSyncing = isFetching || manualRefreshing;
 
   /* ── Cancellation Modal State & Handlers ── */
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -901,6 +924,11 @@ export default function MyProcurementsPage() {
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6 pb-8">
+      {/* Live Region for VPAT / WCAG Accessibility Announcements */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {isSyncing ? 'Synchronizing procurement records...' : 'Procurement records are up to date.'}
+      </div>
+
       {/* ── Page Header ── */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between pt-2 px-4 sm:px-0">
         <div className="space-y-1">
@@ -921,11 +949,13 @@ export default function MyProcurementsPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => loadData()}
-            disabled={loading}
+            onClick={loadData}
+            disabled={isSyncing}
+            aria-label="Refresh procurements"
             className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase text-slate-700 hover:bg-slate-50 transition-all active:scale-95 cursor-pointer shadow-2xs"
           >
-            <RefreshCw className={cn('mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-500', loading && 'animate-spin')} /> Refresh
+            <RefreshCw className={cn('mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-500', isSyncing && 'animate-spin')} />
+            {isSyncing ? 'Refreshing...' : 'Refresh'}
           </Button>
           <Button
             type="button"
@@ -943,7 +973,7 @@ export default function MyProcurementsPage() {
           icon={BarChart3}
           label="Total"
           value={kpis.totalProcurements}
-          loading={isKpisLoading}
+          loading={showSkeleton}
           active={activeKpi === null && !statusFilter}
           onClick={() => handleKpiClick(null)}
           tone="blue"
@@ -953,7 +983,7 @@ export default function MyProcurementsPage() {
           icon={Clock}
           label="Pending"
           value={kpis.pendingApproval}
-          loading={isKpisLoading}
+          loading={showSkeleton}
           active={activeKpi === 'pending_approval'}
           onClick={() => handleKpiClick('pending_approval')}
           tone="amber"
@@ -963,7 +993,7 @@ export default function MyProcurementsPage() {
           icon={TrendingUp}
           label="Active"
           value={kpis.active}
-          loading={isKpisLoading}
+          loading={showSkeleton}
           active={activeKpi === 'active'}
           onClick={() => handleKpiClick('active')}
           tone="cyan"
@@ -973,7 +1003,7 @@ export default function MyProcurementsPage() {
           icon={CheckCircle2}
           label="Completed"
           value={kpis.completed}
-          loading={isKpisLoading}
+          loading={showSkeleton}
           active={activeKpi === 'completed'}
           onClick={() => handleKpiClick('completed')}
           tone="green"
@@ -983,7 +1013,7 @@ export default function MyProcurementsPage() {
           icon={XCircle}
           label="Cancelled"
           value={kpis.cancelled}
-          loading={isKpisLoading}
+          loading={showSkeleton}
           active={activeKpi === 'cancelled'}
           onClick={() => handleKpiClick('cancelled')}
           tone="red"
@@ -993,7 +1023,7 @@ export default function MyProcurementsPage() {
           icon={Package}
           label="Est. Value"
           value={formatCurrency(kpis.totalValue)}
-          loading={isKpisLoading}
+          loading={showSkeleton}
           tone="purple"
           subtext="Aggregate budget"
         />
@@ -1047,7 +1077,7 @@ export default function MyProcurementsPage() {
       />
 
       {/* ── Content ── */}
-      {loading ? (
+      {showSkeleton ? (
         viewMode === 'list' ? <ProcurementsTableSkeleton /> : <ProcurementsGridSkeleton />
       ) : displayData.length > 0 ? (
         <div className="space-y-4">

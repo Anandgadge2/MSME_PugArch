@@ -2245,6 +2245,7 @@ export interface ProcurementDetailUnifiedViewProps {
   deadlineDate?: Date | string | null;
   createdAt?: Date | string | null;
   publishedDate?: string;
+  submissionStartDate?: string;
   closingDate?: string;
   clarificationDate?: string;
   technicalDate?: string;
@@ -3063,6 +3064,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   );
 
   const submissionStartDateValue = firstPresent(
+    props.submissionStartDate,
     schedule.submissionStartDate,
     schedule.startDate,
     tender.bidStartDate,
