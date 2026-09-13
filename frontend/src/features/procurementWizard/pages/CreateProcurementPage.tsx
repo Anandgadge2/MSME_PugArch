@@ -45,7 +45,8 @@ import {
   Tag,
   HelpCircle,
   CheckCircle2,
-  ArrowUpRight
+  ArrowUpRight,
+  Truck,
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
@@ -6414,25 +6415,63 @@ function CommercialTermsForm({
             </select>
           </Field>
 
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 pt-1">
-            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={draft.terms.freightIncluded}
-                onChange={e => updateTerms('freightIncluded', e.target.checked)}
-                className="h-4 w-4 rounded accent-[#12335f]"
-              />
-              <span>Freight included?</span>
-            </label>
-            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={draft.terms.gstIncluded}
-                onChange={e => updateTerms('gstIncluded', e.target.checked)}
-                className="h-4 w-4 rounded accent-[#12335f]"
-              />
-              <span>GST included in budget?</span>
-            </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 flex flex-col justify-between">
+              <label className="flex items-start gap-2.5 text-xs font-bold text-slate-800 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={draft.terms.freightIncluded}
+                  onChange={e => updateTerms('freightIncluded', e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded accent-[#12335f]"
+                />
+                <div className="space-y-0.5 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="flex items-center gap-1 text-slate-900 font-bold">
+                      <Truck className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
+                      Freight Included
+                    </span>
+                    <span className={cn(
+                      "px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded",
+                      draft.terms.freightIncluded ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+                    )}>
+                      {draft.terms.freightIncluded ? 'Door Delivery' : 'Extra'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-medium text-slate-500 leading-tight">
+                    {draft.terms.freightIncluded
+                      ? 'Bid price must include all shipping, transit insurance & door delivery to buyer location.'
+                      : 'Freight charges are excluded and can be billed separately as per actuals.'}
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 flex flex-col justify-between">
+              <label className="flex items-start gap-2.5 text-xs font-bold text-slate-800 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={draft.terms.gstIncluded}
+                  onChange={e => updateTerms('gstIncluded', e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded accent-[#12335f]"
+                />
+                <div className="space-y-0.5 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-slate-900 font-bold">GST Included in Budget</span>
+                    <span className={cn(
+                      "px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded",
+                      draft.terms.gstIncluded ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+                    )}>
+                      {draft.terms.gstIncluded ? 'Gross' : 'Net + Tax'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-medium text-slate-500 leading-tight">
+                    {draft.terms.gstIncluded
+                      ? 'Procurement estimated value includes all applicable GST.'
+                      : 'GST is evaluated and billed on top of the quoted base price.'}
+                  </p>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
 

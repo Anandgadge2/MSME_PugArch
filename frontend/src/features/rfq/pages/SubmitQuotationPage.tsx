@@ -26,7 +26,8 @@ import {
   Eye,
   Trash2,
   AlertCircle,
-  Circle
+  Circle,
+  Truck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
@@ -759,6 +760,15 @@ export default function SubmitQuotationPage() {
       payment: emdRes?.payment || null,
     };
   }, [emdRes, rfqData]);
+
+  const isFreightIncluded = React.useMemo(() => {
+    const raw = rfqData?.payload?.terms?.freightIncluded ??
+      rfqData?.payload?.freightIncluded ??
+      rfqData?.technicalPacket?.terms?.freightIncluded ??
+      rfqData?.terms?.freightIncluded;
+    if (raw === false || raw === 'false' || raw === 'No' || raw === 0) return false;
+    return true;
+  }, [rfqData]);
 
   const rawMethodStr = String(
     rfqData?.procurementType ||
@@ -2014,6 +2024,14 @@ export default function SubmitQuotationPage() {
                   </div>
                 </div>
                 {fieldError('offeredPrice')}
+                <div className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+                  <Truck className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
+                  <span>
+                    {isFreightIncluded
+                      ? 'Freight Included: Quoted price must encompass all transit, insurance & door delivery charges.'
+                      : 'Freight Excluded: Delivery charges are payable separately as per actuals.'}
+                  </span>
+                </div>
                 {lineTotals.total > 0 && (
                   <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
                     <span className="text-slate-500 font-medium">

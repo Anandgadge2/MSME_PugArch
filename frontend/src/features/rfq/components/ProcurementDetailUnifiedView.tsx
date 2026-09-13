@@ -45,6 +45,7 @@ import {
   Gavel,
   Ban,
   Lock,
+  Truck,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -1007,7 +1008,7 @@ function TimelineRibbon({
 function PolicyRulesMatrix({
   rules,
 }: {
-  rules: Array<{ label: string; value: any; icon?: IconComponent }>;
+  rules: Array<{ label: string; value: any; icon?: IconComponent; subtext?: string }>;
 }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -1022,6 +1023,7 @@ function PolicyRulesMatrix({
         return (
           <div
             key={idx}
+            title={rule.subtext ? `${rule.label}: ${rule.subtext}` : undefined}
             className={cn(
               'flex items-center justify-between gap-2 p-2.5 rounded-lg border transition-colors',
               isYes
@@ -1038,7 +1040,14 @@ function PolicyRulesMatrix({
                   isYes ? 'text-emerald-600' : isNo ? 'text-slate-400' : 'text-indigo-600'
                 )}
               />
-              <span className="text-[11px] font-semibold truncate text-slate-800">{rule.label}</span>
+              <div className="min-w-0 flex flex-col">
+                <span className="text-[11px] font-semibold truncate text-slate-800">{rule.label}</span>
+                {rule.subtext && (
+                  <span className="text-[9.5px] text-slate-500 font-medium truncate leading-tight">
+                    {rule.subtext}
+                  </span>
+                )}
+              </div>
             </div>
             <span
               className={cn(
@@ -2256,6 +2265,7 @@ export interface ProcurementDetailUnifiedViewProps {
   deliveryLocation?: string;
   paymentTerms?: string;
   deliveryTerms?: string;
+  freightIncluded?: boolean;
   description?: string;
   payload?: any;
   documents?: DisplayDocument[];
@@ -3686,6 +3696,15 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const localPrefRaw = vendors.localVendorPreference !== undefined ? vendors.localVendorPreference : payload.localVendorPreference;
   const localPrefVal = localPrefRaw !== undefined ? ((localPrefRaw === true || localPrefRaw === 'Yes' || localPrefRaw === 'true' || localPrefRaw === 1) ? 'Yes' : 'No') : 'No';
 
+  const rawFreightVal = firstPresent(
+    props.freightIncluded,
+    terms.freightIncluded,
+    payload.freightIncluded,
+    rules.freightIncluded,
+    true
+  );
+  const isFreightIncluded = rawFreightVal === true || rawFreightVal === 'true' || rawFreightVal === 'Yes' || rawFreightVal === 1 || rawFreightVal === '1';
+
   const resolveRuleBool = (val: any, fallback = 'Yes') => {
     if (val === true || val === 'true' || val === 'Yes' || val === 'yes' || val === 1) return 'Yes';
     if (val === false || val === 'false' || val === 'No' || val === 'no' || val === 0) return 'No';
@@ -3702,6 +3721,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         { label: 'Allow Withdrawal', value: resolveRuleBool(firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal), 'Yes') },
         { label: 'Show Lowest Price', value: resolveRuleBool(firstPresent(rules.showLowestPrice, schedule.showLowestPrice), 'Yes') },
         { label: 'Clarification Allowed', value: isClarificationAllowed ? 'Yes' : 'No' },
+        { label: 'Freight Included', value: isFreightIncluded ? 'Yes' : 'No', icon: Truck, subtext: isFreightIncluded ? 'Door delivery in quote' : 'Freight charged extra' },
         { label: 'Minimum Bidders', value: String(firstPresent(rules.minimumBidders, schedule.minimumBidders, '3')) },
         { label: 'Pre-Bid Meeting', value: isPreBidConfigured ? 'Yes' : 'No' },
         { label: 'MSME Preference', value: msmePrefVal },
@@ -3712,10 +3732,11 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
     // Non-buyer side (Sellers, Public, SHGs, Bidders):
     // Exclude internal buyer controls: Exclude Blacklisted, Minimum Bidders, Auto Close, and unconfigured Pre-Bid Meeting
-    const list: Array<{ label: string; value: string; icon?: IconComponent }> = [
+    const list: Array<{ label: string; value: string; icon?: IconComponent; subtext?: string }> = [
       { label: 'Allow Revision', value: resolveRuleBool(firstPresent(rules.allowRevision, schedule.allowRevision), 'Yes') },
       { label: 'Allow Withdrawal', value: resolveRuleBool(firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal), 'Yes') },
       { label: 'Clarification Allowed', value: isClarificationAllowed ? 'Yes' : 'No' },
+      { label: 'Freight Included', value: isFreightIncluded ? 'Yes' : 'No', icon: Truck, subtext: isFreightIncluded ? 'Door delivery in quote' : 'Freight charged extra' },
       { label: 'MSME Preference', value: msmePrefVal },
     ];
 
@@ -3743,6 +3764,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     rules,
     schedule,
     isClarificationAllowed,
+    isFreightIncluded,
     isPreBidConfigured,
     msmePrefVal,
     localPrefVal,
@@ -4216,6 +4238,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
             <DataCard title="Commercial & Payment Terms" icon={IndianRupee}>
               <PropertyGrid columns={3}>
+                <PropertyItem
+                  label="Freight Terms"
+                  icon={Truck}
+                  value={isFreightIncluded ? 'Freight Included (Door Delivery)' : 'Freight Excluded (Extra as per actuals)'}
+                  subtext={isFreightIncluded ? 'Bid price must include all shipping, insurance & delivery to destination.' : 'Freight is not included in bid price and will be paid extra.'}
+                />
                 {/* Payment Terms and Delivery Terms commented out as they already appear in Terms & Conditions */}
                 {/* <PropertyItem label="Payment Terms" value={paymentTerms} /> */}
                 {/* <PropertyItem label="Delivery Terms" value={deliveryTerms} /> */}
