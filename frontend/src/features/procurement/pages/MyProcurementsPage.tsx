@@ -448,33 +448,16 @@ const initialKpis: KpiData = {
   totalValue: 0,
 };
 
-const CACHE_KEY = 'buyer_my_procurements_cached_data_v1';
-
-const getCachedProcurementsData = () => {
-  if (typeof window === 'undefined') return undefined;
+// Clear legacy client-side procurement caches to ensure authentic production data (Rule #3)
+if (typeof window !== 'undefined') {
   try {
-    const raw = sessionStorage.getItem(CACHE_KEY) || localStorage.getItem(CACHE_KEY);
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && parsed.kpis) {
-      return parsed;
-    }
+    sessionStorage.removeItem('buyer_my_procurements_cached_data_v1');
+    localStorage.removeItem('buyer_my_procurements_cached_data_v1');
   } catch {
     // ignore
   }
-  return undefined;
-};
+}
 
-const setCachedProcurementsData = (data: any) => {
-  if (typeof window === 'undefined' || !data) return;
-  try {
-    const str = JSON.stringify(data);
-    sessionStorage.setItem(CACHE_KEY, str);
-    localStorage.setItem(CACHE_KEY, str);
-  } catch {
-    // ignore
-  }
-};
 
 /* ═══════════════════════════════════════════════
    MAIN COMPONENT
@@ -551,39 +534,31 @@ export default function MyProcurementsPage() {
     setSelectedProcurement(null);
   };
 
-  /* ── Data Loading with React Query & Client SWR Caching ── */
+  /* ── Data Loading with React Query (Real Production Data Only) ── */
+  const manualRefreshRef = React.useRef(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
 
   const { data: queryData, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['buyerMyProcurements'],
     queryFn: async () => {
-      const url = manualRefreshing ? '/api/buyer/my-procurements?refresh=true' : '/api/buyer/my-procurements';
+      const isManual = manualRefreshRef.current;
+      const url = isManual ? '/api/buyer/my-procurements?refresh=true' : '/api/buyer/my-procurements';
       const result = await getApi<any>(url);
-      const payload = result || { kpis: null, procurements: [] };
-      if (payload?.kpis) {
-        setCachedProcurementsData(payload);
-      }
-      return payload;
+      return result || { kpis: null, procurements: [] };
     },
-    initialData: getCachedProcurementsData,
-    initialDataUpdatedAt: () => {
-      if (typeof window !== 'undefined') {
-        const raw = sessionStorage.getItem(CACHE_KEY) || localStorage.getItem(CACHE_KEY);
-        if (raw) return Date.now();
-      }
-      return 0;
-    },
-    staleTime: 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   const loadData = useCallback(async () => {
+    manualRefreshRef.current = true;
     setManualRefreshing(true);
     try {
       await refetch();
     } finally {
+      manualRefreshRef.current = false;
       setManualRefreshing(false);
     }
   }, [refetch]);

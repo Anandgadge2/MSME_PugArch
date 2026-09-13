@@ -10776,11 +10776,12 @@ export async function getBuyerProcurementsData(
   const cacheKey = `cache:buyer:procurements:${buyerId}`;
   if (bypassCache) {
     await deleteCache(cacheKey).catch(() => undefined);
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
   }
 
   return getOrSetCache(cacheKey, async () => {
     return fetchFreshBuyerProcurementsData(buyerId, buyerOrgId);
-  }, 60);
+  }, 5);
 }
 
 async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: number = -1): Promise<BuyerProcurementsDataResult> {
