@@ -296,7 +296,7 @@ export function CancelProcurementModal({
               onAcceptedChange={setPolicyAccepted}
               checkboxLabel="I accept the Order Cancellation, Withdrawal & Refund Policy"
               checkboxDescription="I acknowledge that this cancellation is recorded in the statutory audit trail, and agree to the legal terms governing cancellation rights, settlement pauses, and refund handling under JSG SMILE."
-              readerHeightClassName="h-[180px] sm:h-[220px]"
+              readerHeightClassName="h-[100px] sm:h-[120px]"
               showPolicyLibrary
             >
               <CancellationRefundPolicyContent />

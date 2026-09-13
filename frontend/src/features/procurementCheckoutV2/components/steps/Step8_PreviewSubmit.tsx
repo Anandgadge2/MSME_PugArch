@@ -170,7 +170,7 @@ export default function Step8_PreviewSubmit({
             onAcceptedChange={val => onDeclarationChange('termsAccepted', val)}
             checkboxLabel="I accept the Procurement Facilitation Policy and Cancellation & Refund Policy"
             checkboxDescription="By authorizing this order, you legally confirm administrative sanction, agree to binding purchase order terms, and accept the cancellation and settlement framework of JSG SMILE."
-            readerHeightClassName="h-[240px] sm:h-[280px]"
+            readerHeightClassName="h-[120px] sm:h-[135px]"
             showPolicyLibrary
           />
           {errors.termsAccepted && (

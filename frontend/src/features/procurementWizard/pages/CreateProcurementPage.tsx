@@ -7109,7 +7109,7 @@ function PreviewPublishForm({
           onAcceptedChange={onComplianceAcceptedChange}
           checkboxLabel="I certify compliance with procurement rules & accept the Order Placement & Procurement Facilitation Policy"
           checkboxDescription="By checking this box, you formally confirm administrative and financial sanction, affirm that this requirement is not split to circumvent competitive bidding thresholds, and agree to be bound by the statutory procurement terms of JSG SMILE."
-          readerHeightClassName="h-[280px] sm:h-[320px]"
+          readerHeightClassName="h-[120px] sm:h-[135px]"
           showPolicyLibrary
         >
           <OrderPlacementPolicyContent />

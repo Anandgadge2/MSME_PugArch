@@ -2929,7 +2929,7 @@ export default function SubmitQuotationPage() {
                   }}
                   checkboxLabel="I certify quotation authenticity & accept the MSME Supplier Participation Agreement"
                   checkboxDescription="I hereby certify that the quoted rates, technical specifications, and delivery schedules are firm, binding, and compliant with the MSME Supplier Participation Agreement and platform policies of JSG SMILE."
-                  readerHeightClassName="h-[260px] sm:h-[300px]"
+                  readerHeightClassName="h-[120px] sm:h-[135px]"
                   showPolicyLibrary
                 >
                   <SupplierAgreementPolicyContent />

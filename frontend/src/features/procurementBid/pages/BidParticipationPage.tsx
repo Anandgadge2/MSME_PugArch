@@ -1956,7 +1956,7 @@ function SubmitStep({
               onAcceptedChange={setComplianceAgreed}
               checkboxLabel="I certify bid authenticity & agree to the MSME Supplier Participation Agreement"
               checkboxDescription="I formally declare that all technical specifications, rates, and delivery schedules submitted in this bid are firm and legally binding under the MSME Supplier Participation Agreement of JSG SMILE."
-              readerHeightClassName="h-[240px] sm:h-[280px]"
+              readerHeightClassName="h-[120px] sm:h-[135px]"
               showPolicyLibrary
             >
               <SupplierAgreementPolicyContent />

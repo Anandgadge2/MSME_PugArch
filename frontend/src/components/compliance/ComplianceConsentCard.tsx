@@ -10,6 +10,7 @@ import {
   Minimize2,
   Check,
   Info,
+  ChevronsUpDown,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -56,8 +57,8 @@ export function ComplianceConsentCard({
   checkboxDescription,
   required = true,
   className,
-  readerHeightClassName = 'h-[320px] sm:h-[360px]',
-  compact = false,
+  readerHeightClassName,
+  compact = true,
   showPolicyLibrary = false,
 }: ComplianceConsentCardProps) {
   const generatedId = useId();
@@ -78,6 +79,7 @@ export function ComplianceConsentCard({
 
   const [activeDocId, setActiveDocId] = useState<string>(activeDocs[0].id);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -106,126 +108,134 @@ export function ComplianceConsentCard({
     document.body.removeChild(link);
   };
 
+  // Determine height: if fullscreen, full height. If isExpanded, h-[260px] sm:h-[300px]. Else compact height h-[120px] sm:h-[135px].
+  const effectiveHeightClass = isFullscreen
+    ? 'flex-1 min-h-[400px]'
+    : isExpanded
+    ? 'h-[260px] sm:h-[300px]'
+    : (readerHeightClassName || 'h-[120px] sm:h-[135px]');
+
   return (
     <div
       className={cn(
-        'w-full transition-all duration-300',
-        isFullscreen && 'fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 p-4 sm:p-6 backdrop-blur-sm flex flex-col justify-center items-center',
+        'w-full transition-all duration-200',
+        isFullscreen && 'fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 p-3 sm:p-6 backdrop-blur-sm flex flex-col justify-center items-center',
         className
       )}
     >
       <div
         className={cn(
-          'w-full rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-sm transition-all',
-          isFullscreen && 'max-w-5xl h-[92vh] flex flex-col shadow-2xl overflow-hidden p-2'
+          'w-full rounded-xl sm:rounded-2xl border border-slate-200/90 bg-white shadow-xs overflow-hidden transition-all',
+          isFullscreen && 'max-w-4xl h-[92vh] flex flex-col shadow-2xl p-1.5'
         )}
       >
-        {/* Card Header & Multi-tab switcher if applicable */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#12335f]">
-              <ShieldCheck className="h-4 w-4 text-[#12335f]" aria-hidden="true" />
-              <span>Legal Compliance &amp; Regulatory Undertaking</span>
-            </div>
-            <h3 className="mt-1 text-sm sm:text-base font-black text-slate-900 tracking-tight">
-              {title || currentDoc.title}
-            </h3>
-            {subtitle && (
-              <p className="text-xs font-semibold text-slate-500 mt-0.5">{subtitle}</p>
-            )}
+        {/* Multi-doc tabs if more than 1 document */}
+        {activeDocs.length > 1 && (
+          <div className="bg-slate-100/90 border-b border-slate-200 px-3 py-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            {activeDocs.map(doc => (
+              <button
+                key={doc.id}
+                type="button"
+                onClick={() => {
+                  setActiveDocId(doc.id);
+                  if (scrollRef.current) scrollRef.current.scrollTop = 0;
+                }}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all cursor-pointer whitespace-nowrap',
+                  activeDocId === doc.id
+                    ? 'bg-[#12335f] text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-200/80 hover:text-slate-900'
+                )}
+              >
+                <FileText className="h-3 w-3" aria-hidden="true" />
+                <span>{doc.title}</span>
+              </button>
+            ))}
           </div>
+        )}
 
-          {activeDocs.length > 1 && (
-            <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto rounded-xl bg-slate-100/90 p-1 border border-slate-200/60">
-              {activeDocs.map(doc => (
-                <button
-                  key={doc.id}
-                  type="button"
-                  onClick={() => {
-                    setActiveDocId(doc.id);
-                    if (scrollRef.current) scrollRef.current.scrollTop = 0;
-                  }}
-                  className={cn(
-                    'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer',
-                    activeDocId === doc.id
-                      ? 'bg-[#12335f] text-white shadow-xs font-black'
-                      : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-900'
-                  )}
-                >
-                  <FileText className="h-3 w-3" aria-hidden="true" />
-                  <span>{doc.title}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Navy Blue Reader Bar (#12335f) */}
-        <div className="flex h-11 sm:h-12 items-center justify-between gap-2 bg-[#12335f] px-3 sm:px-5 text-white">
+        {/* Compact Navy Toolbar (#12335f) */}
+        <div className="flex h-9 sm:h-10 items-center justify-between gap-2 bg-[#12335f] px-3 sm:px-4 text-white select-none">
           <div className="flex items-center gap-2 min-w-0">
-            <FileText className="h-4 w-4 shrink-0 text-blue-300" aria-hidden="true" />
-            <span className="truncate text-xs font-bold tracking-tight text-white" title={currentDoc.name}>
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-blue-300" aria-hidden="true" />
+            <span className="truncate text-xs font-bold text-white tracking-tight" title={currentDoc.name}>
               {currentDoc.name}
+            </span>
+            <span className="hidden md:inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold bg-white/15 text-blue-100 uppercase tracking-wider">
+              Statutory Compliance
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {/* Quick Scroll Controls */}
-            <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-lg border border-white/15">
+            <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-md border border-white/15">
               <button
                 type="button"
-                onClick={() => scrollByAmount(-220)}
-                className="p-1 text-blue-200 hover:text-white hover:bg-white/20 rounded transition-colors cursor-pointer"
+                onClick={() => scrollByAmount(-180)}
+                className="p-0.5 text-blue-200 hover:text-white hover:bg-white/20 rounded transition-colors cursor-pointer"
                 title="Scroll Up"
                 aria-label="Scroll legal text up"
               >
-                <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+                <ChevronUp className="h-3 w-3" aria-hidden="true" />
               </button>
               <button
                 type="button"
-                onClick={() => scrollByAmount(220)}
-                className="p-1 text-blue-200 hover:text-white hover:bg-white/20 rounded transition-colors cursor-pointer"
+                onClick={() => scrollByAmount(180)}
+                className="p-0.5 text-blue-200 hover:text-white hover:bg-white/20 rounded transition-colors cursor-pointer"
                 title="Scroll Down"
                 aria-label="Scroll legal text down"
               >
-                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                <ChevronDown className="h-3 w-3" aria-hidden="true" />
               </button>
             </div>
 
-            {/* View PDF in External Tab */}
+            {/* View PDF */}
             <button
               type="button"
               onClick={() => window.open(pdfUrl, '_blank', 'noopener,noreferrer')}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-100 hover:text-white transition-colors cursor-pointer px-1.5 py-1"
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-100 hover:text-white transition-colors cursor-pointer px-1.5 py-0.5 rounded hover:bg-white/10"
               title="Open authentic PDF document in new tab"
             >
-              <span className="hidden xs:inline">View PDF</span>
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>View PDF</span>
+              <ExternalLink className="h-3 w-3" aria-hidden="true" />
             </button>
 
             {/* Download PDF Button */}
             <button
               type="button"
               onClick={() => handleDownload(pdfUrl, currentDoc.name)}
-              className="inline-flex items-center gap-1.5 text-xs font-bold bg-white/15 hover:bg-white/25 active:scale-95 text-white px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl transition-all shadow-xs cursor-pointer"
-              title="Download authentic PDF copy"
+              className="inline-flex items-center gap-1 text-[11px] font-bold bg-white/15 hover:bg-white/25 active:scale-95 text-white px-2 py-0.5 sm:py-1 rounded-md transition-all shadow-2xs cursor-pointer"
+              title="Download official PDF copy"
             >
-              <Download className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">Download PDF</span>
+              <Download className="h-3 w-3" aria-hidden="true" />
+              <span className="hidden sm:inline">Download</span>
             </button>
+
+            {/* Expand / Collapse Reader Height */}
+            {!isFullscreen && (
+              <button
+                type="button"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="p-1 text-blue-200 hover:text-white hover:bg-white/15 rounded transition-colors cursor-pointer"
+                title={isExpanded ? 'Compact View' : 'Expand Height'}
+                aria-label={isExpanded ? 'Collapse reader height' : 'Expand reader height'}
+              >
+                <ChevronsUpDown className="h-3 w-3" aria-hidden="true" />
+              </button>
+            )}
 
             {/* Fullscreen Toggle */}
             <button
               type="button"
               onClick={() => setIsFullscreen(!isFullscreen)}
-              className="p-1 text-blue-200 hover:text-white hover:bg-white/15 rounded-lg transition-colors cursor-pointer ml-0.5"
-              title={isFullscreen ? 'Exit Fullscreen' : 'Expand Fullscreen View'}
-              aria-label={isFullscreen ? 'Exit Fullscreen View' : 'Open Fullscreen Legal View'}
+              className="p-1 text-blue-200 hover:text-white hover:bg-white/15 rounded transition-colors cursor-pointer"
+              title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              aria-label={isFullscreen ? 'Exit Fullscreen View' : 'Open Fullscreen View'}
             >
               {isFullscreen ? (
-                <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                <Minimize2 className="h-3 w-3" aria-hidden="true" />
               ) : (
-                <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                <Maximize2 className="h-3 w-3" aria-hidden="true" />
               )}
             </button>
           </div>
@@ -238,105 +248,122 @@ export function ComplianceConsentCard({
           tabIndex={0}
           role="region"
           aria-label={`${currentDoc.title} terms content`}
-          style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}
+          style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f8fafc' }}
           className={cn(
-            'bg-white p-4 sm:p-6 overflow-y-auto overscroll-contain focus:outline-none transition-all cursor-ns-resize',
-            '[&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#12335f]',
-            isFullscreen ? 'flex-1 min-h-[400px]' : readerHeightClassName
+            'bg-white p-3 sm:p-4 overflow-y-auto overscroll-contain focus:outline-none transition-all cursor-ns-resize',
+            '[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#12335f]',
+            effectiveHeightClass
           )}
         >
-          <article className="mx-auto max-w-full font-sans text-xs leading-relaxed text-slate-700 sm:text-sm">
+          <article className="mx-auto max-w-full font-sans text-xs leading-relaxed text-slate-700">
             {currentDoc.content}
           </article>
         </main>
 
-        {/* Optional Expandable PDF Policy Library Reference */}
+        {/* Policy Library Link (Compact Single Line) */}
         {showPolicyLibrary && (
-          <div className="border-t border-slate-100 px-4 py-2.5 bg-slate-50/70 text-xs">
+          <div className="border-t border-slate-100 px-3 py-1.5 bg-slate-50/70 flex items-center justify-between text-[11px]">
             <button
               type="button"
               onClick={() => setShowLibrary(!showLibrary)}
-              className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 hover:text-[#12335f] transition-colors cursor-pointer"
+              className="flex items-center gap-1 font-semibold text-slate-500 hover:text-[#12335f] transition-colors cursor-pointer"
             >
-              <Info className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>{showLibrary ? 'Hide Related Legal Reference Documents' : 'View All Related Policy PDFs (6)'}</span>
-              <ChevronDown className={cn('h-3 w-3 transition-transform', showLibrary && 'rotate-180')} />
+              <Info className="h-3 w-3" aria-hidden="true" />
+              <span>{showLibrary ? 'Hide Related Policies' : 'Related Platform Policies (6)'}</span>
+              <ChevronDown className={cn('h-2.5 w-2.5 transition-transform duration-150', showLibrary && 'rotate-180')} />
             </button>
-
-            {showLibrary && (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-3 pt-2 border-t border-slate-200/60">
-                {[
-                  { label: 'Procurement Policy', file: 'Order_Placement_Procurement_Policy.pdf' },
-                  { label: 'Cancellation & Refund', file: 'Order_Cancellation_Refund_Policy.pdf' },
-                  { label: 'MSME Supplier Agreement', file: 'MSME_Registration_Supplier_Participation_Agreement.pdf' },
-                  { label: 'General Terms & Conditions', file: 'Terms_and_Conditions.pdf' },
-                  { label: 'Vendor Verification', file: 'Vendor_Verification_Policy.pdf' },
-                  { label: 'Privacy Policy', file: 'Privacy_Policy_JSG_Smile.pdf' },
-                ].map(doc => {
-                  const docUrl = `/docs/${doc.file}`;
-                  return (
-                    <div
-                      key={doc.label}
-                      className="flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-white text-[11px]"
-                    >
-                      <span className="font-semibold text-slate-700 truncate">{doc.label}</span>
-                      <div className="flex items-center gap-1 shrink-0 ml-1">
-                        <button
-                          type="button"
-                          onClick={() => window.open(docUrl, '_blank', 'noopener,noreferrer')}
-                          className="p-1 text-slate-500 hover:text-[#12335f] rounded cursor-pointer"
-                          title="View PDF"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDownload(docUrl, doc.file)}
-                          className="p-1 text-slate-500 hover:text-[#12335f] rounded cursor-pointer"
-                          title="Download PDF"
-                        >
-                          <Download className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <span className="text-[10px] font-medium text-slate-400">Statutory Compliant</span>
           </div>
         )}
 
-        {/* Acceptance Bar with High-Contrast Checkbox */}
-        <div
-          className={cn(
-            'border-t border-slate-200/80 bg-slate-50/90 p-3.5 sm:p-4 rounded-b-2xl sm:rounded-b-3xl transition-colors',
-            accepted && 'bg-blue-50/40 border-blue-200/60'
-          )}
-        >
+        {showPolicyLibrary && showLibrary && (
+          <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 p-2.5 bg-slate-50 border-t border-slate-200/60 text-[11px]">
+            {[
+              { label: 'Procurement Policy', file: 'Order_Placement_Procurement_Policy.pdf' },
+              { label: 'Cancellation & Refund', file: 'Order_Cancellation_Refund_Policy.pdf' },
+              { label: 'MSME Supplier Agreement', file: 'MSME_Registration_Supplier_Participation_Agreement.pdf' },
+              { label: 'General Terms & Conditions', file: 'Terms_and_Conditions.pdf' },
+              { label: 'Vendor Verification', file: 'Vendor_Verification_Policy.pdf' },
+              { label: 'Privacy Policy', file: 'Privacy_Policy_JSG_Smile.pdf' },
+            ].map(doc => {
+              const docUrl = `/docs/${doc.file}`;
+              return (
+                <div
+                  key={doc.label}
+                  className="flex items-center justify-between px-2 py-1 rounded border border-slate-200 bg-white"
+                >
+                  <span className="font-semibold text-slate-700 truncate">{doc.label}</span>
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                    <button
+                      type="button"
+                      onClick={() => window.open(docUrl, '_blank', 'noopener,noreferrer')}
+                      className="p-0.5 text-slate-500 hover:text-[#12335f] cursor-pointer"
+                      title="View PDF"
+                    >
+                      <ExternalLink className="h-2.5 w-2.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(docUrl, doc.file)}
+                      className="p-0.5 text-slate-500 hover:text-[#12335f] cursor-pointer"
+                      title="Download PDF"
+                    >
+                      <Download className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Enhanced Standard OS-Style Acceptance Checkbox Tile */}
+        <div className="border-t border-slate-200/80 p-2 sm:p-2.5 bg-slate-50/90">
           <label
             htmlFor={checkboxId}
-            className="flex cursor-pointer items-start gap-3 text-slate-800 select-none group"
+            className={cn(
+              'group flex items-start gap-2.5 sm:gap-3 rounded-lg border p-2.5 sm:p-3 transition-all duration-150 cursor-pointer select-none',
+              accepted
+                ? 'border-blue-600 bg-blue-50/60 shadow-2xs ring-1 ring-blue-600/20'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80'
+            )}
           >
-            <div className="relative flex items-center mt-0.5">
+            {/* Standard OS Checkbox Box */}
+            <div className="relative flex items-center justify-center shrink-0 mt-0.5">
               <input
                 type="checkbox"
                 id={checkboxId}
                 checked={accepted}
                 onChange={(e) => onAcceptedChange(e.target.checked)}
                 aria-required={required}
-                className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 transition-all checked:bg-[#12335f] checked:border-[#12335f] hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                className="peer sr-only"
               />
-              <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" aria-hidden="true" />
+              <div
+                className={cn(
+                  'flex h-4 w-4 sm:h-4.5 sm:w-4.5 items-center justify-center rounded-[4px] border transition-all duration-150',
+                  accepted
+                    ? 'border-blue-600 bg-blue-600 text-white shadow-2xs'
+                    : 'border-slate-300 bg-white group-hover:border-slate-400 group-focus-within:ring-2 group-focus-within:ring-blue-500/30'
+                )}
+                aria-hidden="true"
+              >
+                <Check
+                  className={cn(
+                    'h-3 w-3 sm:h-3.5 sm:w-3.5 stroke-[3] transition-transform duration-150',
+                    accepted ? 'scale-100 opacity-100' : 'scale-50 opacity-0'
+                  )}
+                />
+              </div>
             </div>
 
-            <div className="flex flex-col">
-              <span className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-[#12335f] transition-colors leading-tight">
-                {checkboxLabel} {required && <span className="text-red-500 font-bold">*</span>}
-              </span>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs sm:text-[13px] font-bold text-slate-900 group-hover:text-blue-950 transition-colors leading-snug">
+                {checkboxLabel} {required && <span className="text-rose-600 font-bold ml-0.5">*</span>}
+              </div>
               {checkboxDescription && (
-                <span className="text-[11px] sm:text-xs font-medium text-slate-500 mt-1 leading-relaxed">
+                <div className="text-[11px] font-normal text-slate-500 mt-0.5 leading-relaxed">
                   {checkboxDescription}
-                </span>
+                </div>
               )}
             </div>
           </label>
