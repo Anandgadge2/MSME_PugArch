@@ -10231,6 +10231,47 @@ router.post('/notifications/read-all', authenticate, asyncRoute(async (req, res)
   ok(res, { success: true, expiresAfterReadHours: 24 });
 }));
 
+router.delete('/notifications/:id', authenticate, asyncRoute(async (req, res) => {
+  const id = Number(req.params.id);
+  const currentUserId = userId(req);
+  const notification = await db.notification.findFirst({
+    where: { id, userId: currentUserId },
+    select: { id: true }
+  });
+  if (!notification) throw new ApiError(404, 'Notification not found', 'NOTIFICATION_NOT_FOUND');
+  await db.notificationLog.deleteMany({ where: { notificationId: id } });
+  await db.notification.delete({ where: { id } });
+  ok(res, { success: true });
+}));
+
+router.delete('/notifications', authenticate, asyncRoute(async (req, res) => {
+  const currentUserId = userId(req);
+  const userNotifs = await db.notification.findMany({
+    where: { userId: currentUserId },
+    select: { id: true }
+  });
+  const notifIds = userNotifs.map(n => n.id);
+  if (notifIds.length > 0) {
+    await db.notificationLog.deleteMany({ where: { notificationId: { in: notifIds } } });
+    await db.notification.deleteMany({ where: { id: { in: notifIds } } });
+  }
+  ok(res, { success: true, count: notifIds.length });
+}));
+
+router.post('/notifications/clear-all', authenticate, asyncRoute(async (req, res) => {
+  const currentUserId = userId(req);
+  const userNotifs = await db.notification.findMany({
+    where: { userId: currentUserId },
+    select: { id: true }
+  });
+  const notifIds = userNotifs.map(n => n.id);
+  if (notifIds.length > 0) {
+    await db.notificationLog.deleteMany({ where: { notificationId: { in: notifIds } } });
+    await db.notification.deleteMany({ where: { id: { in: notifIds } } });
+  }
+  ok(res, { success: true, count: notifIds.length });
+}));
+
 // Seller settings endpoints
 router.post('/seller/settings/change-password/send-otp', authenticate, asyncRoute(async (req, res) => {
   const { generateOtp, storeOtp } = await import('../services/otp.service.js');

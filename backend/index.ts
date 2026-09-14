@@ -6676,6 +6676,59 @@ app.post('/api/notifications/:id/read', authenticate, async (req: AuthRequest, r
   }
 });
 
+app.delete('/api/notifications/:id', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const currentUserId = Number(req.user?.id);
+    const id = Number(req.params.id);
+    const notification = await prisma.notification.findFirst({
+      where: { id, userId: currentUserId },
+      select: { id: true }
+    });
+    if (!notification) return res.status(404).json({ message: 'Notification not found' });
+    await prisma.notificationLog.deleteMany({ where: { notificationId: id } });
+    await prisma.notification.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err: any) {
+    handleSecureRouteError(res, err, 'Unable to delete notification');
+  }
+});
+
+app.delete('/api/notifications', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const currentUserId = Number(req.user?.id);
+    const userNotifs = await prisma.notification.findMany({
+      where: { userId: currentUserId },
+      select: { id: true }
+    });
+    const notifIds = userNotifs.map(n => n.id);
+    if (notifIds.length > 0) {
+      await prisma.notificationLog.deleteMany({ where: { notificationId: { in: notifIds } } });
+      await prisma.notification.deleteMany({ where: { id: { in: notifIds } } });
+    }
+    res.json({ success: true, count: notifIds.length });
+  } catch (err: any) {
+    handleSecureRouteError(res, err, 'Unable to clear notifications');
+  }
+});
+
+app.post('/api/notifications/clear-all', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const currentUserId = Number(req.user?.id);
+    const userNotifs = await prisma.notification.findMany({
+      where: { userId: currentUserId },
+      select: { id: true }
+    });
+    const notifIds = userNotifs.map(n => n.id);
+    if (notifIds.length > 0) {
+      await prisma.notificationLog.deleteMany({ where: { notificationId: { in: notifIds } } });
+      await prisma.notification.deleteMany({ where: { id: { in: notifIds } } });
+    }
+    res.json({ success: true, count: notifIds.length });
+  } catch (err: any) {
+    handleSecureRouteError(res, err, 'Unable to clear notifications');
+  }
+});
+
 const startListening = (port: number) => {
   const server = app.listen(port, () => {
     logger.info({ context: 'Server', port }, `MSME Core API listening on http://localhost:${port} [env: ${env.NODE_ENV}]`);
