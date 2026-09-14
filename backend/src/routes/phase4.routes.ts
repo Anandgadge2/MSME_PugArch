@@ -2845,7 +2845,7 @@ router.get('/public/files/:id/view', asyncRoute(async (req: AuthRequest, res) =>
   res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
-  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
   return res.end(file.buffer);
 }));
 

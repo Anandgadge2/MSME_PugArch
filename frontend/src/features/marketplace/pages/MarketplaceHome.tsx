@@ -62,6 +62,29 @@ const uniqueItems = <T extends MarketplaceDiscoveryItem>(items: T[]) => {
     });
 };
 
+const SNAPSHOT_KEY = 'jsg_marketplace_home_snapshot_v2';
+
+const getStoredSnapshot = (): MarketplaceHomeData | undefined => {
+    if (typeof window === 'undefined') return undefined;
+    try {
+        const raw = localStorage.getItem(SNAPSHOT_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && (parsed.categories?.length || parsed.featuredProducts?.length)) {
+                return parsed;
+            }
+        }
+    } catch {}
+    return undefined;
+};
+
+const persistSnapshot = (freshData: MarketplaceHomeData) => {
+    if (typeof window === 'undefined' || !freshData) return;
+    try {
+        localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(freshData));
+    } catch {}
+};
+
 export default function MarketplaceHome() {
     const { user } = useAuth();
     const router = useRouter();
@@ -70,19 +93,19 @@ export default function MarketplaceHome() {
 
     const { data, isLoading: isHomeLoading } = useQuery<MarketplaceHomeData>({
         queryKey: ['marketplaceHome'],
-        queryFn: marketplaceApi.getHomeData,
-        placeholderData: (previous) => previous ?? api.peek('/api/marketplace/home') ?? undefined,
-    });
-
-    const { data: activeBannerData, isLoading: isBannerLoading } = useQuery({
-        queryKey: ['activeHomeBanners'],
-        queryFn: () => marketplaceApi.getActiveBanners('HOME_HERO'),
+        queryFn: async () => {
+            const res = await marketplaceApi.getHomeData();
+            if (res) persistSnapshot(res);
+            return res;
+        },
+        placeholderData: (previous) => previous ?? getStoredSnapshot(),
         staleTime: 60_000,
     });
 
     const { data: homeLayoutData } = useQuery({
         queryKey: ['marketplaceHomeLayout', activeCategoryId],
         queryFn: () => marketplaceApi.getHomeLayout(activeCategoryId ? { categoryId: activeCategoryId } : {}),
+        enabled: Boolean(activeCategoryId),
         staleTime: 60_000,
         retry: 1,
     });
@@ -132,8 +155,10 @@ export default function MarketplaceHome() {
         return Array.from(map.values());
     }, [data?.largeIndustries, buyerFallbackData?.buyers, data?.featuredRequirements]);
 
-    const categories = homeLayoutData?.categories?.length ? homeLayoutData.categories : data?.categories || [];
-    const layoutSections = homeLayoutData?.sections || [];
+    const categories = (activeCategoryId && homeLayoutData?.categories?.length) ? homeLayoutData.categories : data?.categories || [];
+    const layoutSections = (activeCategoryId && homeLayoutData?.sections?.length)
+        ? homeLayoutData.sections
+        : ((data as any)?.sections || []);
     const itemLayoutSections = layoutSections.filter((section: MarketplaceLayoutSection) =>
         section.items?.some((item: any) => item?.itemType === 'PRODUCT' || item?.itemType === 'SERVICE')
     );
@@ -185,7 +210,7 @@ export default function MarketplaceHome() {
 
                     <main className="relative z-10 flex-1 overflow-x-hidden">
                 <MarketplaceNav categories={categories} />
-                <HeroBanner banners={activeBannerData?.banners?.length ? activeBannerData.banners : (data?.banners || [])} />
+                <HeroBanner banners={data?.banners || []} />
                 <div className="hidden md:block">
                     <SearchSection categories={categories} />
                 </div>
@@ -232,6 +257,7 @@ export default function MarketplaceHome() {
                                 title={section.title}
                                 subtitle={section.subtitle}
                                 items={section.items as MarketplaceDiscoveryItem[]}
+                                loading={isHomeLoading && !data}
                                 emptyState={`No listings available for ${section.title}.`}
                                 viewAllUrl={section.key === 'services' ? '/marketplace/services' : section.key === 'most_purchased' ? '/marketplace/products?sort=most_purchased' : '/marketplace/products'}
                                 showAddToCart={section.key !== 'services'}
@@ -257,17 +283,18 @@ export default function MarketplaceHome() {
                             title="Mostly Purchased Items"
                             subtitle="Shown only when completed procurement history is available"
                             items={mostPurchased.slice(0, 12).map(item => ({ ...item, itemType: 'PRODUCT' as const }))}
+                            loading={isHomeLoading && !data}
                             emptyState="Settled purchase history is not available yet, so no artificial most-purchased items are shown."
                             viewAllUrl={activeCategoryId ? `/marketplace/products?categoryId=${activeCategoryId}&sort=most_purchased` : '/marketplace/products?sort=most_purchased'}
                             showRequestQuote={false}
                         />
-
 
                         <MarketplaceSectionCarousel
                             sectionKey="discounted-products"
                             title="Discounted Products and Offers"
                             subtitle="Real offers only; no placeholder discounts are generated"
                             items={discountedItems.slice(0, 12)}
+                            loading={isHomeLoading && !data}
                             emptyState="No active discount offers are published right now."
                             viewAllUrl="/marketplace/products?discount=active"
                         />
@@ -277,6 +304,7 @@ export default function MarketplaceHome() {
                             title="Local MSME Products"
                             subtitle="Prioritised listings from Jharsuguda and Odisha sellers where available"
                             items={localProducts.slice(0, 12).map(item => ({ ...item, itemType: 'PRODUCT' as const }))}
+                            loading={isHomeLoading && !data}
                             viewAllUrl={activeCategoryId ? `/marketplace/products?categoryId=${activeCategoryId}&district=Jharsuguda` : '/marketplace/products?district=Jharsuguda'}
                         />
 
@@ -285,6 +313,7 @@ export default function MarketplaceHome() {
                             title="HerSHG and Women SHG Products"
                             subtitle="Listings are shown when seller metadata identifies HerSHG or women SHG participation"
                             items={herShgItems.slice(0, 12)}
+                            loading={isHomeLoading && !data}
                             emptyState="HerSHG listings will appear here once verified seller metadata is available."
                             viewAllUrl="/marketplace/products?tag=hershg"
                         />
@@ -294,6 +323,7 @@ export default function MarketplaceHome() {
                             title="Industrial Essentials"
                             subtitle="Safety, electrical, mechanical, machinery, tools, and construction supplies"
                             items={industrialEssentials.slice(0, 12).map(item => ({ ...item, itemType: 'PRODUCT' as const }))}
+                            loading={isHomeLoading && !data}
                             viewAllUrl={activeCategoryId ? `/marketplace/products?categoryId=${activeCategoryId}` : '/marketplace/products'}
                         />
 
@@ -302,6 +332,7 @@ export default function MarketplaceHome() {
                             title="Services You May Need"
                             subtitle="Professional services from verified providers for buyer requirements and operations"
                             items={filteredServices.slice(0, 12).map(item => ({ ...item, itemType: 'SERVICE' as const }))}
+                            loading={isHomeLoading && !data}
                             emptyState="No services are listed in this category yet."
                             viewAllUrl={activeCategoryId ? `/marketplace/services?categoryId=${activeCategoryId}` : '/marketplace/services'}
                             showAddToCart={false}

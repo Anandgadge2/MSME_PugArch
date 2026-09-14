@@ -125,6 +125,7 @@ export function MarketplaceItemCard({
                             src={imageUrl}
                             alt={item.name}
                             loading="lazy"
+                            decoding="async"
                             onError={() => setImageFailed(true)}
                             className="h-full w-full object-contain p-2 mix-blend-multiply transition-transform duration-200 ease-out group-hover:scale-105"
                         />

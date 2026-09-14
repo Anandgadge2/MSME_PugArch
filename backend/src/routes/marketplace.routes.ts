@@ -1153,17 +1153,42 @@ const enrichMarketplaceItemsWithTrustData = async (items: any[]) => {
     }
 };
 
+let cachedHomeSections: any[] | null = null;
+let lastHomeSectionsFetch = 0;
+
+export const clearHomeSectionsCache = () => {
+    cachedHomeSections = null;
+    lastHomeSectionsFetch = 0;
+};
+
 const ensureMarketplaceHomeSections = async () => {
-    if (!db.marketplaceHomeSection) return defaultHomeSections.map(section => ({ ...section }));
-    await Promise.all(defaultHomeSections.map(section =>
-        db.marketplaceHomeSection.upsert({
-            where: { key: section.key },
-            update: {},
-            create: section
-        }).catch(() => null)
-    ));
-    const sections = await db.marketplaceHomeSection.findMany({ orderBy: [{ displayOrder: 'asc' }, { key: 'asc' }] }).catch(() => []);
-    return sections?.length ? sections : defaultHomeSections.map(section => ({ ...section }));
+    const now = Date.now();
+    if (cachedHomeSections && (now - lastHomeSectionsFetch < 600_000)) {
+        return cachedHomeSections;
+    }
+    if (!db.marketplaceHomeSection) {
+        cachedHomeSections = defaultHomeSections.map(section => ({ ...section }));
+        lastHomeSectionsFetch = now;
+        return cachedHomeSections;
+    }
+    try {
+        let sections = await db.marketplaceHomeSection.findMany({ orderBy: [{ displayOrder: 'asc' }, { key: 'asc' }] });
+        if (!sections || sections.length === 0) {
+            await Promise.all(defaultHomeSections.map(section =>
+                db.marketplaceHomeSection.upsert({
+                    where: { key: section.key },
+                    update: {},
+                    create: section
+                }).catch(() => null)
+            ));
+            sections = await db.marketplaceHomeSection.findMany({ orderBy: [{ displayOrder: 'asc' }, { key: 'asc' }] });
+        }
+        cachedHomeSections = sections?.length ? sections : defaultHomeSections.map(section => ({ ...section }));
+        lastHomeSectionsFetch = now;
+        return cachedHomeSections;
+    } catch {
+        return defaultHomeSections.map(section => ({ ...section }));
+    }
 };
 
 const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketplaceFeaturedCategories(), async () => {
@@ -1606,154 +1631,176 @@ router.get('/marketplace/recommendations', authenticate, authorize('buyer', 'adm
 
 const purgeMarketplaceHomeCache = async () => {
     try {
+        clearHomeSectionsCache();
         await Promise.allSettled([
             deleteCache(redisKeys.cacheMarketplaceHome()),
             deleteCache('marketplace:home:v2'),
             invalidateByPattern('cache:marketplace:home-layout:*'),
             invalidateByPattern('cache:marketplace:*')
         ]);
+        void fetchMarketplaceHomeData().catch(() => undefined);
     } catch (err) {
         console.warn('[Marketplace Cache Purge Warning]', err);
     }
 };
 
-router.get('/admin/marketplace/home-sections', authenticate, authorize('admin', 'master_admin'), async (_req: AuthRequest, res: Response) => {
-    try {
-        return ok(res, { sections: await ensureMarketplaceHomeSections() });
-    } catch (error) {
-        console.error('[Admin Marketplace Sections]', error);
-        return apiResponse.error(res, 500, 'Failed to load marketplace home sections', 'ADMIN_MARKETPLACE_SECTIONS_ERROR');
-    }
-});
+export const fetchMarketplaceHomeData = async () => {
+    return getOrSetCache(redisKeys.cacheMarketplaceHome(), async () => {
+        const [
+            banners,
+            categories,
+            featuredProducts,
+            featuredServices,
+            verifiedSellers,
+            notices,
+            largeIndustries,
+            bigMsmes,
+            stats,
+            latestRequirements,
+            latestTenders,
+            latestBids,
+            homeLayout
+        ] = await Promise.all([
+            // Banners
+            db.marketplaceBanner?.findMany?.({
+                where: { isActive: true },
+                orderBy: { displayOrder: 'asc' },
+                take: 10
+            }).catch(() => []),
 
-router.post('/admin/marketplace/home-sections/reset-defaults', authenticate, authorize('admin', 'master_admin'), async (_req: AuthRequest, res: Response) => {
-    try {
-        await Promise.all(defaultHomeSections.map(section =>
-            db.marketplaceHomeSection.upsert({
-                where: { key: section.key },
-                update: {
-                    title: section.title,
-                    enabled: section.enabled,
-                    displayOrder: section.displayOrder,
-                    itemLimit: section.itemLimit,
-                    ruleType: section.ruleType
+            // Categories
+            db.category.findMany({
+                where: { isActive: true },
+                orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+                include: {
+                    _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
+                }
+            }).catch(() => []),
+
+            // Featured Products
+            db.product.findMany({
+                where: { status: 'ACTIVE' },
+                orderBy: { createdAt: 'desc' },
+                take: 12,
+                include: {
+                    category: { select: { id: true, name: true } },
+                    seller: { select: { id: true, name: true, onboardingStatus: true } },
+                    organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect }, profile: { select: organizationProfileBrandSelect } } },
+                    images: { include: { fileAsset: { select: { id: true, url: true } } }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }], take: 1 }
+                }
+            }).catch(() => []),
+
+            // Featured Services
+            db.service.findMany({
+                where: { status: 'ACTIVE' },
+                orderBy: { createdAt: 'desc' },
+                take: 8,
+                include: {
+                    category: { select: { id: true, name: true } },
+                    seller: { select: { id: true, name: true, onboardingStatus: true } },
+                    organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect }, profile: { select: organizationProfileBrandSelect } } }
+                }
+            }).catch(() => []),
+
+            // Verified Sellers
+            db.organization.findMany({
+                where: sellerOrganizationWhere,
+                orderBy: { updatedAt: 'desc' },
+                take: 16,
+                select: {
+                    id: true,
+                    organizationName: true,
+                    organizationType: true,
+                    city: true,
+                    district: true,
+                    state: true,
+                    verificationStatus: true,
+                    logoFile: { select: organizationLogoSelect },
+                    profile: { select: organizationProfileBrandSelect },
+                    _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
+                }
+            }).catch(() => []),
+
+            // Notices
+            db.marketplaceNotice?.findMany?.({
+                where: { isActive: true },
+                orderBy: { publishedAt: 'desc' },
+                take: 5
+            }).catch(() => []),
+
+            db.organization.findMany({
+                where: {
+                    verificationStatus: 'VERIFIED',
+                    isBlacklisted: false,
+                    deletedAt: null,
+                    OR: [
+                        { users: { some: { role: 'buyer', accountStatus: 'ACTIVE' } } },
+                        { buyerProfiles: { some: {} } },
+                        { buyerRequirements: { some: {} } },
+                        { procurementBids: { some: {} } },
+                        { tenders: { some: {} } },
+                        { profile: { isLargeIndustry: true } },
+                        { organizationType: { in: ['PUBLIC_LIMITED', 'PSU', 'GOVERNMENT'] } }
+                    ]
                 },
-                create: { ...section }
-            })
-        ));
-        await purgeMarketplaceHomeCache();
-        const sections = await db.marketplaceHomeSection.findMany({ orderBy: [{ displayOrder: 'asc' }, { key: 'asc' }] });
-        return ok(res, { sections });
-    } catch (error) {
-        console.error('[Admin Marketplace Sections Reset]', error);
-        return apiResponse.error(res, 500, 'Failed to reset marketplace home sections', 'ADMIN_MARKETPLACE_SECTIONS_RESET_ERROR');
-    }
-});
+                orderBy: { updatedAt: 'desc' },
+                take: 24,
+                select: {
+                    id: true,
+                    organizationName: true,
+                    organizationType: true,
+                    city: true,
+                    district: true,
+                    state: true,
+                    verificationStatus: true,
+                    logoFile: { select: organizationLogoSelect },
+                    profile: true,
+                    buyerProfiles: {
+                        where: {
+                            verificationStatus: 'VERIFIED',
+                            isActive: true
+                        },
+                        select: {
+                            id: true,
+                            logoUrl: true,
+                            bannerUrl: true
+                        }
+                    },
+                    _count: { select: { buyerRequirements: true } }
+                }
+            }).catch(() => []),
 
-router.patch('/admin/marketplace/home-sections/:key', authenticate, authorize('admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
-    try {
-        const key = String(req.params.key || '').trim();
-        const body = adminHomeSectionSchema.parse(req.body);
-        const existingDefault = defaultHomeSections.find(section => section.key === key);
-        if (!existingDefault) return apiResponse.error(res, 404, 'Marketplace section not found', 'MARKETPLACE_SECTION_NOT_FOUND');
-        const section = await db.marketplaceHomeSection.upsert({
-            where: { key },
-            update: body,
-            create: { ...existingDefault, ...body }
-        });
-        await purgeMarketplaceHomeCache();
-        return ok(res, section);
-    } catch (error) {
-        console.error('[Admin Marketplace Section Update]', error);
-        return apiResponse.error(res, 400, 'Unable to update marketplace home section', 'ADMIN_MARKETPLACE_SECTION_UPDATE_ERROR');
-    }
-});
+            db.organization.findMany({
+                where: {
+                    verificationStatus: 'VERIFIED',
+                    isBlacklisted: false,
+                    deletedAt: null,
+                    OR: [
+                        { profile: { isBigMsme: true } },
+                        { organizationType: 'MSME' }
+                    ]
+                },
+                orderBy: { updatedAt: 'desc' },
+                take: 8,
+                select: {
+                    id: true,
+                    organizationName: true,
+                    organizationType: true,
+                    city: true,
+                    district: true,
+                    state: true,
+                    verificationStatus: true,
+                    logoFile: { select: organizationLogoSelect },
+                    profile: true,
+                    _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
+                }
+            }).catch(() => []),
 
-router.get('/marketplace/home', shortCache(60), async (_req: Request, res: Response) => {
-    try {
-        const data = await getOrSetCache(redisKeys.cacheMarketplaceHome(), async () => {
-            const [
-                banners,
-                categories,
-                featuredProducts,
-                featuredServices,
-                verifiedSellers,
-                notices,
-                largeIndustries,
-                bigMsmes,
-                stats,
-                latestRequirements,
-                latestTenders,
-                latestBids
-            ] = await Promise.all([
-                // Banners
-                db.marketplaceBanner?.findMany?.({
-                    where: { isActive: true },
-                    orderBy: { displayOrder: 'asc' },
-                    take: 10
-                }).catch(() => []),
-
-                // Categories
-                db.category.findMany({
-                    where: { isActive: true },
-                    orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
-                    include: {
-                        _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
-                    }
-                }).catch(() => []),
-
-                // Featured Products
-                db.product.findMany({
-                    where: { status: 'ACTIVE' },
-                    orderBy: { createdAt: 'desc' },
-                    take: 12,
-                    include: {
-                        category: { select: { id: true, name: true } },
-                        seller: { select: { id: true, name: true, onboardingStatus: true } },
-                        organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect }, profile: { select: organizationProfileBrandSelect } } },
-                        images: { include: { fileAsset: { select: { id: true, url: true } } }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }], take: 1 }
-                    }
-                }).catch(() => []),
-
-                // Featured Services
-                db.service.findMany({
-                    where: { status: 'ACTIVE' },
-                    orderBy: { createdAt: 'desc' },
-                    take: 8,
-                    include: {
-                        category: { select: { id: true, name: true } },
-                        seller: { select: { id: true, name: true, onboardingStatus: true } },
-                        organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect }, profile: { select: organizationProfileBrandSelect } } }
-                    }
-                }).catch(() => []),
-
-                // Verified Sellers
-                db.organization.findMany({
-                    where: sellerOrganizationWhere,
-                    orderBy: { updatedAt: 'desc' },
-                    take: 16,
-                    select: {
-                        id: true,
-                        organizationName: true,
-                        organizationType: true,
-                        city: true,
-                        district: true,
-                        state: true,
-                        verificationStatus: true,
-                        logoFile: { select: organizationLogoSelect },
-                        profile: { select: organizationProfileBrandSelect },
-                        _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
-                    }
-                }).catch(() => []),
-
-                // Notices
-                db.marketplaceNotice?.findMany?.({
-                    where: { isActive: true },
-                    orderBy: { publishedAt: 'desc' },
-                    take: 5
-                }).catch(() => []),
-
-                db.organization.findMany({
+            // Stats
+            Promise.all([
+                db.organization.count({ where: sellerOrganizationWhere }).catch(() => 0),
+                db.user.count({ where: { role: 'buyer', accountStatus: 'ACTIVE', onboardingStatus: { in: ['approved_for_procurement', 'approved'] } } }).catch(() => 0),
+                db.organization.count({
                     where: {
                         verificationStatus: 'VERIFIED',
                         isBlacklisted: false,
@@ -1767,102 +1814,53 @@ router.get('/marketplace/home', shortCache(60), async (_req: Request, res: Respo
                             { profile: { isLargeIndustry: true } },
                             { organizationType: { in: ['PUBLIC_LIMITED', 'PSU', 'GOVERNMENT'] } }
                         ]
-                    },
-                    orderBy: { updatedAt: 'desc' },
-                    take: 24,
-                    select: {
-                        id: true,
-                        organizationName: true,
-                        organizationType: true,
-                        city: true,
-                        district: true,
-                        state: true,
-                        verificationStatus: true,
-                        logoFile: { select: organizationLogoSelect },
-                        profile: true,
-                        buyerProfiles: {
-                            where: {
-                                verificationStatus: 'VERIFIED',
-                                isActive: true
-                            },
-                            select: {
-                                id: true,
-                                logoUrl: true,
-                                bannerUrl: true
-                            }
-                        },
-                        _count: { select: { buyerRequirements: true } }
                     }
-                }).catch(() => []),
+                }).catch(() => 0),
+                db.product.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
+                db.service.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
+                db.category.count({ where: { isActive: true } }).catch(() => 0),
+                db.buyerRequirement.count({ where: getPublicRequirementWhere() }).catch(() => 0),
+            ]).then(([sellers, buyerUsers, buyerOrganizations, products, services, categories, activeReqs]) => ({
+                verifiedSellers: sellers,
+                registeredBuyers: Math.max(buyerUsers, buyerOrganizations),
+                productsListed: products,
+                servicesListed: services,
+                categories,
+                activeRequirements: activeReqs || 0
+            })),
 
-                db.organization.findMany({
-                    where: {
-                        verificationStatus: 'VERIFIED',
-                        isBlacklisted: false,
-                        deletedAt: null,
-                        OR: [
-                            { profile: { isBigMsme: true } },
-                            { organizationType: 'MSME' }
-                        ]
-                    },
-                    orderBy: { updatedAt: 'desc' },
-                    take: 8,
-                    select: {
-                        id: true,
-                        organizationName: true,
-                        organizationType: true,
-                        city: true,
-                        district: true,
-                        state: true,
-                        verificationStatus: true,
-                        logoFile: { select: organizationLogoSelect },
-                        profile: true,
-                        _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
-                    }
-                }).catch(() => []),
+            // Latest requirements, tenders, and bids
+            loadLatestRequirements(24),
+            loadLatestTenders(6),
+            loadLatestProcurementBids(6),
 
-                // Stats
-                Promise.all([
-                    db.organization.count({ where: sellerOrganizationWhere }).catch(() => 0),
-                    db.user.count({ where: { role: 'buyer', accountStatus: 'ACTIVE', onboardingStatus: { in: ['approved_for_procurement', 'approved'] } } }).catch(() => 0),
-                    db.organization.count({
-                        where: {
-                            verificationStatus: 'VERIFIED',
-                            isBlacklisted: false,
-                            deletedAt: null,
-                            OR: [
-                                { users: { some: { role: 'buyer', accountStatus: 'ACTIVE' } } },
-                                { buyerProfiles: { some: {} } },
-                                { buyerRequirements: { some: {} } },
-                                { procurementBids: { some: {} } },
-                                { tenders: { some: {} } },
-                                { profile: { isLargeIndustry: true } },
-                                { organizationType: { in: ['PUBLIC_LIMITED', 'PSU', 'GOVERNMENT'] } }
-                            ]
-                        }
-                    }).catch(() => 0),
-                    db.product.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
-                    db.service.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
-                    db.category.count({ where: { isActive: true } }).catch(() => 0),
-                    db.buyerRequirement.count({ where: getPublicRequirementWhere() }).catch(() => 0),
-                ]).then(([sellers, buyerUsers, buyerOrganizations, products, services, categories, activeReqs]) => ({
-                    verifiedSellers: sellers,
-                    registeredBuyers: Math.max(buyerUsers, buyerOrganizations),
-                    productsListed: products,
-                    servicesListed: services,
-                    categories,
-                    activeRequirements: activeReqs || 0
-                })),
+            // Pre-structured Home layout sections
+            buildHomeLayout({ limit: 12 }, undefined).catch(() => null)
+        ]);
 
-                // Latest requirements, tenders, and bids
-                loadLatestRequirements(24),
-                loadLatestTenders(6),
-                loadLatestProcurementBids(6)
-            ]);
+        return {
+            banners,
+            categories,
+            featuredProducts,
+            featuredServices,
+            verifiedSellers,
+            largeIndustries,
+            bigMsmes,
+            notices,
+            stats,
+            featuredRequirements: latestRequirements,
+            latestTenders,
+            latestBids,
+            sections: homeLayout?.sections || []
+        };
+    }, 300); // Cache 5 minutes
+};
 
-            return { banners, categories, featuredProducts, featuredServices, verifiedSellers, largeIndustries, bigMsmes, notices, stats, featuredRequirements: latestRequirements, latestTenders, latestBids };
-        }, 300); // Cache 5 minutes
+export const prewarmMarketplaceHomeCache = () => fetchMarketplaceHomeData().catch(() => undefined);
 
+router.get('/marketplace/home', shortCache(60), async (_req: Request, res: Response) => {
+    try {
+        const data = await fetchMarketplaceHomeData();
         return ok(res, data);
     } catch (error) {
         console.error('[Marketplace Home]', error);

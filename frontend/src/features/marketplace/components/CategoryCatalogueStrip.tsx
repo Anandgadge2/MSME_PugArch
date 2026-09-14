@@ -164,6 +164,51 @@ const isProductCategory = (c: MarketplaceCategory) => {
     );
 };
 
+function CategoryCatalogueStripSkeleton({ title, subtitle, className }: { title: string; subtitle?: string; className?: string }) {
+    return (
+        <section
+            className={cn(
+                'relative overflow-visible py-12 sm:py-16 border-y border-slate-200/70 bg-gradient-to-b from-blue-50/60 via-slate-50/80 to-blue-50/40',
+                className
+            )}
+            id="categories"
+            aria-busy="true"
+            aria-label="Loading Category catalogue"
+        >
+            <div className="relative mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
+                <div className="mb-7 sm:mb-9 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-200/80 shadow-xs">
+                                Industrial Sectors &amp; Work Categories
+                            </span>
+                        </div>
+                        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-slate-950 leading-tight">
+                            {title}
+                        </h2>
+                        {subtitle && (
+                            <p className="mt-1.5 text-xs sm:text-base font-semibold text-slate-500 max-w-3xl">
+                                {subtitle}
+                            </p>
+                        )}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3.5 sm:gap-4.5">
+                    {Array.from({ length: 14 }).map((_, index) => (
+                        <div
+                            key={index}
+                            className="relative flex flex-col bg-slate-200/50 rounded-2xl sm:rounded-3xl border border-slate-200/70 w-full aspect-[4/5] sm:aspect-square md:aspect-[4/5] xl:aspect-[4/5] overflow-hidden animate-pulse p-3.5 justify-end"
+                        >
+                            <div className="h-4 bg-slate-300/60 rounded-md w-3/4 mx-auto" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+}
+
 export function CategoryCatalogueStrip({
     categories,
     selectedCategoryId,
@@ -191,7 +236,9 @@ export function CategoryCatalogueStrip({
         return categories;
     }, [categories, scopeFilter, productCategories, serviceCategories]);
 
-    if (!categories.length) return null;
+    if (!categories.length) {
+        return <CategoryCatalogueStripSkeleton title={title} subtitle={subtitle} className={className} />;
+    }
 
     const trackCategory = (category: MarketplaceCategory) => {
         marketplaceApi.trackInteraction({

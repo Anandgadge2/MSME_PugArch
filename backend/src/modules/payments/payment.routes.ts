@@ -508,8 +508,9 @@ router.post('/:orderId/offline-proof', requirePermission('payment.initiate', org
     });
     if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
     if (!isPlatformFinanceUser(req) && po.buyerId !== req.user?.id) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-    if (Number(parsed.amount.toFixed(2)) !== Number(Number(po.amount).toFixed(2))) {
-      throw new ApiError(400, 'Offline proof amount must match the payable amount', 'PAYMENT_AMOUNT_MISMATCH');
+    const payableAmount = Number(po.amount ?? po.totalValue ?? 0);
+    if (parsed.amount <= 0 || (payableAmount > 0 && parsed.amount > payableAmount + 0.05)) {
+      throw new ApiError(400, 'Offline proof amount cannot exceed the payable amount', 'PAYMENT_AMOUNT_MISMATCH');
     }
     const existingProof = await (prisma as any).offlinePaymentProof.findFirst({
       where: { buyerOrgId: po.buyer?.organizationId || req.user?.organizationId || null, transactionReference: parsed.transactionReference }
@@ -522,7 +523,7 @@ router.post('/:orderId/offline-proof', requirePermission('payment.initiate', org
         purchaseOrderId: po.id,
         payerId: po.buyerId,
         payeeId: po.sellerId,
-        amount: po.amount,
+        amount: parsed.amount,
         currency: po.currency,
         gateway: 'offline',
         gatewayEnum: 'MANUAL' as any,

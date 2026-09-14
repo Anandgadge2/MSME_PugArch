@@ -50,7 +50,7 @@ import { Button } from '../../../components/ui/button';
 import { Input, Select } from '../../../components/ui/input';
 import { useAuth } from '../../../hooks/useAuth';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
-import { CardSkeleton, ListSkeleton } from '../../../components/ui/skeleton';
+import { CardSkeleton, Skeleton } from '../../../components/ui/skeleton';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { cn } from '../../../lib/utils';
 import { runWithToast, notify } from '../../../lib/toast';
@@ -197,9 +197,38 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
 
   if (detailQuery.isLoading && !detailQuery.data) {
     return (
-      <div className="space-y-4">
-        <CardSkeleton rows={4} />
-        <ListSkeleton rows={3} />
+      <div className="space-y-5 animate-in fade-in duration-150">
+        {/* Header Card Skeleton */}
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
+          <div className="flex items-start gap-4">
+            <Skeleton className="h-12 w-12 rounded-2xl shrink-0" />
+            <div className="space-y-2 flex-1">
+              <div className="flex gap-2">
+                <Skeleton className="h-5 w-24 rounded-full" />
+                <Skeleton className="h-5 w-32 rounded-full" />
+              </div>
+              <Skeleton className="h-7 w-2/3 rounded-lg" />
+              <div className="flex gap-3 pt-1">
+                <Skeleton className="h-6 w-36 rounded-lg" />
+                <Skeleton className="h-6 w-36 rounded-lg" />
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Status Pipeline Skeleton */}
+        <div className="rounded-xl border border-slate-200/80 bg-white p-4">
+          <Skeleton className="h-10 w-full rounded-lg" />
+        </div>
+        {/* Details Grid Skeleton */}
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-4">
+            <CardSkeleton rows={3} />
+            <CardSkeleton rows={3} />
+          </div>
+          <div>
+            <CardSkeleton rows={4} />
+          </div>
+        </div>
       </div>
     );
   }

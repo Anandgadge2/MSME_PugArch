@@ -78,30 +78,40 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const storedUser = localStorage.getItem('msme_user_cache');
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      return null;
+    }
+  });
   const [token, setToken] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     return getStoredToken() || (getCookieValue('csrfToken') ? COOKIE_SESSION_TOKEN : null);
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const hasCachedUser = Boolean(localStorage.getItem('msme_user_cache'));
+    const hasToken = Boolean(getStoredToken() || getCookieValue('csrfToken'));
+    if (!hasToken && !hasCachedUser) return false;
+    if (hasCachedUser) return false;
+    return true;
+  });
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     try {
-      const storedUser = localStorage.getItem('msme_user_cache');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
-        setLoading(false);
-      }
       const storedToken = getStoredToken() || (getCookieValue('csrfToken') ? COOKIE_SESSION_TOKEN : null);
-      if (storedToken) {
+      if (storedToken && storedToken !== token) {
         setToken(storedToken);
       }
     } catch {
       // ignore
     }
-  }, []);
+  }, [token]);
 
   const clearLocalSession = useCallback(() => {
     clearStoredToken();

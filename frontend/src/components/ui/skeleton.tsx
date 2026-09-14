@@ -347,7 +347,12 @@ export function PageTableSkeleton({ kpiCount = 4 }: { kpiCount?: number }) {
                 <Skeleton className="h-10 w-28 rounded-lg" />
             </div>
             {kpiCount > 0 && (
-                <div className={`grid gap-3 grid-cols-2 md:grid-cols-${kpiCount}`}>
+                <div className={cn(
+                    "grid gap-2.5 sm:gap-3",
+                    kpiCount >= 6 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" :
+                    kpiCount === 5 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" :
+                    "grid-cols-2 sm:grid-cols-2 lg:grid-cols-4"
+                )}>
                     {Array.from({ length: kpiCount }).map((_, i) => (
                         <div key={i} className="rounded-xl border border-slate-200 bg-white p-4">
                             <Skeleton className="h-2.5 w-16 rounded" />
