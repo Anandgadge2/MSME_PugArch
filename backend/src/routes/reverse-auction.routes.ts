@@ -491,6 +491,43 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
     }
 
     if (!auction) {
+      // SAP Ariba Follow-On Pattern: Check if the requirement has reverse auction
+      // configured but the auction hasn't been created yet (follow-on pattern).
+      // Return lightweight metadata so the frontend shows the correct informational UI
+      // and can pre-populate the launch modal with buyer-configured defaults.
+      if (Number.isFinite(numId) && numId > 0) {
+        const requirement = await db.requirement.findFirst({
+          where: { id: numId },
+          select: { id: true, payload: true }
+        }).catch(() => null);
+
+        const reqPayload = (requirement?.payload || {}) as any;
+        const isPlanned = Boolean(
+          reqPayload.allowReverseAuction ||
+          reqPayload.basics?.isReverseAuctionNeeded ||
+          reqPayload.rules?.allowReverseAuction
+        );
+
+        if (isPlanned) {
+          const auctionConfig = reqPayload.auctionConfig || reqPayload.rules?.auctionConfig || {};
+          const plannedData = {
+            auctionPlanned: true,
+            requirementId: requirement!.id,
+            startPrice: Number(auctionConfig.startingBidPrice || reqPayload.rules?.startPrice || 0),
+            minDecrementAmount: Number(auctionConfig.minimumBidDecrement || reqPayload.rules?.minimumDecrement || 0),
+            autoExtensionEnabled: Boolean(auctionConfig.autoExtensionEnabled),
+            extensionTriggerMinutes: auctionConfig.extensionTriggerMinutes || 5,
+            extensionDurationMinutes: auctionConfig.extensionDurationMinutes || 5,
+            maximumExtensions: auctionConfig.maximumExtensions || 3,
+            rankVisibility: auctionConfig.rankVisibility || 'SHOW_RANK_ONLY',
+            durationMinutes: auctionConfig.durationMinutes || 60,
+            triggerConfiguration: auctionConfig.triggerConfiguration || {},
+          };
+          procurementAuctionCache.set(rawId, { data: plannedData, expiresAt: Date.now() + 30_000 });
+          return apiResponse.success(res, plannedData);
+        }
+      }
+
       procurementAuctionCache.set(rawId, { data: null, expiresAt: Date.now() + 30_000 });
       return apiResponse.success(res, null, 200, 'No auction linked to this procurement');
     }

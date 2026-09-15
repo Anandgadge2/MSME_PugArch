@@ -131,7 +131,7 @@ export function BuyerProcurementMonitor() {
       }
 
       return {
-        id: String(bid.id || `bid-${idx}`),
+        id: `${bid.type || 'bid'}-${bid.id || idx}`,
         bidNumber: bid.bidNumber || bid.referenceNumber || bid.requisitionNumber || `BID-REQ-${10000 + idx}`,
         title: bid.title || bid.name || bid.itemName || 'Procurement Requisition',
         type: typeLabel,

@@ -45,6 +45,7 @@ import {
   Gavel,
   Ban,
   Lock,
+  Truck,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -63,6 +64,7 @@ import { EmdPaymentModal } from './EmdPaymentModal';
 import StartReverseAuctionModal, { SubmittedVendorItem } from '../../reverseAuctions/components/StartReverseAuctionModal';
 import LiveAuctionLeaderboard from '../../reverseAuctions/components/LiveAuctionLeaderboard';
 import SellerLiveAuctionBanner from '../../reverseAuctions/components/SellerLiveAuctionBanner';
+import SellerAuctionPlannedBanner from '../../reverseAuctions/components/SellerAuctionPlannedBanner';
 import { reverseAuctionApi } from '../../reverseAuctions/api';
 import { formatDate, formatDateTime } from '../../shared/format';
 
@@ -955,6 +957,146 @@ function BuyerProfileSection({
   );
 }
 
+function InternalComplianceSection({
+  approvalAuthority,
+  justification,
+  budgetConfirmed,
+  competentAuthority,
+  fileNumber,
+  sanctionDate,
+  department,
+}: {
+  approvalAuthority?: string | null;
+  justification?: string | null;
+  budgetConfirmed?: boolean;
+  competentAuthority?: string | null;
+  fileNumber?: string | null;
+  sanctionDate?: string | null;
+  department?: string | null;
+}) {
+  return (
+    <DataCard
+      title="Internal Approval & Statutory Compliance"
+      icon={ShieldCheck}
+      badge={
+        budgetConfirmed ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800 tracking-wider">
+            <CheckCircle2 className="h-3 w-3 text-emerald-600" aria-hidden="true" />
+            Budget Sanctioned
+          </span>
+        ) : undefined
+      }
+    >
+      <div className="space-y-4">
+        {/* Top summary grid */}
+        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+          {approvalAuthority && (
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+              <dt className="text-[10px] font-black uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+                <User className="h-3 w-3 text-indigo-600" aria-hidden="true" />
+                Internal Approval Authority
+              </dt>
+              <dd className="mt-1 text-xs font-black text-slate-900 leading-snug">
+                {approvalAuthority}
+              </dd>
+            </div>
+          )}
+
+          {budgetConfirmed !== undefined && (
+            <div className={cn(
+              'rounded-xl border p-3',
+              budgetConfirmed ? 'border-emerald-150 bg-emerald-50/40' : 'border-slate-200 bg-slate-50/60'
+            )}>
+              <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <ShieldCheck className={cn('h-3 w-3', budgetConfirmed ? 'text-emerald-600' : 'text-slate-400')} aria-hidden="true" />
+                Budget Allocation & Sanction
+              </dt>
+              <dd className="mt-1 text-xs font-black text-slate-900 flex items-center gap-1.5">
+                {budgetConfirmed ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
+                    <span>Sanctioned & Allocated (GFR Compliance)</span>
+                  </>
+                ) : (
+                  <span className="text-slate-500 font-semibold">Not Specified</span>
+                )}
+              </dd>
+            </div>
+          )}
+
+          {competentAuthority && competentAuthority !== approvalAuthority && (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+              <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Building2 className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                Competent Financial Authority (CFA)
+              </dt>
+              <dd className="mt-1 text-xs font-black text-slate-900 leading-snug">
+                {competentAuthority}
+              </dd>
+            </div>
+          )}
+
+          {fileNumber && (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+              <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <FileText className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                Department File / Case Number
+              </dt>
+              <dd className="mt-1 font-mono text-xs font-bold text-slate-900">
+                {fileNumber}
+              </dd>
+            </div>
+          )}
+
+          {department && (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+              <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Building2 className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                Sanctioning Department / Unit
+              </dt>
+              <dd className="mt-1 text-xs font-bold text-slate-900">
+                {department}
+              </dd>
+            </div>
+          )}
+
+          {sanctionDate && (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+              <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Calendar className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                Sanction Approval Date
+              </dt>
+              <dd className="mt-1 text-xs font-bold text-slate-900">
+                {sanctionDate}
+              </dd>
+            </div>
+          )}
+        </div>
+
+        {/* Purchase Justification & Compliance Reason full-width callout */}
+        {justification && (
+          <div className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-4 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-800">
+                <FileText className="h-3 w-3" aria-hidden="true" />
+              </span>
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-amber-900">
+                Purchase Justification & Compliance Reason
+              </h4>
+              <span className="rounded-full bg-amber-100/80 border border-amber-300/60 px-2 py-0.5 text-[9px] font-bold text-amber-900">
+                Statutory Audit Record
+              </span>
+            </div>
+            <p className="text-xs text-slate-800 leading-relaxed font-normal whitespace-pre-wrap pl-7">
+              {justification}
+            </p>
+          </div>
+        )}
+      </div>
+    </DataCard>
+  );
+}
+
 function TimelineRibbon({
   dates,
 }: {
@@ -1006,19 +1148,22 @@ function TimelineRibbon({
 function PolicyRulesMatrix({
   rules,
 }: {
-  rules: Array<{ label: string; value: any; icon?: IconComponent }>;
+  rules: Array<{ label: string; value: any; icon?: IconComponent; subtext?: string }>;
 }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       {rules.map((rule, idx) => {
-        const valStr = String(rule.value || '').trim();
-        const isYes = ['yes', 'true', '1', 'enabled'].includes(valStr.toLowerCase());
+        const valStr = typeof rule.value === 'boolean'
+          ? (rule.value ? 'Yes' : 'No')
+          : String(rule.value !== null && rule.value !== undefined ? rule.value : '').trim();
+        const isYes = ['yes', 'true', '1', 'enabled', 'scheduled'].includes(valStr.toLowerCase());
         const isNo = ['no', 'false', '0', 'disabled'].includes(valStr.toLowerCase());
         const Icon = rule.icon || (isYes ? CheckCircle2 : Info);
 
         return (
           <div
             key={idx}
+            title={rule.subtext ? `${rule.label}: ${rule.subtext}` : undefined}
             className={cn(
               'flex items-center justify-between gap-2 p-2.5 rounded-lg border transition-colors',
               isYes
@@ -1035,7 +1180,14 @@ function PolicyRulesMatrix({
                   isYes ? 'text-emerald-600' : isNo ? 'text-slate-400' : 'text-indigo-600'
                 )}
               />
-              <span className="text-[11px] font-semibold truncate text-slate-800">{rule.label}</span>
+              <div className="min-w-0 flex flex-col">
+                <span className="text-[11px] font-semibold truncate text-slate-800">{rule.label}</span>
+                {rule.subtext && (
+                  <span className="text-[9.5px] text-slate-500 font-medium truncate leading-tight">
+                    {rule.subtext}
+                  </span>
+                )}
+              </div>
             </div>
             <span
               className={cn(
@@ -2233,6 +2385,7 @@ export interface ProcurementDetailUnifiedViewProps {
   deadlineDate?: Date | string | null;
   createdAt?: Date | string | null;
   publishedDate?: string;
+  submissionStartDate?: string;
   closingDate?: string;
   clarificationDate?: string;
   technicalDate?: string;
@@ -2253,6 +2406,7 @@ export interface ProcurementDetailUnifiedViewProps {
   deliveryLocation?: string;
   paymentTerms?: string;
   deliveryTerms?: string;
+  freightIncluded?: boolean;
   description?: string;
   payload?: any;
   rateContractConfig?: any;
@@ -2299,6 +2453,11 @@ export interface ProcurementDetailUnifiedViewProps {
   invitedCount?: number;
   invitedSellers?: any[];
   invitations?: any[];
+
+  // Internal Approvals & Statutory Compliance (Buyer / Admin Side Only)
+  approvalAuthority?: string;
+  justification?: string;
+  internalDetails?: Record<string, any>;
 }
 
 export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedViewProps) {
@@ -2313,7 +2472,11 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
 
-  const [nowMs] = useState(() => Date.now());
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  React.useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
   const targetId = String(props.displayId && props.displayId !== 'N/A' && props.displayId !== '—' ? props.displayId : props.id);
   const userRoleStr = String(currentUser?.role || '').toLowerCase();
   const isBuyerOrAdmin = userRoleStr === 'buyer' || userRoleStr === 'admin' || userRoleStr === 'master_admin' || (!!currentUser?.id && String(currentUser?.id) === String(props.buyer?.id));
@@ -2573,7 +2736,58 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
   const payload = props.payload || {};
   const basics = payload.basics || {};
-  const internal = payload.internal || {};
+  const internal = props.internalDetails || payload.internal || payload.basics?.internal || (props as any).technicalPacket?.internal || (props as any).internal || {};
+  const approvalAuthority = firstPresent(
+    props.approvalAuthority,
+    internal.approvalAuthority,
+    internal.authorityName,
+    internal.authority,
+    payload.approvalAuthority,
+    (props as any).approvalAuthority
+  );
+  const justification = firstPresent(
+    props.justification,
+    internal.justification,
+    internal.purchaseJustification,
+    internal.complianceReason,
+    payload.justification,
+    basics.justification,
+    (props as any).justification
+  );
+  const budgetConfirmed = internal.budgetSanctionConfirmed === true ||
+    internal.budgetSanctionConfirmed === 'true' ||
+    internal.budgetConfirmed === true ||
+    internal.budgetConfirmed === 'true' ||
+    internal.isBudgetSanctioned === true ||
+    internal.budgetSanction === true;
+  const competentAuthority = firstPresent(
+    internal.competentAuthority,
+    approvalAuthority
+  );
+  const internalFileNumber = firstPresent(
+    internal.internalFileNumber,
+    internal.fileNumber,
+    internal.sanctionOrderNo
+  );
+  const internalDepartment = firstPresent(
+    internal.department,
+    internal.departmentName,
+    internal.costCenter
+  );
+  const sanctionDateFormatted = internal.sanctionDate || internal.approvalDate
+    ? formatDateString(internal.sanctionDate || internal.approvalDate, false)
+    : undefined;
+
+  const hasInternalCompliance = Boolean(
+    isBuyerSide && (
+      approvalAuthority ||
+      justification ||
+      internal.budgetConfirmed !== undefined ||
+      internal.budgetSanctionConfirmed !== undefined ||
+      competentAuthority ||
+      internalFileNumber
+    )
+  );
   const schedule = payload.schedule || {};
   const tender = payload.tender || {};
   const terms = payload.terms || {};
@@ -2588,6 +2802,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     payload?.discloseEstimatedCost ??
     basics?.discloseEstimatedCost ??
     payload?.basics?.discloseEstimatedCost ??
+    (props as any)?.bid?.discloseEstimatedCost ??
+    (props as any)?.technicalPacket?.discloseEstimatedCost ??
+    (props as any)?.rawBid?.discloseEstimatedCost ??
     false
   );
 
@@ -2905,41 +3122,39 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   );
 
   const publishedDateValue = (() => {
+    // Determine authentic live creation/approval time
+    const createdTimestamp = props.createdAt;
+    const tCreated = createdTimestamp ? new Date(createdTimestamp).getTime() : NaN;
+
+    // Check candidate published dates
+    const rawPublish = props.publishedDate || schedule.publishDate || tender.publishDate;
+    if (rawPublish && Number.isFinite(tCreated)) {
+      const tPub = new Date(rawPublish).getTime();
+      if (Number.isFinite(tPub)) {
+        // If the candidate publish date is in the future relative to creation (+ 1 min), honor it as scheduled publish.
+        // If it is in the past or earlier than creation (e.g. 5:44 AM form draft vs 5:06 PM live creation),
+        // the authentic live publication time is createdTimestamp!
+        if (tPub > tCreated + 60000) {
+          return rawPublish;
+        }
+        return createdTimestamp;
+      }
+    }
+
     // 1. If explicit time is present on the primary published date candidates
     if (hasExplicitDateTime(props.publishedDate)) return props.publishedDate;
     if (hasExplicitDateTime(schedule.publishDate)) return schedule.publishDate;
     if (hasExplicitDateTime(tender.publishDate)) return tender.publishDate;
-    if (hasExplicitDateTime(schedule.submissionStartDate)) return schedule.submissionStartDate;
 
-    // 2. If a date-only publishDate was specified, see if createdAt matches the same date
-    const rawPublish = schedule.publishDate || tender.publishDate || props.publishedDate;
-    if (rawPublish && props.createdAt && hasExplicitDateTime(props.createdAt)) {
-      try {
-        const dPub = new Date(rawPublish);
-        const dCreated = new Date(props.createdAt);
-        if (!isNaN(dPub.getTime()) && !isNaN(dCreated.getTime())) {
-          if (
-            dPub.getFullYear() === dCreated.getFullYear() &&
-            dPub.getMonth() === dCreated.getMonth() &&
-            dPub.getDate() === dCreated.getDate()
-          ) {
-            return props.createdAt;
-          }
-        }
-      } catch {}
-    }
-
-    // 3. If createdAt has explicit time
+    // 2. If createdAt has explicit time
     if (hasExplicitDateTime(props.createdAt)) return props.createdAt;
 
-    // 4. Fallback to first present value
+    // 3. Fallback to first present publication or creation date
     return firstPresent(
+      props.publishedDate,
       schedule.publishDate,
       tender.publishDate,
-      props.publishedDate,
-      props.createdAt,
-      schedule.submissionStartDate,
-      tender.bidStartDate
+      props.createdAt
     );
   })();
 
@@ -3047,6 +3262,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   );
 
   const submissionStartDateValue = firstPresent(
+    props.submissionStartDate,
     schedule.submissionStartDate,
     schedule.startDate,
     tender.bidStartDate,
@@ -3449,17 +3665,11 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   ]);
 
   const resolvedWorkflow = (() => {
-    const rawWf = approval.workflow || payload.workflow || rules.workflow;
-    if (!isTwoPacket) {
-      if (!rawWf || rawWf === 'Finance + Procurement' || rawWf.toLowerCase().includes('technical') || rawWf.toLowerCase().includes('two')) {
-        return 'Single Stage (Commercial Only)';
-      }
-      return rawWf;
-    }
-    if (!rawWf || rawWf === 'Finance + Procurement') {
+    const rawWf = String(approval.workflow || payload.workflow || rules.workflow || '').trim();
+    if (isTwoPacket || rawWf.toLowerCase().includes('two') || rawWf.toLowerCase().includes('technical')) {
       return 'Two-Stage (Technical + Financial)';
     }
-    return rawWf;
+    return 'Single Stage (Commercial Only)';
   })();
 
   const supplierControlsData = compactObject({
@@ -3500,6 +3710,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     });
   }, [allParticipationsList]);
 
+  const effectiveDeadlineTarget = closingDateValue || props.deadlineDate;
+  const isDeadlinePassed = Boolean(
+    effectiveDeadlineTarget && (() => {
+      const parsed = parseDateValue(effectiveDeadlineTarget);
+      return parsed ? parsed.getTime() < nowMs : false;
+    })()
+  );
+
   const proposalStatusDisplay = useMemo(() => {
     // If current user is explicitly a seller and not viewing as buyer, show their submission status
     if (currentUser?.role === 'seller' && !isBuyerSide) {
@@ -3509,7 +3727,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     // For buyer, admin, or general viewer, derive authentic status from real database records
     const rawStatus = String(props.status || '').toUpperCase();
     const count = Math.max(props.participantsCount || 0, submittedParticipations.length);
-    const isDeadlinePassed = props.deadlineDate ? new Date(props.deadlineDate).getTime() < nowMs : false;
 
     // 1. Awarded / Completed
     const hasAwarded = submittedParticipations.some((p: any) => {
@@ -3569,7 +3786,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       value: closingDateFormatted || 'N/A',
       icon: Clock,
       tone: 'rose' as Tone,
-      subtext: (linkedAuction && allowsReverseAuction) ? 'Stage 1 initial quotation cutoff' : 'Bidding window closing'
+      subtext: allowsReverseAuction ? 'Stage 1 initial quotation cutoff' : 'Bidding window closing'
     },
     shouldShowEstimatedCost
       ? { label: 'Estimated Value', value: formatCurrency(props.estimatedValue), icon: IndianRupee, tone: 'emerald' as Tone, subtext: 'Total budget estimate' }
@@ -3594,7 +3811,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     { id: 'overview', label: 'Overview & Dates', icon: ClipboardList },
     { id: 'scope_docs', label: 'Scope & Documents', icon: FileText, count: documents.length },
     { id: 'terms_schedule', label: 'Terms & Schedule', icon: CalendarDays },
-    { id: 'evaluation', label: 'Evaluation & Controls', icon: ClipboardCheck },
+    { id: 'evaluation', label: isBuyerSide ? 'Evaluation & Controls' : 'Evaluation Criteria', icon: ClipboardCheck },
     { id: 'clarifications', label: isClarificationAllowed ? (isRfqType ? 'Clarifications & Quotations' : 'Clarifications & Proposals') : (isRfqType ? 'Quotations' : 'Proposals'), icon: isClarificationAllowed ? MessageSquare : ClipboardList, count: (isClarificationAllowed ? (props.totalClarifications || 0) : 0) + (isBuyerOrAdmin ? (submittedParticipations.length || 0) : 0) },
   ];
 
@@ -3665,6 +3882,96 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     }
   };
 
+  const isPreBidConfigured = Boolean(
+    preBidDateFormatted ||
+    schedule.preBidMeeting === true ||
+    schedule.preBidMeeting === 'true' ||
+    schedule.preBidMeeting === 'Yes' ||
+    (schedule.preBidMeetingDate && schedule.preBidMeetingDate !== '—' && schedule.preBidMeetingDate !== 'N/A')
+  );
+
+  const msmePrefRaw = vendors.msmePreference !== undefined ? vendors.msmePreference : payload.msmePreference;
+  const msmePrefVal = msmePrefRaw !== undefined ? ((msmePrefRaw === false || msmePrefRaw === 'No' || msmePrefRaw === 'false' || msmePrefRaw === 0) ? 'No' : 'Yes') : 'Yes';
+
+  const localPrefRaw = vendors.localVendorPreference !== undefined ? vendors.localVendorPreference : payload.localVendorPreference;
+  const localPrefVal = localPrefRaw !== undefined ? ((localPrefRaw === true || localPrefRaw === 'Yes' || localPrefRaw === 'true' || localPrefRaw === 1) ? 'Yes' : 'No') : 'No';
+
+  const rawFreightVal = firstPresent(
+    props.freightIncluded,
+    terms.freightIncluded,
+    payload.freightIncluded,
+    rules.freightIncluded,
+    true
+  );
+  const isFreightIncluded = rawFreightVal === true || rawFreightVal === 'true' || rawFreightVal === 'Yes' || rawFreightVal === 1 || rawFreightVal === '1';
+
+  const resolveRuleBool = (val: any, fallback = 'Yes') => {
+    if (val === true || val === 'true' || val === 'Yes' || val === 'yes' || val === 1) return 'Yes';
+    if (val === false || val === 'false' || val === 'No' || val === 'no' || val === 0) return 'No';
+    if (val !== undefined && val !== null && String(val).trim().length > 0) return String(val).trim();
+    return fallback;
+  };
+
+  const biddingRules = useMemo(() => {
+    if (isBuyerSide) {
+      return [
+        { label: 'Auto Close', value: resolveRuleBool(firstPresent(rules.autoClose, schedule.autoClose), 'Yes') },
+        { label: 'Allow Revision', value: resolveRuleBool(firstPresent(rules.allowRevision, schedule.allowRevision), 'Yes') },
+        { label: 'Show Seller Rank', value: resolveRuleBool(firstPresent(rules.showSellerRank, schedule.showSellerRank), 'Yes') },
+        { label: 'Allow Withdrawal', value: resolveRuleBool(firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal), 'Yes') },
+        { label: 'Show Lowest Price', value: resolveRuleBool(firstPresent(rules.showLowestPrice, schedule.showLowestPrice), 'Yes') },
+        { label: 'Clarification Allowed', value: isClarificationAllowed ? 'Yes' : 'No' },
+        { label: 'Freight Included', value: isFreightIncluded ? 'Yes' : 'No', icon: Truck, subtext: isFreightIncluded ? 'Door delivery in quote' : 'Freight charged extra' },
+        { label: 'Minimum Bidders', value: String(firstPresent(rules.minimumBidders, schedule.minimumBidders, '3')) },
+        { label: 'Pre-Bid Meeting', value: isPreBidConfigured ? 'Yes' : 'No' },
+        { label: 'MSME Preference', value: msmePrefVal },
+        { label: 'Exclude Blacklisted', value: 'Yes' },
+        { label: 'Local Vendor Preference', value: localPrefVal },
+      ];
+    }
+
+    // Non-buyer side (Sellers, Public, SHGs, Bidders):
+    // Exclude internal buyer controls: Exclude Blacklisted, Minimum Bidders, Auto Close, and unconfigured Pre-Bid Meeting
+    const list: Array<{ label: string; value: string; icon?: IconComponent; subtext?: string }> = [
+      { label: 'Allow Revision', value: resolveRuleBool(firstPresent(rules.allowRevision, schedule.allowRevision), 'Yes') },
+      { label: 'Allow Withdrawal', value: resolveRuleBool(firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal), 'Yes') },
+      { label: 'Clarification Allowed', value: isClarificationAllowed ? 'Yes' : 'No' },
+      { label: 'Freight Included', value: isFreightIncluded ? 'Yes' : 'No', icon: Truck, subtext: isFreightIncluded ? 'Door delivery in quote' : 'Freight charged extra' },
+      { label: 'MSME Preference', value: msmePrefVal },
+    ];
+
+    const showRankVal = resolveRuleBool(firstPresent(rules.showSellerRank, schedule.showSellerRank), 'Yes');
+    const showLowestVal = resolveRuleBool(firstPresent(rules.showLowestPrice, schedule.showLowestPrice), 'Yes');
+
+    if (allowsReverseAuction || isRateContractType || showRankVal === 'Yes') {
+      list.push({ label: 'Show Seller Rank', value: showRankVal });
+    }
+    if (allowsReverseAuction || isRateContractType || showLowestVal === 'Yes') {
+      list.push({ label: 'Show Lowest Price', value: showLowestVal });
+    }
+
+    if (isPreBidConfigured) {
+      list.push({ label: 'Pre-Bid Meeting', value: 'Scheduled' });
+    }
+
+    if (localPrefVal === 'Yes') {
+      list.push({ label: 'Local Vendor Preference', value: 'Yes' });
+    }
+
+    return list;
+  }, [
+    isBuyerSide,
+    rules,
+    schedule,
+    isClarificationAllowed,
+    isFreightIncluded,
+    isPreBidConfigured,
+    msmePrefVal,
+    localPrefVal,
+    allowsReverseAuction,
+    isRateContractType,
+  ]);
+
   return (
     <BuyerSideContext.Provider value={{
       isBuyer: isBuyerSide,
@@ -3724,13 +4031,22 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           </div>
         )}
 
-        {/* Live Reverse Auction Banner for Sellers */}
-        {!isBuyerSide && linkedAuction && allowsReverseAuction && ['LIVE', 'SCHEDULED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
+        {/* Live/Scheduled Reverse Auction Banner for Sellers */}
+        {!isBuyerSide && linkedAuction && !(linkedAuction as any).auctionPlanned && allowsReverseAuction && ['LIVE', 'SCHEDULED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase()) && (
           <SellerLiveAuctionBanner
             auctionId={linkedAuction.id}
             procurementTitle={resolvedSubject}
             procurementReference={displayIdStr}
             onBidSubmitted={() => linkedAuctionQuery.refetch()}
+          />
+        )}
+
+        {/* Planned (Not Yet Created) Reverse Auction Info Banner for Sellers */}
+        {!isBuyerSide && allowsReverseAuction && (!linkedAuction || (linkedAuction as any).auctionPlanned === true) && (
+          <SellerAuctionPlannedBanner
+            startPrice={linkedAuction?.startPrice ?? undefined}
+            minDecrementAmount={(linkedAuction?.minDecrementAmount != null ? Number(linkedAuction.minDecrementAmount) : undefined)}
+            rankVisibility={(linkedAuction?.rankVisibility != null ? String(linkedAuction.rankVisibility) : undefined)}
           />
         )}
 
@@ -3749,7 +4065,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 {props.deadlineDate && (
                   <DeadlineCountdown
                     targetDate={props.deadlineDate}
-                    label={(linkedAuction && allowsReverseAuction) ? 'Stage 1 Quote Due: ' : 'Quote Due: '}
+                    label={allowsReverseAuction ? 'Stage 1 Quote Due: ' : 'Quote Due: '}
                   />
                 )}
                 {props.hasSubmittedProposal && (
@@ -3952,6 +4268,19 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               />
             </div>
 
+            {/* Internal Approval & Statutory Compliance Section (Buyer & Admin Side Only) */}
+            {hasInternalCompliance && (
+              <InternalComplianceSection
+                approvalAuthority={approvalAuthority}
+                justification={justification}
+                budgetConfirmed={budgetConfirmed}
+                competentAuthority={competentAuthority}
+                fileNumber={internalFileNumber}
+                sanctionDate={sanctionDateFormatted}
+                department={internalDepartment}
+              />
+            )}
+
             <TimelineRibbon
               dates={[
                 { label: 'Published', value: publishedDateFormatted, icon: Calendar, tone: 'emerald' },
@@ -3969,7 +4298,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 <PropertyGrid columns={4}>
                   <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
                   <PropertyItem label={isRfqType ? 'Quotation Status' : 'Proposal Status'} value={proposalStatusDisplay} />
-                  <PropertyItem label="Deadline Status" value={props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs ? 'Closed' : 'Open'} />
+                  <PropertyItem label="Deadline Status" value={isDeadlinePassed ? 'Closed' : 'Open'} />
                   <PropertyItem label="Source Record" value={procurementTypeLabel} />
                 </PropertyGrid>
               </div>
@@ -4109,19 +4438,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     <ShieldCheck className="h-4 w-4 text-emerald-600" />
                     Bidding Rules &amp; Policy Matrix
                   </h3>
-                  <PolicyRulesMatrix
-                    rules={[
-                      { label: 'Auto Close', value: firstPresent(rules.autoClose, schedule.autoClose, 'Yes') },
-                      { label: 'Allow Revision', value: firstPresent(rules.allowRevision, schedule.allowRevision, 'Yes') },
-                      { label: 'Show Seller Rank', value: firstPresent(rules.showSellerRank, schedule.showSellerRank, 'Yes') },
-                      { label: 'Allow Withdrawal', value: firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal, 'Yes') },
-                      { label: 'Show Lowest Price', value: firstPresent(rules.showLowestPrice, schedule.showLowestPrice, 'Yes') },
-                      { label: 'Clarification Allowed', value: isClarificationAllowed ? 'Yes' : 'No' },
-                      { label: 'Minimum Bidders', value: firstPresent(rules.minimumBidders, schedule.minimumBidders, '3') },
-                      { label: 'Pre-Bid Meeting', value: firstPresent(schedule.preBidMeeting, schedule.preBidMeetingDate, 'No') },
-                    ]}
-                  />
-                  {(payload.limitedTenderJustification || rules.limitedTenderJustification) && (
+                  <PolicyRulesMatrix rules={biddingRules} />
+                  {isBuyerSide && (payload.limitedTenderJustification || rules.limitedTenderJustification) && (
                     <div className="rounded-xl border-l-4 border-amber-500 bg-amber-50/60 p-3.5 border border-amber-200/80 text-xs font-semibold text-amber-900">
                       <span className="font-black uppercase tracking-wider block text-[10px] text-amber-700 mb-0.5">Tender Justification:</span>
                       {payload.limitedTenderJustification || rules.limitedTenderJustification}
@@ -4133,6 +4451,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
             <DataCard title="Commercial & Payment Terms" icon={IndianRupee}>
               <PropertyGrid columns={3}>
+                <PropertyItem
+                  label="Freight Terms"
+                  icon={Truck}
+                  value={isFreightIncluded ? 'Freight Included (Door Delivery)' : 'Freight Excluded (Extra as per actuals)'}
+                  subtext={isFreightIncluded ? 'Bid price must include all shipping, insurance & delivery to destination.' : 'Freight is not included in bid price and will be paid extra.'}
+                />
                 {/* Payment Terms and Delivery Terms commented out as they already appear in Terms & Conditions */}
                 {/* <PropertyItem label="Payment Terms" value={paymentTerms} /> */}
                 {/* <PropertyItem label="Delivery Terms" value={deliveryTerms} /> */}
@@ -4228,38 +4552,40 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               />
             )}
 
-            <DataCard title="Supplier & Approval Controls" icon={Users}>
-              <div className="space-y-5">
-                <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
-                  <PropertyGrid columns={3}>
-                    <PropertyItem label="Selection Mode" value={vendors.selection || payload.selectionMode || rules.selectionMode || 'Open'} />
-                    <PropertyItem label="Invite Count" value={String(effectiveInviteCount)} />
-                    <PropertyItem label="Workflow" value={resolvedWorkflow} />
-                  </PropertyGrid>
-                </div>
-
-                <div className="space-y-2.5 pt-1">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                    Vendor Preferences &amp; Eligibility Controls
-                  </h3>
-                  <PolicyRulesMatrix
-                    rules={[
-                      { label: 'MSME Preference', value: (vendors.msmePreference !== undefined ? vendors.msmePreference : payload.msmePreference) !== undefined ? ((vendors.msmePreference ?? payload.msmePreference) ? 'Yes' : 'No') : 'Yes' },
-                      { label: 'Exclude Blacklisted', value: (vendors.excludeBlacklisted !== undefined ? vendors.excludeBlacklisted : payload.excludeBlacklisted) !== undefined ? ((vendors.excludeBlacklisted ?? payload.excludeBlacklisted) ? 'Yes' : 'No') : 'Yes' },
-                      { label: 'Local Vendor Preference', value: (vendors.localVendorPreference !== undefined ? vendors.localVendorPreference : payload.localVendorPreference) !== undefined ? ((vendors.localVendorPreference ?? payload.localVendorPreference) ? 'Yes' : 'No') : 'Yes' },
-                    ]}
-                  />
-                </div>
-
-                {(approval.notes || payload.approvalNotes) && isBuyerOrAdmin && (
-                  <div className="rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Approval Notes:</span>
-                    <p className="text-xs font-semibold text-slate-700">{approval.notes || payload.approvalNotes}</p>
+            {isBuyerSide && (
+              <DataCard title="Supplier & Approval Controls" icon={Users}>
+                <div className="space-y-5">
+                  <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+                    <PropertyGrid columns={3}>
+                      <PropertyItem label="Selection Mode" value={vendors.selection || payload.selectionMode || rules.selectionMode || 'Open'} />
+                      <PropertyItem label="Invite Count" value={String(effectiveInviteCount)} />
+                      <PropertyItem label="Workflow" value={resolvedWorkflow} />
+                    </PropertyGrid>
                   </div>
-                )}
-              </div>
-            </DataCard>
+
+                  <div className="space-y-2.5 pt-1">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      Vendor Preferences &amp; Eligibility Controls
+                    </h3>
+                    <PolicyRulesMatrix
+                      rules={[
+                        { label: 'MSME Preference', value: (vendors.msmePreference !== undefined ? vendors.msmePreference : payload.msmePreference) !== undefined ? ((vendors.msmePreference ?? payload.msmePreference) ? 'Yes' : 'No') : 'Yes' },
+                        { label: 'Exclude Blacklisted', value: (vendors.excludeBlacklisted !== undefined ? vendors.excludeBlacklisted : payload.excludeBlacklisted) !== undefined ? ((vendors.excludeBlacklisted ?? payload.excludeBlacklisted) ? 'Yes' : 'No') : 'Yes' },
+                        { label: 'Local Vendor Preference', value: (vendors.localVendorPreference !== undefined ? vendors.localVendorPreference : payload.localVendorPreference) !== undefined ? ((vendors.localVendorPreference ?? payload.localVendorPreference) ? 'Yes' : 'No') : 'Yes' },
+                      ]}
+                    />
+                  </div>
+
+                  {(approval.notes || payload.approvalNotes) && isBuyerOrAdmin && (
+                    <div className="rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Approval Notes:</span>
+                      <p className="text-xs font-semibold text-slate-700">{approval.notes || payload.approvalNotes}</p>
+                    </div>
+                  )}
+                </div>
+              </DataCard>
+            )}
           </div>
         )}
 
@@ -4294,7 +4620,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
                   {/* Start Reverse Auction Button */}
                   <div className="flex flex-wrap items-center gap-2">
-                    {(!linkedAuction || ['DRAFT', 'CANCELLED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase())) && submittedParticipations.length > 0 && (
+                    {allowsReverseAuction && (!linkedAuction || (linkedAuction as any).auctionPlanned === true || ['DRAFT', 'CANCELLED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase())) && submittedParticipations.length > 0 && (
                       <Button
                         type="button"
                         size="sm"
@@ -4302,7 +4628,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                         className="h-7.5 gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-2xs rounded-lg px-3"
                       >
                         <Gavel className="h-3 w-3" />
-                        <span>Start Reverse Auction</span>
+                        <span>Launch Stage 2 Reverse Auction</span>
                       </Button>
                     )}
                   </div>
@@ -4413,6 +4739,10 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 onAuctionStarted={() => {
                   linkedAuctionQuery.refetch();
                 }}
+                auctionDefaults={linkedAuction ? {
+                  ...linkedAuction,
+                  minDecrementAmount: linkedAuction.minDecrementAmount != null ? Number(linkedAuction.minDecrementAmount) : undefined
+                } : undefined}
               />
             )}
 
@@ -4421,12 +4751,20 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 const clarKind = props.clarificationKind
                   ?? (props.procurementType === 'RATE_CONTRACT' || props.procurementType === 'LIMITED_TENDER' ? 'requirement' : 'quote-request');
                 const clarId = props.clarificationEntityId ?? targetId;
+                const isClarDeadlinePassed = (() => {
+                  const d1 = parseDateValue(clarificationDeadlineValue);
+                  const d2 = parseDateValue(closingDateValue || props.deadlineDate);
+                  const t1 = d1 ? d1.getTime() : 0;
+                  const t2 = d2 ? d2.getTime() : 0;
+                  const maxTime = Math.max(t1, t2);
+                  return maxTime > 0 ? maxTime < nowMs : false;
+                })();
                 return (
                   <ClarificationPanel
                     quoteRequestId={clarId}
                     kind={clarKind}
                     role={currentUser?.role === 'buyer' ? 'buyer' : 'seller'}
-                    deadlinePassed={Boolean(props.deadlineDate && new Date(props.deadlineDate).getTime() < nowMs)}
+                    deadlinePassed={isClarDeadlinePassed}
                     procurementLabel={props.procurementLabel || procurementTypeLabel}
                   />
                 );
@@ -4444,7 +4782,14 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           <div className="flex items-center gap-4 text-xs font-semibold text-slate-700">
             <div>
               <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Estimated Value</span>
-              <span className="text-xs sm:text-sm font-bold text-slate-900">{formatMoney(props.estimatedValue)}</span>
+              {shouldShowEstimatedCost ? (
+                <span className="text-xs sm:text-sm font-bold text-slate-900">{formatMoney(props.estimatedValue)}</span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-700">
+                  <span>Confidential</span>
+                  <Lock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                </span>
+              )}
             </div>
             {((closingDateFormatted && closingDateFormatted !== 'N/A') || props.deadlineDate) && (
               <div className="hidden sm:block border-l border-slate-200 pl-4">

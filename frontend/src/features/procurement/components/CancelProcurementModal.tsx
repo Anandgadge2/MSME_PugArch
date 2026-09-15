@@ -8,6 +8,8 @@ import {
   Ban,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
+import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
+import { CancellationRefundPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
 
 export interface CancelTargetProcurement {
   id: number;
@@ -46,6 +48,7 @@ export function CancelProcurementModal({
   const [remarks, setRemarks] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
 
   const modalRef = useRef<HTMLDivElement>(null);
   const reasonSelectRef = useRef<HTMLSelectElement>(null);
@@ -58,6 +61,7 @@ export function CancelProcurementModal({
       setRemarks('');
       setError(null);
       setIsSubmitting(false);
+      setPolicyAccepted(false);
 
       // Accessibility: Focus the reason select element when opened
       const timer = setTimeout(() => {
@@ -125,6 +129,11 @@ export function CancelProcurementModal({
       return;
     }
 
+    if (!policyAccepted) {
+      setError('Please read and accept the Order Cancellation, Withdrawal & Refund Policy to proceed.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       await onConfirm({
@@ -144,7 +153,7 @@ export function CancelProcurementModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs transition-opacity duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-xs transition-opacity duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="cancel-procurement-title"
@@ -152,7 +161,7 @@ export function CancelProcurementModal({
     >
       <div
         ref={modalRef}
-        className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl transition-all duration-200 animate-in fade-in zoom-in-95"
+        className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl transition-all duration-200 animate-in fade-in zoom-in-95"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
@@ -277,6 +286,23 @@ export function CancelProcurementModal({
             />
           </div>
 
+          {/* Policy Compliance Card */}
+          <div className="pt-2">
+            <ComplianceConsentCard
+              title="Order Cancellation, Withdrawal & Refund Policy"
+              subtitle="Statutory framework governing cancellation stages, supplier compensation, and refund eligibility."
+              pdfFile="Order_Cancellation_Refund_Policy.pdf"
+              accepted={policyAccepted}
+              onAcceptedChange={setPolicyAccepted}
+              checkboxLabel="I accept the Order Cancellation, Withdrawal & Refund Policy"
+              checkboxDescription="I acknowledge that this cancellation is recorded in the statutory audit trail, and agree to the legal terms governing cancellation rights, settlement pauses, and refund handling under JSG SMILE."
+              readerHeightClassName="h-[100px] sm:h-[120px]"
+              showPolicyLibrary
+            >
+              <CancellationRefundPolicyContent />
+            </ComplianceConsentCard>
+          </div>
+
           {/* Error Message */}
           {error && (
             <div
@@ -302,8 +328,8 @@ export function CancelProcurementModal({
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting}
-              className="h-9 px-5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wider shadow-sm transition-all active:scale-95 border-none cursor-pointer flex items-center gap-1.5"
+              disabled={isSubmitting || !policyAccepted}
+              className="h-9 px-5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wider shadow-sm transition-all active:scale-95 border-none cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>

@@ -82,6 +82,7 @@ import { redisKeys } from './src/constants/redis-keys.js';
 import { invalidateByPattern } from './src/services/cache.service.js';
 
 import { startWorkers } from './src/jobs/workers.js';
+import { prewarmMarketplaceHomeCache } from './src/routes/marketplace.routes.js';
 
 // Storage Provider initialized above
 
@@ -3051,11 +3052,13 @@ app.get('/api/files/:id/view', async (req: any, res: any) => {
     }
 
     const filename = encodeURIComponent((file.asset as any).originalName || (file.asset as any).key || 'document');
+    const entityType = String((file.asset as any)?.entityType || '').toLowerCase();
+    const isPublicAsset = ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'catalogue_service', 'organization_banner', 'public'].includes(entityType);
 
     res.setHeader('Content-Type', file.contentType);
     res.setHeader('Content-Length', file.buffer.length);
     res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
-    res.setHeader('Cache-Control', user ? 'private, no-store' : 'public, max-age=86400');
+    res.setHeader('Cache-Control', isPublicAsset ? 'public, max-age=86400, stale-while-revalidate=604800' : (user ? 'private, no-store' : 'public, max-age=86400'));
     return res.end(file.buffer);
   } catch (err: any) {
     return handleUploadRouteError(res, err);
@@ -6725,6 +6728,59 @@ app.post('/api/notifications/:id/read', authenticate, async (req: AuthRequest, r
   }
 });
 
+app.delete('/api/notifications/:id', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const currentUserId = Number(req.user?.id);
+    const id = Number(req.params.id);
+    const notification = await prisma.notification.findFirst({
+      where: { id, userId: currentUserId },
+      select: { id: true }
+    });
+    if (!notification) return res.status(404).json({ message: 'Notification not found' });
+    await prisma.notificationLog.deleteMany({ where: { notificationId: id } });
+    await prisma.notification.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err: any) {
+    handleSecureRouteError(res, err, 'Unable to delete notification');
+  }
+});
+
+app.delete('/api/notifications', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const currentUserId = Number(req.user?.id);
+    const userNotifs = await prisma.notification.findMany({
+      where: { userId: currentUserId },
+      select: { id: true }
+    });
+    const notifIds = userNotifs.map(n => n.id);
+    if (notifIds.length > 0) {
+      await prisma.notificationLog.deleteMany({ where: { notificationId: { in: notifIds } } });
+      await prisma.notification.deleteMany({ where: { id: { in: notifIds } } });
+    }
+    res.json({ success: true, count: notifIds.length });
+  } catch (err: any) {
+    handleSecureRouteError(res, err, 'Unable to clear notifications');
+  }
+});
+
+app.post('/api/notifications/clear-all', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const currentUserId = Number(req.user?.id);
+    const userNotifs = await prisma.notification.findMany({
+      where: { userId: currentUserId },
+      select: { id: true }
+    });
+    const notifIds = userNotifs.map(n => n.id);
+    if (notifIds.length > 0) {
+      await prisma.notificationLog.deleteMany({ where: { notificationId: { in: notifIds } } });
+      await prisma.notification.deleteMany({ where: { id: { in: notifIds } } });
+    }
+    res.json({ success: true, count: notifIds.length });
+  } catch (err: any) {
+    handleSecureRouteError(res, err, 'Unable to clear notifications');
+  }
+});
+
 const startListening = (port: number) => {
   const server = app.listen(port, () => {
     logger.info({ context: 'Server', port }, `MSME Core API listening on http://localhost:${port} [env: ${env.NODE_ENV}]`);
@@ -6853,6 +6909,7 @@ export async function startServer() {
   if (process.env.NODE_ENV !== 'production' || process.env.DB_KEEPALIVE === 'true') {
     const ping = () => prisma.$queryRawUnsafe('SELECT 1').catch(logDbKeepaliveFailure);
     void ping(); // immediate warm-up
+    void prewarmMarketplaceHomeCache(); // pre-warm marketplace landing cache
     const dbKeepaliveInterval = setInterval(() => { void ping(); }, 90_000);
     dbKeepaliveInterval.unref?.();
   }

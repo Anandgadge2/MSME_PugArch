@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { api, unwrapApiData } from '../lib/api';
 import { useRouter } from 'next/navigation';
-import { Bell, CheckCircle2, AlertTriangle, Info, ArrowLeft, Check, CheckSquare } from 'lucide-react';
+import { Bell, CheckCircle2, AlertTriangle, Info, ArrowLeft, Check, CheckSquare, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { routeForNotification, type PortalNotification } from '../lib/notifications';
@@ -48,6 +48,9 @@ export default function NotificationCenter() {
       return;
     }
     void fetchNotifications();
+    const handleUpdate = () => { void fetchNotifications(); };
+    window.addEventListener('notifications:updated', handleUpdate);
+    return () => window.removeEventListener('notifications:updated', handleUpdate);
   }, [token, page, pageSize]);
 
   const handleMarkAsRead = async (id: number | string) => {
@@ -81,6 +84,42 @@ export default function NotificationCenter() {
     } catch (err) {
       console.error('Failed to mark all as read:', err);
       toast.error("Failed to update notifications");
+    }
+  };
+
+  const handleDeleteNotification = async (id: number | string) => {
+    if (!token) return;
+    try {
+      const res = await api.delete(`/api/notifications/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+        setTotal(prev => Math.max(0, prev - 1));
+        window.dispatchEvent(new CustomEvent('notifications:updated'));
+        toast.success("Notification deleted");
+      }
+    } catch (err) {
+      console.error('Failed to delete notification:', err);
+      toast.error("Failed to delete notification");
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!token || notifications.length === 0) return;
+    try {
+      const res = await api.delete('/api/notifications', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setNotifications([]);
+        setTotal(0);
+        window.dispatchEvent(new CustomEvent('notifications:updated'));
+        toast.success("All notifications cleared");
+      }
+    } catch (err) {
+      console.error('Failed to clear notifications:', err);
+      toast.error("Failed to clear notifications");
     }
   };
 
@@ -128,15 +167,26 @@ export default function NotificationCenter() {
             </div>
           </div>
 
-          {unreadCount > 0 && (
-            <Button
-              onClick={handleMarkAllAsRead}
-              variant="outline"
-              className="h-10 rounded-lg border-slate-200 text-[#12335f] hover:bg-slate-50 font-black uppercase tracking-wider text-xs px-4 shadow-sm"
-            >
-              <CheckSquare className="mr-2 h-4 w-4" /> Mark All Read
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Button
+                onClick={handleMarkAllAsRead}
+                variant="outline"
+                className="h-10 rounded-lg border-slate-200 text-[#12335f] hover:bg-slate-50 font-black uppercase tracking-wider text-xs px-4 shadow-sm"
+              >
+                <CheckSquare className="mr-2 h-4 w-4" /> Mark All Read
+              </Button>
+            )}
+            {notifications.length > 0 && (
+              <Button
+                onClick={handleClearAll}
+                variant="outline"
+                className="h-10 rounded-lg border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 font-black uppercase tracking-wider text-xs px-4 shadow-sm"
+              >
+                <Trash2 className="mr-2 h-4 w-4" /> Clear All
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -207,12 +257,22 @@ export default function NotificationCenter() {
                     {!item.isRead && (
                       <button
                         onClick={() => handleMarkAsRead(item.id)}
-                        className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-500 hover:text-emerald-600"
+                        className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-500 hover:text-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         title="Mark as Read"
+                        aria-label="Mark as Read"
                       >
                         <Check className="h-4 w-4" />
                       </button>
                     )}
+
+                    <button
+                      onClick={() => handleDeleteNotification(item.id)}
+                      className="p-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 hover:border-rose-200 transition-colors text-slate-400 hover:text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                      title="Delete notification"
+                      aria-label="Delete notification"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               );
@@ -236,6 +296,17 @@ export default function NotificationCenter() {
         onClose={() => setDetailRecord(null)}
         footer={detailRecord && (
           <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:border-rose-300"
+              onClick={() => {
+                if (detailRecord) handleDeleteNotification(detailRecord.id);
+                setDetailRecord(null);
+              }}
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
+            </Button>
             <Button
               variant="outline"
               size="sm"

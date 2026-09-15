@@ -7,6 +7,9 @@ import type { CartEvaluation, CheckoutFormData } from '../../types';
 import { formatCurrency } from '../../../shared/format';
 import { cn } from '../../../../lib/utils';
 
+import { ComplianceConsentCard, type ComplianceDoc } from '../../../../components/compliance/ComplianceConsentCard';
+import { OrderPlacementPolicyContent, CancellationRefundPolicyContent } from '../../../../components/compliance/CompliancePoliciesText';
+
 const DECLARATIONS = [
   ['specsConfirmed', 'I confirm the selected product/service meets required specifications.'],
   ['priceReasonabilityConfirmed', 'I confirm price reasonability.'],
@@ -38,6 +41,23 @@ export default function Step8_PreviewSubmit({
   errors: Record<string, string>;
 }) {
   const total = cart?.items.reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice), 0) ?? 0;
+
+  const complianceDocs: ComplianceDoc[] = [
+    {
+      id: 'procurement',
+      name: 'Order_Placement_Procurement_Policy.pdf',
+      pdfFile: 'Order_Placement_Procurement_Policy.pdf',
+      title: 'Procurement Policy',
+      content: <OrderPlacementPolicyContent />,
+    },
+    {
+      id: 'cancellation',
+      name: 'Order_Cancellation_Refund_Policy.pdf',
+      pdfFile: 'Order_Cancellation_Refund_Policy.pdf',
+      title: 'Cancellation & Refund',
+      content: <CancellationRefundPolicyContent />,
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -111,32 +131,52 @@ export default function Step8_PreviewSubmit({
       {evaluation?.warnings?.map(w => (
         <p key={w} className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{w}</p>
       ))}
-      <div className="space-y-2 border-t border-slate-200 pt-4">
-        <h3 className="text-sm font-black">Declarations</h3>
-        {DECLARATIONS.map(([key, label]) => {
-          const isMandatory = MANDATORY_DECLARATIONS.has(key);
-          const hasError = Boolean(errors[key]);
-          return (
-            <label
-              key={key}
-              className={cn(
-                "flex items-start gap-2 text-xs cursor-pointer transition-colors",
-                hasError ? "text-red-600 font-medium" : "text-slate-700 hover:text-slate-900"
-              )}
-            >
-              <input
-                type="checkbox"
-                checked={Boolean(form.declarations[key as keyof typeof form.declarations])}
-                onChange={e => onDeclarationChange(key, e.target.checked)}
-                className="mt-0.5"
-              />
-              <span>
-                {label}
-                {isMandatory && <span className="text-red-500 font-bold ml-1">*</span>}
-              </span>
-            </label>
-          );
-        })}
+      <div className="space-y-3 border-t border-slate-200 pt-4">
+        <h3 className="text-sm font-black text-slate-900">Mandatory Sourcing Declarations</h3>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {DECLARATIONS.filter(([key]) => key !== 'termsAccepted').map(([key, label]) => {
+            const isMandatory = MANDATORY_DECLARATIONS.has(key);
+            const hasError = Boolean(errors[key]);
+            return (
+              <label
+                key={key}
+                className={cn(
+                  "flex items-start gap-2 text-xs cursor-pointer transition-colors p-2 rounded-lg border border-slate-100 bg-white hover:bg-slate-50",
+                  hasError ? "border-red-300 text-red-600 font-medium" : "text-slate-700 hover:text-slate-900"
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.declarations[key as keyof typeof form.declarations])}
+                  onChange={e => onDeclarationChange(key, e.target.checked)}
+                  className="mt-0.5 rounded text-[#12335f] focus:ring-[#12335f]/20 cursor-pointer"
+                />
+                <span>
+                  {label}
+                  {isMandatory && <span className="text-red-500 font-bold ml-1">*</span>}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+
+        {/* Compliance Legal Consent Card for Procurement & Cancellation */}
+        <div className="pt-2">
+          <ComplianceConsentCard
+            docs={complianceDocs}
+            title="Procurement & Order Cancellation Policies"
+            subtitle="Statutory compliance agreement governing Purchase Order issuance, T+1 settlement, and cancellation terms."
+            accepted={Boolean(form.declarations.termsAccepted)}
+            onAcceptedChange={val => onDeclarationChange('termsAccepted', val)}
+            checkboxLabel="I accept the Procurement Facilitation Policy and Cancellation & Refund Policy"
+            checkboxDescription="By authorizing this order, you legally confirm administrative sanction, agree to binding purchase order terms, and accept the cancellation and settlement framework of JSG SMILE."
+            readerHeightClassName="h-[120px] sm:h-[135px]"
+            showPolicyLibrary
+          />
+          {errors.termsAccepted && (
+            <p className="text-xs font-bold text-red-600 mt-1">{errors.termsAccepted}</p>
+          )}
+        </div>
       </div>
     </div>
   );

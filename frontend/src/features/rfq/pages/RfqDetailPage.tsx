@@ -241,8 +241,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const bidPacket: any = (bidData as any)?.technicalPacket && typeof (bidData as any).technicalPacket === 'object'
     ? (bidData as any).technicalPacket
     : {};
+  const activeBidId = (bidData as any)?.id || (initialData as any)?.id;
   const linkedRequirementId = bidPacket.sourceRequirementId || bidPacket.requirementId || bidPacket.linkedRequirementId || (bidData as any)?.sourceId;
-  const targetReqId = requirementId || (reqData as any)?.requirement?.id || linkedRequirementId || requestId;
+  const targetReqId = requirementId || (reqData as any)?.requirement?.id || activeBidId || requestId || linkedRequirementId;
 
   const { data: ownResponseQueryData } = useQuery({
     queryKey: ['rfq-own-response', targetReqId, requestId],
@@ -277,15 +278,17 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     : null;
 
   const localSubmittedResponse = React.useMemo(() => {
-    if (typeof window === 'undefined' || !user || user.role !== 'seller') return null;
+    if (typeof window === 'undefined' || !user || user.role !== 'seller' || !user.id) return null;
     const keys = [targetReqId, requirementId, requestId, (rawBid as any)?.id, (rawBid as any)?.bidNumber].filter(Boolean);
     for (const k of keys) {
       try {
-        const item = localStorage.getItem(`rfq_submitted_${k}`);
+        const item = localStorage.getItem(`rfq_submitted_${user.id}_${k}`);
         if (item) {
           const parsed = JSON.parse(item);
           if (parsed && parsed.status && String(parsed.status).toUpperCase() !== 'DRAFT') {
-            return parsed;
+            if (!parsed.userId || String(parsed.userId) === String(user.id)) {
+              return parsed;
+            }
           }
         }
       } catch {
@@ -389,6 +392,11 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   });
 
   const sellerResponses = React.useMemo(() => {
+    // Sealed Bidding Strict Confidentiality: Sellers must strictly NEVER see other sellers' quotations
+    if (user?.role === 'seller') {
+      return ownParticipation ? [ownParticipation] : [];
+    }
+
     const rawList = [
       ...(Array.isArray(buyerResponsesData) ? buyerResponsesData : []),
       ...(Array.isArray(reqData?.responses) ? reqData.responses : []),
@@ -595,25 +603,25 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     });
     return withTime || valid[0];
   };
-  const published  = preferReq
-    ? resolvePublishedCandidate(
-        reqObj?.payload?.schedule?.submissionStartDate,
-        reqObj?.approvedAt,
-        reqObj?.createdAt,
-        rawBid?.startDate,
-        rawBid?.createdAt,
-        reqObj?.payload?.schedule?.publishDate,
-        rawBid?.technicalPacket?.schedule?.publishDate
-      )
-    : resolvePublishedCandidate(
-        rawBid?.technicalPacket?.schedule?.submissionStartDate,
-        rawBid?.startDate,
-        rawBid?.createdAt,
-        reqObj?.approvedAt,
-        reqObj?.createdAt,
-        rawBid?.technicalPacket?.schedule?.publishDate,
-        reqObj?.payload?.schedule?.publishDate
-      );
+  const createdCandidate = reqObj?.createdAt || rawBid?.createdAt || null;
+  const approvedCandidate = reqObj?.approvedAt || rawBid?.approvedAt || rawBid?.publishedAt || null;
+  const formPublishCandidate = preferReq
+    ? (reqObj?.payload?.schedule?.publishDate || rawBid?.technicalPacket?.schedule?.publishDate)
+    : (rawBid?.technicalPacket?.schedule?.publishDate || reqObj?.payload?.schedule?.publishDate);
+
+  const published = (() => {
+    const tCreated = createdCandidate ? new Date(createdCandidate).getTime() : NaN;
+    if (formPublishCandidate && Number.isFinite(tCreated)) {
+      const tPub = new Date(formPublishCandidate).getTime();
+      if (Number.isFinite(tPub) && tPub > tCreated + 60000) {
+        return formPublishCandidate;
+      }
+    }
+    return approvedCandidate || createdCandidate || formPublishCandidate || rawBid?.startDate || null;
+  })();
+  const submissionStartDate = preferReq
+    ? (reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || published)
+    : (rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || published);
   const location   = preferReq ? (reqObj?.location || reqObj?.deliveryLocation || rawBid?.deliveryLocation || '—') : (rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—');
   const buyerOrg   = preferReq ? (reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || reqObj?.buyerName || rawBid?.buyerOrganizationName || '—') : (rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—');
   const buyerType  = preferReq ? (reqObj?.buyerType || reqObj?.buyerOrganization?.type || rawBid?.buyerType || 'Private Buyer') : (rawBid?.buyerType || rawBid?.technicalPacket?.basics?.buyerType || 'Private Buyer');
@@ -1080,7 +1088,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       procurementType={derivedProcurementType}
       procurementLabel={derivedProcurementLabel}
       backRouteLabel={derivedBackRouteLabel}
-      id={targetReqId || requestId || 'RFQ'}
+      id={rawBid?.id || reqObj?.id || targetReqId || requestId || 'RFQ'}
       displayId={ref}
       subject={title}
       status={status}
@@ -1088,9 +1096,19 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       orgName={buyerOrg}
       buyer={{ name: contact, email, mobile, buyerProfile: reqObj?.buyerOrganization || rawBid?.buyerOrganization || rawBid?.buyer?.buyerProfile }}
       estimatedValue={value}
+      discloseEstimatedCost={Boolean(
+        rawBid?.discloseEstimatedCost ??
+        reqObj?.discloseEstimatedCost ??
+        reqObj?.payload?.discloseEstimatedCost ??
+        reqObj?.payload?.basics?.discloseEstimatedCost ??
+        rawBid?.technicalPacket?.discloseEstimatedCost ??
+        rawBid?.technicalPacket?.basics?.discloseEstimatedCost ??
+        false
+      )}
       deadlineDate={deadline}
       createdAt={reqObj?.createdAt || rawBid?.createdAt || published}
       publishedDate={published ? fmtDate(published, true) : undefined}
+      submissionStartDate={submissionStartDate ? fmtDate(submissionStartDate, true) : undefined}
       closingDate={deadline ? fmtDate(deadline, true) : undefined}
       clarificationDate={clarDeadline ? fmtDate(clarDeadline, true) : undefined}
       technicalDate={techOpen ? fmtDate(techOpen, true) : undefined}
@@ -1111,6 +1129,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       deliveryTerms={delTerms}
       description={desc}
       payload={preferReq ? (reqObj?.payload || rawBid?.technicalPacket || {}) : (rawBid?.technicalPacket || reqObj?.payload || {})}
+      approvalAuthority={rawBid?.approvalAuthority || (preferReq ? reqObj?.approvalAuthority : rawBid?.approvalAuthority) || rawBid?.technicalPacket?.internal?.approvalAuthority || reqObj?.payload?.internal?.approvalAuthority}
+      justification={rawBid?.justification || (preferReq ? reqObj?.justification : rawBid?.justification) || rawBid?.technicalPacket?.internal?.justification || reqObj?.payload?.internal?.justification}
+      internalDetails={preferReq ? (reqObj?.payload?.internal || rawBid?.technicalPacket?.internal || rawBid?.internalDetails) : (rawBid?.technicalPacket?.internal || rawBid?.internalDetails || reqObj?.payload?.internal)}
       boqTable={preferReq ? (reqObj?.payload?.boqTable || reqObj?.boqTable) : (rawBid?.technicalPacket?.boqTable || rawBid?.boqTable || reqObj?.payload?.boqTable)}
       documents={docs}
       items={items}
@@ -1136,14 +1157,14 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
       cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Request' : 'Cancel RFQ'}
       clarificationKind={requirementId || (rawBid?.sourceModel === 'REQUIREMENT') ? 'requirement' : 'quote-request'}
-      clarificationEntityId={requirementId || rawBid?.sourceId || targetReqId || requestId}
+      clarificationEntityId={rawBid?.id || reqObj?.id || requirementId || requestId || targetReqId}
     />
     {canCancel && (
       <CancelProcurementModal
         isOpen={cancelModalOpen}
         onClose={() => setCancelModalOpen(false)}
         procurement={{
-          id: Number(targetReqId || requestId || rawBid?.id || reqObj?.id),
+          id: Number(rawBid?.id || reqObj?.id || targetReqId || requestId),
           type: requirementId || rawBid?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'bid_tender',
           title: title,
           referenceNumber: ref,

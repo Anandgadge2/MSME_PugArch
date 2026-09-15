@@ -187,11 +187,23 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
           buyerProfile: bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization,
         }}
         estimatedValue={bid.estimatedValue || reqObj.estimatedValue || basics.estimatedValue}
-        deadlineDate={bid.endDate || reqObj.lastDate || schedule.submissionDate}
-        createdAt={bid.startDate || bid.createdAt || reqObj.createdAt}
-        publishedDate={formatDateString(schedule.publishDate || bid.startDate || reqObj.createdAt)}
-        closingDate={formatDateString(bid.endDate || reqObj.lastDate || schedule.submissionDate, true)}
-        clarificationDate={formatDateString(schedule.clarificationDeadline, true)}
+        discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? basics.discloseEstimatedCost ?? false)}
+        deadlineDate={schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate}
+        createdAt={reqObj.createdAt || bid.createdAt || bid.startDate}
+        publishedDate={(() => {
+          const tCreated = reqObj.createdAt || bid.createdAt;
+          const rawPub = schedule.publishDate || schedule.publishedDate;
+          if (rawPub && tCreated) {
+            const pubMs = new Date(rawPub).getTime();
+            const crMs = new Date(tCreated).getTime();
+            if (Number.isFinite(pubMs) && Number.isFinite(crMs) && pubMs > crMs + 60000) {
+              return formatDateString(rawPub);
+            }
+          }
+          return formatDateString(reqObj.approvedAt || reqObj.publishedAt || bid.publishedAt || bid.approvedAt || tCreated || bid.rawStartDate || bid.startDate);
+        })()}
+        closingDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
+        clarificationDate={schedule.clarificationDeadline || schedule.clarificationEndDate ? formatDateString(schedule.clarificationDeadline || schedule.clarificationEndDate, true) : undefined}
         technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate, true)}
         financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate, true)}
         category={bid.category?.name || bid.category || reqObj.category?.name || basics.category}
@@ -202,6 +214,9 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
         deliveryTerms={bid.deliveryTerms || terms.deliveryTerms || 'Door delivery'}
         description={bid.description || reqObj.description || basics.description}
         payload={payload}
+        approvalAuthority={bid.approvalAuthority || payload.internal?.approvalAuthority || payload.approvalAuthority}
+        justification={bid.justification || payload.internal?.justification || payload.limitedTenderJustification || basics.justification}
+        internalDetails={bid.internalDetails || payload.internal}
         documents={bid.documents || bid.bidDocuments || reqObj.documents || payload.documents || []}
         items={bid.items || payload.items || reqObj.items || payload.boqTable || []}
         evaluationMethod={

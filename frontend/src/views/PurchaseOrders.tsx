@@ -1,8 +1,10 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical, Building2, Calendar, ChevronDown, MapPin, User, Copy, Package, CreditCard, Clock } from 'lucide-react';
+import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical, Building2, Calendar, ChevronDown, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
+import { PaymentReceiptUploadModal } from '../features/payments/components/PaymentReceiptUploadModal';
+import { PaymentReceiptViewModal } from '../features/payments/components/PaymentReceiptViewModal';
 
 const moneyPdf = (val: any, currency = 'INR') => {
   const num = Number(val || 0);
@@ -27,7 +29,7 @@ import { PageToolbar } from '../features/shared/PageToolbar';
 import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
 import { useDeliveryByPO } from '../features/delivery/hooks';
-import { PageTableSkeleton } from '../components/ui/skeleton';
+import { PageTableSkeleton, TableSkeleton, GridCardSkeleton } from '../components/ui/skeleton';
 import { PurchaseOrderReceiptModal } from '../features/purchaseOrders/components/PurchaseOrderReceiptModal';
 import { DataTable, type ColumnDef } from '../components/ui/data-table';
 
@@ -111,7 +113,9 @@ const OrderActionsMenu = ({
   handleRejectOrder,
   handleOpenDelivery,
   exportInvoicePdf,
-  setConfirming
+  setConfirming,
+  onUploadPaymentSlip,
+  onViewPaymentSlip
 }: any) => {
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -248,6 +252,47 @@ const OrderActionsMenu = ({
         <Printer className="h-3.5 w-3.5 text-slate-500" />
         <span>Print</span>
       </button>
+
+      {isBuyer && !isCancelled && (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onUploadPaymentSlip?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left"
+          >
+            <Upload className="h-3.5 w-3.5 text-indigo-600" />
+            <span>Upload Slip</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onViewPaymentSlip?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
+          >
+            <Receipt className="h-3.5 w-3.5 text-slate-500" />
+            <span>View Slip</span>
+          </button>
+        </>
+      )}
+
+      {isSeller && !isCancelled && (
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            onViewPaymentSlip?.(order);
+          }}
+          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left"
+        >
+          <Receipt className="h-3.5 w-3.5 text-indigo-600" />
+          <span>Payment Slip</span>
+        </button>
+      )}
 
       {isBuyer && !isCancelled && !isDelivered && (
         <button
@@ -390,6 +435,8 @@ export default function PurchaseOrders() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [confirming, setConfirming] = useState<{ action: 'acknowledge' | 'cancel'; order: PurchaseOrderDto } | null>(null);
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrderDto | null>(null);
+  const [uploadProofOrder, setUploadProofOrder] = useState<PurchaseOrderDto | null>(null);
+  const [viewProofOrder, setViewProofOrder] = useState<PurchaseOrderDto | null>(null);
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -474,7 +521,7 @@ export default function PurchaseOrders() {
   }, [searchTerm]);
 
   const { data: allOrders, loading, refreshing, error, reload: reloadAllOrders, setData: setAllOrders } = useFeatureQuery<PurchaseOrderDto[]>(
-    `/api/purchase-orders?take=500&viewerScope=${encodeURIComponent(viewerScope)}`,
+    `/api/purchase-orders?take=100&viewerScope=${encodeURIComponent(viewerScope)}`,
     []
   );
 
@@ -786,6 +833,8 @@ export default function PurchaseOrders() {
             handleOpenDelivery={handleOpenDelivery}
             exportInvoicePdf={exportInvoicePdf}
             setConfirming={setConfirming}
+            onUploadPaymentSlip={setUploadProofOrder}
+            onViewPaymentSlip={setViewProofOrder}
           />
         )}
       </div>
@@ -1118,7 +1167,7 @@ export default function PurchaseOrders() {
       </div>
 
       {(loading || refreshing) && (!allOrders || allOrders.length === 0) ? (
-        <PageTableSkeleton kpiCount={4} />
+        viewMode === 'grid' ? <GridCardSkeleton count={6} /> : <TableSkeleton rows={8} cols={7} />
       ) : error ? (
         <div className="p-8 text-center text-red-500">
           <ShieldCheck className="mx-auto h-12 w-12 opacity-50 mb-4" />
@@ -1243,6 +1292,8 @@ export default function PurchaseOrders() {
             handleOpenDelivery(order as PurchaseOrderDto);
           }}
           onRepeatOrder={(order) => handleOpenRepeatModal(order as PurchaseOrderDto)}
+          onUploadSlip={(order) => setUploadProofOrder(order as PurchaseOrderDto)}
+          onViewSlip={(order) => setViewProofOrder(order as PurchaseOrderDto)}
           activeDelivery={activeDelivery}
         />
       )}
@@ -1322,6 +1373,37 @@ export default function PurchaseOrders() {
           </div>
         </div>
       )}
+
+      {uploadProofOrder && (
+        <PaymentReceiptUploadModal
+          isOpen={!!uploadProofOrder}
+          onClose={() => setUploadProofOrder(null)}
+          order={{
+            id: Number(uploadProofOrder.id),
+            poNumber: uploadProofOrder.poNumber,
+            amount: uploadProofOrder.amount || uploadProofOrder.totalValue,
+            totalValue: uploadProofOrder.totalValue || uploadProofOrder.amount,
+            seller: uploadProofOrder.seller
+          }}
+          onSuccess={() => {
+            setUploadProofOrder(null);
+            toast.success('Payment slip uploaded successfully. Awaiting verification.');
+            reload();
+          }}
+        />
+      )}
+
+      {viewProofOrder && (
+        <PaymentReceiptViewModal
+          isOpen={!!viewProofOrder}
+          onClose={() => setViewProofOrder(null)}
+          orderId={Number(viewProofOrder.id)}
+          onStatusChange={() => {
+            setViewProofOrder(null);
+            reload();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1343,19 +1425,23 @@ function StatusPill({ status }: { status?: string }) {
   const isCancelled = value === 'cancelled' || value === 'rejected';
   const isDelivered = value === 'delivered';
   const isIssued = value === 'issued' || value === 'generated' || value === 'order_placed';
+  const isPaidOffline = value === 'paid_offline_verified';
+  const isPaid = value === 'paid' || isPaidOffline;
 
   return (
     <span
       className={cn(
         'inline-flex items-center rounded-lg border px-3 py-1 text-[10px] font-black uppercase tracking-wide',
-        isAccepted && 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs',
-        isDelivered && 'border-green-300 bg-green-50 text-green-800 shadow-2xs',
-        isCancelled && 'border-rose-300 bg-rose-50 text-rose-800 shadow-2xs',
-        isIssued && 'border-sky-300 bg-sky-50 text-sky-900 shadow-2xs',
-        !isAccepted && !isDelivered && !isCancelled && !isIssued && 'border-slate-200 bg-slate-50 text-slate-700'
+        isPaidOffline && 'border-indigo-300 bg-indigo-50 text-indigo-800 shadow-2xs',
+        isPaid && !isPaidOffline && 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs',
+        !isPaid && isAccepted && 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs',
+        !isPaid && isDelivered && 'border-green-300 bg-green-50 text-green-800 shadow-2xs',
+        !isPaid && isCancelled && 'border-rose-300 bg-rose-50 text-rose-800 shadow-2xs',
+        !isPaid && isIssued && 'border-sky-300 bg-sky-50 text-sky-900 shadow-2xs',
+        !isAccepted && !isDelivered && !isCancelled && !isIssued && !isPaid && 'border-slate-200 bg-slate-50 text-slate-700'
       )}
     >
-      {isAccepted ? 'ACCEPTED' : isIssued ? 'ISSUED' : readableStatus(value).toUpperCase()}
+      {isPaidOffline ? 'PAID (OFFLINE)' : isAccepted ? 'ACCEPTED' : isIssued ? 'ISSUED' : readableStatus(value).toUpperCase()}
     </span>
   );
 }

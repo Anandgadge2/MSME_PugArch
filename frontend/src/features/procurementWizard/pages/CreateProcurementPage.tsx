@@ -45,10 +45,13 @@ import {
   Tag,
   HelpCircle,
   CheckCircle2,
-  ArrowUpRight
+  ArrowUpRight,
+  Truck,
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
+import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
+import { OrderPlacementPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
 import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
@@ -1212,6 +1215,7 @@ export default function CreateProcurementPage() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [submittingDraft, setSubmittingDraft] = useState(false);
   const [triedNext, setTriedNext] = useState(false);
+  const [legalComplianceAccepted, setLegalComplianceAccepted] = useState(false);
   const [showItemDrawer, setShowItemDrawer] = useState(false);
   const [selectedItemForEdit, setSelectedItemForEdit] = useState<ItemRow | null>(null);
   const [hasAutofilled, setHasAutofilled] = useState(false);
@@ -2098,6 +2102,10 @@ export default function CreateProcurementPage() {
       }
       return;
     }
+    if (!legalComplianceAccepted) {
+      toast.error('Please read and accept the Order Placement & Procurement Facilitation Policy before publishing.');
+      return;
+    }
     setSubmittingDraft(true);
     try {
       const effectiveDraftId = draftIdRef.current || draft.id;
@@ -2374,6 +2382,8 @@ export default function CreateProcurementPage() {
                   draft={draft}
                   updateDraft={updateDraft}
                   readiness={readiness}
+                  complianceAccepted={legalComplianceAccepted}
+                  onComplianceAcceptedChange={setLegalComplianceAccepted}
                 />
               </SectionCard>
             )}
@@ -2388,6 +2398,7 @@ export default function CreateProcurementPage() {
                 onSubmit={submitProcurement}
                 isSaving={savingDraft}
                 isSubmitting={submittingDraft}
+                disableSubmit={activeStep === ALL_STEPS.length - 1 && !legalComplianceAccepted}
                 showSubmit={activeStep === ALL_STEPS.length - 1}
               />
             </div>
@@ -4907,12 +4918,12 @@ function ItemsDetailsForm({
   if (whatBuying === 'BOQ') {
     return (
       <div className="space-y-4 w-full min-w-0 max-w-full">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-2.5 gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-2.5 gap-2.5">
           <div>
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Structured Bill of Quantities (BOQ)</h3>
             <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Invite quotes using an itemized spreadsheet schedule</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
             <Button
               type="button"
               variant="outline"
@@ -4921,35 +4932,36 @@ function ItemsDetailsForm({
                 toast.info('Downloading BOQ Excel Template...');
                 window.open(`${BASE_URL}/api/buyer-showcase/boq/template`, '_blank');
               }}
-              className="h-8.5 text-xs font-bold text-slate-700"
+              className="h-8.5 text-xs font-bold text-slate-700 shrink-0 whitespace-nowrap"
             >
-              <Download className="h-4 w-4 mr-1" /> Template
+              <Download className="h-4 w-4 mr-1 text-slate-500" aria-hidden="true" /> Template
             </Button>
             
-            <div className="relative">
+            <div className="relative shrink-0">
               <input
                 type="file"
                 id="boq-upload"
                 accept=".xls,.xlsx,.csv"
                 onChange={handleBOQUpload}
-                className="hidden"
+                className="sr-only"
                 disabled={uploadingFile}
+                aria-label="Upload BOQ File"
               />
               <label
                 htmlFor="boq-upload"
                 className={cn(
-                  "cursor-pointer inline-flex items-center justify-center h-8.5 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-3xs",
+                  "cursor-pointer inline-flex items-center justify-center h-8.5 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-3xs shrink-0 whitespace-nowrap focus-within:ring-2 focus-within:ring-[#12335f]/20",
                   uploadingFile && "opacity-50 pointer-events-none"
                 )}
               >
                 {uploadingFile ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-1 text-slate-500" />
+                    <Loader2 className="h-4 w-4 animate-spin mr-1 text-slate-500" aria-hidden="true" />
                     <span>Uploading...</span>
                   </>
                 ) : (
                   <>
-                    <Upload className="h-4 w-4 mr-1 text-slate-500" />
+                    <Upload className="h-4 w-4 mr-1 text-slate-500" aria-hidden="true" />
                     <span>Upload BOQ File</span>
                   </>
                 )}
@@ -5084,81 +5096,89 @@ function ItemsDetailsForm({
   return (
     <div className="space-y-5 w-full min-w-0 max-w-full">
       {serviceDetailsPanel}
-      <div className="flex flex-col gap-2.5 sm:gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">
-              Procurement Schedule & Specifications
-            </h3>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">
-              {draft.items.length} line{draft.items.length === 1 ? '' : 's'}
-            </span>
+      <div className="border-b border-slate-100 pb-3.5 space-y-3">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                Procurement Schedule & Specifications
+              </h3>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">
+                {draft.items.length} line{draft.items.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+              Add product/service items, configure pricing and GST, and attach technical specifications & drawings.
+            </p>
           </div>
-          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-            Add product/service items, configure pricing and GST, and attach technical specifications & drawings.
-          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={handleDownloadItemTemplate}
-            className="h-8.5 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            title="Download Excel template (.xlsx) for bulk items"
-          >
-            <Download className="h-3.5 w-3.5 mr-1 text-slate-500" /> Template
-          </Button>
-
-          <div className="relative">
-            <input
-              type="file"
-              id="item-template-import"
-              accept=".xlsx,.xls,.csv,.txt"
-              onChange={handleImportItemTemplate}
-              className="hidden"
-            />
-            <label
-              htmlFor="item-template-import"
-              className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50"
-              title="Import items from Excel (.xlsx) or CSV spreadsheet"
+        {/* Action Toolbar: All buttons in a single row without wrapping */}
+        <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-0.5 flex-nowrap">
+          <div className="flex items-center gap-2 shrink-0 flex-nowrap">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => handleAddNewItem('Product')}
+              className="h-8.5 px-3.5 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-3xs shrink-0 whitespace-nowrap"
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Import Excel / CSV
-            </label>
+              <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product
+            </Button>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => handleAddNewItem('Service')}
+              className="h-8.5 px-3.5 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50 shrink-0 whitespace-nowrap"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service
+            </Button>
           </div>
 
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={handleImportCartItems}
-            disabled={isCartLoading}
-            className="h-8.5 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            title="Import catalogue items from your active cart"
-          >
-            <ShoppingCart className="h-3.5 w-3.5 mr-1 text-blue-600" />
-            {isCartLoading ? 'Reading Cart...' : `Import Cart${activeCart?.items?.length ? ` (${activeCart.items.length})` : ''}`}
-          </Button>
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-nowrap">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleImportCartItems}
+              disabled={isCartLoading}
+              className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
+              title="Import catalogue items from your active cart"
+            >
+              <ShoppingCart className="h-3.5 w-3.5 mr-1 text-blue-600" aria-hidden="true" />
+              {isCartLoading ? 'Reading Cart...' : activeCart?.items?.length ? `Import Cart (${activeCart.items.length})` : 'Import Cart'}
+            </Button>
 
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => handleAddNewItem('Service')}
-            className="h-8.5 px-3.5 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add Service
-          </Button>
+            <div className="relative shrink-0">
+              <input
+                type="file"
+                id="item-template-import"
+                accept=".xlsx,.xls,.csv,.txt"
+                onChange={handleImportItemTemplate}
+                className="sr-only"
+                aria-label="Import items from Excel or CSV spreadsheet"
+              />
+              <label
+                htmlFor="item-template-import"
+                className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-[#12335f]/20 shrink-0 whitespace-nowrap"
+                title="Import items from Excel (.xlsx) or CSV spreadsheet"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" aria-hidden="true" /> Import Excel / CSV
+              </label>
+            </div>
 
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => handleAddNewItem('Product')}
-            className="h-8.5 px-3.5 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-3xs"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add Product
-          </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleDownloadItemTemplate}
+              className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
+              title="Download Excel template (.xlsx) for bulk items"
+            >
+              <Download className="h-3.5 w-3.5 mr-1 text-slate-500" aria-hidden="true" /> Template
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -5189,27 +5209,27 @@ function ItemsDetailsForm({
         emptyTitle="No items or services added yet"
         emptyDescription="Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
         footer={
-          <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+          <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar flex-nowrap">
+            <div className="flex items-center gap-2 shrink-0 flex-nowrap">
               <Button
                 type="button"
                 size="sm"
                 onClick={() => handleAddNewItem('Product')}
-                className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445]"
+                className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shrink-0 whitespace-nowrap"
               >
-                <Plus className="h-3.5 w-3.5 mr-1" /> Add Product Line
+                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product Line
               </Button>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => handleAddNewItem('Service')}
-                className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
+                className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50 shrink-0 whitespace-nowrap"
               >
-                <Plus className="h-3.5 w-3.5 mr-1" /> Add Service Line
+                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service Line
               </Button>
             </div>
-            <span className="text-[11px] font-semibold text-slate-500">
+            <span className="text-[11px] font-semibold text-slate-500 shrink-0 whitespace-nowrap">
               {draft.items.length} line item{draft.items.length === 1 ? '' : 's'} scheduled
             </span>
           </div>
@@ -5885,15 +5905,26 @@ function ScheduleStepForm({
             <Field label="Auction Mode" required>
               <input value={draft.auctionConfig.auctionMode} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
             </Field>
-            <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
-              <input type="datetime-local" value={draft.auctionConfig.startDateTime} onChange={e => updateAuction('startDateTime', e.target.value)} className={controlClass(fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.'))} />
-            </Field>
-            <Field label="Auction End DateTime" required error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}>
-              <input type="datetime-local" value={draft.auctionConfig.endDateTime} onChange={e => updateAuction('endDateTime', e.target.value)} className={controlClass(fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.'))} />
-            </Field>
-            <Field label="Auction Duration (Minutes)" required error={fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.')}>
-              <input type="number" min={1} value={draft.auctionConfig.durationMinutes || ''} onChange={e => updateAuction('durationMinutes', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.'))} />
-            </Field>
+            {isReverseAuctionMethod(draft.type) ? (
+              <>
+                <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
+                  <input type="datetime-local" value={draft.auctionConfig.startDateTime} onChange={e => updateAuction('startDateTime', e.target.value)} className={controlClass(fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.'))} />
+                </Field>
+                <Field label="Auction End DateTime" required error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}>
+                  <input type="datetime-local" value={draft.auctionConfig.endDateTime} onChange={e => updateAuction('endDateTime', e.target.value)} className={controlClass(fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.'))} />
+                </Field>
+                <Field label="Auction Duration (Minutes)" required error={fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.')}>
+                  <input type="number" min={1} value={draft.auctionConfig.durationMinutes || ''} onChange={e => updateAuction('durationMinutes', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.'))} />
+                </Field>
+              </>
+            ) : (
+              <div className="sm:col-span-2 flex items-center gap-2.5 p-3 rounded-xl bg-blue-50 border border-blue-200 text-[11px] text-blue-900 font-semibold">
+                <svg className="h-4 w-4 shrink-0 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                <span>
+                  <strong>Follow-on Auction (SAP Ariba Pattern):</strong> The live auction start time and duration will be configured when you launch Stage 2 from the &quot;Proposals&quot; tab — after evaluating sealed bids. The auction ceiling will automatically lock to the lowest qualified bid (L1).
+                </span>
+              </div>
+            )}
             <Field label="Starting Bid Price" required error={fieldError(showErrors && draft.auctionConfig.startingBidPrice <= 0, 'Starting bid price must be greater than 0.')}>
               <input type="number" min={0} value={draft.auctionConfig.startingBidPrice || ''} onChange={e => updateAuction('startingBidPrice', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.startingBidPrice <= 0, 'Starting bid price must be greater than 0.'))} />
             </Field>
@@ -6403,25 +6434,63 @@ function CommercialTermsForm({
             </select>
           </Field>
 
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 pt-1">
-            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={draft.terms.freightIncluded}
-                onChange={e => updateTerms('freightIncluded', e.target.checked)}
-                className="h-4 w-4 rounded accent-[#12335f]"
-              />
-              <span>Freight included?</span>
-            </label>
-            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={draft.terms.gstIncluded}
-                onChange={e => updateTerms('gstIncluded', e.target.checked)}
-                className="h-4 w-4 rounded accent-[#12335f]"
-              />
-              <span>GST included in budget?</span>
-            </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 flex flex-col justify-between">
+              <label className="flex items-start gap-2.5 text-xs font-bold text-slate-800 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={draft.terms.freightIncluded}
+                  onChange={e => updateTerms('freightIncluded', e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded accent-[#12335f]"
+                />
+                <div className="space-y-0.5 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="flex items-center gap-1 text-slate-900 font-bold">
+                      <Truck className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
+                      Freight Included
+                    </span>
+                    <span className={cn(
+                      "px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded",
+                      draft.terms.freightIncluded ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+                    )}>
+                      {draft.terms.freightIncluded ? 'Door Delivery' : 'Extra'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-medium text-slate-500 leading-tight">
+                    {draft.terms.freightIncluded
+                      ? 'Bid price must include all shipping, transit insurance & door delivery to buyer location.'
+                      : 'Freight charges are excluded and can be billed separately as per actuals.'}
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 flex flex-col justify-between">
+              <label className="flex items-start gap-2.5 text-xs font-bold text-slate-800 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={draft.terms.gstIncluded}
+                  onChange={e => updateTerms('gstIncluded', e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded accent-[#12335f]"
+                />
+                <div className="space-y-0.5 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-slate-900 font-bold">GST Included in Budget</span>
+                    <span className={cn(
+                      "px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded",
+                      draft.terms.gstIncluded ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+                    )}>
+                      {draft.terms.gstIncluded ? 'Gross' : 'Net + Tax'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-medium text-slate-500 leading-tight">
+                    {draft.terms.gstIncluded
+                      ? 'Procurement estimated value includes all applicable GST.'
+                      : 'GST is evaluated and billed on top of the quoted base price.'}
+                  </p>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -6881,9 +6950,9 @@ function EvaluationBasisForm({
             </div>
 
             <div className="flex items-center gap-2 p-2.5 rounded-lg bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 font-semibold">
-              <Info className="h-4 w-4 shrink-0 text-indigo-700" />
+              <Info className="h-4 w-4 shrink-0 text-indigo-700" aria-hidden="true" />
               <span>
-                The live auction schedule, duration, and optional terms document can be fine-tuned under <strong>Step 5 (Timeline & Rules)</strong>.
+                <strong>How it works:</strong> The reverse auction will be launched as a follow-on event after you evaluate Stage 1 sealed proposals. The rules you configure here (decrement step, rank visibility, anti-sniping) will be used as defaults. You can adjust the start time, duration, and vendor selection when launching from the Proposals tab.
               </span>
             </div>
           </div>
@@ -6899,11 +6968,15 @@ function EvaluationBasisForm({
 function PreviewPublishForm({
   draft,
   updateDraft,
-  readiness
+  readiness,
+  complianceAccepted,
+  onComplianceAcceptedChange,
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
   readiness: Array<{ label: string; ok: boolean; severity: 'error' | 'warning' | 'info' }>;
+  complianceAccepted: boolean;
+  onComplianceAcceptedChange: (accepted: boolean) => void;
 }) {
   // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   // const approvalHandoff = isGov
@@ -7004,14 +7077,25 @@ function PreviewPublishForm({
         <Field label="Approval Workflow">
           <select
             value={draft.approval.workflow || (draft.schedule.packetType === 'Two' ? 'Two-Stage (Technical + Financial)' : 'Single Stage (Commercial Only)')}
-            onChange={e => updateDraft(c => ({ ...c, approval: { ...c.approval, workflow: e.target.value } }))}
+            onChange={e => {
+              const val = e.target.value;
+              const isTwo = val.includes('Two-Stage');
+              updateDraft(c => ({
+                ...c,
+                approval: { ...c.approval, workflow: val },
+                schedule: { ...c.schedule, packetType: isTwo ? 'Two' : 'Single' }
+              }));
+            }}
             className={inputClass}
           >
             <option value="Single Stage (Commercial Only)">Single Stage (Commercial Only)</option>
             <option value="Two-Stage (Technical + Financial)">Two-Stage (Technical + Financial)</option>
-            <option value="Finance + Procurement Dual Review">Finance + Procurement Dual Review</option>
-            <option value="Department Head Sanction">Department Head Sanction</option>
           </select>
+          <p className="text-[10px] text-slate-500 font-semibold mt-1">
+            {draft.schedule.packetType === 'Two'
+              ? 'Two-Stage: Technical bids are evaluated and qualified first before unsealing commercial price bids.'
+              : 'Single Stage: Direct commercial evaluation; price bids are unsealed immediately upon deadline closure.'}
+          </p>
         </Field>
       </div>
 
@@ -7024,6 +7108,22 @@ function PreviewPublishForm({
           placeholder="Enter remarks for the approval authority..."
         />
       </Field>
+
+      <div className="pt-2">
+        <ComplianceConsentCard
+          title="Order Placement & Procurement Facilitation Policy"
+          subtitle="Statutory compliance agreement governing RFQ publishing, bidding, delivery verification, and settlement."
+          pdfFile="Order_Placement_Procurement_Policy.pdf"
+          accepted={complianceAccepted}
+          onAcceptedChange={onComplianceAcceptedChange}
+          checkboxLabel="I certify compliance with procurement rules & accept the Order Placement & Procurement Facilitation Policy"
+          checkboxDescription="By checking this box, you formally confirm administrative and financial sanction, affirm that this requirement is not split to circumvent competitive bidding thresholds, and agree to be bound by the statutory procurement terms of JSG SMILE."
+          readerHeightClassName="h-[120px] sm:h-[135px]"
+          showPolicyLibrary
+        >
+          <OrderPlacementPolicyContent />
+        </ComplianceConsentCard>
+      </div>
     </div>
   );
 }
@@ -7187,9 +7287,13 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   };
 
   const hasReverseAuction = isReverseAuctionMethod(draft.type) || Boolean(draft.basics.isReverseAuctionNeeded);
+  const isStandaloneRA = isReverseAuctionMethod(draft.type);
   const auctionConfigPayload = hasReverseAuction ? {
     ...draft.auctionConfig,
-    procurementMethod: isReverseAuctionMethod(draft.type) ? 'REVERSE_AUCTION' : 'BID_WITH_REVERSE_AUCTION',
+    // For hybrid follow-on methods, omit start/end dates — they will be set
+    // when the buyer launches Stage 2 from the Proposals tab after evaluation
+    ...(isStandaloneRA ? {} : { startDateTime: undefined, endDateTime: undefined }),
+    procurementMethod: isStandaloneRA ? 'REVERSE_AUCTION' : 'BID_WITH_REVERSE_AUCTION',
     auctionTitle: draft.auctionConfig.auctionTitle || title,
     auctionDescription: draft.auctionConfig.auctionDescription || draft.basics.justification || basics.description,
     auctionCategory: draft.auctionConfig.auctionCategory || draft.basics.category,

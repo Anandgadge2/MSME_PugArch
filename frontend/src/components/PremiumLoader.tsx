@@ -43,7 +43,7 @@ export default function PremiumLoader({
   progress: externalProgress,
   mode = 'initial',
   isReady = false,
-  duration = 1400,
+  duration = 800,
   onComplete
 }: PremiumLoaderProps) {
   const [internalProgress, setInternalProgress] = useState(0);
@@ -74,12 +74,12 @@ export default function PremiumLoader({
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime;
-      // Safety timeout (3.5 seconds max) guarantees the loader never gets stuck at 95%
-      const forceReady = elapsed >= Math.max(duration * 2, 3500);
+      // Safety timeout guarantees the loader never gets stuck
+      const forceReady = elapsed >= Math.max(duration * 2, 2000);
       const ready = isReadyRef.current || forceReady;
 
-      // Ensure minimum display duration so animation feels natural and smooth
-      if (!ready || (elapsed < duration * 0.75 && !forceReady)) {
+      // Allow natural progression up to 90%, but if ready early, proceed directly
+      if (!ready || (elapsed < duration * 0.4 && !forceReady)) {
         // Smoothly progress up to 90% while waiting for isReady
         const ratio = Math.min(elapsed / duration, 1);
         const target = Math.floor(90 * (1 - Math.pow(1 - ratio, 2.2)));

@@ -415,6 +415,7 @@ export default function TenderDetailPage() {
       orgName={orgName}
       buyer={tender.buyer}
       estimatedValue={tender.budget}
+      discloseEstimatedCost={Boolean((tender as any)?.discloseEstimatedCost ?? draft?.discloseEstimatedCost ?? draft?.basics?.discloseEstimatedCost ?? false)}
       deadlineDate={tender.closesAt}
       createdAt={tender.publishedAt || tender.createdAt}
       publishedDate={publishedDateFormatted}

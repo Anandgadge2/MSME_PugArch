@@ -310,6 +310,7 @@ interface StickyActionBarProps {
   isSaving?: boolean;
   isSubmitting?: boolean;
   disableContinue?: boolean;
+  disableSubmit?: boolean;
   showSubmit?: boolean;
 }
 
@@ -325,6 +326,7 @@ export function StickyActionBar({
   isSaving = false,
   isSubmitting = false,
   disableContinue = false,
+  disableSubmit = false,
   showSubmit = false
 }: StickyActionBarProps) {
   return (
@@ -355,8 +357,8 @@ export function StickyActionBar({
         {showSubmit && onSubmit ? (
           <Button
             onClick={onSubmit}
-            disabled={isSubmitting}
-            className="h-[38px] sm:h-10 text-[11px] sm:text-sm bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 hover:from-emerald-700 hover:to-teal-900 text-white font-black shadow-md shadow-emerald-700/25 hover:shadow-lg hover:shadow-emerald-700/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 px-4 sm:px-6 rounded-xl flex items-center gap-1.5"
+            disabled={isSubmitting || disableSubmit}
+            className="h-[38px] sm:h-10 text-[11px] sm:text-sm bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 hover:from-emerald-700 hover:to-teal-900 text-white font-black shadow-md shadow-emerald-700/25 hover:shadow-lg hover:shadow-emerald-700/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 px-4 sm:px-6 rounded-xl flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
             type="button"
           >
             {isSubmitting ? <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin mr-1.5" /> : null}

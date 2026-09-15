@@ -21,6 +21,8 @@ import {
   MapPin,
   Sun,
   Moon,
+  Upload,
+  Receipt,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { toast } from 'sonner';
@@ -89,6 +91,8 @@ export interface PurchaseOrderReceiptModalProps {
   onCreateInvoice?: (order: PurchaseOrderDto) => void;
   onManageDispatch?: (order: PurchaseOrderDto) => void;
   onRepeatOrder?: (order: PurchaseOrderDto) => void;
+  onUploadSlip?: (order: PurchaseOrderDto) => void;
+  onViewSlip?: (order: PurchaseOrderDto) => void;
   activeDelivery?: any;
 }
 
@@ -173,6 +177,8 @@ export function PurchaseOrderReceiptModal({
   onCreateInvoice,
   onManageDispatch,
   onRepeatOrder,
+  onUploadSlip,
+  onViewSlip,
   activeDelivery,
 }: PurchaseOrderReceiptModalProps) {
   const [order, setOrder] = useState<PurchaseOrderDto | null>(initialOrder);
@@ -1102,6 +1108,25 @@ export function PurchaseOrderReceiptModal({
                 className="h-9 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-4"
               >
                 <RefreshCw className="mr-1.5 h-4 w-4" /> Repeat Order
+              </Button>
+            )}
+
+            {isBuyer && viewingStatusLower !== 'cancelled' && onUploadSlip && (
+              <Button
+                onClick={() => onUploadSlip(order)}
+                className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-4"
+              >
+                <Upload className="mr-1.5 h-4 w-4" /> Upload Slip
+              </Button>
+            )}
+
+            {viewingStatusLower !== 'cancelled' && onViewSlip && (
+              <Button
+                variant="outline"
+                onClick={() => onViewSlip(order)}
+                className="h-9 border-slate-300 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-xl px-4"
+              >
+                <Receipt className="mr-1.5 h-4 w-4 text-slate-600" /> Payment Slip
               </Button>
             )}
           </div>

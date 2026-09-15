@@ -27,6 +27,8 @@ import {
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
+import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
+import { SupplierAgreementPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
 import type { DocumentPreview } from '../../../lib/files';
 import { getDocumentPreviewMode } from '../../../lib/files';
 import { useAuth } from '../../../hooks/useAuth';
@@ -117,12 +119,36 @@ const isSellerVerified = (user: any) => {
   return Boolean(user.sellerProfile?.verificationStatusEnum === 'VERIFIED' || user.sellerProfile?.panVerified || user.sellerProfile?.isUdyamCertified);
 };
 
-const isBidClosed = (bid: ProcurementBid) => bid.status === 'Closed' || new Date(`${bid.endDate}T23:59:59`).getTime() < Date.now();
+const parseBidEndDate = (dateStr?: string) => {
+  if (!dateStr) return null;
+  const s = String(dateStr).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+  }
+  const parsed = new Date(s).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const isBidClosed = (bid: ProcurementBid) => {
+  const stat = String(bid.status || '').toLowerCase();
+  if (stat.includes('closed') || stat.includes('awarded') || stat.includes('cancelled')) return true;
+  const endTime = parseBidEndDate(bid.rawEndDate || bid.endDate);
+  return endTime !== null && endTime < Date.now();
+};
 
 const daysLeft = (date: string) => {
-  const days = Math.ceil((new Date(`${date}T23:59:59`).getTime() - Date.now()) / 86400000);
-  if (days <= 0) return 'Closed';
-  if (days === 1) return '1 day left';
+  const endTime = parseBidEndDate(date);
+  if (!endTime) return 'Closed';
+  const diffMs = endTime - Date.now();
+  if (diffMs <= 0) return 'Closed';
+  const days = Math.ceil(diffMs / 86400000);
+  if (days === 1) {
+    const hours = Math.ceil(diffMs / 3600000);
+    if (hours <= 24) return `${hours} hr(s) left`;
+    return '1 day left';
+  }
   return `${days} days left`;
 };
 
@@ -1874,6 +1900,8 @@ function SubmitStep({
   onPayClick?: () => void;
   procurementType?: string | null;
 }) {
+  const [complianceAgreed, setComplianceAgreed] = useState(false);
+
   return (
     <div className={panelClass + " p-6 text-center space-y-6"}>
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-50">
@@ -1918,7 +1946,23 @@ function SubmitStep({
       )}
 
       {!submitted && (
-        <div className="mt-6 flex flex-col items-center justify-center gap-2.5 sm:gap-3">
+        <div className="mt-4 flex flex-col items-center justify-center gap-4">
+          <div className="w-full max-w-2xl mx-auto text-left">
+            <ComplianceConsentCard
+              title="MSME Registration & Supplier Participation Agreement"
+              subtitle="Statutory supplier undertaking governing commercial offers, bid authenticity, and delivery commitment."
+              pdfFile="MSME_Registration_Supplier_Participation_Agreement.pdf"
+              accepted={complianceAgreed}
+              onAcceptedChange={setComplianceAgreed}
+              checkboxLabel="I certify bid authenticity & agree to the MSME Supplier Participation Agreement"
+              checkboxDescription="I formally declare that all technical specifications, rates, and delivery schedules submitted in this bid are firm and legally binding under the MSME Supplier Participation Agreement of JSG SMILE."
+              readerHeightClassName="h-[120px] sm:h-[135px]"
+              showPolicyLibrary
+            >
+              <SupplierAgreementPolicyContent />
+            </ComplianceConsentCard>
+          </div>
+
           {isEmdActive && !isEmdPaid && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 max-w-md text-left text-xs text-amber-900 font-medium flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
@@ -1929,7 +1973,7 @@ function SubmitStep({
           )}
           <button
             onClick={onSubmit}
-            disabled={!canSubmit || submitting || (isEmdActive && !isEmdPaid)}
+            disabled={!canSubmit || submitting || !complianceAgreed || (isEmdActive && !isEmdPaid)}
             className="inline-flex h-12 items-center justify-center gap-2 rounded-xl px-8 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
             style={{ backgroundColor: 'var(--bid-primary)' }}
           >

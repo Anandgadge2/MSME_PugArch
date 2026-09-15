@@ -140,6 +140,7 @@ import { MarketplaceHeader } from './features/marketplace/components/Marketplace
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
 import { SubUserActivationGate } from './features/auth/components/SubUserActivationGate';
+import { PageTableSkeleton, ProfileSkeleton, FormSectionSkeleton, StorefrontSkeleton, GridCardSkeleton } from './components/ui/skeleton';
 
 function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKey: string }) {
   React.useEffect(() => {
@@ -180,30 +181,87 @@ function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKe
 }
 
 /**
- * Lightweight skeleton for lazy-loaded routes. Replaces a full-page spinner
- * so navigation feels instant: the layout (sidebar, header) stays put and
- * only the main panel shows shimmer until the route chunk lands.
+ * Route-aware skeleton fallback for lazy-loaded routes. Matches the destination
+ * layout (table register, profile, wizard, storefront) so navigation feels seamless
+ * and eliminates the jarring 2-stage skeleton transition.
  */
 function RouteFallback() {
+  const pathname = usePathname() || '';
+
+  if (pathname.includes('/profile')) {
+    return <ProfileSkeleton />;
+  }
+
+  if (pathname.startsWith('/marketplace/sellers/') || pathname.startsWith('/vendors/')) {
+    return (
+      <div className="mx-auto max-w-[1560px] p-4 sm:p-6 pb-16 animate-in fade-in duration-150">
+        <StorefrontSkeleton />
+      </div>
+    );
+  }
+
+  if (pathname.includes('/vendors') || pathname.includes('/sellers')) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto animate-in fade-in duration-150">
+        <GridCardSkeleton count={6} />
+      </div>
+    );
+  }
+
+  if (pathname.includes('/create') || pathname.includes('/wizard') || pathname.includes('/register')) {
+    return (
+      <div className="space-y-6 max-w-5xl mx-auto p-4 sm:p-6 animate-in fade-in duration-150">
+        <div className="h-8 w-64 bg-slate-200/70 rounded-xl" />
+        <FormSectionSkeleton fields={6} />
+      </div>
+    );
+  }
+
+  // Standard Table / Register / Dashboard view (Orders, Invoices, Delivery, Escrow, Procurements, Rbac, Admin)
   return (
-    <div className="p-6 space-y-6 animate-pulse">
-      <div className="flex justify-between items-center">
-        <div className="h-8 w-48 bg-slate-200 rounded-xl" />
-        <div className="h-10 w-24 bg-slate-200 rounded-xl" />
-      </div>
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="h-32 bg-slate-200/60 rounded-2xl border border-slate-200/20" />
-        <div className="h-32 bg-slate-200/60 rounded-2xl border border-slate-200/20" />
-        <div className="h-32 bg-slate-200/60 rounded-2xl border border-slate-200/20" />
-      </div>
-      <div className="space-y-4">
-        <div className="h-12 bg-slate-200/40 rounded-xl w-full" />
-        <div className="h-12 bg-slate-200/40 rounded-xl w-full" />
-        <div className="h-12 bg-slate-200/40 rounded-xl w-full" />
-      </div>
+    <div className="space-y-4 animate-in fade-in duration-150">
+      <PageTableSkeleton kpiCount={4} />
     </div>
   );
 }
+
+export const routeLoaders: Record<string, () => Promise<unknown>> = {
+  '/dashboard': () => import('./views/Dashboard'),
+  '/shg/dashboard': () => import('./views/Dashboard'),
+  '/master-admin': () => import('./features/masterAdmin/pages/MasterAdminPage'),
+  '/orders': () => import('./views/PurchaseOrders'),
+  '/repeat-orders': () => import('./views/RepeatOrders'),
+  '/buyer/my-procurements': () => import('./features/procurement/pages/MyProcurementsPage'),
+  '/buyer/procurement/create': () => import('./features/procurementWizard/pages/CreateProcurementPage'),
+  '/buyer/procurement/drafts': () => import('./features/procurementWizard/pages/ProcurementDraftsPage'),
+  '/buyer/procurement/hub': () => import('./features/procurement/pages/BuyerProcurementHub'),
+  '/buyer/procurement/responses': () => import('./features/procurement/pages/SupplierResponsesPage'),
+  '/seller/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
+  '/buyer/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
+  '/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
+  '/delivery': () => import('./features/delivery/pages/DeliveryListPage'),
+  '/escrow': () => import('./features/escrow/pages/EscrowPage'),
+  '/buyer/vendors': () => import('./views/Vendors'),
+  '/vendors': () => import('./views/Vendors'),
+  '/profile': () => import('./views/Profile'),
+  '/buyer/profile': () => import('./views/BuyerProfile'),
+  '/seller/catalogue': () => import('./features/catalogue/pages/CatalogueFormPage'),
+  '/admin/onboarding': () => import('./views/AdminOnboarding'),
+  '/admin/rbac': () => import('./views/RbacPanel'),
+  '/admin/records': () => import('./features/admin/pages/AdminRecordsPage'),
+  '/admin/reports': () => import('./views/MISReports'),
+  '/messages': () => import('./features/messages/pages/MessagesPage'),
+  '/org/team': () => import('./features/orgTeam/pages/TeamManagementPage'),
+};
+
+export const preloadRoute = (path: string) => {
+  if (typeof window === 'undefined') return;
+  const cleanPath = path.split('?')[0];
+  const loader = routeLoaders[cleanPath];
+  if (loader) {
+    loader().catch(() => undefined);
+  }
+};
 
 const scheduleIdle = (callback: () => void, timeout = 2500) => {
   if (typeof window === 'undefined') return () => undefined;
@@ -234,7 +292,7 @@ const shouldRunBackgroundPreload = () => {
   };
   if (nav.connection?.saveData) return false;
   if (nav.connection?.effectiveType && /(^2g$|slow-2g)/i.test(nav.connection.effectiveType)) return false;
-  return window.matchMedia('(min-width: 1024px)').matches;
+  return true;
 };
 
 const preloadInBatches = (loaders: ReadonlyArray<() => Promise<unknown>>) => {
@@ -257,26 +315,28 @@ const rolePreloaders = {
   shg: [
     () => import('./views/ShgOnboarding'),
     () => import('./features/payments/pages/PaymentHistoryPage'),
+    () => import('./views/PurchaseOrders'),
   ],
   buyer: [
+    () => import('./views/PurchaseOrders'),
+    () => import('./features/invoices/pages/InvoiceRegisterPage'),
     () => import('./features/procurement/pages/MyProcurementsPage'),
+    () => import('./views/RepeatOrders'),
+    () => import('./features/delivery/pages/DeliveryListPage'),
     () => import('./features/procurementWizard/pages/CreateProcurementPage'),
-    () => import('./features/procurementWizard/pages/ProcurementDraftsPage'),
-    () => import('./features/procurement/pages/BuyerProcurementHub'),
-    () => import('./features/procurementBid/pages/BidComparisonPage'),
-    // LEGACY: CreateBidPage preload removed — /buyer/create-bid now shows LegacyNoticePage
   ],
   seller: [
+    () => import('./views/PurchaseOrders'),
+    () => import('./features/invoices/pages/InvoiceRegisterPage'),
+    () => import('./features/delivery/pages/DeliveryListPage'),
+    () => import('./features/escrow/pages/EscrowPage'),
     () => import('./features/sellerOpportunities/pages/SellerOpportunitiesPage'),
-    () => import('./features/sellerOpportunities/pages/SellerEventListPage'),
     () => import('./features/procurementBid/pages/BidsListingPage'),
-    () => import('./features/procurementBid/pages/BidParticipationPage'),
-    () => import('./features/procurementBid/pages/SellerBidsPage'),
   ],
   admin: [
+    () => import('./views/AdminOnboarding'),
     () => import('./features/admin/pages/AdminRecordsPage'),
     () => import('./views/OrganizationManagement'),
-    () => import('./features/fraudAlerts/pages/FraudAlertsPage'),
     () => import('./views/RbacPanel'),
     () => import('./features/messages/pages/MessagesPage'),
   ],
@@ -470,7 +530,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     setSafetyTimeoutPassed(false);
     const timer = setTimeout(() => {
       setSafetyTimeoutPassed(true);
-    }, 4000);
+    }, 1200);
     return () => clearTimeout(timer);
   }, [pathname, isLoggingIn, isLoggingOut]);
 
@@ -483,8 +543,9 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     setIsPageMounted(true);
   }, []);
 
+  const isPublicLanding = pathname === '/' || pathname === '/marketplace';
   const isDataSettled = isFetchingQueries === 0 || safetyTimeoutPassed;
-  const isInitialReady = (!loading && isDataSettled) || safetyTimeoutPassed;
+  const isInitialReady = isPublicLanding || (!loading && isDataSettled) || safetyTimeoutPassed;
   const isAuthTransitionReady = isPageMounted && (!loading || safetyTimeoutPassed);
   const isLogoutReady = isPageMounted || safetyTimeoutPassed;
 

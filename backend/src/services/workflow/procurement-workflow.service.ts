@@ -12,6 +12,7 @@ type RequirementInput = {
   canonicalMethod?: string;
   estimatedValue?: number;
   requiredBy?: Date;
+  status?: string;
   items?: Array<Record<string, unknown>>;
   payload?: any;
   draftStep?: number;
@@ -42,7 +43,7 @@ export const procurementWorkflow = {
         canonicalMethod: input.canonicalMethod || null,
         estimatedValue: input.estimatedValue,
         requiredBy: input.requiredBy,
-        status: 'DRAFT',
+        status: (input.status as any) || 'DRAFT',
         payload: input.payload || null,
         draftStep: input.draftStep ?? null,
         items: input.items?.length ? { create: input.items } : undefined

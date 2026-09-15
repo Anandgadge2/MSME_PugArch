@@ -21,6 +21,7 @@ import {
   IndianRupee,
   Layers,
   Ban,
+  CheckCircle2,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
@@ -201,6 +202,19 @@ export function ProcurementDetailView({
   onCancel?: (p: any) => void;
   breadcrumbParent?: string;
 }) {
+  const internalData = p.internalDetails || p.payload?.internal || {};
+  const approvalAuthority = p.approvalAuthority || internalData.approvalAuthority || p.budgetDetails?.approvingAuthority;
+  const justification = p.justification || internalData.justification || p.budgetDetails?.justification || p.payload?.basics?.justification;
+  const budgetConfirmed = internalData.budgetConfirmed !== undefined
+    ? Boolean(internalData.budgetConfirmed)
+    : (p.budgetDetails?.remarks?.toLowerCase().includes('sanction') || false);
+  const contactPerson = internalData.contactPerson;
+  const contactEmail = internalData.email;
+  const contactMobile = internalData.mobile;
+  const department = internalData.department;
+  const fileNumber = internalData.internalFileNumber;
+  const competentAuthority = internalData.competentAuthority;
+
   /* ── 1. Timeline Calculations (Guaranteed Order) ── */
   const rawSteps =
     p.tracking && p.tracking.length > 0
@@ -743,6 +757,111 @@ export function ProcurementDetailView({
 
       </div>
 
+      {/* ── Internal Approvals & Statutory Compliance Card ── */}
+      {(approvalAuthority || justification || internalData.orgName || contactPerson || budgetConfirmed) && (
+        <section className="rounded-xl border border-indigo-100 bg-gradient-to-b from-indigo-50/35 via-white to-white p-5 shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-indigo-100 gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100/80 text-[#12335f] font-black shadow-2xs">
+                <ShieldCheck className="h-4 w-4 text-[#12335f]" aria-hidden="true" />
+              </span>
+              <div>
+                <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                  Internal Approval & Statutory Compliance
+                </h2>
+                <p className="text-[10px] text-slate-500 font-semibold">
+                  Competent financial sanction, authority sign-off, and GFR / corporate justification
+                </p>
+              </div>
+            </div>
+            {budgetConfirmed && (
+              <span className="inline-flex items-center gap-1.5 self-start sm:self-center px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10.5px] font-bold shadow-2xs">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
+                Budget Allocated & Sanctioned
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            {/* Approval Authority */}
+            <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs space-y-1">
+              <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                Internal Approval Authority
+              </span>
+              <p className="font-extrabold text-slate-900 text-sm">
+                {approvalAuthority || '—'}
+              </p>
+              <span className="inline-block text-[10px] text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded font-semibold border border-indigo-100/60">
+                Verified Sign-Off
+              </span>
+            </div>
+
+            {/* Competent Financial Authority or Department */}
+            <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs space-y-1">
+              <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                {competentAuthority ? 'Competent Authority (CFA)' : 'Buying Department'}
+              </span>
+              <p className="font-bold text-slate-800 text-xs truncate">
+                {competentAuthority || department || p.organizationName || '—'}
+              </p>
+              {fileNumber && (
+                <p className="text-[10px] text-slate-500 font-mono">
+                  File: {fileNumber}
+                </p>
+              )}
+            </div>
+
+            {/* Contact Person */}
+            <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs space-y-1">
+              <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                Requisitioner / Contact
+              </span>
+              <p className="font-bold text-slate-800 text-xs truncate">
+                {contactPerson || '—'}
+              </p>
+              {contactEmail && (
+                <p title={contactEmail} className="text-[10px] text-slate-500 truncate">
+                  {contactEmail}
+                </p>
+              )}
+            </div>
+
+            {/* Mobile / Budget Allocation */}
+            <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs space-y-1">
+              <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                Budget & Sanction Guideline
+              </span>
+              <p className="font-bold text-slate-800 text-xs">
+                {budgetConfirmed ? 'GFR / Corporate Compliant' : 'Subject to Financial Approval'}
+              </p>
+              {contactMobile && (
+                <p className="text-[10px] text-slate-500">
+                  Tel: {contactMobile}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Justification Text Area */}
+          {justification && (
+            <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/90 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase text-[#12335f] tracking-wider flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
+                  Purchase Justification & Compliance Reason
+                </span>
+                <span className="text-[9.5px] font-bold text-slate-400 uppercase">
+                  Statutory Audit Record
+                </span>
+              </div>
+              <p className="text-xs text-slate-800 leading-relaxed font-medium whitespace-pre-wrap pl-1 border-l-2 border-[#12335f]/30">
+                {justification}
+              </p>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* ── Lower 2-Column Grid: Compliance & Terms ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         
@@ -842,6 +961,7 @@ export function ProcurementDetailView({
             {p.detailSections.map((section: any, idx: number) => {
               const getSectionIcon = (title: string) => {
                 const t = title.toLowerCase();
+                if (t.includes('approval') || t.includes('compliance') || t.includes('sanction')) return ShieldCheck;
                 if (t.includes('intent') || t.includes('scope')) return ClipboardList;
                 if (t.includes('buyer') || t.includes('user') || t.includes('contact') || t.includes('org')) return Info;
                 if (t.includes('item') || t.includes('qty')) return Package;
@@ -858,7 +978,9 @@ export function ProcurementDetailView({
                   val.length > 80 ||
                   f.label.toLowerCase().includes('description') ||
                   f.label.toLowerCase().includes('scope') ||
-                  f.label.toLowerCase().includes('notes')
+                  f.label.toLowerCase().includes('notes') ||
+                  f.label.toLowerCase().includes('justification') ||
+                  f.label.toLowerCase().includes('reason')
                 );
               });
 

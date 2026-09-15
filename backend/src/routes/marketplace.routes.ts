@@ -1153,17 +1153,42 @@ const enrichMarketplaceItemsWithTrustData = async (items: any[]) => {
     }
 };
 
+let cachedHomeSections: any[] | null = null;
+let lastHomeSectionsFetch = 0;
+
+export const clearHomeSectionsCache = () => {
+    cachedHomeSections = null;
+    lastHomeSectionsFetch = 0;
+};
+
 const ensureMarketplaceHomeSections = async () => {
-    if (!db.marketplaceHomeSection) return defaultHomeSections.map(section => ({ ...section }));
-    await Promise.all(defaultHomeSections.map(section =>
-        db.marketplaceHomeSection.upsert({
-            where: { key: section.key },
-            update: {},
-            create: section
-        }).catch(() => null)
-    ));
-    const sections = await db.marketplaceHomeSection.findMany({ orderBy: [{ displayOrder: 'asc' }, { key: 'asc' }] }).catch(() => []);
-    return sections?.length ? sections : defaultHomeSections.map(section => ({ ...section }));
+    const now = Date.now();
+    if (cachedHomeSections && (now - lastHomeSectionsFetch < 600_000)) {
+        return cachedHomeSections;
+    }
+    if (!db.marketplaceHomeSection) {
+        cachedHomeSections = defaultHomeSections.map(section => ({ ...section }));
+        lastHomeSectionsFetch = now;
+        return cachedHomeSections;
+    }
+    try {
+        let sections = await db.marketplaceHomeSection.findMany({ orderBy: [{ displayOrder: 'asc' }, { key: 'asc' }] });
+        if (!sections || sections.length === 0) {
+            await Promise.all(defaultHomeSections.map(section =>
+                db.marketplaceHomeSection.upsert({
+                    where: { key: section.key },
+                    update: {},
+                    create: section
+                }).catch(() => null)
+            ));
+            sections = await db.marketplaceHomeSection.findMany({ orderBy: [{ displayOrder: 'asc' }, { key: 'asc' }] });
+        }
+        cachedHomeSections = sections?.length ? sections : defaultHomeSections.map(section => ({ ...section }));
+        lastHomeSectionsFetch = now;
+        return cachedHomeSections;
+    } catch {
+        return defaultHomeSections.map(section => ({ ...section }));
+    }
 };
 
 const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketplaceFeaturedCategories(), async () => {
@@ -1606,154 +1631,176 @@ router.get('/marketplace/recommendations', authenticate, authorize('buyer', 'adm
 
 const purgeMarketplaceHomeCache = async () => {
     try {
+        clearHomeSectionsCache();
         await Promise.allSettled([
             deleteCache(redisKeys.cacheMarketplaceHome()),
             deleteCache('marketplace:home:v2'),
             invalidateByPattern('cache:marketplace:home-layout:*'),
             invalidateByPattern('cache:marketplace:*')
         ]);
+        void fetchMarketplaceHomeData().catch(() => undefined);
     } catch (err) {
         console.warn('[Marketplace Cache Purge Warning]', err);
     }
 };
 
-router.get('/admin/marketplace/home-sections', authenticate, authorize('admin', 'master_admin'), async (_req: AuthRequest, res: Response) => {
-    try {
-        return ok(res, { sections: await ensureMarketplaceHomeSections() });
-    } catch (error) {
-        console.error('[Admin Marketplace Sections]', error);
-        return apiResponse.error(res, 500, 'Failed to load marketplace home sections', 'ADMIN_MARKETPLACE_SECTIONS_ERROR');
-    }
-});
+export const fetchMarketplaceHomeData = async () => {
+    return getOrSetCache(redisKeys.cacheMarketplaceHome(), async () => {
+        const [
+            banners,
+            categories,
+            featuredProducts,
+            featuredServices,
+            verifiedSellers,
+            notices,
+            largeIndustries,
+            bigMsmes,
+            stats,
+            latestRequirements,
+            latestTenders,
+            latestBids,
+            homeLayout
+        ] = await Promise.all([
+            // Banners
+            db.marketplaceBanner?.findMany?.({
+                where: { isActive: true },
+                orderBy: { displayOrder: 'asc' },
+                take: 10
+            }).catch(() => []),
 
-router.post('/admin/marketplace/home-sections/reset-defaults', authenticate, authorize('admin', 'master_admin'), async (_req: AuthRequest, res: Response) => {
-    try {
-        await Promise.all(defaultHomeSections.map(section =>
-            db.marketplaceHomeSection.upsert({
-                where: { key: section.key },
-                update: {
-                    title: section.title,
-                    enabled: section.enabled,
-                    displayOrder: section.displayOrder,
-                    itemLimit: section.itemLimit,
-                    ruleType: section.ruleType
+            // Categories
+            db.category.findMany({
+                where: { isActive: true },
+                orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+                include: {
+                    _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
+                }
+            }).catch(() => []),
+
+            // Featured Products
+            db.product.findMany({
+                where: { status: 'ACTIVE' },
+                orderBy: { createdAt: 'desc' },
+                take: 12,
+                include: {
+                    category: { select: { id: true, name: true } },
+                    seller: { select: { id: true, name: true, onboardingStatus: true } },
+                    organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect }, profile: { select: organizationProfileBrandSelect } } },
+                    images: { include: { fileAsset: { select: { id: true, url: true } } }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }], take: 1 }
+                }
+            }).catch(() => []),
+
+            // Featured Services
+            db.service.findMany({
+                where: { status: 'ACTIVE' },
+                orderBy: { createdAt: 'desc' },
+                take: 8,
+                include: {
+                    category: { select: { id: true, name: true } },
+                    seller: { select: { id: true, name: true, onboardingStatus: true } },
+                    organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect }, profile: { select: organizationProfileBrandSelect } } }
+                }
+            }).catch(() => []),
+
+            // Verified Sellers
+            db.organization.findMany({
+                where: sellerOrganizationWhere,
+                orderBy: { updatedAt: 'desc' },
+                take: 16,
+                select: {
+                    id: true,
+                    organizationName: true,
+                    organizationType: true,
+                    city: true,
+                    district: true,
+                    state: true,
+                    verificationStatus: true,
+                    logoFile: { select: organizationLogoSelect },
+                    profile: { select: organizationProfileBrandSelect },
+                    _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
+                }
+            }).catch(() => []),
+
+            // Notices
+            db.marketplaceNotice?.findMany?.({
+                where: { isActive: true },
+                orderBy: { publishedAt: 'desc' },
+                take: 5
+            }).catch(() => []),
+
+            db.organization.findMany({
+                where: {
+                    verificationStatus: 'VERIFIED',
+                    isBlacklisted: false,
+                    deletedAt: null,
+                    OR: [
+                        { users: { some: { role: 'buyer', accountStatus: 'ACTIVE' } } },
+                        { buyerProfiles: { some: {} } },
+                        { buyerRequirements: { some: {} } },
+                        { procurementBids: { some: {} } },
+                        { tenders: { some: {} } },
+                        { profile: { isLargeIndustry: true } },
+                        { organizationType: { in: ['PUBLIC_LIMITED', 'PSU', 'GOVERNMENT'] } }
+                    ]
                 },
-                create: { ...section }
-            })
-        ));
-        await purgeMarketplaceHomeCache();
-        const sections = await db.marketplaceHomeSection.findMany({ orderBy: [{ displayOrder: 'asc' }, { key: 'asc' }] });
-        return ok(res, { sections });
-    } catch (error) {
-        console.error('[Admin Marketplace Sections Reset]', error);
-        return apiResponse.error(res, 500, 'Failed to reset marketplace home sections', 'ADMIN_MARKETPLACE_SECTIONS_RESET_ERROR');
-    }
-});
+                orderBy: { updatedAt: 'desc' },
+                take: 24,
+                select: {
+                    id: true,
+                    organizationName: true,
+                    organizationType: true,
+                    city: true,
+                    district: true,
+                    state: true,
+                    verificationStatus: true,
+                    logoFile: { select: organizationLogoSelect },
+                    profile: true,
+                    buyerProfiles: {
+                        where: {
+                            verificationStatus: 'VERIFIED',
+                            isActive: true
+                        },
+                        select: {
+                            id: true,
+                            logoUrl: true,
+                            bannerUrl: true
+                        }
+                    },
+                    _count: { select: { buyerRequirements: true } }
+                }
+            }).catch(() => []),
 
-router.patch('/admin/marketplace/home-sections/:key', authenticate, authorize('admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
-    try {
-        const key = String(req.params.key || '').trim();
-        const body = adminHomeSectionSchema.parse(req.body);
-        const existingDefault = defaultHomeSections.find(section => section.key === key);
-        if (!existingDefault) return apiResponse.error(res, 404, 'Marketplace section not found', 'MARKETPLACE_SECTION_NOT_FOUND');
-        const section = await db.marketplaceHomeSection.upsert({
-            where: { key },
-            update: body,
-            create: { ...existingDefault, ...body }
-        });
-        await purgeMarketplaceHomeCache();
-        return ok(res, section);
-    } catch (error) {
-        console.error('[Admin Marketplace Section Update]', error);
-        return apiResponse.error(res, 400, 'Unable to update marketplace home section', 'ADMIN_MARKETPLACE_SECTION_UPDATE_ERROR');
-    }
-});
+            db.organization.findMany({
+                where: {
+                    verificationStatus: 'VERIFIED',
+                    isBlacklisted: false,
+                    deletedAt: null,
+                    OR: [
+                        { profile: { isBigMsme: true } },
+                        { organizationType: 'MSME' }
+                    ]
+                },
+                orderBy: { updatedAt: 'desc' },
+                take: 8,
+                select: {
+                    id: true,
+                    organizationName: true,
+                    organizationType: true,
+                    city: true,
+                    district: true,
+                    state: true,
+                    verificationStatus: true,
+                    logoFile: { select: organizationLogoSelect },
+                    profile: true,
+                    _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
+                }
+            }).catch(() => []),
 
-router.get('/marketplace/home', shortCache(60), async (_req: Request, res: Response) => {
-    try {
-        const data = await getOrSetCache(redisKeys.cacheMarketplaceHome(), async () => {
-            const [
-                banners,
-                categories,
-                featuredProducts,
-                featuredServices,
-                verifiedSellers,
-                notices,
-                largeIndustries,
-                bigMsmes,
-                stats,
-                latestRequirements,
-                latestTenders,
-                latestBids
-            ] = await Promise.all([
-                // Banners
-                db.marketplaceBanner?.findMany?.({
-                    where: { isActive: true },
-                    orderBy: { displayOrder: 'asc' },
-                    take: 10
-                }).catch(() => []),
-
-                // Categories
-                db.category.findMany({
-                    where: { isActive: true },
-                    orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
-                    include: {
-                        _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
-                    }
-                }).catch(() => []),
-
-                // Featured Products
-                db.product.findMany({
-                    where: { status: 'ACTIVE' },
-                    orderBy: { createdAt: 'desc' },
-                    take: 12,
-                    include: {
-                        category: { select: { id: true, name: true } },
-                        seller: { select: { id: true, name: true, onboardingStatus: true } },
-                        organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect }, profile: { select: organizationProfileBrandSelect } } },
-                        images: { include: { fileAsset: { select: { id: true, url: true } } }, orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }], take: 1 }
-                    }
-                }).catch(() => []),
-
-                // Featured Services
-                db.service.findMany({
-                    where: { status: 'ACTIVE' },
-                    orderBy: { createdAt: 'desc' },
-                    take: 8,
-                    include: {
-                        category: { select: { id: true, name: true } },
-                        seller: { select: { id: true, name: true, onboardingStatus: true } },
-                        organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, verificationStatus: true, logoFile: { select: organizationLogoSelect }, profile: { select: organizationProfileBrandSelect } } }
-                    }
-                }).catch(() => []),
-
-                // Verified Sellers
-                db.organization.findMany({
-                    where: sellerOrganizationWhere,
-                    orderBy: { updatedAt: 'desc' },
-                    take: 16,
-                    select: {
-                        id: true,
-                        organizationName: true,
-                        organizationType: true,
-                        city: true,
-                        district: true,
-                        state: true,
-                        verificationStatus: true,
-                        logoFile: { select: organizationLogoSelect },
-                        profile: { select: organizationProfileBrandSelect },
-                        _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
-                    }
-                }).catch(() => []),
-
-                // Notices
-                db.marketplaceNotice?.findMany?.({
-                    where: { isActive: true },
-                    orderBy: { publishedAt: 'desc' },
-                    take: 5
-                }).catch(() => []),
-
-                db.organization.findMany({
+            // Stats
+            Promise.all([
+                db.organization.count({ where: sellerOrganizationWhere }).catch(() => 0),
+                db.user.count({ where: { role: 'buyer', accountStatus: 'ACTIVE', onboardingStatus: { in: ['approved_for_procurement', 'approved'] } } }).catch(() => 0),
+                db.organization.count({
                     where: {
                         verificationStatus: 'VERIFIED',
                         isBlacklisted: false,
@@ -1767,102 +1814,53 @@ router.get('/marketplace/home', shortCache(60), async (_req: Request, res: Respo
                             { profile: { isLargeIndustry: true } },
                             { organizationType: { in: ['PUBLIC_LIMITED', 'PSU', 'GOVERNMENT'] } }
                         ]
-                    },
-                    orderBy: { updatedAt: 'desc' },
-                    take: 24,
-                    select: {
-                        id: true,
-                        organizationName: true,
-                        organizationType: true,
-                        city: true,
-                        district: true,
-                        state: true,
-                        verificationStatus: true,
-                        logoFile: { select: organizationLogoSelect },
-                        profile: true,
-                        buyerProfiles: {
-                            where: {
-                                verificationStatus: 'VERIFIED',
-                                isActive: true
-                            },
-                            select: {
-                                id: true,
-                                logoUrl: true,
-                                bannerUrl: true
-                            }
-                        },
-                        _count: { select: { buyerRequirements: true } }
                     }
-                }).catch(() => []),
+                }).catch(() => 0),
+                db.product.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
+                db.service.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
+                db.category.count({ where: { isActive: true } }).catch(() => 0),
+                db.buyerRequirement.count({ where: getPublicRequirementWhere() }).catch(() => 0),
+            ]).then(([sellers, buyerUsers, buyerOrganizations, products, services, categories, activeReqs]) => ({
+                verifiedSellers: sellers,
+                registeredBuyers: Math.max(buyerUsers, buyerOrganizations),
+                productsListed: products,
+                servicesListed: services,
+                categories,
+                activeRequirements: activeReqs || 0
+            })),
 
-                db.organization.findMany({
-                    where: {
-                        verificationStatus: 'VERIFIED',
-                        isBlacklisted: false,
-                        deletedAt: null,
-                        OR: [
-                            { profile: { isBigMsme: true } },
-                            { organizationType: 'MSME' }
-                        ]
-                    },
-                    orderBy: { updatedAt: 'desc' },
-                    take: 8,
-                    select: {
-                        id: true,
-                        organizationName: true,
-                        organizationType: true,
-                        city: true,
-                        district: true,
-                        state: true,
-                        verificationStatus: true,
-                        logoFile: { select: organizationLogoSelect },
-                        profile: true,
-                        _count: { select: { products: { where: { status: 'ACTIVE' } }, services: { where: { status: 'ACTIVE' } } } }
-                    }
-                }).catch(() => []),
+            // Latest requirements, tenders, and bids
+            loadLatestRequirements(24),
+            loadLatestTenders(6),
+            loadLatestProcurementBids(6),
 
-                // Stats
-                Promise.all([
-                    db.organization.count({ where: sellerOrganizationWhere }).catch(() => 0),
-                    db.user.count({ where: { role: 'buyer', accountStatus: 'ACTIVE', onboardingStatus: { in: ['approved_for_procurement', 'approved'] } } }).catch(() => 0),
-                    db.organization.count({
-                        where: {
-                            verificationStatus: 'VERIFIED',
-                            isBlacklisted: false,
-                            deletedAt: null,
-                            OR: [
-                                { users: { some: { role: 'buyer', accountStatus: 'ACTIVE' } } },
-                                { buyerProfiles: { some: {} } },
-                                { buyerRequirements: { some: {} } },
-                                { procurementBids: { some: {} } },
-                                { tenders: { some: {} } },
-                                { profile: { isLargeIndustry: true } },
-                                { organizationType: { in: ['PUBLIC_LIMITED', 'PSU', 'GOVERNMENT'] } }
-                            ]
-                        }
-                    }).catch(() => 0),
-                    db.product.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
-                    db.service.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
-                    db.category.count({ where: { isActive: true } }).catch(() => 0),
-                    db.buyerRequirement.count({ where: getPublicRequirementWhere() }).catch(() => 0),
-                ]).then(([sellers, buyerUsers, buyerOrganizations, products, services, categories, activeReqs]) => ({
-                    verifiedSellers: sellers,
-                    registeredBuyers: Math.max(buyerUsers, buyerOrganizations),
-                    productsListed: products,
-                    servicesListed: services,
-                    categories,
-                    activeRequirements: activeReqs || 0
-                })),
+            // Pre-structured Home layout sections
+            buildHomeLayout({ limit: 12 }, undefined).catch(() => null)
+        ]);
 
-                // Latest requirements, tenders, and bids
-                loadLatestRequirements(24),
-                loadLatestTenders(6),
-                loadLatestProcurementBids(6)
-            ]);
+        return {
+            banners,
+            categories,
+            featuredProducts,
+            featuredServices,
+            verifiedSellers,
+            largeIndustries,
+            bigMsmes,
+            notices,
+            stats,
+            featuredRequirements: latestRequirements,
+            latestTenders,
+            latestBids,
+            sections: homeLayout?.sections || []
+        };
+    }, 300); // Cache 5 minutes
+};
 
-            return { banners, categories, featuredProducts, featuredServices, verifiedSellers, largeIndustries, bigMsmes, notices, stats, featuredRequirements: latestRequirements, latestTenders, latestBids };
-        }, 300); // Cache 5 minutes
+export const prewarmMarketplaceHomeCache = () => fetchMarketplaceHomeData().catch(() => undefined);
 
+router.get('/marketplace/home', shortCache(60), async (_req: Request, res: Response) => {
+    try {
+        const data = await fetchMarketplaceHomeData();
         return ok(res, data);
     } catch (error) {
         console.error('[Marketplace Home]', error);
@@ -2500,55 +2498,59 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
             buyerOrderBy = [{ lastDate: 'asc' }];
         }
 
-        const [buyerRequirements, buyerTotal, legacyRequirements, legacyTotal] = await Promise.all([
-            db.buyerRequirement.findMany({ where, orderBy: buyerOrderBy, take: pageSize * page, select: publicRequirementListSelect }),
-            db.buyerRequirement.count({ where }),
-            db.requirement.findMany({ where: legacyWhere, orderBy: [{ requiredBy: 'asc' }, { updatedAt: 'desc' }], take: pageSize * page, select: publicLegacyRequirementSelect }).catch(() => []),
-            db.requirement.count({ where: legacyWhere }).catch(() => 0)
-        ]);
+        const cacheKey = `cache:marketplace:requirements:${req.user?.id || 'anon'}:${JSON.stringify(req.query)}`;
+        const cachedResult = await getOrSetCache(cacheKey, async () => {
+            const [buyerRequirements, buyerTotal, legacyRequirements, legacyTotal] = await Promise.all([
+                db.buyerRequirement.findMany({ where, orderBy: buyerOrderBy, take: pageSize * page, select: publicRequirementListSelect }),
+                db.buyerRequirement.count({ where }),
+                db.requirement.findMany({ where: legacyWhere, orderBy: [{ requiredBy: 'asc' }, { updatedAt: 'desc' }], take: pageSize * page, select: publicLegacyRequirementSelect }).catch(() => []),
+                db.requirement.count({ where: legacyWhere }).catch(() => 0)
+            ]);
 
-        const currentUserId = req.user?.id ? Number(req.user.id) : null;
-        const currentUserOrgId = req.user?.organizationId ? Number(req.user.organizationId) : null;
-        const filteredLegacy = (legacyRequirements || []).filter((reqItem: any) => {
-            const method = reqItem.canonicalMethod || reqItem.procurementMethod || '';
-            const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
-            const isLimitedRfq = method.toUpperCase() === 'RFQ' && reqItem.payload && typeof reqItem.payload === 'object' && (reqItem.payload as any).rfqType === 'LIMITED';
-            const selection = String((reqItem.payload as any)?.vendors?.selection || '').toUpperCase();
-            const isInviteOnly = selection === 'SELECTED' || selection === 'CATEGORY' || selection === 'SELECT' || selection === 'LIMITED';
-            
-            if (isRestricted || isLimitedRfq || isInviteOnly) {
-                if (!currentUserId) return false;
-                const isOwner = Number(reqItem.buyerId || reqItem.createdById) === currentUserId;
-                const isAdmin = ['admin', 'master_admin'].includes(req.user?.role || '');
-                if (isOwner || isAdmin) return true;
-                const invited = Array.isArray((reqItem.payload as any)?.vendors?.invitedSellers) ? (reqItem.payload as any).vendors.invitedSellers : [];
-                return invited.includes(currentUserId) || (currentUserOrgId && invited.includes(currentUserOrgId));
-            }
-            return true;
-        });
+            const currentUserId = req.user?.id ? Number(req.user.id) : null;
+            const currentUserOrgId = req.user?.organizationId ? Number(req.user.organizationId) : null;
+            const filteredLegacy = (legacyRequirements || []).filter((reqItem: any) => {
+                const method = reqItem.canonicalMethod || reqItem.procurementMethod || '';
+                const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
+                const isLimitedRfq = method.toUpperCase() === 'RFQ' && reqItem.payload && typeof reqItem.payload === 'object' && (reqItem.payload as any).rfqType === 'LIMITED';
+                const selection = String((reqItem.payload as any)?.vendors?.selection || '').toUpperCase();
+                const isInviteOnly = selection === 'SELECTED' || selection === 'CATEGORY' || selection === 'SELECT' || selection === 'LIMITED';
+                
+                if (isRestricted || isLimitedRfq || isInviteOnly) {
+                    if (!currentUserId) return false;
+                    const isOwner = Number(reqItem.buyerId || reqItem.createdById) === currentUserId;
+                    const isAdmin = ['admin', 'master_admin'].includes(req.user?.role || '');
+                    if (isOwner || isAdmin) return true;
+                    const invited = Array.isArray((reqItem.payload as any)?.vendors?.invitedSellers) ? (reqItem.payload as any).vendors.invitedSellers : [];
+                    return invited.includes(currentUserId) || (currentUserOrgId && invited.includes(currentUserOrgId));
+                }
+                return true;
+            });
 
-        const decoratedBuyer = buyerRequirements.map(decorateRequirement);
-        const buyerTitles = new Set(decoratedBuyer.map((b: any) => (b.title || '').trim().toLowerCase()));
-        const decoratedLegacy = filteredLegacy
-            .map(mapLegacyRequirementToPublic)
-            .filter((l: any) => !buyerTitles.has((l.title || '').trim().toLowerCase()));
+            const decoratedBuyer = buyerRequirements.map(decorateRequirement);
+            const buyerTitles = new Set(decoratedBuyer.map((b: any) => (b.title || '').trim().toLowerCase()));
+            const decoratedLegacy = filteredLegacy
+                .map(mapLegacyRequirementToPublic)
+                .filter((l: any) => !buyerTitles.has((l.title || '').trim().toLowerCase()));
 
-        const combined = [
-            ...decoratedBuyer,
-            ...decoratedLegacy
-        ].sort((a: any, b: any) => {
-            if (rawSort === 'latest') {
-                return new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime();
-            }
-            if (rawSort === 'deadline') {
+            const combined = [
+                ...decoratedBuyer,
+                ...decoratedLegacy
+            ].sort((a: any, b: any) => {
+                if (rawSort === 'latest') {
+                    return new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime();
+                }
+                if (rawSort === 'deadline') {
+                    return new Date(a.lastDate || 0).getTime() - new Date(b.lastDate || 0).getTime();
+                }
+                const urgent = Number(Boolean(b.isUrgent)) - Number(Boolean(a.isUrgent));
+                if (urgent) return urgent;
                 return new Date(a.lastDate || 0).getTime() - new Date(b.lastDate || 0).getTime();
-            }
-            const urgent = Number(Boolean(b.isUrgent)) - Number(Boolean(a.isUrgent));
-            if (urgent) return urgent;
-            return new Date(a.lastDate || 0).getTime() - new Date(b.lastDate || 0).getTime();
-        });
-        const total = buyerTotal + decoratedLegacy.length;
-        return ok(res, { requirements: combined.slice(skip, skip + pageSize), total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+            });
+            const total = buyerTotal + decoratedLegacy.length;
+            return { requirements: combined.slice(skip, skip + pageSize), total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+        }, 30);
+        return ok(res, cachedResult);
     } catch (error) {
         if (error instanceof z.ZodError) {
             return apiResponse.error(res, 400, error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '), 'VALIDATION_ERROR');
@@ -3532,73 +3534,33 @@ const findRequirementRecord = async (idParam: string | number) => {
     const numId = isNum ? Number(token) : null;
 
     if (numId && numId > 0) {
-        const req = await db.buyerRequirement.findUnique({
-            where: { id: numId },
-            select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
-        });
-        if (req) return req;
+        const [req, bid] = await Promise.all([
+            db.buyerRequirement.findUnique({
+                where: { id: numId },
+                select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
+            }).catch(() => null),
+            db.procurementBid.findUnique({
+                where: { id: numId },
+                select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
+            }).catch(() => null)
+        ]);
 
-        const bid = await db.procurementBid.findUnique({
-            where: { id: numId },
-            select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
-        });
+        if (req) return req;
         if (bid) {
-            const tp: any = bid.technicalPacket || {};
-            const sourceRequirementId = tp.sourceRequirementId || tp.sourceId || tp.requirementId;
-            if (sourceRequirementId) {
-                const srcReq = await db.buyerRequirement.findUnique({
-                    where: { id: Number(sourceRequirementId) },
-                    select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
-                });
-                if (srcReq) return srcReq;
-            }
             return {
                 id: bid.id,
                 title: bid.title,
                 lastDate: bid.endDate,
                 status: bid.status,
                 createdById: bid.buyerId,
-                buyerOrganizationId: bid.buyerOrganizationId
-            };
-        }
-
-        const contract = await db.contract.findFirst({
-            where: {
-                OR: [
-                    { id: numId },
-                    { metadata: { path: ['requirementId'], equals: numId } },
-                    { metadata: { path: ['requirementId'], equals: String(numId) } }
-                ]
-            }
-        }).catch(() => null);
-        if (contract) {
-            const meta = (contract.metadata || {}) as any;
-            const refNum = meta.requirementNumber || contract.contractNumber;
-            if (refNum || contract.title) {
-                const matchedBid = await db.procurementBid.findFirst({
-                    where: { OR: [{ bidNumber: refNum }, { title: contract.title }] },
-                    select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true }
-                });
-                if (matchedBid) return { id: matchedBid.id, title: matchedBid.title, lastDate: matchedBid.endDate, status: matchedBid.status, createdById: matchedBid.buyerId, buyerOrganizationId: matchedBid.buyerOrganizationId };
-                const matchedReq = await db.buyerRequirement.findFirst({
-                    where: { title: contract.title },
-                    select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
-                });
-                if (matchedReq) return matchedReq;
-            }
-            return {
-                id: contract.id,
-                title: contract.title,
-                lastDate: contract.endDate,
-                status: contract.status,
-                createdById: meta.buyerId || 1,
-                buyerOrganizationId: meta.buyerOrganizationId || null
+                buyerOrganizationId: bid.buyerOrganizationId,
+                payload: bid.technicalPacket || {}
             };
         }
 
         const legacy = await db.requirement.findUnique({
             where: { id: numId },
-            select: { id: true, title: true, createdById: true }
+            select: { id: true, title: true, createdById: true, payload: true }
         }).catch(() => null);
         if (legacy) {
             return {
@@ -3607,7 +3569,8 @@ const findRequirementRecord = async (idParam: string | number) => {
                 lastDate: null,
                 status: 'PUBLISHED',
                 createdById: legacy.createdById,
-                buyerOrganizationId: null
+                buyerOrganizationId: null,
+                payload: legacy.payload || {}
             };
         }
     }
@@ -3617,52 +3580,49 @@ const findRequirementRecord = async (idParam: string | number) => {
         token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : (token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token)
     ];
 
-    const bid = await db.procurementBid.findFirst({
-        where: {
-            OR: tokenVariants.flatMap(t => [
-                { bidNumber: t },
-                { bidNumber: `REQ-${t}` },
-                { bidNumber: `RFQ-${t}` }
-            ])
-        }
-    });
+    const [bid, legacyMatch] = await Promise.all([
+        db.procurementBid.findFirst({
+            where: {
+                OR: tokenVariants.flatMap(t => [
+                    { bidNumber: t },
+                    { bidNumber: `REQ-${t}` },
+                    { bidNumber: `RFQ-${t}` }
+                ])
+            },
+            select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
+        }).catch(() => null),
+        db.requirement.findFirst({
+            where: {
+                OR: tokenVariants.flatMap(t => [
+                    { requirementNumber: t },
+                    { requirementNumber: `REQ-${t}` },
+                    { requirementNumber: `RFQ-${t}` }
+                ])
+            },
+            select: { id: true, title: true, createdById: true, payload: true }
+        }).catch(() => null)
+    ]);
+
     if (bid) {
-        const tp: any = (bid as any).technicalPacket || {};
-        const sourceRequirementId = tp.sourceRequirementId || tp.sourceId || tp.requirementId;
-        if (sourceRequirementId) {
-            const reqRecord = await db.buyerRequirement.findUnique({
-                where: { id: Number(sourceRequirementId) },
-                select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
-            });
-            if (reqRecord) return reqRecord;
-        }
         return {
             id: bid.id,
             title: bid.title,
             lastDate: bid.endDate,
             status: bid.status,
             createdById: bid.buyerId,
-            buyerOrganizationId: bid.buyerOrganizationId
+            buyerOrganizationId: bid.buyerOrganizationId,
+            payload: bid.technicalPacket || {}
         };
     }
-
-    const contract = await db.contract.findFirst({
-        where: {
-            OR: tokenVariants.flatMap(t => [
-                { contractNumber: t },
-                { contractNumber: `RC-${t}` }
-            ])
-        }
-    });
-    if (contract) {
-        const meta = (contract.metadata || {}) as any;
+    if (legacyMatch) {
         return {
-            id: contract.id,
-            title: contract.title,
-            lastDate: contract.endDate,
-            status: contract.status,
-            createdById: meta.buyerId || 1,
-            buyerOrganizationId: meta.buyerOrganizationId || null
+            id: legacyMatch.id,
+            title: legacyMatch.title,
+            lastDate: null,
+            status: 'PUBLISHED',
+            createdById: legacyMatch.createdById,
+            buyerOrganizationId: null,
+            payload: legacyMatch.payload || {}
         };
     }
 
@@ -3676,8 +3636,31 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
         const id = requirement.id;
         const body = requirementClarificationAskBody.parse(req.body);
 
-        if (requirement.lastDate && new Date(requirement.lastDate) < new Date()) {
-            return apiResponse.error(res, 400, 'The clarification window has closed for this requirement.', 'REQUIREMENT_DEADLINE_PASSED');
+        const sched = (requirement.payload as any)?.schedule;
+        const rawClarDeadline = sched?.clarificationDeadline || sched?.clarificationEndDate;
+        const rawSubmissionDeadline = sched?.submissionDate || sched?.submissionDeadline || requirement.lastDate || requirement.endDate;
+
+        // Allow clarifications up to the later of clarification deadline and submission deadline, as long as the tender is open
+        let effectiveClarDeadline: Date | null = null;
+        if (rawClarDeadline && rawSubmissionDeadline) {
+            const d1 = new Date(rawClarDeadline);
+            const d2 = new Date(rawSubmissionDeadline);
+            const t1 = !isNaN(d1.getTime()) ? d1.getTime() : 0;
+            const t2 = !isNaN(d2.getTime()) ? d2.getTime() : 0;
+            effectiveClarDeadline = new Date(Math.max(t1, t2));
+        } else if (rawClarDeadline) {
+            effectiveClarDeadline = new Date(rawClarDeadline);
+        } else if (rawSubmissionDeadline) {
+            effectiveClarDeadline = new Date(rawSubmissionDeadline);
+        }
+
+        if (effectiveClarDeadline && !isNaN(effectiveClarDeadline.getTime())) {
+            if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+                effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+            }
+            if (effectiveClarDeadline.getTime() < Date.now()) {
+                return apiResponse.error(res, 400, 'The clarification window has closed for this requirement.', 'REQUIREMENT_DEADLINE_PASSED');
+            }
         }
         // Sellers ask; the buyer owner may also post (their message doubles as an announcement).
         if (req.user?.role !== 'seller' && !isRequirementOwner(req, requirement)) {
@@ -3694,20 +3677,22 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
             }
         });
 
-        // Notify the buyer owner (best-effort).
+        // Notify the buyer owner asynchronously (best-effort, non-blocking for fast response).
         if (requirement.createdById && requirement.createdById !== Number(req.user?.id)) {
-            try {
-                const { notificationService } = await import('../services/notification.service.js');
-                await notificationService.notifyNow(requirement.createdById, {
-                    title: 'New Clarification Question',
-                    message: `Regarding "${requirement.title}": ${body.question.substring(0, 100)}${body.question.length > 100 ? '…' : ''}`,
-                    type: 'requirement_clarification',
-                    priority: 'medium',
-                    redirectUrl: `/marketplace/requirements/${id}`
-                });
-            } catch (notifyError) {
-                console.warn('[Requirement Clarification] notify failed', notifyError);
-            }
+            setImmediate(async () => {
+                try {
+                    const { notificationService } = await import('../services/notification.service.js');
+                    await notificationService.notifyNow(requirement.createdById, {
+                        title: 'New Clarification Question',
+                        message: `Regarding "${requirement.title}": ${body.question.substring(0, 100)}${body.question.length > 100 ? '…' : ''}`,
+                        type: 'requirement_clarification',
+                        priority: 'medium',
+                        redirectUrl: `/marketplace/requirements/${id}`
+                    });
+                } catch (notifyError) {
+                    console.warn('[Requirement Clarification] notify failed', notifyError);
+                }
+            });
         }
 
         return res.status(201).json({ success: true, data: clarification });

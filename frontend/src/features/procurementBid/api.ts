@@ -404,8 +404,26 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   const reqDocs = raw.requiredDocuments?.length ? raw.requiredDocuments : (pkt?.requiredDocs || []);
 
   // Important dates
-  const startDate = String(raw.startDate || raw.createdAt || new Date().toISOString()).slice(0, 10);
-  const endDate = String(raw.endDate || schedule.submissionDate || raw.startDate || new Date().toISOString()).slice(0, 10);
+  const candidatePublish = raw.publishedAt || raw.approvedAt || raw.startDate || schedule.publishDate || null;
+  let authenticPublishedAt = raw.createdAt || raw.startDate || null;
+  if (candidatePublish && raw.createdAt) {
+    const tCandidate = new Date(candidatePublish).getTime();
+    const tCreated = new Date(raw.createdAt).getTime();
+    if (Number.isFinite(tCandidate) && Number.isFinite(tCreated)) {
+      if (tCandidate > tCreated + 60000) {
+        authenticPublishedAt = candidatePublish;
+      } else {
+        authenticPublishedAt = raw.approvedAt || raw.createdAt;
+      }
+    }
+  } else if (candidatePublish) {
+    authenticPublishedAt = candidatePublish;
+  }
+
+  const rawStartDate = authenticPublishedAt || raw.startDate || schedule.publishDate || raw.createdAt || null;
+  const rawEndDate = raw.endDate || schedule.submissionDate || schedule.submissionDeadline || null;
+  const startDate = String(rawStartDate || new Date().toISOString()).slice(0, 10);
+  const endDate = String(rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
   const techDate = String(raw.technicalOpeningDate || schedule.technicalOpeningDate || raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10);
   const finDate = String(raw.financialOpeningDate || schedule.financialOpeningDate || raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10);
 
@@ -430,6 +448,12 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     estimatedValue,
     startDate,
     endDate,
+    rawStartDate,
+    rawEndDate,
+    publishedAt: authenticPublishedAt,
+    approvedAt: raw.approvedAt || null,
+    createdAt: raw.createdAt || undefined,
+    updatedAt: raw.updatedAt || undefined,
     status: (raw.awards && raw.awards.length > 0) || (participations && participations.some((p: any) => String(p.finalStatus || p.resultStatus || '').toUpperCase().includes('AWARD')))
       ? 'Awarded'
       : toUiStatus(raw.status),
@@ -441,7 +465,44 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     clarificationStatus: raw.clarifications && raw.clarifications.length > 0
       ? (raw.clarifications[0].status === 'RESPONDED' ? 'Responded' : raw.clarifications[0].status === 'COMPLETED' ? 'Completed' : 'Pending')
       : 'None',
-    participated: Boolean(raw.myParticipation || participations.length),
+    participated: (() => {
+      const currentUserId = (() => {
+        try {
+          if (typeof window === 'undefined') return null;
+          const cached = localStorage.getItem('msme_user_cache');
+          if (cached) {
+            const u = JSON.parse(cached);
+            return u?.id || null;
+          }
+        } catch {}
+        return null;
+      })();
+
+      const currentUserOrgId = (() => {
+        try {
+          if (typeof window === 'undefined') return null;
+          const cached = localStorage.getItem('msme_user_cache');
+          if (cached) {
+            const u = JSON.parse(cached);
+            return u?.organizationId || u?.sellerProfile?.organizationId || null;
+          }
+        } catch {}
+        return null;
+      })();
+
+      return Boolean(
+        raw.myParticipation ||
+        raw.hasParticipated ||
+        (currentUserId && participations.some((p: any) => {
+          const sId = p.sellerId || p.sellerUserId || p.seller?.id;
+          const sOrg = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId;
+          return (
+            (sId && Number(sId) === Number(currentUserId)) ||
+            (currentUserOrgId && sOrg && Number(sOrg) === Number(currentUserOrgId))
+          );
+        }))
+      );
+    })(),
     description: description || 'No description provided.',
     eligibility: eligArr,
     requiredDocuments: reqDocs,
@@ -509,7 +570,10 @@ export const normalizeBid = (raw: any): ProcurementBid => {
             ),
           }
         }
-      : { items },
+      : null,
+    internalDetails: pkt?.internal || (raw as any).internalDetails || null,
+    approvalAuthority: pkt?.internal?.approvalAuthority || (raw as any).approvalAuthority || '',
+    justification: pkt?.internal?.justification || pkt?.basics?.justification || pkt?.limitedTenderJustification || (raw as any).justification || '',
     buyer: raw.buyer || null,
     buyerOrganization: raw.buyerOrganization || raw.organization || null,
   };

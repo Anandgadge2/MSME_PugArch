@@ -11,6 +11,8 @@ export interface ResponsiveFilterBarProps {
   singleRowDesktop?: boolean;
   className?: string;
   hasFilters?: boolean;
+  searchWrapperClassName?: string;
+  filtersClassName?: string;
 }
 
 export function ResponsiveFilterBar({
@@ -21,7 +23,9 @@ export function ResponsiveFilterBar({
   activeFilterCount = 0,
   singleRowDesktop = true,
   className,
-  hasFilters
+  hasFilters,
+  searchWrapperClassName,
+  filtersClassName
 }: ResponsiveFilterBarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const showFiltersBtn = hasFilters !== false && Boolean(filters);
@@ -110,12 +114,12 @@ export function ResponsiveFilterBar({
       ) : (
         /* Desktop / Tablet Single-Row Layout (when all filters fit on one line) */
         <div className="hidden sm:flex sm:items-center sm:flex-nowrap gap-2 sm:gap-2.5 w-full min-w-0 overflow-x-auto scrollbar-none">
-          <div className="w-52 md:w-60 lg:w-64 xl:w-72 shrink-0">
+          <div className={cn(searchWrapperClassName || "w-52 md:w-60 lg:w-64 xl:w-72 shrink-0")}>
             {searchInput}
           </div>
 
           {filters && (
-            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1 flex-wrap">
+            <div className={cn("flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1", filtersClassName || "flex-wrap")}>
               {filters}
             </div>
           )}

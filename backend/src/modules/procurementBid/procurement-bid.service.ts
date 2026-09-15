@@ -349,6 +349,41 @@ export const bidInclude: any = {
   awards: true
 };
 
+export const leanBidInclude = {
+  buyer: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      organizationId: true,
+      buyerProfile: {
+        select: {
+          organizationName: true,
+          department: true,
+          designation: true,
+          city: true,
+          district: true,
+          state: true
+        }
+      }
+    }
+  },
+  buyerOrganization: { select: { id: true, organizationName: true, organizationType: true, verificationStatus: true, city: true, district: true, state: true } },
+  documents: true,
+  participations: {
+    include: {
+      seller: { select: { id: true, name: true, email: true, role: true, onboardingStatus: true, organizationId: true, organization: { select: { organizationName: true } } } },
+      documents: true
+    }
+  },
+  clarifications: {
+    include: {
+      seller: { select: { id: true, name: true } }
+    }
+  }
+};
+
 export const nextBidNumber = async () => {
   const year = new Date().getFullYear();
   const count = await db.procurementBid.count({
@@ -371,7 +406,7 @@ export const nextClarificationNumber = async (bidNumber: string) => {
   return `${bidNumber}-CLR-${String(count + 1).padStart(3, '0')}`;
 };
 
-export const resolveBid = async (bidIdOrNumber: string | number, include: any = bidInclude) => {
+export const resolveBid = async (bidIdOrNumber: string | number, include: any = leanBidInclude) => {
   const token = String(bidIdOrNumber).trim();
   logger.info({ token }, '[RESOLVE_BID] Resolving bid for token');
 
@@ -407,42 +442,42 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
   if (bid) {
     logger.info({ token, bidId: bid.id, bidNumber: bid.bidNumber }, '[RESOLVE_BID] Found existing procurementBid in database');
   } else {
-    logger.info({ token }, '[RESOLVE_BID] Not found in procurementBid table, searching requirement tables...');
+    logger.info({ token }, '[RESOLVE_BID] Not found in procurementBid table, searching requirement tables concurrently...');
     const reqWhere: any[] = Array.from(candidateTokens).map(t => ({ requirementNumber: t }));
     if (parsedNum) {
       reqWhere.push({ id: parsedNum });
     }
 
-    let buyerReq: any = await db.buyerRequirement.findFirst({
-      where: { OR: reqWhere },
-      include: { buyerOrganization: true, createdBy: true }
-    }).catch(err => {
-      logger.warn({ err }, '[RESOLVE_BID] Error querying buyerRequirement');
-      return null;
-    });
+    const qReqWhere: any[] = Array.from(candidateTokens).map(t => ({ subject: t }));
+    if (parsedNum) {
+      qReqWhere.push({ id: parsedNum });
+    }
 
-    if (!buyerReq) {
-      buyerReq = await db.requirement.findFirst({
+    const [buyerReqCandidate, legacyReqCandidate, qReq] = await Promise.all([
+      db.buyerRequirement.findFirst({
+        where: { OR: reqWhere },
+        include: { buyerOrganization: true, createdBy: true }
+      }).catch(err => {
+        logger.warn({ err }, '[RESOLVE_BID] Error querying buyerRequirement');
+        return null;
+      }),
+      db.requirement.findFirst({
         where: { OR: reqWhere },
         include: { organization: true, buyer: true }
       }).catch(err => {
         logger.warn({ err }, '[RESOLVE_BID] Error querying requirement');
         return null;
-      });
-    }
-
-    if (!buyerReq) {
-      const qReqWhere: any[] = Array.from(candidateTokens).map(t => ({ subject: t }));
-      if (parsedNum) {
-        qReqWhere.push({ id: parsedNum });
-      }
-      const qReq = await db.quoteRequest.findFirst({
+      }),
+      db.quoteRequest.findFirst({
         where: { OR: qReqWhere },
         include: { buyer: { include: { organization: true } } }
       }).catch(err => {
         logger.warn({ err }, '[RESOLVE_BID] Error querying quoteRequest');
         return null;
-      });
+      })
+    ]);
+
+    let buyerReq: any = buyerReqCandidate || legacyReqCandidate;
 
       if (qReq) {
         const reqId = qReq.id;
@@ -498,7 +533,6 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
           logger.info({ newBidId: bid.id }, '[RESOLVE_BID] Created shadow procurementBid for QuoteRequest successfully');
         }
       }
-    }
 
     if (buyerReq) {
       const reqId = buyerReq.id;
@@ -741,9 +775,20 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
   };
 
   const tenderItems = normalizeBidItems(bid);
-  const sellerTechnicalPacket = bid.technicalPacket && typeof bid.technicalPacket === 'object'
-    ? { ...(bid.technicalPacket as any), items: tenderItems, vendors: enrichedVendors }
-    : (tenderItems.length ? { items: tenderItems, vendors: enrichedVendors } : { vendors: enrichedVendors });
+  const rawPacketCopy = bid.technicalPacket && typeof bid.technicalPacket === 'object'
+    ? { ...(bid.technicalPacket as any) }
+    : {};
+
+  if (actorRole === 'seller') {
+    delete rawPacketCopy.internal;
+    delete rawPacketCopy.limitedTenderJustification;
+  }
+
+  const sellerTechnicalPacket = {
+    ...rawPacketCopy,
+    items: tenderItems,
+    vendors: enrichedVendors
+  };
 
   return {
     id: bid.id,
@@ -795,6 +840,17 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     eligibilityCriteria: bid.eligibilityCriteria || [],
     requiredDocuments: bid.requiredDocuments || [],
     rejectedReason: isAdmin || isBuyerOwner ? bid.rejectedReason : undefined,
+    approvalAuthority: (isAdmin || isBuyerOwner)
+      ? (rawTechnicalPacket.internal?.approvalAuthority || rawTechnicalPacket.internal?.authorityName || rawTechnicalPacket.internal?.authority || '')
+      : undefined,
+    justification: (isAdmin || isBuyerOwner)
+      ? (rawTechnicalPacket.internal?.justification || rawTechnicalPacket.basics?.justification || rawTechnicalPacket.limitedTenderJustification || '')
+      : undefined,
+    internalDetails: (isAdmin || isBuyerOwner)
+      ? (rawTechnicalPacket.internal || null)
+      : undefined,
+    approvedAt: bid.approvedAt || null,
+    publishedAt: bid.approvedAt || bid.createdAt || bid.startDate,
     createdAt: bid.createdAt,
     updatedAt: bid.updatedAt,
     buyer: bid.buyer ? {
@@ -831,7 +887,22 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
       return subStatus !== 'DRAFT' && !p.isWithdrawn;
     }).length,
-    participations: canSeeParticipants ? (bid.participations || []).map((p: any) => serializeParticipation(p, { canSeeFinancial, bid })) : undefined,
+    participations: canSeeParticipants ? (bid.participations || []).filter((p: any) => {
+      if (isAdmin || isBuyerOwner) return true;
+      if (actorRole === 'seller') {
+        const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
+        // During bidding and before financial evaluation, sellers must only see their own participation
+        if (!financialOpenStatuses.includes(bid.status)) {
+          return isOwn;
+        }
+        return true;
+      }
+      return false;
+    }).map((p: any) => {
+      const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
+      const allowFinancial = isAdmin || isBuyerOwner || isOwn || (canSeeFinancial && financialOpenStatuses.includes(bid.status));
+      return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
+    }) : undefined,
     clarifications: (isAdmin || isBuyerOwner)
       ? bid.clarifications
       : actor?.role === 'seller'
@@ -881,6 +952,7 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
 
 export const serializeParticipation = (p: any, options: { canSeeFinancial?: boolean; bid?: any; ownView?: boolean } = {}) => {
   const bid = options.bid || p.bid;
+  const canSeeFin = options.canSeeFinancial !== false;
   const rawQuoted = p.quotedAmount ?? p.totalAmount ?? p.responseData?.totalAmount ?? p.responseData?.quotedAmount ?? p.responseData?.totalPrice;
   const rawTotal = p.totalAmount ?? p.quotedAmount ?? p.responseData?.totalAmount ?? p.responseData?.quotedAmount ?? p.responseData?.totalPrice;
 
@@ -940,11 +1012,11 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     financialStatus: p.financialStatus,
     finalStatus: p.finalStatus,
     rank: p.rank,
-    quotedAmount: moneyNumber(rawQuoted),
-    gstPercentage: moneyNumber(first(p.gstPercentage, respData.gstPercentage, ackData.gstPercentage, descData.gstPercentage, firstItem.gstPercent, firstItem.gstPercentage)),
-    totalAmount: moneyNumber(rawTotal),
-    financialSealed: false,
-    financialMessage: undefined,
+    quotedAmount: canSeeFin ? moneyNumber(rawQuoted) : null,
+    gstPercentage: canSeeFin ? moneyNumber(first(p.gstPercentage, respData.gstPercentage, ackData.gstPercentage, descData.gstPercentage, firstItem.gstPercent, firstItem.gstPercentage)) : null,
+    totalAmount: canSeeFin ? moneyNumber(rawTotal) : null,
+    financialSealed: !canSeeFin,
+    financialMessage: !canSeeFin ? 'Financial bid is sealed until opening' : undefined,
     makeBrand: first(p.makeBrand, respData.makeBrand, ackData.makeBrand, descData.makeBrand, techOffer.makeBrand, firstItem.makeBrand),
     model: first(p.model, respData.model, ackData.model, descData.model, techOffer.model, firstItem.model),
     offeredItemDescription: first(descData.offeredItemDescription, p.offeredItemDescription, respData.offeredItemDescription, ackData.offeredItemDescription, techOffer.offeredItemDescription),
@@ -955,9 +1027,9 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     serviceSupport: first(descData.serviceSupport, respData.serviceSupport, ackData.serviceSupport, techOffer.serviceSupport),
     deviation: first(descData.deviation, respData.deviation, ackData.deviation, techOffer.deviation, firstItem.deviation),
     rfqNotes: first(descData.rfqNotes, respData.rfqNotes, ackData.rfqNotes, descData.notes, respData.notes, ackData.notes),
-    responseData: { ...ackData, ...respData, ...descData },
-    acknowledgement: p.acknowledgement,
-    lineItems: lineItemsArr,
+    responseData: (options.ownView || canSeeFin) ? { ...ackData, ...respData, ...descData } : {},
+    acknowledgement: (options.ownView || canSeeFin) ? p.acknowledgement : undefined,
+    lineItems: (options.ownView || canSeeFin) ? lineItemsArr : [],
     terms: first(p.terms, respData.terms, ackData.terms, descData.terms),
     offeredQuantity: first(p.offeredQuantity, respData.offeredQuantity, ackData.offeredQuantity, descData.offeredQuantity),
     submissionStatus: p.submissionStatus,
@@ -968,7 +1040,7 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     updatedAt: p.updatedAt,
     isWithdrawn: p.isWithdrawn,
     rejectionReason: p.rejectionReason,
-    documents: (p.documents || [])
+    documents: (options.ownView || canSeeFin) ? (p.documents || [])
       .map((doc: any) => ({
         id: doc.id,
         documentCategory: doc.documentCategory,
@@ -981,8 +1053,8 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
         documentStatus: doc.documentStatus,
         uploadedAt: doc.uploadedAt,
         fileAssetId: doc.fileAssetId
-      })),
-    hasSealedFinancialQuote: false,
+      })) : [],
+    hasSealedFinancialQuote: !canSeeFin,
     clarifications: p.clarifications,
     evaluations: p.evaluations,
     awards: p.awards
@@ -1980,6 +2052,31 @@ export const sellerAskClarification = async (req: AuthRequest, bidId: string, qu
   const allowedStatuses = ['PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING'];
   if (!allowedStatuses.includes(bid.status)) {
     throw new ApiError(400, 'Questions can only be asked when the bidding opportunity is open.', 'INVALID_BID_STATUS');
+  }
+
+  const sched = (bid.technicalPacket as any)?.schedule || (bid.payload as any)?.schedule;
+  const rawClarDeadline = sched?.clarificationDeadline || sched?.clarificationEndDate;
+  const rawSubmissionDeadline = sched?.submissionDate || sched?.submissionDeadline || bid.endDate;
+  let effectiveClarDeadline: Date | null = null;
+  if (rawClarDeadline && rawSubmissionDeadline) {
+    const d1 = new Date(rawClarDeadline);
+    const d2 = new Date(rawSubmissionDeadline);
+    const t1 = !isNaN(d1.getTime()) ? d1.getTime() : 0;
+    const t2 = !isNaN(d2.getTime()) ? d2.getTime() : 0;
+    effectiveClarDeadline = new Date(Math.max(t1, t2));
+  } else if (rawClarDeadline) {
+    effectiveClarDeadline = new Date(rawClarDeadline);
+  } else if (rawSubmissionDeadline) {
+    effectiveClarDeadline = new Date(rawSubmissionDeadline);
+  }
+
+  if (effectiveClarDeadline && !isNaN(effectiveClarDeadline.getTime())) {
+    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+      effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+    }
+    if (effectiveClarDeadline.getTime() < Date.now()) {
+      throw new ApiError(400, 'The clarification window has closed for this procurement.', 'CLARIFICATION_DEADLINE_PASSED');
+    }
   }
 
   let participation = bid.participations?.[0];

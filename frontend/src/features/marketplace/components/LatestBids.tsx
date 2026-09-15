@@ -158,7 +158,15 @@ function mapTender(t: MarketplaceTender): OpportunityData {
 
 function mapBid(b: MarketplaceBid): OpportunityData {
     const rawDeadline = (b as any).schedule?.submissionDate || (b as any).schedule?.submissionDeadline || (b as any).technicalPacket?.schedule?.submissionDate || (b as any).technicalPacket?.schedule?.submissionDeadline || b.endDate;
-    const rawStartDate = (b as any).schedule?.publishDate || (b as any).schedule?.submissionStartDate || (b as any).technicalPacket?.schedule?.publishDate || (b as any).technicalPacket?.schedule?.submissionStartDate || b.startDate || b.createdAt;
+    const schedulePub = (b as any).schedule?.publishDate || (b as any).technicalPacket?.schedule?.publishDate;
+    let rawStartDate = (b as any).publishedAt || (b as any).approvedAt || b.createdAt || b.startDate;
+    if (schedulePub && b.createdAt) {
+      const pubMs = new Date(schedulePub).getTime();
+      const crMs = new Date(b.createdAt).getTime();
+      if (Number.isFinite(pubMs) && Number.isFinite(crMs) && pubMs > crMs + 60000) {
+        rawStartDate = schedulePub;
+      }
+    }
     const status = getProcurementStatus({ status: b.status || b.lifecycleStage || b.approvalStatus, dueDate: rawDeadline });
     const deadlineMs = new Date(rawDeadline || '').getTime();
     const days = isNaN(deadlineMs) ? 0 : Math.max(0, Math.ceil((deadlineMs - Date.now()) / 86400000));
@@ -488,7 +496,15 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
         const mappedBids = bids.map(mapBid);
         const mappedRequirements = (requirements || []).map((r: any) => {
             const rawDeadline = r.payload?.schedule?.submissionDate || r.payload?.schedule?.submissionDeadline || r.endDate || r.lastDate || r.requiredBy;
-            const rawStartDate = r.payload?.schedule?.publishDate || r.payload?.schedule?.submissionStartDate || r.startDate || r.createdAt;
+            const schedulePub = r.payload?.schedule?.publishDate;
+            let rawStartDate = r.approvedAt || r.publishedAt || r.createdAt || r.startDate;
+            if (schedulePub && r.createdAt) {
+              const pubMs = new Date(schedulePub).getTime();
+              const crMs = new Date(r.createdAt).getTime();
+              if (Number.isFinite(pubMs) && Number.isFinite(crMs) && pubMs > crMs + 60000) {
+                rawStartDate = schedulePub;
+              }
+            }
             const status = getProcurementStatus({ status: r.status, dueDate: rawDeadline });
             const deadlineMs = new Date(rawDeadline || '').getTime();
             const days = isNaN(deadlineMs) ? 0 : Math.max(0, Math.ceil((deadlineMs - Date.now()) / 86400000));

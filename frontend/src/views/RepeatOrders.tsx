@@ -88,9 +88,9 @@ export default function RepeatOrders() {
 
   const viewerScope = `${user?.role || 'buyer'}-${user?.id || 'none'}`;
 
-  // Fetch all orders for complete frontend filtering
+  // Fetch orders for completed frontend filtering with optimized limit
   const { data: rawAllOrders, reload, loading: loadingAll, refreshing } = useFeatureQuery<PurchaseOrderDto[]>(
-    `/api/purchase-orders?take=500&viewerScope=${encodeURIComponent(viewerScope)}`,
+    `/api/purchase-orders?take=100&viewerScope=${encodeURIComponent(viewerScope)}`,
     []
   );
 

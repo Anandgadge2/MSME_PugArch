@@ -448,10 +448,23 @@ const profileStatus = (user?: any, profile?: any) =>
   (approvedProcurementStatuses.has(String(user?.onboardingStatus)) ? 'VERIFIED' : 'PENDING');
 
 const assertBuyerProcurementApproved = async (req: AuthRequest) => {
-  if (isAdmin(req) || req.user?.role !== 'buyer') return;
+  if (isAdmin(req) || req.user?.role !== 'buyer') return (req as any)._buyerContext;
+  if ((req as any)._buyerContext) return (req as any)._buyerContext;
   const user = await db.user.findUnique({
     where: { id: userId(req) },
-    select: { onboardingStatus: true, accountStatus: true, isDualRole: true, buyerProfile: true }
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      mobile: true,
+      role: true,
+      onboardingStatus: true,
+      accountStatus: true,
+      isDualRole: true,
+      organizationId: true,
+      organization: true,
+      buyerProfile: true
+    }
   });
   if (!user) throw new ApiError(404, 'User not found');
 
@@ -466,6 +479,8 @@ const assertBuyerProcurementApproved = async (req: AuthRequest) => {
       'BUYER_PROCUREMENT_APPROVAL_REQUIRED'
     );
   }
+  (req as any)._buyerContext = user;
+  return user;
 };
 
 const listProfileBackedOrganizations = async (query: { q?: string; status?: string; skip?: number; take?: number; page?: number; pageSize?: number }, companyIdFilter?: number | null) => {
@@ -1539,7 +1554,7 @@ const validateRateContractConfigForDraft = (configInput: Record<string, unknown>
 
 const categoryCache = new Map<string, number>();
 
-const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procurementDraftBody>) => {
+const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procurementDraftBody>, targetStatus = 'DRAFT') => {
   const methodSlug = methodSlugForDraft(body);
   const methodCode = procurementMethodCodeFor(methodSlug);
   if (body.payload && typeof body.payload === 'object') {
@@ -1602,7 +1617,7 @@ const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procu
     canonicalMethod: body.canonicalMethod || methodSlug.toUpperCase(),
     estimatedValue: body.estimatedValue,
     requiredBy: body.requiredBy,
-    status: 'DRAFT',
+    status: targetStatus,
     payload: body.payload || null,  // Store complete wizard data
     draftStep: body.draftStep ?? null  // Store current wizard step
   };
@@ -1611,7 +1626,9 @@ const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procu
     ? await (async () => {
       const existing = await db.requirement.findFirst({ where: { id: body.id, buyerId: userId(req) } });
       if (!existing) throw new ApiError(404, 'Procurement draft not found', 'PROCUREMENT_DRAFT_NOT_FOUND');
-      if (!['DRAFT', 'REJECTED'].includes(String(existing.status))) throw new ApiError(409, 'Submitted procurement cannot be edited as a draft', 'PROCUREMENT_DRAFT_LOCKED');
+      if (targetStatus === 'DRAFT' && !['DRAFT', 'REJECTED'].includes(String(existing.status))) {
+        throw new ApiError(409, 'Submitted procurement cannot be edited as a draft', 'PROCUREMENT_DRAFT_LOCKED');
+      }
       const [, updated] = await db.$transaction([
         db.requirementItem.deleteMany({ where: { requirementId: body.id } }),
         db.requirement.update({
@@ -1624,12 +1641,13 @@ const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procu
     })()
     : await procurementWorkflow.createRequirement(actorFrom(req), {
       ...data,
+      status: targetStatus,
       items,
       payload: data.payload,
       draftStep: data.draftStep
     });
   await auditWrite(req, body.id ? 'procurement.draft.updated' : 'procurement.draft.created', 'requirement', saved.id, { methodSlug });
-  return db.requirement.findUnique({ where: { id: saved.id }, include: procurementDraftInclude });
+  return (saved as any)?.items ? saved : db.requirement.findUnique({ where: { id: saved.id }, include: procurementDraftInclude });
 };
 
 const nextProcurementAuctionCode = () => `REQ-${Math.floor(10000 + Math.random() * 90000)}`;
@@ -1638,10 +1656,19 @@ const nextRateContractCode = () => `RC-${Math.floor(10000 + Math.random() * 9000
 const createAuctionForSubmittedProcurement = async (req: AuthRequest, requirement: any, draftBody: z.infer<typeof procurementDraftBody>) => {
   const methodSlug = methodSlugForDraft(draftBody);
   const payload = (draftBody.payload || {}) as Record<string, any>;
+  const isStandaloneReverseAuction = methodSlug === 'reverse-auction';
   const isAuctionMethod = ['reverse-auction', 'bid-with-reverse-auction'].includes(methodSlug);
   const isAuctionExplicitlyEnabled = payload.allowReverseAuction === true || (payload.basics?.isReverseAuctionNeeded === true && payload.allowReverseAuction !== false);
   const hasAuction = isAuctionMethod || isAuctionExplicitlyEnabled;
   if (!hasAuction) return null;
+
+  // SAP Ariba Follow-On Pattern: For hybrid methods (BID_WITH_REVERSE_AUCTION or
+  // toggle-based e-RA on RFQ/Open Tender), do NOT create the auction record at
+  // publish time. The auction configuration is stored in the requirement payload
+  // and will be used when the buyer explicitly launches Stage 2 via the
+  // "Launch Reverse Auction" button after evaluating Stage 1 sealed proposals.
+  // Only standalone REVERSE_AUCTION creates the auction immediately.
+  if (!isStandaloneReverseAuction) return null;
 
   const existing = await db.auction.findFirst({ where: { linkedRequirementId: requirement.id } });
   if (existing) return existing;
@@ -1673,7 +1700,7 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
       auctionDurationMinutes: config.auctionDurationMinutes,
       purchaseGroup: config.purchaseGroup || null,
       purchaseOrganization: config.purchaseOrganization || null,
-      buyerOrgId: req.user?.organizationId || requirement.organizationId || null,
+      buyerOrgId: (req as any)._buyerContext?.organizationId || req.user?.organizationId || requirement.organizationId || null,
       createdByUserId: userId(req),
       startPrice: Number(config.startingBidPrice),
       basePrice: Number(config.startingBidPrice),
@@ -1726,7 +1753,7 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
     procurementMethod: config.procurementMethod,
     qualifiedVendorCount: config.qualifiedVendors.length
   });
-  return db.auction.findUnique({ where: { id: auction.id } });
+  return auction;
 };
 
 const createRateContractForSubmittedProcurement = async (req: AuthRequest, requirement: any, draftBody: z.infer<typeof procurementDraftBody>) => {
@@ -1817,7 +1844,11 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   const canonicalMethod = String(draftBody.canonicalMethod || requirement.canonicalMethod || methodSlug.toUpperCase()).toUpperCase();
   const isLimitedRfq = methodSlug === 'rfq' && String(payload.rfqType || '').toUpperCase() === 'LIMITED';
   const bidType = isLimitedRfq ? 'LIMITED_TENDER' : canonicalMethod;
-  const startDate = rateContractConfig.periodStartDate || schedule.publishDate || schedule.submissionStartDate || schedule.bidStartDate || tender.bidStartDate || requirement.createdAt || new Date();
+  const creationTime = requirement.createdAt ? new Date(requirement.createdAt) : new Date();
+  const rawPublishCandidate = schedule.publishDate || schedule.submissionStartDate || schedule.bidStartDate || tender.bidStartDate || null;
+  const parsedStartDate = rateContractConfig.periodStartDate ? new Date(rateContractConfig.periodStartDate) : (rawPublishCandidate ? new Date(rawPublishCandidate) : null);
+  const isFutureScheduled = parsedStartDate && !isNaN(parsedStartDate.getTime()) && parsedStartDate.getTime() > (creationTime.getTime() + 60000);
+  const effectiveStartDate = isFutureScheduled ? parsedStartDate : creationTime;
   const endDate = rateContractConfig.periodEndDate || schedule.submissionDate || schedule.submissionDeadline || schedule.bidClosingDate || tender.bidClosingDate || requirement.requiredBy || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   const existing = await db.procurementBid.findFirst({
@@ -1830,7 +1861,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     }
   }).catch(() => null);
 
-  const buyer = await db.user.findUnique({
+  const buyer = (req as any)._buyerContext || await db.user.findUnique({
     where: { id: userId(req) },
     include: { organization: true, buyerProfile: true }
   });
@@ -1854,13 +1885,14 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     state: buyer?.organization?.state || null,
     district: buyer?.organization?.district || null,
     pincode: buyer?.organization?.pincode || null,
-    startDate: new Date(startDate),
+    startDate: effectiveStartDate,
     endDate: new Date(endDate),
     technicalOpeningDate: tender.technicalEvaluationDate ? new Date(tender.technicalEvaluationDate) : null,
     financialOpeningDate: tender.financialEvaluationDate ? new Date(tender.financialEvaluationDate) : null,
     bidValidityDate: tender.bidValidityDate ? new Date(tender.bidValidityDate) : null,
     status: 'OPEN',
     approvalStatus: 'APPROVED',
+    approvedAt: creationTime,
     lifecycleStage: 'SELLER_PARTICIPATION',
     evaluationMethod: payload.evaluation?.evaluationMethod || payload.evaluation?.method || payload.evaluationMethod || payload.rules?.evaluationMethod || payload.evaluation?.quotationFormat || 'L1',
     isEmdRequired: Boolean(terms.emdRequired || tender.emdRequired),
@@ -1873,6 +1905,10 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     visibility: deriveVisibility({ procurementType: canonicalMethod, bidType, technicalPacket: { vendors } }),
     technicalPacket: {
       ...payload,
+      schedule: {
+        ...schedule,
+        publishDate: effectiveStartDate.toISOString(),
+      },
       sourceRequirementId: requirement.id,
       requirementId: requirement.id,
       requirementNumber: requirement.requirementNumber,
@@ -1944,42 +1980,58 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   }).catch(() => undefined);
 
   const documents = Array.isArray(payload.documents) ? payload.documents : [];
-  for (const doc of documents) {
-    const fileAssetId = Number(doc?.fileAssetId || 0);
-    if (!fileAssetId) continue;
-    const asset = await db.fileAsset.findFirst({
-      where: { id: fileAssetId },
-      select: { id: true, originalName: true, mimeType: true, size: true, url: true, key: true }
-    });
-    if (!asset) continue;
-    const existingDoc = await db.procurementBidDocument.findFirst({ where: { bidId: bid.id, fileAssetId } });
-    if (existingDoc) {
-      await db.procurementBidDocument.update({
-        where: { id: existingDoc.id },
-        data: {
-          fileName: doc.fileName || asset.originalName || doc.name || 'Procurement document',
-          mimeType: asset.mimeType || 'application/octet-stream',
-          fileSize: asset.size || 0,
-          fileUrl: asset.url || null,
-          fileKey: asset.key || null,
-          visibility: 'PUBLIC'
-        }
-      });
-    } else {
-      await db.procurementBidDocument.create({
-        data: {
-          bidId: bid.id,
-          documentType: doc.name || doc.documentType || 'PROCUREMENT_DOCUMENT',
-          fileAssetId,
-          fileName: doc.fileName || asset.originalName || doc.name || 'Procurement document',
-          fileUrl: asset.url || null,
-          fileKey: asset.key || null,
-          mimeType: asset.mimeType || 'application/octet-stream',
-          fileSize: asset.size || 0,
-          uploadedById: userId(req),
-          visibility: 'PUBLIC'
-        }
-      });
+  const fileAssetIds = documents.map((d: any) => Number(d?.fileAssetId || 0)).filter((id: number) => id > 0);
+  if (fileAssetIds.length > 0) {
+    const [assets, existingDocs] = await Promise.all([
+      db.fileAsset.findMany({
+        where: { id: { in: fileAssetIds } },
+        select: { id: true, originalName: true, mimeType: true, size: true, url: true, key: true }
+      }),
+      db.procurementBidDocument.findMany({
+        where: { bidId: bid.id, fileAssetId: { in: fileAssetIds } }
+      })
+    ]);
+    const assetMap = new Map(assets.map((a: any) => [a.id, a]));
+    const existingDocMap = new Map(existingDocs.map((d: any) => [d.fileAssetId, d]));
+
+    const docOps: Promise<any>[] = [];
+    for (const doc of documents) {
+      const fileAssetId = Number(doc?.fileAssetId || 0);
+      if (!fileAssetId) continue;
+      const asset: any = assetMap.get(fileAssetId);
+      if (!asset) continue;
+      const existingDoc: any = existingDocMap.get(fileAssetId);
+      if (existingDoc) {
+        docOps.push(db.procurementBidDocument.update({
+          where: { id: existingDoc.id },
+          data: {
+            fileName: doc.fileName || asset.originalName || doc.name || 'Procurement document',
+            mimeType: asset.mimeType || 'application/octet-stream',
+            fileSize: asset.size || 0,
+            fileUrl: asset.url || null,
+            fileKey: asset.key || null,
+            visibility: 'PUBLIC'
+          }
+        }));
+      } else {
+        docOps.push(db.procurementBidDocument.create({
+          data: {
+            bidId: bid.id,
+            documentType: doc.name || doc.documentType || 'PROCUREMENT_DOCUMENT',
+            fileAssetId,
+            fileName: doc.fileName || asset.originalName || doc.name || 'Procurement document',
+            fileUrl: asset.url || null,
+            fileKey: asset.key || null,
+            mimeType: asset.mimeType || 'application/octet-stream',
+            fileSize: asset.size || 0,
+            uploadedById: userId(req),
+            visibility: 'PUBLIC'
+          }
+        }));
+      }
+    }
+    if (docOps.length > 0) {
+      await Promise.all(docOps);
     }
   }
 
@@ -1988,7 +2040,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     methodSlug,
     canonicalMethod
   });
-  return db.procurementBid.findUnique({ where: { id: bid.id } });
+  return bid;
 };
 
 const tenderBody = z.object({
@@ -2074,6 +2126,7 @@ const quoteResponseBody = z.object({
 const actorFrom = (req: AuthRequest) => ({
   id: userId(req),
   role: String(req.user?.role),
+  organizationId: (req as any)._buyerContext?.organizationId || req.user?.organizationId || null,
   ipAddress: req.ip,
   userAgent: req.headers['user-agent']
 });
@@ -2857,7 +2910,7 @@ router.get('/public/files/:id/view', asyncRoute(async (req: AuthRequest, res) =>
   res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
-  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
   return res.end(file.buffer);
 }));
 
@@ -5144,20 +5197,18 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
     }
   }
 
-  const draft = parsed.id ? await assertProcurementDraftAccess(req, parsed.id) : await saveProcurementDraft(req, parsed);
-  let submitted = await procurementWorkflow.submitRequirement(actorFrom(req), draft.id);
-  // Auto-approve the requirement in development/guided mode to skip corporate approvals queue
-  submitted = await db.requirement.update({
-    where: { id: submitted.id },
-    data: { status: 'APPROVED' }
-  });
+  const submitted = await saveProcurementDraft(req, parsed, 'APPROVED');
+  void auditWrite(req, 'workflow.requirement.submitted', 'requirement', submitted.id);
+
   try {
-    const procurementBid = await createProcurementBidForSubmittedRequirement(req, submitted, parsed);
-    const auction = await createAuctionForSubmittedProcurement(req, submitted, parsed);
-    const rateContract = await createRateContractForSubmittedProcurement(req, submitted, parsed);
+    const [procurementBid, auction, rateContract] = await Promise.all([
+      createProcurementBidForSubmittedRequirement(req, submitted, parsed),
+      createAuctionForSubmittedProcurement(req, submitted, parsed),
+      createRateContractForSubmittedProcurement(req, submitted, parsed)
+    ]);
     await auditWrite(req, 'procurement.submitted', 'requirement', submitted.id, { methodSlug: methodSlugForDraft(parsed) });
     ok(res, {
-      procurement: serializeProcurementDraft({ ...submitted, items: draft.items || [] }),
+      procurement: serializeProcurementDraft({ ...submitted, items: (submitted as any).items || [] }),
       procurementBid,
       auction,
       rateContract,
@@ -5165,9 +5216,9 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
     });
   } catch (error) {
     await db.requirement.update({
-      where: { id: draft.id },
+      where: { id: submitted.id },
       data: { status: 'DRAFT' }
-    });
+    }).catch(() => undefined);
     throw error;
   }
 }, 'Unable to submit procurement'));
@@ -5876,6 +5927,9 @@ router.get('/quote-requests/:id', authenticate, asyncRoute(async (req, res) => {
   if (req.user?.role === 'buyer' && enriched.quoteResponses) {
     enriched.quoteResponses = enriched.quoteResponses.filter((qr: any) => qr.status !== 'DRAFT');
   }
+  if (req.user?.role === 'seller' && enriched.quoteResponses) {
+    enriched.quoteResponses = enriched.quoteResponses.filter((qr: any) => qr.sellerId === userId(req));
+  }
   ok(res, { ...enriched, requestDocAsset });
 }));
 
@@ -6338,42 +6392,74 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
   const numId = isNum ? Number(token) : null;
 
   if (numId && numId > 0) {
-    const q = await db.quoteRequest.findUnique({ where: { id: numId }, include: { buyer: { select: { name: true } } } });
+    const [q, req, bid] = await Promise.all([
+      db.quoteRequest.findUnique({ where: { id: numId }, include: { buyer: { select: { name: true } } } }).catch(() => null),
+      db.buyerRequirement.findUnique({ where: { id: numId } }).catch(() => null),
+      db.procurementBid.findUnique({ where: { id: numId } }).catch(() => null)
+    ]);
     if (q) return q;
 
-    const req = await db.buyerRequirement.findUnique({ where: { id: numId } });
     if (req) {
       return {
         id: req.id,
         subject: req.title,
-        requirementNumber: req.requirementNumber,
+        requirementNumber: `REQ-${req.id}`,
         buyerId: req.createdById,
         sellerId: null,
-        deadlineDate: req.lastDate
+        deadlineDate: req.lastDate,
+        clarificationDeadline: null
       };
     }
 
-    const legacyReq = await db.requirement.findUnique({ where: { id: numId } });
-    if (legacyReq) {
-      return {
-        id: legacyReq.id,
-        subject: legacyReq.title,
-        requirementNumber: legacyReq.requirementNumber,
-        buyerId: legacyReq.createdById,
-        sellerId: null,
-        deadlineDate: null
-      };
-    }
-
-    const bid = await db.procurementBid.findUnique({ where: { id: numId } });
     if (bid) {
+      const sched = (bid.technicalPacket as any)?.schedule;
       return {
         id: bid.id,
         subject: bid.title,
         requirementNumber: bid.bidNumber,
         buyerId: bid.buyerId,
         sellerId: null,
-        deadlineDate: bid.endDate
+        deadlineDate: bid.endDate,
+        clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
+      };
+    }
+
+    const legacyReq = await db.requirement.findUnique({ where: { id: numId } }).catch(() => null);
+    if (legacyReq) {
+      const sched = (legacyReq.payload as any)?.schedule;
+      return {
+        id: legacyReq.id,
+        subject: legacyReq.title,
+        requirementNumber: legacyReq.requirementNumber,
+        buyerId: legacyReq.createdById,
+        sellerId: null,
+        deadlineDate: null,
+        clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
+      };
+    }
+  }
+
+  const isBidToken = token.startsWith('TND-') || token.startsWith('BID-') || token.startsWith('RA-') || token.startsWith('RFQ-');
+  if (isBidToken) {
+    const bid = await db.procurementBid.findFirst({
+      where: {
+        OR: [
+          { bidNumber: token },
+          { bidNumber: token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : token },
+          { bidNumber: token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token }
+        ]
+      }
+    });
+    if (bid) {
+      const sched = (bid.technicalPacket as any)?.schedule;
+      return {
+        id: bid.id,
+        subject: bid.title,
+        requirementNumber: bid.bidNumber,
+        buyerId: bid.buyerId,
+        sellerId: null,
+        deadlineDate: bid.endDate,
+        clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
       };
     }
   }
@@ -6383,55 +6469,49 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
     token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : (token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token)
   ];
 
-  const qMatch = await db.quoteRequest.findFirst({
-    where: {
-      OR: tokenVariants.flatMap(t => [
-        { requirementNumber: t },
-        { requirementNumber: `REQ-${t}` },
-        { requirementNumber: `RFQ-${t}` }
-      ])
-    },
-    include: { buyer: { select: { name: true } } }
-  });
-  if (qMatch) return qMatch;
+  const [bidMatch, reqMatch] = await Promise.all([
+    db.procurementBid.findFirst({
+      where: {
+        OR: tokenVariants.flatMap(t => [
+          { bidNumber: t },
+          { bidNumber: `REQ-${t}` },
+          { bidNumber: `RFQ-${t}` }
+        ])
+      }
+    }).catch(() => null),
+    db.requirement.findFirst({
+      where: {
+        OR: tokenVariants.flatMap(t => [
+          { requirementNumber: t },
+          { requirementNumber: `REQ-${t}` },
+          { requirementNumber: `RFQ-${t}` }
+        ])
+      }
+    }).catch(() => null)
+  ]);
 
-  const reqMatch = await db.buyerRequirement.findFirst({
-    where: {
-      OR: tokenVariants.flatMap(t => [
-        { requirementNumber: t },
-        { requirementNumber: `REQ-${t}` },
-        { requirementNumber: `RFQ-${t}` }
-      ])
-    }
-  });
-  if (reqMatch) {
-    return {
-      id: reqMatch.id,
-      subject: reqMatch.title,
-      requirementNumber: reqMatch.requirementNumber,
-      buyerId: reqMatch.createdById,
-      sellerId: null,
-      deadlineDate: reqMatch.lastDate
-    };
-  }
-
-  const bidMatch = await db.procurementBid.findFirst({
-    where: {
-      OR: tokenVariants.flatMap(t => [
-        { bidNumber: t },
-        { bidNumber: `REQ-${t}` },
-        { bidNumber: `RFQ-${t}` }
-      ])
-    }
-  });
   if (bidMatch) {
+    const sched = (bidMatch.technicalPacket as any)?.schedule;
     return {
       id: bidMatch.id,
       subject: bidMatch.title,
       requirementNumber: bidMatch.bidNumber,
       buyerId: bidMatch.buyerId,
       sellerId: null,
-      deadlineDate: bidMatch.endDate
+      deadlineDate: bidMatch.endDate,
+      clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
+    };
+  }
+  if (reqMatch) {
+    const sched = (reqMatch.payload as any)?.schedule;
+    return {
+      id: reqMatch.id,
+      subject: reqMatch.title,
+      requirementNumber: reqMatch.requirementNumber,
+      buyerId: reqMatch.createdById,
+      sellerId: null,
+      deadlineDate: null,
+      clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
     };
   }
 
@@ -6446,8 +6526,29 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
   if (req.user?.role !== 'seller' && userId(req) !== quote.buyerId && userId(req) !== quote.sellerId) {
     throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
   }
-  if (quote.deadlineDate && new Date(quote.deadlineDate) < new Date()) {
-    throw new ApiError(400, 'RFQ deadline has passed.', 'RFQ_DEADLINE_PASSED');
+
+  const rawClarDeadline = (quote as any).clarificationDeadline;
+  const rawSubmissionDeadline = quote.deadlineDate;
+  let effectiveClarDeadline: Date | null = null;
+  if (rawClarDeadline && rawSubmissionDeadline) {
+    const d1 = new Date(rawClarDeadline);
+    const d2 = new Date(rawSubmissionDeadline);
+    const t1 = !isNaN(d1.getTime()) ? d1.getTime() : 0;
+    const t2 = !isNaN(d2.getTime()) ? d2.getTime() : 0;
+    effectiveClarDeadline = new Date(Math.max(t1, t2));
+  } else if (rawClarDeadline) {
+    effectiveClarDeadline = new Date(rawClarDeadline);
+  } else if (rawSubmissionDeadline) {
+    effectiveClarDeadline = new Date(rawSubmissionDeadline);
+  }
+
+  if (effectiveClarDeadline && !isNaN(effectiveClarDeadline.getTime())) {
+    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+      effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+    }
+    if (effectiveClarDeadline.getTime() < Date.now()) {
+      throw new ApiError(400, 'The clarification window has closed for this procurement.', 'CLARIFICATION_DEADLINE_PASSED');
+    }
   }
 
   const realQuoteReq = await db.quoteRequest.findUnique({ where: { id } }).catch(() => null);
@@ -6476,16 +6577,22 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
 
   const targetId = userId(req) === quote.buyerId ? quote.sellerId : quote.buyerId;
   if (targetId) {
-    await notifySafe(
-      targetId,
-      userId(req) === quote.buyerId ? 'Clarification Reply' : 'New Clarification Question',
-      `Regarding "${quote.subject}": ${body.question.substring(0, 100)}${body.question.length > 100 ? '...' : ''}`,
-      'quote_request_clarification',
-      `/quotations`
-    );
+    // Non-blocking background notification for fast HTTP response
+    setImmediate(() => {
+      notifySafe(
+        targetId,
+        userId(req) === quote.buyerId ? 'Clarification Reply' : 'New Clarification Question',
+        `Regarding "${quote.subject}": ${body.question.substring(0, 100)}${body.question.length > 100 ? '...' : ''}`,
+        'quote_request_clarification',
+        `/quotations`
+      );
+    });
   }
 
-  await auditWrite(req, 'quote_request.clarification_asked', 'quoteRequestClarification', clarification.id);
+  // Non-blocking audit write
+  setImmediate(() => {
+    void auditWrite(req, 'quote_request.clarification_asked', 'quoteRequestClarification', clarification.id);
+  });
   ok(res, clarification, 201);
 }));
 
@@ -10404,6 +10511,47 @@ router.post('/notifications/read-all', authenticate, asyncRoute(async (req, res)
   ok(res, { success: true, expiresAfterReadHours: 24 });
 }));
 
+router.delete('/notifications/:id', authenticate, asyncRoute(async (req, res) => {
+  const id = Number(req.params.id);
+  const currentUserId = userId(req);
+  const notification = await db.notification.findFirst({
+    where: { id, userId: currentUserId },
+    select: { id: true }
+  });
+  if (!notification) throw new ApiError(404, 'Notification not found', 'NOTIFICATION_NOT_FOUND');
+  await db.notificationLog.deleteMany({ where: { notificationId: id } });
+  await db.notification.delete({ where: { id } });
+  ok(res, { success: true });
+}));
+
+router.delete('/notifications', authenticate, asyncRoute(async (req, res) => {
+  const currentUserId = userId(req);
+  const userNotifs = await db.notification.findMany({
+    where: { userId: currentUserId },
+    select: { id: true }
+  });
+  const notifIds = userNotifs.map(n => n.id);
+  if (notifIds.length > 0) {
+    await db.notificationLog.deleteMany({ where: { notificationId: { in: notifIds } } });
+    await db.notification.deleteMany({ where: { id: { in: notifIds } } });
+  }
+  ok(res, { success: true, count: notifIds.length });
+}));
+
+router.post('/notifications/clear-all', authenticate, asyncRoute(async (req, res) => {
+  const currentUserId = userId(req);
+  const userNotifs = await db.notification.findMany({
+    where: { userId: currentUserId },
+    select: { id: true }
+  });
+  const notifIds = userNotifs.map(n => n.id);
+  if (notifIds.length > 0) {
+    await db.notificationLog.deleteMany({ where: { notificationId: { in: notifIds } } });
+    await db.notification.deleteMany({ where: { id: { in: notifIds } } });
+  }
+  ok(res, { success: true, count: notifIds.length });
+}));
+
 // Seller settings endpoints
 router.post('/seller/settings/change-password/send-otp', authenticate, asyncRoute(async (req, res) => {
   const { generateOtp, storeOtp } = await import('../services/otp.service.js');
@@ -10911,6 +11059,9 @@ export type NormalizedProcurement = {
   eligibilityCriteria?: string[];
   termsAndConditions?: string[];
   budgetDetails?: any;
+  approvalAuthority?: string;
+  justification?: string;
+  internalDetails?: Record<string, any>;
   detailSections?: Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
   approvalTrail?: Array<Record<string, unknown>>;
   tracking?: Array<{ label: string; status: string; date?: string }>;
@@ -10932,18 +11083,42 @@ export interface BuyerProcurementsDataResult {
   };
 }
 
-export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: number = -1): Promise<BuyerProcurementsDataResult> {
-  // Fetch logged in user's organization name
-  const buyerOrg = buyerOrgId > 0
-    ? await db.organization.findUnique({
-        where: { id: buyerOrgId },
-        select: { organizationName: true }
-      })
-    : null;
-  const loggedInOrgName = buyerOrg?.organizationName || '';
+const cleanOpportunitySummary = (desc?: string | null): string => {
+  if (!desc) return '';
+  let text = String(desc).replace(/\r/g, '');
+  text = text.replace(/Sourcing Method:\s*[^|\n]*/gi, '');
+  text = text.replace(/Value:\s*(?:INR|Rs\.?|₹)?\s*[\d,.]*[^|\n]*/gi, '');
+  text = text.replace(/Urgency:\s*[^|\n]*/gi, '');
+  text = text.replace(/[\n\r|]+/g, ' ').replace(/\s+/g, ' ').trim();
+  text = text.replace(/^[-:|,.\s]+|[-:|,.\s]+$/g, '').trim();
+  return text;
+};
 
-  // ── Parallel data fetch ──
-  const [bidDrafts, procurementBids, procurementRequests, directPurchases, requirements, rateContracts, fileAssets, auctions, allApprovals] = await Promise.all([
+export async function getBuyerProcurementsData(
+  buyerId: number,
+  buyerOrgId: number = -1,
+  bypassCache: boolean = false
+): Promise<BuyerProcurementsDataResult> {
+  const cacheKey = `cache:buyer:procurements:${buyerId}`;
+  if (bypassCache) {
+    await deleteCache(cacheKey).catch(() => undefined);
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
+  }
+
+  return getOrSetCache(cacheKey, async () => {
+    return fetchFreshBuyerProcurementsData(buyerId, buyerOrgId);
+  }, 5);
+}
+
+async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: number = -1): Promise<BuyerProcurementsDataResult> {
+  // ── Parallel data fetch (concurrent, including buyer organization) ──
+  const [buyerOrg, bidDrafts, procurementBids, procurementRequests, directPurchases, requirements, rateContracts, fileAssets, auctions, allApprovals] = await Promise.all([
+    buyerOrgId > 0
+      ? db.organization.findUnique({
+          where: { id: buyerOrgId },
+          select: { organizationName: true }
+        })
+      : Promise.resolve(null),
     db.bidWizardDraft.findMany({
       where: { buyerId, draftStatus: 'DRAFT' },
       orderBy: { updatedAt: 'desc' },
@@ -11014,6 +11189,8 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       orderBy: [{ entityId: 'asc' }, { sequence: 'asc' }]
     })
   ]);
+
+  const loggedInOrgName = buyerOrg?.organizationName || '';
 
   const requirementAssets = fileAssets.reduce((acc: Record<number, any[]>, asset: any) => {
     const key = Number(asset.entityId);
@@ -11159,7 +11336,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       methodLabel: METHOD_LABEL_MAP[bidTypeSlug] || bidTypeSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
       estimatedValue: Number(fd?.basicDetails?.estimatedValue || fd?.estimatedValue || step3.estimatedValue || 0),
       category: fd?.basicDetails?.category || fd?.category || step4.productCategory || step4.serviceCategory || '',
-      description: fd?.basicDetails?.description || fd?.description || step4.productDescription || step4.scopeOfWork || '',
+      description: cleanOpportunitySummary(fd?.basicDetails?.description || fd?.description || step4.productDescription || step4.scopeOfWork || ''),
       deliveryLocation: fd?.basicDetails?.deliveryLocation || fd?.deliveryLocation || step5.singleConsignee?.location || '',
       startDate: fd?.basicDetails?.startDate || fd?.startDate || '',
       endDate: fd?.basicDetails?.endDate || fd?.endDate || '',
@@ -11173,7 +11350,10 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       items,
       paymentTerms: step7.paymentTerms || '',
       eligibilityCriteria,
-      termsAndConditions
+      termsAndConditions,
+      approvalAuthority: String((fd?.internal || fd?.step2)?.approvalAuthority || '').trim(),
+      justification: String((fd?.internal || fd?.step2)?.justification || fd?.basics?.justification || fd?.limitedTenderJustification || '').trim(),
+      internalDetails: (fd?.internal || fd?.step2) || undefined,
     });
   }
 
@@ -11190,11 +11370,86 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       documentType: doc.documentType || 'Bid Document'
     }));
 
-    const items = [{
+    const technicalPacket = (b.technicalPacket || {}) as any;
+    const internal = technicalPacket.internal || {};
+    const basics = technicalPacket.basics || {};
+    const schedule = technicalPacket.schedule || {};
+    const terms = technicalPacket.terms || {};
+
+    const approvalAuthority = String(internal.approvalAuthority || '').trim();
+    const justification = String(internal.justification || basics.justification || technicalPacket.limitedTenderJustification || '').trim();
+    const budgetConfirmed = internal.budgetConfirmed !== undefined ? Boolean(internal.budgetConfirmed) : true;
+    const internalDetails = {
+      orgName: internal.orgName || b.buyerOrganizationName || '',
+      contactPerson: internal.contactPerson || '',
+      email: internal.email || '',
+      mobile: internal.mobile || '',
+      department: internal.department || '',
+      approvalAuthority,
+      justification,
+      budgetConfirmed,
+      internalFileNumber: internal.internalFileNumber || '',
+      competentAuthority: internal.competentAuthority || '',
+    };
+
+    const bidDetailSections = [
+      detailSection('Procurement Intent', {
+        title: b.title,
+        category: b.category,
+        estimatedValue: b.estimatedValue ? `INR ${Number(b.estimatedValue).toLocaleString('en-IN')}` : undefined,
+        deliveryLocation: b.deliveryLocation,
+        requiredByDate: basics.requiredByDate,
+        priority: basics.priority,
+        buyerType: basics.buyerType,
+      }),
+      detailSection('Internal Approvals & Compliance', {
+        approvalAuthority: approvalAuthority || undefined,
+        justification: justification || undefined,
+        budgetConfirmed: budgetConfirmed ? 'Confirmed & Sanctioned' : 'Pending',
+        orgName: internal.orgName || b.buyerOrganizationName || undefined,
+        contactPerson: internal.contactPerson || undefined,
+        email: internal.email || undefined,
+        mobile: internal.mobile || undefined,
+        department: internal.department || undefined,
+        internalFileNumber: internal.internalFileNumber || undefined,
+        competentAuthority: internal.competentAuthority || undefined,
+      }, {
+        approvalAuthority: 'Internal Approval Authority',
+        justification: 'Purchase Justification & Compliance Reason',
+        budgetConfirmed: 'Budget Allocation & Sanction',
+        orgName: 'Organization Name',
+        contactPerson: 'Contact Person Name',
+        email: 'Contact Email Address',
+        mobile: 'Contact Mobile Number',
+        department: 'Buying Department',
+        internalFileNumber: 'Department File / Case Number',
+        competentAuthority: 'Competent Financial Authority (CFA)',
+      }),
+      detailSection('Consignee & Delivery', technicalPacket.consigneeDetails ? { consigneeDetails: technicalPacket.consigneeDetails } : undefined),
+      detailSection('Vendor / Supplier Selection', technicalPacket.vendors),
+      detailSection('Timeline & Rules', { ...schedule, ...(technicalPacket.tender || {}), ...(technicalPacket.rules || {}) }),
+      detailSection('Commercial Terms', terms),
+      detailSection('Evaluation Basis', technicalPacket.evaluation),
+      detailSection('Approval Notes', technicalPacket.approval),
+      detailSection('Service Details', technicalPacket.serviceDetails),
+    ].filter(Boolean) as Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
+
+    const packetItems = Array.isArray(technicalPacket.items) && technicalPacket.items.length > 0
+      ? technicalPacket.items.map((it: any) => ({
+          itemName: it.name || it.itemName || b.title,
+          quantity: String(it.quantity || it.qty || b.quantity || ''),
+          unitOfMeasure: it.unit || it.unitOfMeasure || b.unit || 'Nos',
+          description: it.description || it.specifications?.description || cleanOpportunitySummary(b.description || ''),
+          estimatedUnitPrice: Number(it.estimatedUnitPrice || it.unitPrice || it.price || 0) || undefined,
+          specifications: it.specifications || it
+        }))
+      : null;
+
+    const items = packetItems || [{
       itemName: b.title,
       quantity: String(b.quantity || ''),
       unitOfMeasure: b.unit || '',
-      description: b.description || ''
+      description: cleanOpportunitySummary(b.description || '')
     }];
 
     const eligibilityCriteria = b.eligibilityCriteria || [];
@@ -11219,7 +11474,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
 
       estimatedValue: Number(b.estimatedValue || 0),
       category: b.category || '',
-      description: b.description || '',
+      description: cleanOpportunitySummary(b.description || ''),
       deliveryLocation: b.deliveryLocation || '',
       startDate: b.startDate?.toISOString?.() || '',
       endDate: b.endDate?.toISOString?.() || '',
@@ -11236,9 +11491,19 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       evaluationMethod: b.evaluationMethod || (b.technicalPacket as any)?.evaluation?.method || (b.technicalPacket as any)?.evaluationMethod || (b.technicalPacket as any)?.rules?.evaluationMethod || 'L1 Basis',
       documents,
       items,
-      paymentTerms: '',
+      paymentTerms: terms.paymentTerms || '',
       eligibilityCriteria,
-      termsAndConditions
+      termsAndConditions,
+      approvalAuthority,
+      justification,
+      internalDetails,
+      budgetDetails: {
+        costCenter: internal.costCenter || '',
+        justification,
+        approvingAuthority: approvalAuthority,
+        remarks: budgetConfirmed ? 'Budget allocated and sanctioned under GFR/Corporate guidelines' : '',
+      },
+      detailSections: bidDetailSections.length > 0 ? bidDetailSections : undefined
     });
   }
 
@@ -11595,7 +11860,18 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
         recommendedMethod: payload.recommendation?.id,
         recommendationReason: payload.recommendation?.reason,
       }),
-      detailSection('Internal Buyer Details', payload.internal),
+      detailSection('Internal Approvals & Compliance', payload.internal, {
+        approvalAuthority: 'Internal Approval Authority',
+        justification: 'Purchase Justification & Compliance Reason',
+        budgetConfirmed: 'Budget Allocation & Sanction',
+        orgName: 'Organization Name',
+        contactPerson: 'Contact Person Name',
+        email: 'Contact Email Address',
+        mobile: 'Contact Mobile Number',
+        department: 'Buying Department',
+        internalFileNumber: 'Department File / Case Number',
+        competentAuthority: 'Competent Financial Authority (CFA)',
+      }),
       detailSection('Consignee Details', { consigneeDetails: payload.consigneeDetails }),
       detailSection('Vendor / Supplier Selection', payload.vendors),
       detailSection('Timeline & Rules', { ...(payload.schedule || {}), ...(payload.tender || {}), ...(payload.rules || {}) }),
@@ -11624,7 +11900,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       methodLabel: METHOD_LABEL_MAP[methodSlug] || methodSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
       estimatedValue: Number(r.estimatedValue || payload.basics?.estimatedValue || 0),
       category: (r as any).category?.name || payload.basics?.category || '',
-      description: r.description || payload.basics?.description || '',
+      description: cleanOpportunitySummary(r.description || payload.basics?.description || ''),
       deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || (r as any).deliveryLocation || '',
       startDate: '',
       endDate: '',
@@ -11654,15 +11930,57 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       eligibilityCriteria: [],
       termsAndConditions: [],
       detailSections: requirementDetailSections,
+      approvalAuthority: payload.internal?.approvalAuthority || '',
+      justification: payload.internal?.justification || payload.basics?.justification || payload.limitedTenderJustification || '',
+      internalDetails: payload.internal || undefined,
+      budgetDetails: {
+        costCenter: payload.internal?.costCenter || '',
+        justification: payload.internal?.justification || payload.basics?.justification || '',
+        approvingAuthority: payload.internal?.approvalAuthority || '',
+        remarks: payload.internal?.budgetConfirmed ? 'Budget allocated and sanctioned under GFR/Corporate guidelines' : '',
+      },
       approvalTrail: [],
       tracking: trackingFor(String(r.status || 'DRAFT'), r.createdAt, r.status === 'DRAFT' ? null : r.updatedAt, ['APPROVED', 'SOURCING', 'FULFILLED', 'PUBLISHED', 'OPEN', 'CLOSED'].includes(String(r.status || '')) ? r.updatedAt : null, [])
     });
   }
 
   // 6) Rate Contracts
-  for (const contract of rateContracts) {
+  const buyerRateContracts = rateContracts.filter(c => {
+    const metadata = (c.metadata || {}) as any;
+    return Number(metadata.buyerId || 0) === buyerId;
+  });
+
+  const rcCandidateReqIds = new Set<number>();
+  const rcCandidateSupplierIds = new Set<number>();
+  for (const contract of buyerRateContracts) {
     const metadata = (contract.metadata || {}) as any;
-    if (Number(metadata.buyerId || 0) !== buyerId) continue;
+    const srcReq = requirements.find(r => r.id === Number(metadata.requirementId) || r.requirementNumber === metadata.requirementNumber);
+    if (srcReq?.id) rcCandidateReqIds.add(srcReq.id);
+    if (metadata.requirementId) rcCandidateReqIds.add(Number(metadata.requirementId));
+    for (const s of (metadata.selectedSuppliers || [])) {
+      const sid = Number(s.supplierId || s.id);
+      if (sid > 0) rcCandidateSupplierIds.add(sid);
+    }
+  }
+
+  const allRcResponses = (rcCandidateReqIds.size > 0 || rcCandidateSupplierIds.size > 0)
+    ? await db.requirementResponse.findMany({
+        where: {
+          OR: [
+            ...(rcCandidateReqIds.size > 0 ? [{ requirementId: { in: Array.from(rcCandidateReqIds) } }] : []),
+            ...(rcCandidateSupplierIds.size > 0 ? [{ sellerUserId: { in: Array.from(rcCandidateSupplierIds) } }] : []),
+            ...(rcCandidateSupplierIds.size > 0 ? [{ sellerOrganizationId: { in: Array.from(rcCandidateSupplierIds) } }] : [])
+          ]
+        },
+        include: {
+          sellerUser: { select: { id: true, name: true, email: true, mobile: true, role: true, organizationId: true } },
+          sellerOrganization: { select: { organizationName: true } }
+        }
+      }).catch(() => [])
+    : [];
+
+  for (const contract of buyerRateContracts) {
+    const metadata = (contract.metadata || {}) as any;
 
     // Deduplication check: Skip if this Rate Contract is already represented by a ProcurementBid or Requirement in `all`
     const isAlreadyAdded = all.some(item =>
@@ -11679,22 +11997,9 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
     const srcReq = requirements.find(r => r.id === Number(metadata.requirementId) || r.requirementNumber === metadata.requirementNumber);
     const srcPayload = (srcReq as any)?.payload || {};
 
-    // Query supplier responses / quotations linked to this rate contract or its source requirement
+    // Filter supplier responses from the pre-fetched batch
     const reqIds = Array.from(new Set([srcReq?.id, Number(metadata.requirementId || 0)].filter(Boolean) as number[]));
-    const selectedSupplierIds = (metadata.selectedSuppliers || []).map((s: any) => Number(s.supplierId || s.id)).filter(Boolean);
-    const allPossibleResponses = await db.requirementResponse.findMany({
-      where: {
-        OR: [
-          ...(reqIds.length > 0 ? [{ requirementId: { in: reqIds } }] : []),
-          ...(selectedSupplierIds.length > 0 ? [{ sellerUserId: { in: selectedSupplierIds } }] : []),
-          ...(selectedSupplierIds.length > 0 ? [{ sellerOrganizationId: { in: selectedSupplierIds } }] : [])
-        ]
-      },
-      include: {
-        sellerUser: { select: { id: true, name: true, email: true, mobile: true, role: true, organizationId: true } },
-        sellerOrganization: { select: { organizationName: true } }
-      }
-    }).catch(() => []);
+    const allPossibleResponses = allRcResponses;
 
     const rateContractItemNames = itemRateSchedule.map((i: any) => String(i.itemName || '').toLowerCase().trim()).filter(Boolean);
     const responses = allPossibleResponses.filter((r: any) => {
@@ -11765,7 +12070,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       methodLabel: 'Rate Contract',
       estimatedValue: Number(contract.value || srcReq?.estimatedValue || 0),
       category: metadata.contractCategory || srcReq?.category?.name || srcPayload.basics?.category || '',
-      description: metadata.contractDescription || srcReq?.description || srcPayload.basics?.description || '',
+      description: cleanOpportunitySummary(metadata.contractDescription || srcReq?.description || srcPayload.basics?.description || ''),
       deliveryLocation: metadata.deliverySla || srcPayload.basics?.deliveryLocation || (srcReq as any)?.deliveryLocation || '',
       startDate: contract.startDate?.toISOString?.() || '',
       endDate: contract.endDate?.toISOString?.() || '',
@@ -11821,7 +12126,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       methodLabel: 'Reverse Auction',
       estimatedValue: Number(a.startPrice || a.basePrice || 0),
       category: a.category || '',
-      description: a.description || '',
+      description: cleanOpportunitySummary(a.description || ''),
       deliveryLocation: '',
       startDate: a.startTime?.toISOString?.() || '',
       endDate: a.endTime?.toISOString?.() || '',
@@ -11840,7 +12145,7 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
         itemName: a.title || 'Reverse Auction Sourcing',
         quantity: '1',
         unitOfMeasure: 'Nos',
-        description: a.description || ''
+        description: cleanOpportunitySummary(a.description || '')
       }],
       paymentTerms: '',
       eligibilityCriteria: [],
@@ -11889,9 +12194,10 @@ export async function getBuyerProcurementsData(buyerId: number, buyerOrgId: numb
 router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const buyerId = userId(req);
   const buyerOrgId = req.user?.organizationId || -1;
-  const { type, status, method, category, department, startDate, endDate, search, sortBy, sortDir } = req.query as Record<string, string | undefined>;
+  const { type, status, method, category, department, startDate, endDate, search, sortBy, sortDir, refresh } = req.query as Record<string, string | undefined>;
 
-  const { all, kpis } = await getBuyerProcurementsData(buyerId, buyerOrgId);
+  const bypassCache = refresh === 'true' || refresh === '1';
+  const { all, kpis } = await getBuyerProcurementsData(buyerId, buyerOrgId, bypassCache);
 
   let filtered = all;
   if (type) {
@@ -11969,7 +12275,7 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
     return String(va).localeCompare(String(vb)) * dir;
   });
 
-  ok(res, { kpis, procurements: filtered });
+  ok(res, { kpis, procurements: filtered, all: filtered });
 }));
 
 const cancelProcurementSchema = z.object({
@@ -11995,6 +12301,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
       throw new ApiError(403, 'You do not have permission to cancel this procurement request', 'FORBIDDEN');
     }
     const updated = await cancelProcurementRequest(id, pr.organizationId, buyerId, `${reason}${remarks ? ` - ${remarks}` : ''}`);
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Procurement request cancelled successfully', procurement: updated });
   }
 
@@ -12045,6 +12352,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     }
 
     await auditWrite(req, 'procurement_bid.cancelled', 'procurementBid', id, { reason, remarks });
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Procurement bid cancelled successfully', procurement: updated });
   }
 
@@ -12101,6 +12409,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     }
 
     await auditWrite(req, 'requirement.cancelled', 'requirement', id, { reason, remarks });
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Requirement cancelled successfully', procurement: updated });
   }
 
@@ -12134,6 +12443,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     );
 
     await auditWrite(req, 'direct_purchase.cancelled', 'directPurchase', id, { reason, remarks });
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Direct purchase cancelled successfully', procurement: updated });
   }
 
@@ -12159,6 +12469,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     });
 
     await auditWrite(req, 'reverse_auction.cancelled', 'auction', id, { reason, remarks });
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Reverse auction cancelled successfully', procurement: updated });
   }
 

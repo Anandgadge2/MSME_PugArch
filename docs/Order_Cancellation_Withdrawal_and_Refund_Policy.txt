@@ -1,0 +1,263 @@
+ORDER CANCELLATION, WITHDRAWAL & REFUND 
+POLICY 
+JSG SMILE – Jharsuguda Supplier & MSME Integrated Local Exchange 
+Website: www.jsgsmile.in 
+Effective Date: [DD/MM/YYYY] 
+ 
+1. PURPOSE 
+This Order Cancellation, Withdrawal & Refund Policy (“Policy”) establishes the rules 
+governing cancellation of orders, withdrawal of quotations, termination of procurement 
+transactions, and refund processing on JSG SMILE (www.jsgsmile.in). 
+The objective of this Policy is to provide a transparent and fair framework for Buyers and 
+Suppliers while ensuring accountability throughout the procurement lifecycle. 
+ 
+2. NATURE OF THE PORTAL 
+JSG SMILE is a procurement facilitation platform established under the guidance of the 
+District Industries Centre (DIC), Jharsuguda, Government of Odisha. 
+The Portal: 
+• Facilitates procurement interactions. 
+• Facilitates order tracking. 
+• Facilitates payment visibility. 
+• Facilitates transaction monitoring. 
+The Portal does not: 
+• Act as Buyer. 
+• Act as Supplier. 
+• Become a party to commercial contracts. 
+• Determine cancellation charges. 
+• Determine compensation. 
+• Guarantee refunds. 
+All commercial obligations remain solely between the Buyer and Supplier. 
+ 
+3. APPLICABILITY 
+This Policy applies to: 
+• RFQs 
+• Quotations 
+• Purchase Orders 
+• Service Orders 
+• Work Orders 
+• Product Deliveries 
+• Service Deliveries 
+• Payment Transactions 
+processed through JSG SMILE. 
+ 
+4. CANCELLATION STAGES 
+For the purpose of this Policy, transactions may be cancelled at the following stages: 
+Stage 1 – Before RFQ Submission 
+Buyer may freely modify or withdraw procurement requirements. 
+No liability shall arise. 
+ 
+Stage 2 – After RFQ Publication but Before Order Placement  
+Buyer may withdraw RFQ at any time. 
+Suppliers may withdraw quotations before quotation validity expires. 
+No cancellation charges shall apply unless separately agreed between parties. 
+ 
+Stage 3 – After Order Placement but Before Order Acceptance  
+Buyer may cancel the order. 
+Supplier may decline the order. 
+No binding supply obligation shall arise until order acceptance. 
+ 
+Stage 4 – After Order Acceptance but Before Dispatch  
+Cancellation may be permitted subject to: 
+• Mutual agreement. 
+• Applicable commercial terms. 
+• Compensation provisions agreed between Buyer and Supplier. 
+Any cancellation costs shall be borne by the responsible party as mutually agreed. 
+ 
+Stage 5 – After Dispatch or Service Commencement 
+Cancellation shall generally not be automatic. 
+The parties shall mutually determine: 
+• Return arrangements. 
+• Compensation. 
+• Refund eligibility. 
+• Replacement requirements. 
+ 
+Stage 6 – After Delivery or Service Completion 
+Cancellation requests shall be subject to: 
+• Product return policies. 
+• Warranty provisions. 
+• Defect verification. 
+• Commercial agreements. 
+ 
+5. BUYER CANCELLATION RIGHTS 
+The Buyer may request cancellation where: 
+• Procurement requirements change. 
+• Budget approvals are withdrawn. 
+• Delivery timelines are no longer required. 
+• Supplier defaults occur. 
+• Mutual agreement exists. 
+The Buyer shall remain responsible for obligations already incurred under accepted orders. 
+ 
+6. SUPPLIER CANCELLATION RIGHTS 
+The Supplier may request cancellation where: 
+• Product becomes unavailable. 
+• Raw material shortages occur. 
+• Regulatory restrictions arise. 
+• Force majeure events occur. 
+• Buyer fails to comply with agreed obligations. 
+The Supplier shall promptly notify the Buyer regarding cancellation requests. 
+ 
+7. ORDER WITHDRAWAL 
+Orders may be withdrawn only: 
+• Before acceptance. 
+• In accordance with mutually agreed commercial terms. 
+• Subject to applicable laws. 
+The Portal may maintain records of all withdrawal actions. 
+ 
+8. AUTOMATIC CANCELLATION 
+The Portal may automatically cancel transactions where: 
+• Required approvals are not completed. 
+• Payment is not received within prescribed timelines. 
+• Accounts are suspended. 
+• Fraud is suspected. 
+• Regulatory requirements are not met. 
+Such cancellation shall not create liability for the Portal. 
+ 
+9. PAYMENT-RELATED CANCELLATIONS 
+Where integrated payment facilities are used: 
+Cancellation requests may trigger: 
+• Payment review. 
+• Refund review. 
+• Settlement hold. 
+• Transaction verification. 
+The Portal may facilitate processing but shall not determine refund entitlement. 
+ 
+10. REFUND ELIGIBILITY 
+Refund eligibility may arise in cases of: 
+Eligible Scenarios 
+• Duplicate payments. 
+• Failed transactions. 
+• Successful cancellation before execution. 
+• Non-delivery. 
+• Supplier inability to fulfill order. 
+• Mutual cancellation agreement. 
+Non-Eligible Scenarios 
+• Change of mind after delivery. 
+• Completed and accepted services. 
+• Customized products where production has commenced. 
+• Products specifically manufactured against order. 
+• Cases prohibited by applicable agreements. 
+ 
+11. REFUND PROCESS 
+Where applicable: 
+Step 1 
+Refund request is submitted. 
+Step 2 
+Supporting documentation is reviewed. 
+Step 3 
+Buyer and Supplier confirmation may be obtained. 
+Step 4 
+Payment partner verification may be conducted. 
+Step 5 
+Refund processing is initiated. 
+ 
+12. REFUND TIMELINES 
+Indicative timelines: 
+Transaction Type Expected Processing Time 
+Failed Transaction 3–7 Business Days 
+Duplicate Payment 7–10 Business Days 
+Approved Cancellation 7–15 Business Days 
+Chargeback Cases As per Banking Rules 
+Actual timelines may vary depending on: 
+• Banks 
+• Payment Gateway Providers 
+• Regulatory requirements 
+• Verification processes 
+ 
+13. T+1 SETTLEMENT IMPACT 
+Where settlement has not yet been completed: 
+• Settlement may be paused. 
+• Refund requests may be reviewed. 
+• Transaction status may be modified. 
+Where settlement has already been completed, refund obligations shall be determined 
+directly between Buyer and Supplier. 
+ 
+14. CHARGEBACKS 
+Chargebacks shall be governed by: 
+• RBI Guidelines 
+• Banking Rules 
+• Payment Gateway Policies 
+• Applicable Laws 
+The Portal shall not determine chargeback outcomes. 
+ 
+15. RETURN OF GOODS 
+Where return of goods is agreed: 
+The parties shall determine: 
+• Return logistics. 
+• Inspection procedures. 
+• Transportation responsibilities. 
+• Associated costs. 
+The Portal shall not manage physical returns. 
+ 
+16. FORCE MAJEURE CANCELLATIONS 
+Orders may be cancelled due to: 
+• Natural disasters. 
+• Floods. 
+• Earthquakes. 
+• Fire. 
+• Pandemic situations. 
+• Government restrictions. 
+• Civil disturbances. 
+• Internet or infrastructure failures. 
+Neither party shall be liable for delays or cancellations resulting from force majeure 
+events. 
+ 
+17. FRAUDULENT TRANSACTIONS 
+The Portal reserves the right to: 
+• Suspend transactions. 
+• Hold settlements. 
+• Restrict accounts. 
+• Request additional verification. 
+• Report suspected fraud. 
+Fraudulent users may be permanently removed from the Portal. 
+ 
+18. RECORDS AND AUDIT TRAIL 
+The Portal may maintain records relating to: 
+• Cancellation requests. 
+• Withdrawal requests. 
+• Refund applications. 
+• Settlement status. 
+• Transaction communications. 
+Such records may be used for audit, reporting, compliance, and legal purposes. 
+ 
+19. DISCLAIMER 
+JSG SMILE functions solely as a facilitation platform. 
+District Administration Jharsuguda, District Industries Centre (DIC), Government of 
+Odisha, Technology Partner, Portal Operator, and their officers: 
+• Do not determine cancellation rights. 
+• Do not determine refund entitlement. 
+• Do not guarantee refund approval. 
+• Do not guarantee refund timelines. 
+• Do not act as arbitrators. 
+All commercial decisions remain with the Buyer and Supplier. 
+ 
+20. LIMITATION OF LIABILITY 
+District Administration Jharsuguda, District Industries Centre (DIC), Government of 
+Odisha, Technology Partner, Portal Operator, and their officers shall not be liable for: 
+• Cancellation losses. 
+• Refund delays. 
+• Banking delays. 
+• Chargeback outcomes. 
+• Commercial disputes. 
+• Consequential damages. 
+Maximum liability shall be NIL to the fullest extent permitted by law. 
+ 
+21. GOVERNING LAW 
+This Policy shall be governed by the laws of India. 
+ 
+22. JURISDICTION 
+Any proceedings relating to this Policy shall be subject to the exclusive jurisdiction of 
+competent courts located in Odisha. 
+ 
+23. AMENDMENTS 
+JSG SMILE reserves the right to amend this Policy at any time. 
+Updated versions shall become effective upon publication on the Portal. 
+ 
+24. ACCEPTANCE 
+By registering, posting requirements, submitting quotations, placing orders, accepting 
+orders, making payments, requesting cancellations, seeking refunds, or otherwise using 
+JSG SMILE (www.jsgsmile.in), Users acknowledge that: 
+1. They have read and understood this Policy. 
+2. They agree to comply with the cancellation and refund framework. 
+3. They understand that JSG SMILE acts solely as a facilitation platform. 
+4. They accept that refund eligibility remains subject to commercial agreements and 
+applicable laws. 

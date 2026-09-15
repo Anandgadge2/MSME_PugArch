@@ -54,7 +54,8 @@ import {
   UserCheck,
   Globe,
   RotateCcw,
-  Layers
+  Layers,
+  Trash2
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { routeForNotification, type PortalNotification } from '../../lib/notifications';
@@ -82,74 +83,66 @@ interface SidebarProps {
 const preloadRegistry: Record<string, () => Promise<any>> = {
   '/dashboard': () => import('../../views/Dashboard'),
   '/master-admin': () => import('../../features/masterAdmin/pages/MasterAdminPage'),
-  // LEGACY: /buyer/create-bid now shows LegacyNoticePage → redirects to unified wizard
   '/buyer/create-bid': () => import('../../features/procurementWizard/pages/CreateProcurementPage'),
   '/buyer/procurement/create': () => import('../../features/procurementWizard/pages/CreateProcurementPage'),
   '/buyer/procurement/drafts': () => import('../../features/procurementWizard/pages/ProcurementDraftsPage'),
-  
   '/seller/opportunities': () => import('../../features/sellerOpportunities/pages/SellerOpportunitiesPage'),
-  
   '/seller/procurement/events': () => import('../../features/sellerOpportunities/pages/SellerEventListPage'),
-  '/orders': () => import('../../features/procurementBid/pages/ProcurementOrdersPage'),
+  '/seller/bids': () => import('../../features/procurementBid/pages/SellerBidsPage'),
+  '/orders': () => import('../../views/PurchaseOrders'),
+  '/seller/orders': () => import('../../views/PurchaseOrders'),
+  '/buyer/orders': () => import('../../views/PurchaseOrders'),
+  '/repeat-orders': () => import('../../views/RepeatOrders'),
+  '/buyer/repeat-orders': () => import('../../views/RepeatOrders'),
+  '/orders/repeat': () => import('../../views/RepeatOrders'),
   '/orders/delivery-confirmation': () => import('../../features/grn/pages/GrnListPage'),
-  '/orders/tracking': () => import('../../views/ParcelTracking'),
-  '/payments/invoices': () => Promise.resolve(),
-  '/payments/transactions': () => Promise.resolve(),
+  '/orders/tracking': () => import('../../features/delivery/pages/DeliveryListPage'),
+  '/delivery': () => import('../../features/delivery/pages/DeliveryListPage'),
+  '/seller/delivery-management': () => import('../../features/delivery/pages/DeliveryListPage'),
+  '/admin/delivery': () => import('../../features/delivery/pages/DeliveryListPage'),
+  '/payments/invoices': () => import('../../features/invoices/pages/InvoiceRegisterPage'),
+  '/seller/invoices': () => import('../../features/invoices/pages/InvoiceRegisterPage'),
+  '/buyer/invoices': () => import('../../features/invoices/pages/InvoiceRegisterPage'),
+  '/invoices': () => import('../../features/invoices/pages/InvoiceRegisterPage'),
+  '/payments/transactions': () => import('../../features/payments/pages/PaymentHistoryPage'),
+  '/payments': () => import('../../features/payments/pages/PaymentHistoryPage'),
   '/payments/escrow': () => import('../../features/escrow/pages/EscrowPage'),
+  '/escrow': () => import('../../features/escrow/pages/EscrowPage'),
   '/admin/onboarding': () => import('../../views/AdminOnboarding'),
   '/shg/onboarding': () => import('../../views/ShgOnboarding'),
-  '/shg/dashboard': () => import('../../views/ShgOnboarding'),
-  '/seller/marketplace': () => Promise.resolve(),
-  '/seller/catalogue': () => Promise.resolve(),
-  '/buyer/marketplace': () => Promise.resolve(),
-  
-  
-  
-  '/seller/orders': () => Promise.resolve(),
-  '/buyer/orders': () => Promise.resolve(),
-  '/seller/invoices': () => Promise.resolve(),
-  '/buyer/invoices': () => Promise.resolve(),
-  '/seller/delivery': () => import('../../views/ParcelTracking'),
-  '/seller/delivery-management': () => import('../../features/sellerDelivery/pages/SellerDeliveryManagementPage'),
+  '/shg/dashboard': () => import('../../views/Dashboard'),
+  '/seller/catalogue': () => import('../../features/catalogue/pages/CatalogueFormPage'),
+  '/buyer/marketplace': () => import('../../features/marketplace/pages/MarketplaceProductList'),
   '/seller/ratings': () => import('../../features/ratings/pages/RatingsPage'),
   '/buyer/sellers': () => import('../../views/Vendors'),
   '/buyer/vendors': () => import('../../views/Vendors'),
   '/buyer/saved-suppliers': () => import('../../features/marketplace/pages/SavedSuppliersPage'),
   '/buyer/messages': () => import('../../features/messages/pages/MessagesPage'),
   '/seller/messages': () => import('../../features/messages/pages/MessagesPage'),
-  
+  '/messages': () => import('../../features/messages/pages/MessagesPage'),
   '/buyer/procurement': () => import('../../features/procurement/pages/BuyerProcurementHub'),
   '/buyer/my-procurements': () => import('../../features/procurement/pages/MyProcurementsPage'),
+  '/buyer/procurement/responses': () => import('../../features/procurement/pages/SupplierResponsesPage'),
   '/buyer/procurement/checkout': () => import('../../features/procurementCheckoutV2/pages/ProcurementCheckoutPage'),
   '/buyer/direct-purchase/orders': () => import('../../features/directPurchase/pages/DirectPurchasePage'),
   '/buyer/address-book': () => import('../../features/directPurchase/pages/AddressBookPage'),
-  
   '/reports': () => import('../../features/reports/pages/RoleReportsPage'),
-  
   '/reverse-auctions/create': () => import('../../features/reverseAuctions/pages/ReverseAuctionCreatePage'),
   '/seller/direct-purchase': () => import('../../features/directPurchase/pages/DirectPurchasePage'),
-  '/buyer/tracking': () => import('../../views/ParcelTracking'),
-  '/admin/delivery': () => import('../../features/delivery/pages/DeliveryListPage'),
   '/admin/reports': () => import('../../views/MISReports'),
   '/admin/cms': () => import('../../features/admin/pages/AdminCmsHubPage'),
   '/admin/banners': () => import('../../features/banners/pages/AdminBannerManagementPage'),
   '/admin/monthly-rankings': () => import('../../features/banners/pages/MonthlyRankingsAdminPage'),
   '/my-org/banner-eligibility': () => import('../../features/banners/pages/OrganizationBannerEligibilityPage'),
   '/cart': () => import('../../features/cart/pages/CartPage'),
-  
-  
-  
   '/grn': () => import('../../features/grn/pages/GrnListPage'),
-  '/payments': () => Promise.resolve(),
-  '/escrow': () => import('../../features/escrow/pages/EscrowPage'),
   '/org/team': () => import('../../features/orgTeam/pages/TeamManagementPage'),
   '/buyer/disputes': () => import('../../features/disputes/pages/DisputesPage'),
   '/seller/disputes': () => import('../../features/disputes/pages/DisputesPage'),
   '/admin/disputes': () => import('../../features/disputes/pages/DisputesPage'),
   '/settings/notifications': () => import('../../features/settings/pages/NotificationPrefsPage'),
   '/admin/users': () => import('../../features/admin/pages/AdminRecordsPage'),
-  '/admin/catalogue-moderation': () => Promise.resolve(),
-  '/admin/marketplace': () => Promise.resolve(),
+  '/admin/records': () => import('../../features/admin/pages/AdminRecordsPage'),
   '/admin/organizations': () => import('../../views/OrganizationManagement'),
   '/admin/rbac': () => import('../../views/RbacPanel'),
   '/admin/fraud-alerts': () => import('../../features/fraudAlerts/pages/FraudAlertsPage'),
@@ -158,7 +151,6 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/buyer/onboarding': () => import('../../views/BuyerOnboarding'),
   '/seller/settings': () => import('../../views/SellerSettings'),
   '/buyer/profile': () => import('../../views/BuyerProfile'),
-  // '/user-guide': () => import('../../views/PortalDocumentation'),
   '/help': () => import('../../views/HelpPage'),
   '/profile': () => import('../../views/Profile'),
 };
@@ -918,6 +910,9 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
       }
     };
     fetchNotifications();
+    const handleUpdate = () => { void fetchNotifications(); };
+    window.addEventListener('notifications:updated', handleUpdate);
+    return () => window.removeEventListener('notifications:updated', handleUpdate);
   }, [authToken]);
 
   useEffect(() => {
@@ -1054,6 +1049,34 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
     }
   };
 
+  const deleteNotification = async (id: number | string) => {
+    if (!authToken) return;
+    try {
+      await api.delete(`/api/notifications/${id}`, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      window.dispatchEvent(new CustomEvent('notifications:updated'));
+      toast.success('Notification removed');
+    } catch {
+      toast.error('Failed to remove notification');
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    if (!authToken || !Array.isArray(notifications) || notifications.length === 0) return;
+    try {
+      await api.delete('/api/notifications', {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      setNotifications([]);
+      window.dispatchEvent(new CustomEvent('notifications:updated'));
+      toast.success('All notifications cleared');
+    } catch {
+      toast.error('Failed to clear notifications');
+    }
+  };
+
   const openNotification = async (item: PortalNotification) => {
     if (!item.isRead) await markNotificationAsRead(item.id);
     router.push(routeForNotification(item, user?.role));
@@ -1117,7 +1140,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
               <div className="fixed left-3 right-3 top-16 z-50 max-h-[75dvh] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96">
                 <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <h3 className="text-xs font-black uppercase tracking-widest text-[#0b2447]">Notifications</h3>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {unreadCount > 0 && (
                       <Badge variant="secondary" className="bg-white text-[#0b2447] border-slate-200 font-bold text-[10px]">
                         {unreadCount} NEW
@@ -1126,11 +1149,23 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                     {unreadCount > 0 && (
                       <button
                         onClick={markAllNotificationsAsRead}
-                        className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-500 transition-colors hover:text-[#0b2447]"
+                        className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-slate-500 transition-colors hover:text-[#0b2447] hover:border-slate-300"
                         title="Mark all as read"
+                        aria-label="Mark all as read"
                       >
                         <CheckSquare className="h-3.5 w-3.5" />
                         All
+                      </button>
+                    )}
+                    {Array.isArray(notifications) && notifications.length > 0 && (
+                      <button
+                        onClick={clearAllNotifications}
+                        className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-wide text-rose-500 transition-colors hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600"
+                        title="Clear all notifications"
+                        aria-label="Clear all notifications"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Clear
                       </button>
                     )}
                   </div>
@@ -1158,33 +1193,56 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                             )}>
                               <Icon className="h-4 w-4" />
                             </div>
-                            <div className="min-w-0">
-                              <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
                                 <p className={cn(
-                                   "text-[10px] font-black uppercase tracking-widest",
+                                   "text-[10px] font-black uppercase tracking-widest flex-1 min-w-0",
                                    isWarning ? "text-red-600" : isSuccess ? "text-emerald-700" : "text-[#0b2447]"
                                 )}>{item.title}</p>
-                                {!item.isRead && (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {!item.isRead && (
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        markNotificationAsRead(item.id);
+                                      }}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                          event.preventDefault();
+                                          event.stopPropagation();
+                                          markNotificationAsRead(item.id);
+                                        }
+                                      }}
+                                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-400 transition-colors hover:text-emerald-600 hover:border-emerald-200"
+                                      title="Mark as read"
+                                      aria-label="Mark as read"
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                    </span>
+                                  )}
                                   <span
                                     role="button"
                                     tabIndex={0}
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      markNotificationAsRead(item.id);
+                                      deleteNotification(item.id);
                                     }}
                                     onKeyDown={(event) => {
                                       if (event.key === 'Enter' || event.key === ' ') {
                                         event.preventDefault();
                                         event.stopPropagation();
-                                        markNotificationAsRead(item.id);
+                                        deleteNotification(item.id);
                                       }
                                     }}
-                                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-400 transition-colors hover:text-emerald-600"
-                                    title="Mark as read"
+                                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-400 transition-colors hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600"
+                                    title="Delete notification"
+                                    aria-label="Delete notification"
                                   >
-                                    <Check className="h-3.5 w-3.5" />
+                                    <Trash2 className="h-3 w-3" />
                                   </span>
-                                )}
+                                </div>
                               </div>
                               <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-800">{item.message}</p>
                               {item.createdAt && (
