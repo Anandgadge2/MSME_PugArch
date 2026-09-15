@@ -10777,6 +10777,9 @@ export type NormalizedProcurement = {
   eligibilityCriteria?: string[];
   termsAndConditions?: string[];
   budgetDetails?: any;
+  approvalAuthority?: string;
+  justification?: string;
+  internalDetails?: Record<string, any>;
   detailSections?: Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
   approvalTrail?: Array<Record<string, unknown>>;
   tracking?: Array<{ label: string; status: string; date?: string }>;
@@ -11065,7 +11068,10 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       items,
       paymentTerms: step7.paymentTerms || '',
       eligibilityCriteria,
-      termsAndConditions
+      termsAndConditions,
+      approvalAuthority: String((fd?.internal || fd?.step2)?.approvalAuthority || '').trim(),
+      justification: String((fd?.internal || fd?.step2)?.justification || fd?.basics?.justification || fd?.limitedTenderJustification || '').trim(),
+      internalDetails: (fd?.internal || fd?.step2) || undefined,
     });
   }
 
@@ -11082,7 +11088,82 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       documentType: doc.documentType || 'Bid Document'
     }));
 
-    const items = [{
+    const technicalPacket = (b.technicalPacket || {}) as any;
+    const internal = technicalPacket.internal || {};
+    const basics = technicalPacket.basics || {};
+    const schedule = technicalPacket.schedule || {};
+    const terms = technicalPacket.terms || {};
+
+    const approvalAuthority = String(internal.approvalAuthority || '').trim();
+    const justification = String(internal.justification || basics.justification || technicalPacket.limitedTenderJustification || '').trim();
+    const budgetConfirmed = internal.budgetConfirmed !== undefined ? Boolean(internal.budgetConfirmed) : true;
+    const internalDetails = {
+      orgName: internal.orgName || b.buyerOrganizationName || '',
+      contactPerson: internal.contactPerson || '',
+      email: internal.email || '',
+      mobile: internal.mobile || '',
+      department: internal.department || '',
+      approvalAuthority,
+      justification,
+      budgetConfirmed,
+      internalFileNumber: internal.internalFileNumber || '',
+      competentAuthority: internal.competentAuthority || '',
+    };
+
+    const bidDetailSections = [
+      detailSection('Procurement Intent', {
+        title: b.title,
+        category: b.category,
+        estimatedValue: b.estimatedValue ? `INR ${Number(b.estimatedValue).toLocaleString('en-IN')}` : undefined,
+        deliveryLocation: b.deliveryLocation,
+        requiredByDate: basics.requiredByDate,
+        priority: basics.priority,
+        buyerType: basics.buyerType,
+      }),
+      detailSection('Internal Approvals & Compliance', {
+        approvalAuthority: approvalAuthority || undefined,
+        justification: justification || undefined,
+        budgetConfirmed: budgetConfirmed ? 'Confirmed & Sanctioned' : 'Pending',
+        orgName: internal.orgName || b.buyerOrganizationName || undefined,
+        contactPerson: internal.contactPerson || undefined,
+        email: internal.email || undefined,
+        mobile: internal.mobile || undefined,
+        department: internal.department || undefined,
+        internalFileNumber: internal.internalFileNumber || undefined,
+        competentAuthority: internal.competentAuthority || undefined,
+      }, {
+        approvalAuthority: 'Internal Approval Authority',
+        justification: 'Purchase Justification & Compliance Reason',
+        budgetConfirmed: 'Budget Allocation & Sanction',
+        orgName: 'Organization Name',
+        contactPerson: 'Contact Person Name',
+        email: 'Contact Email Address',
+        mobile: 'Contact Mobile Number',
+        department: 'Buying Department',
+        internalFileNumber: 'Department File / Case Number',
+        competentAuthority: 'Competent Financial Authority (CFA)',
+      }),
+      detailSection('Consignee & Delivery', technicalPacket.consigneeDetails ? { consigneeDetails: technicalPacket.consigneeDetails } : undefined),
+      detailSection('Vendor / Supplier Selection', technicalPacket.vendors),
+      detailSection('Timeline & Rules', { ...schedule, ...(technicalPacket.tender || {}), ...(technicalPacket.rules || {}) }),
+      detailSection('Commercial Terms', terms),
+      detailSection('Evaluation Basis', technicalPacket.evaluation),
+      detailSection('Approval Notes', technicalPacket.approval),
+      detailSection('Service Details', technicalPacket.serviceDetails),
+    ].filter(Boolean) as Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
+
+    const packetItems = Array.isArray(technicalPacket.items) && technicalPacket.items.length > 0
+      ? technicalPacket.items.map((it: any) => ({
+          itemName: it.name || it.itemName || b.title,
+          quantity: String(it.quantity || it.qty || b.quantity || ''),
+          unitOfMeasure: it.unit || it.unitOfMeasure || b.unit || 'Nos',
+          description: it.description || it.specifications?.description || cleanOpportunitySummary(b.description || ''),
+          estimatedUnitPrice: Number(it.estimatedUnitPrice || it.unitPrice || it.price || 0) || undefined,
+          specifications: it.specifications || it
+        }))
+      : null;
+
+    const items = packetItems || [{
       itemName: b.title,
       quantity: String(b.quantity || ''),
       unitOfMeasure: b.unit || '',
@@ -11126,9 +11207,19 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       evaluationMethod: b.evaluationMethod || (b.technicalPacket as any)?.evaluation?.method || (b.technicalPacket as any)?.evaluationMethod || (b.technicalPacket as any)?.rules?.evaluationMethod || 'L1 Basis',
       documents,
       items,
-      paymentTerms: '',
+      paymentTerms: terms.paymentTerms || '',
       eligibilityCriteria,
-      termsAndConditions
+      termsAndConditions,
+      approvalAuthority,
+      justification,
+      internalDetails,
+      budgetDetails: {
+        costCenter: internal.costCenter || '',
+        justification,
+        approvingAuthority: approvalAuthority,
+        remarks: budgetConfirmed ? 'Budget allocated and sanctioned under GFR/Corporate guidelines' : '',
+      },
+      detailSections: bidDetailSections.length > 0 ? bidDetailSections : undefined
     });
   }
 
@@ -11485,7 +11576,18 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
         recommendedMethod: payload.recommendation?.id,
         recommendationReason: payload.recommendation?.reason,
       }),
-      detailSection('Internal Buyer Details', payload.internal),
+      detailSection('Internal Approvals & Compliance', payload.internal, {
+        approvalAuthority: 'Internal Approval Authority',
+        justification: 'Purchase Justification & Compliance Reason',
+        budgetConfirmed: 'Budget Allocation & Sanction',
+        orgName: 'Organization Name',
+        contactPerson: 'Contact Person Name',
+        email: 'Contact Email Address',
+        mobile: 'Contact Mobile Number',
+        department: 'Buying Department',
+        internalFileNumber: 'Department File / Case Number',
+        competentAuthority: 'Competent Financial Authority (CFA)',
+      }),
       detailSection('Consignee Details', { consigneeDetails: payload.consigneeDetails }),
       detailSection('Vendor / Supplier Selection', payload.vendors),
       detailSection('Timeline & Rules', { ...(payload.schedule || {}), ...(payload.tender || {}), ...(payload.rules || {}) }),
@@ -11544,6 +11646,15 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       eligibilityCriteria: [],
       termsAndConditions: [],
       detailSections: requirementDetailSections,
+      approvalAuthority: payload.internal?.approvalAuthority || '',
+      justification: payload.internal?.justification || payload.basics?.justification || payload.limitedTenderJustification || '',
+      internalDetails: payload.internal || undefined,
+      budgetDetails: {
+        costCenter: payload.internal?.costCenter || '',
+        justification: payload.internal?.justification || payload.basics?.justification || '',
+        approvingAuthority: payload.internal?.approvalAuthority || '',
+        remarks: payload.internal?.budgetConfirmed ? 'Budget allocated and sanctioned under GFR/Corporate guidelines' : '',
+      },
       approvalTrail: [],
       tracking: trackingFor(String(r.status || 'DRAFT'), r.createdAt, r.status === 'DRAFT' ? null : r.updatedAt, ['APPROVED', 'SOURCING', 'FULFILLED', 'PUBLISHED', 'OPEN', 'CLOSED'].includes(String(r.status || '')) ? r.updatedAt : null, [])
     });

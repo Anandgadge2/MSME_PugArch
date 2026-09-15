@@ -214,6 +214,9 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
         deliveryTerms={bid.deliveryTerms || terms.deliveryTerms || 'Door delivery'}
         description={bid.description || reqObj.description || basics.description}
         payload={payload}
+        approvalAuthority={bid.approvalAuthority || payload.internal?.approvalAuthority || payload.approvalAuthority}
+        justification={bid.justification || payload.internal?.justification || payload.limitedTenderJustification || basics.justification}
+        internalDetails={bid.internalDetails || payload.internal}
         documents={bid.documents || bid.bidDocuments || reqObj.documents || payload.documents || []}
         items={bid.items || payload.items || reqObj.items || payload.boqTable || []}
         evaluationMethod={

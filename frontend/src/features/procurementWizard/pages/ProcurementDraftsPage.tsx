@@ -1509,6 +1509,9 @@ function DraftDetailView({
       deliveryTerms={terms.deliveryTerms || 'Door delivery'}
       description={d.specifications || basics.justification || basics.description || ''}
       payload={payload}
+      approvalAuthority={internal.approvalAuthority}
+      justification={internal.justification || basics.justification}
+      internalDetails={internal}
       documents={mappedDocs}
       items={mappedItems}
       requiredDocuments={requiredDocuments}

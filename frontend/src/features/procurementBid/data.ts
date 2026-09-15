@@ -113,6 +113,9 @@ export interface ProcurementBid {
   invitedCount?: number;
   invitationsCount?: number;
   invitedSellers?: any[];
+  internalDetails?: any;
+  approvalAuthority?: string;
+  justification?: string;
 }
 
 export interface ProcurementBidDocument {

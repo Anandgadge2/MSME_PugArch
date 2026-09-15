@@ -686,6 +686,9 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         deliveryTerms={rcData.deliveryTerms || deliverySla}
         description={rcData.description}
         payload={payload}
+        approvalAuthority={bid?.approvalAuthority || payload.internal?.approvalAuthority || (rcData as any).approvalAuthority}
+        justification={bid?.justification || payload.internal?.justification || (rcData as any).justification || rcData.description}
+        internalDetails={bid?.internalDetails || payload.internal}
         documents={uploadedDocuments.map((d, index) => ({
           id: d.fileAssetId ? String(d.fileAssetId) : `rc-doc-${index}`,
           name: d.fileName,

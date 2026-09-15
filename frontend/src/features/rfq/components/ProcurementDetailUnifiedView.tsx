@@ -957,6 +957,146 @@ function BuyerProfileSection({
   );
 }
 
+function InternalComplianceSection({
+  approvalAuthority,
+  justification,
+  budgetConfirmed,
+  competentAuthority,
+  fileNumber,
+  sanctionDate,
+  department,
+}: {
+  approvalAuthority?: string | null;
+  justification?: string | null;
+  budgetConfirmed?: boolean;
+  competentAuthority?: string | null;
+  fileNumber?: string | null;
+  sanctionDate?: string | null;
+  department?: string | null;
+}) {
+  return (
+    <DataCard
+      title="Internal Approval & Statutory Compliance"
+      icon={ShieldCheck}
+      badge={
+        budgetConfirmed ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800 tracking-wider">
+            <CheckCircle2 className="h-3 w-3 text-emerald-600" aria-hidden="true" />
+            Budget Sanctioned
+          </span>
+        ) : undefined
+      }
+    >
+      <div className="space-y-4">
+        {/* Top summary grid */}
+        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+          {approvalAuthority && (
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+              <dt className="text-[10px] font-black uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+                <User className="h-3 w-3 text-indigo-600" aria-hidden="true" />
+                Internal Approval Authority
+              </dt>
+              <dd className="mt-1 text-xs font-black text-slate-900 leading-snug">
+                {approvalAuthority}
+              </dd>
+            </div>
+          )}
+
+          {budgetConfirmed !== undefined && (
+            <div className={cn(
+              'rounded-xl border p-3',
+              budgetConfirmed ? 'border-emerald-150 bg-emerald-50/40' : 'border-slate-200 bg-slate-50/60'
+            )}>
+              <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <ShieldCheck className={cn('h-3 w-3', budgetConfirmed ? 'text-emerald-600' : 'text-slate-400')} aria-hidden="true" />
+                Budget Allocation & Sanction
+              </dt>
+              <dd className="mt-1 text-xs font-black text-slate-900 flex items-center gap-1.5">
+                {budgetConfirmed ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
+                    <span>Sanctioned & Allocated (GFR Compliance)</span>
+                  </>
+                ) : (
+                  <span className="text-slate-500 font-semibold">Not Specified</span>
+                )}
+              </dd>
+            </div>
+          )}
+
+          {competentAuthority && competentAuthority !== approvalAuthority && (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+              <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Building2 className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                Competent Financial Authority (CFA)
+              </dt>
+              <dd className="mt-1 text-xs font-black text-slate-900 leading-snug">
+                {competentAuthority}
+              </dd>
+            </div>
+          )}
+
+          {fileNumber && (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+              <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <FileText className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                Department File / Case Number
+              </dt>
+              <dd className="mt-1 font-mono text-xs font-bold text-slate-900">
+                {fileNumber}
+              </dd>
+            </div>
+          )}
+
+          {department && (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+              <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Building2 className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                Sanctioning Department / Unit
+              </dt>
+              <dd className="mt-1 text-xs font-bold text-slate-900">
+                {department}
+              </dd>
+            </div>
+          )}
+
+          {sanctionDate && (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+              <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Calendar className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                Sanction Approval Date
+              </dt>
+              <dd className="mt-1 text-xs font-bold text-slate-900">
+                {sanctionDate}
+              </dd>
+            </div>
+          )}
+        </div>
+
+        {/* Purchase Justification & Compliance Reason full-width callout */}
+        {justification && (
+          <div className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-4 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-800">
+                <FileText className="h-3 w-3" aria-hidden="true" />
+              </span>
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-amber-900">
+                Purchase Justification & Compliance Reason
+              </h4>
+              <span className="rounded-full bg-amber-100/80 border border-amber-300/60 px-2 py-0.5 text-[9px] font-bold text-amber-900">
+                Statutory Audit Record
+              </span>
+            </div>
+            <p className="text-xs text-slate-800 leading-relaxed font-normal whitespace-pre-wrap pl-7">
+              {justification}
+            </p>
+          </div>
+        )}
+      </div>
+    </DataCard>
+  );
+}
+
 function TimelineRibbon({
   dates,
 }: {
@@ -2312,6 +2452,11 @@ export interface ProcurementDetailUnifiedViewProps {
   invitedCount?: number;
   invitedSellers?: any[];
   invitations?: any[];
+
+  // Internal Approvals & Statutory Compliance (Buyer / Admin Side Only)
+  approvalAuthority?: string;
+  justification?: string;
+  internalDetails?: Record<string, any>;
 }
 
 export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedViewProps) {
@@ -2590,7 +2735,58 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
   const payload = props.payload || {};
   const basics = payload.basics || {};
-  const internal = payload.internal || {};
+  const internal = props.internalDetails || payload.internal || payload.basics?.internal || (props as any).technicalPacket?.internal || (props as any).internal || {};
+  const approvalAuthority = firstPresent(
+    props.approvalAuthority,
+    internal.approvalAuthority,
+    internal.authorityName,
+    internal.authority,
+    payload.approvalAuthority,
+    (props as any).approvalAuthority
+  );
+  const justification = firstPresent(
+    props.justification,
+    internal.justification,
+    internal.purchaseJustification,
+    internal.complianceReason,
+    payload.justification,
+    basics.justification,
+    (props as any).justification
+  );
+  const budgetConfirmed = internal.budgetSanctionConfirmed === true ||
+    internal.budgetSanctionConfirmed === 'true' ||
+    internal.budgetConfirmed === true ||
+    internal.budgetConfirmed === 'true' ||
+    internal.isBudgetSanctioned === true ||
+    internal.budgetSanction === true;
+  const competentAuthority = firstPresent(
+    internal.competentAuthority,
+    approvalAuthority
+  );
+  const internalFileNumber = firstPresent(
+    internal.internalFileNumber,
+    internal.fileNumber,
+    internal.sanctionOrderNo
+  );
+  const internalDepartment = firstPresent(
+    internal.department,
+    internal.departmentName,
+    internal.costCenter
+  );
+  const sanctionDateFormatted = internal.sanctionDate || internal.approvalDate
+    ? formatDateString(internal.sanctionDate || internal.approvalDate, false)
+    : undefined;
+
+  const hasInternalCompliance = Boolean(
+    isBuyerSide && (
+      approvalAuthority ||
+      justification ||
+      internal.budgetConfirmed !== undefined ||
+      internal.budgetSanctionConfirmed !== undefined ||
+      competentAuthority ||
+      internalFileNumber
+    )
+  );
   const schedule = payload.schedule || {};
   const tender = payload.tender || {};
   const terms = payload.terms || {};
@@ -4070,6 +4266,19 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 department={department}
               />
             </div>
+
+            {/* Internal Approval & Statutory Compliance Section (Buyer & Admin Side Only) */}
+            {hasInternalCompliance && (
+              <InternalComplianceSection
+                approvalAuthority={approvalAuthority}
+                justification={justification}
+                budgetConfirmed={budgetConfirmed}
+                competentAuthority={competentAuthority}
+                fileNumber={internalFileNumber}
+                sanctionDate={sanctionDateFormatted}
+                department={internalDepartment}
+              />
+            )}
 
             <TimelineRibbon
               dates={[

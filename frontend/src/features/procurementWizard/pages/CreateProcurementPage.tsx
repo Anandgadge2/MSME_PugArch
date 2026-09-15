@@ -4918,12 +4918,12 @@ function ItemsDetailsForm({
   if (whatBuying === 'BOQ') {
     return (
       <div className="space-y-4 w-full min-w-0 max-w-full">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-2.5 gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-2.5 gap-2.5">
           <div>
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Structured Bill of Quantities (BOQ)</h3>
             <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Invite quotes using an itemized spreadsheet schedule</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
             <Button
               type="button"
               variant="outline"
@@ -4932,35 +4932,36 @@ function ItemsDetailsForm({
                 toast.info('Downloading BOQ Excel Template...');
                 window.open(`${BASE_URL}/api/buyer-showcase/boq/template`, '_blank');
               }}
-              className="h-8.5 text-xs font-bold text-slate-700"
+              className="h-8.5 text-xs font-bold text-slate-700 shrink-0 whitespace-nowrap"
             >
-              <Download className="h-4 w-4 mr-1" /> Template
+              <Download className="h-4 w-4 mr-1 text-slate-500" aria-hidden="true" /> Template
             </Button>
             
-            <div className="relative">
+            <div className="relative shrink-0">
               <input
                 type="file"
                 id="boq-upload"
                 accept=".xls,.xlsx,.csv"
                 onChange={handleBOQUpload}
-                className="hidden"
+                className="sr-only"
                 disabled={uploadingFile}
+                aria-label="Upload BOQ File"
               />
               <label
                 htmlFor="boq-upload"
                 className={cn(
-                  "cursor-pointer inline-flex items-center justify-center h-8.5 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-3xs",
+                  "cursor-pointer inline-flex items-center justify-center h-8.5 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-3xs shrink-0 whitespace-nowrap focus-within:ring-2 focus-within:ring-[#12335f]/20",
                   uploadingFile && "opacity-50 pointer-events-none"
                 )}
               >
                 {uploadingFile ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-1 text-slate-500" />
+                    <Loader2 className="h-4 w-4 animate-spin mr-1 text-slate-500" aria-hidden="true" />
                     <span>Uploading...</span>
                   </>
                 ) : (
                   <>
-                    <Upload className="h-4 w-4 mr-1 text-slate-500" />
+                    <Upload className="h-4 w-4 mr-1 text-slate-500" aria-hidden="true" />
                     <span>Upload BOQ File</span>
                   </>
                 )}
@@ -5095,81 +5096,89 @@ function ItemsDetailsForm({
   return (
     <div className="space-y-5 w-full min-w-0 max-w-full">
       {serviceDetailsPanel}
-      <div className="flex flex-col gap-2.5 sm:gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">
-              Procurement Schedule & Specifications
-            </h3>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">
-              {draft.items.length} line{draft.items.length === 1 ? '' : 's'}
-            </span>
+      <div className="border-b border-slate-100 pb-3.5 space-y-3">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                Procurement Schedule & Specifications
+              </h3>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">
+                {draft.items.length} line{draft.items.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+              Add product/service items, configure pricing and GST, and attach technical specifications & drawings.
+            </p>
           </div>
-          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-            Add product/service items, configure pricing and GST, and attach technical specifications & drawings.
-          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={handleDownloadItemTemplate}
-            className="h-8.5 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            title="Download Excel template (.xlsx) for bulk items"
-          >
-            <Download className="h-3.5 w-3.5 mr-1 text-slate-500" /> Template
-          </Button>
-
-          <div className="relative">
-            <input
-              type="file"
-              id="item-template-import"
-              accept=".xlsx,.xls,.csv,.txt"
-              onChange={handleImportItemTemplate}
-              className="hidden"
-            />
-            <label
-              htmlFor="item-template-import"
-              className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50"
-              title="Import items from Excel (.xlsx) or CSV spreadsheet"
+        {/* Action Toolbar: All buttons in a single row without wrapping */}
+        <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-0.5 flex-nowrap">
+          <div className="flex items-center gap-2 shrink-0 flex-nowrap">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => handleAddNewItem('Product')}
+              className="h-8.5 px-3.5 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-3xs shrink-0 whitespace-nowrap"
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Import Excel / CSV
-            </label>
+              <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product
+            </Button>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => handleAddNewItem('Service')}
+              className="h-8.5 px-3.5 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50 shrink-0 whitespace-nowrap"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service
+            </Button>
           </div>
 
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={handleImportCartItems}
-            disabled={isCartLoading}
-            className="h-8.5 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            title="Import catalogue items from your active cart"
-          >
-            <ShoppingCart className="h-3.5 w-3.5 mr-1 text-blue-600" />
-            {isCartLoading ? 'Reading Cart...' : `Import Cart${activeCart?.items?.length ? ` (${activeCart.items.length})` : ''}`}
-          </Button>
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-nowrap">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleImportCartItems}
+              disabled={isCartLoading}
+              className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
+              title="Import catalogue items from your active cart"
+            >
+              <ShoppingCart className="h-3.5 w-3.5 mr-1 text-blue-600" aria-hidden="true" />
+              {isCartLoading ? 'Reading Cart...' : activeCart?.items?.length ? `Import Cart (${activeCart.items.length})` : 'Import Cart'}
+            </Button>
 
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => handleAddNewItem('Service')}
-            className="h-8.5 px-3.5 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add Service
-          </Button>
+            <div className="relative shrink-0">
+              <input
+                type="file"
+                id="item-template-import"
+                accept=".xlsx,.xls,.csv,.txt"
+                onChange={handleImportItemTemplate}
+                className="sr-only"
+                aria-label="Import items from Excel or CSV spreadsheet"
+              />
+              <label
+                htmlFor="item-template-import"
+                className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-[#12335f]/20 shrink-0 whitespace-nowrap"
+                title="Import items from Excel (.xlsx) or CSV spreadsheet"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" aria-hidden="true" /> Import Excel / CSV
+              </label>
+            </div>
 
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => handleAddNewItem('Product')}
-            className="h-8.5 px-3.5 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-3xs"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add Product
-          </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleDownloadItemTemplate}
+              className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
+              title="Download Excel template (.xlsx) for bulk items"
+            >
+              <Download className="h-3.5 w-3.5 mr-1 text-slate-500" aria-hidden="true" /> Template
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -5200,27 +5209,27 @@ function ItemsDetailsForm({
         emptyTitle="No items or services added yet"
         emptyDescription="Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
         footer={
-          <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+          <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar flex-nowrap">
+            <div className="flex items-center gap-2 shrink-0 flex-nowrap">
               <Button
                 type="button"
                 size="sm"
                 onClick={() => handleAddNewItem('Product')}
-                className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445]"
+                className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shrink-0 whitespace-nowrap"
               >
-                <Plus className="h-3.5 w-3.5 mr-1" /> Add Product Line
+                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product Line
               </Button>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => handleAddNewItem('Service')}
-                className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50"
+                className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50 shrink-0 whitespace-nowrap"
               >
-                <Plus className="h-3.5 w-3.5 mr-1" /> Add Service Line
+                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service Line
               </Button>
             </div>
-            <span className="text-[11px] font-semibold text-slate-500">
+            <span className="text-[11px] font-semibold text-slate-500 shrink-0 whitespace-nowrap">
               {draft.items.length} line item{draft.items.length === 1 ? '' : 's'} scheduled
             </span>
           </div>

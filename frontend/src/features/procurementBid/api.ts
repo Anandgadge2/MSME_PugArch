@@ -516,7 +516,10 @@ export const normalizeBid = (raw: any): ProcurementBid => {
             ),
           }
         }
-      : { items },
+      : null,
+    internalDetails: pkt?.internal || (raw as any).internalDetails || null,
+    approvalAuthority: pkt?.internal?.approvalAuthority || (raw as any).approvalAuthority || '',
+    justification: pkt?.internal?.justification || pkt?.basics?.justification || pkt?.limitedTenderJustification || (raw as any).justification || '',
     buyer: raw.buyer || null,
     buyerOrganization: raw.buyerOrganization || raw.organization || null,
   };

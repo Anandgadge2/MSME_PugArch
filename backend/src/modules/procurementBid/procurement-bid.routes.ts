@@ -656,6 +656,20 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
         participations: combinedParticipations,
         participantsCount: combinedParticipations.length,
         items,
+        approvalAuthority: srcPayload?.internal?.approvalAuthority || '',
+        justification: srcPayload?.internal?.justification || meta.contractDescription || '',
+        internalDetails: {
+          orgName: srcReq?.buyerOrganization?.organizationName || srcReq?.organization?.organizationName || meta.buyerOrganizationName || '',
+          department: srcReq?.buyer?.buyerProfile?.departmentName || srcReq?.createdBy?.buyerProfile?.departmentName || srcPayload?.internal?.department || '',
+          contactPerson: srcReq?.buyer?.buyerProfile?.representativeName || srcReq?.createdBy?.buyerProfile?.representativeName || srcPayload?.internal?.contactPerson || '',
+          email: srcReq?.buyer?.email || srcReq?.createdBy?.email || srcReq?.buyer?.buyerProfile?.email || srcReq?.createdBy?.buyerProfile?.email || srcPayload?.internal?.email || '',
+          mobile: srcReq?.buyer?.mobile || srcReq?.createdBy?.mobile || srcReq?.buyer?.buyerProfile?.mobile || srcReq?.createdBy?.buyerProfile?.mobile || srcPayload?.internal?.mobile || '',
+          internalFileNumber: srcPayload?.internal?.internalFileNumber || '',
+          justification: srcPayload?.internal?.justification || meta.contractDescription || '',
+          budgetConfirmed: srcPayload?.internal?.budgetConfirmed ?? true,
+          competentAuthority: srcPayload?.internal?.competentAuthority || '',
+          approvalAuthority: srcPayload?.internal?.approvalAuthority || '',
+        },
         sourceModel: 'RATE_CONTRACT',
         sourceId: rateContract.id
       };
@@ -1126,6 +1140,9 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           sourceId: requirement.id,
           consigneeDetails: payload.consigneeDetails || null,
           items: requirement.items || [],
+          approvalAuthority: internal.approvalAuthority || (requirement as any).approvalAuthority || '',
+          justification: internal.justification || basics.justification || (requirement as any).justification || '',
+          internalDetails: internal,
         };
         return apiResponse.success(res, synthesized, 200, 'Requirement-based bid details fetched successfully');
       }

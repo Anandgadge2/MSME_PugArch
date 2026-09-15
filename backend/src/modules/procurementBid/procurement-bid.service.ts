@@ -745,9 +745,20 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
   };
 
   const tenderItems = normalizeBidItems(bid);
-  const sellerTechnicalPacket = bid.technicalPacket && typeof bid.technicalPacket === 'object'
-    ? { ...(bid.technicalPacket as any), items: tenderItems, vendors: enrichedVendors }
-    : (tenderItems.length ? { items: tenderItems, vendors: enrichedVendors } : { vendors: enrichedVendors });
+  const rawPacketCopy = bid.technicalPacket && typeof bid.technicalPacket === 'object'
+    ? { ...(bid.technicalPacket as any) }
+    : {};
+
+  if (actorRole === 'seller') {
+    delete rawPacketCopy.internal;
+    delete rawPacketCopy.limitedTenderJustification;
+  }
+
+  const sellerTechnicalPacket = {
+    ...rawPacketCopy,
+    items: tenderItems,
+    vendors: enrichedVendors
+  };
 
   return {
     id: bid.id,
@@ -799,6 +810,15 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     eligibilityCriteria: bid.eligibilityCriteria || [],
     requiredDocuments: bid.requiredDocuments || [],
     rejectedReason: isAdmin || isBuyerOwner ? bid.rejectedReason : undefined,
+    approvalAuthority: (isAdmin || isBuyerOwner)
+      ? (rawTechnicalPacket.internal?.approvalAuthority || rawTechnicalPacket.internal?.authorityName || rawTechnicalPacket.internal?.authority || '')
+      : undefined,
+    justification: (isAdmin || isBuyerOwner)
+      ? (rawTechnicalPacket.internal?.justification || rawTechnicalPacket.basics?.justification || rawTechnicalPacket.limitedTenderJustification || '')
+      : undefined,
+    internalDetails: (isAdmin || isBuyerOwner)
+      ? (rawTechnicalPacket.internal || null)
+      : undefined,
     approvedAt: bid.approvedAt || null,
     publishedAt: bid.approvedAt || bid.createdAt || bid.startDate,
     createdAt: bid.createdAt,
