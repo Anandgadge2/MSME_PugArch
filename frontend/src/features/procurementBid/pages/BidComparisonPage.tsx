@@ -312,12 +312,50 @@ export default function BidComparisonPage() {
   return (
     <PageShell>
       <div className="container mx-auto space-y-6 p-6">
+        {/* Top Breadcrumb & Navigation Bar */}
+        <div className="flex items-center justify-between gap-2.5">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push(`/bids/${bidId}/results`);
+              }
+            }}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-250 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 text-slate-500" />
+            <span>Back to Results</span>
+          </button>
+
+          <nav className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+            <span
+              className="hover:text-slate-800 cursor-pointer"
+              onClick={() => router.push('/bids')}
+            >
+              Procurements
+            </span>
+            <ChevronRight className="h-3 w-3 text-slate-300" />
+            <span
+              className="font-mono text-slate-600 hover:text-slate-900 cursor-pointer"
+              onClick={() => router.push(`/bids/${bidId}/results`)}
+            >
+              {bidId}
+            </span>
+            <ChevronRight className="h-3 w-3 text-slate-300" />
+            <span className="text-blue-900 font-bold bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded text-[11px]">
+              Comparison
+            </span>
+          </nav>
+        </div>
+
         {/* Main Comparison Container Shell (Matching 1st Screenshot) */}
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
           
           {/* Header Bar */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-            <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 shadow-xs">
                 <BarChart3 className="h-6 w-6" />
               </div>

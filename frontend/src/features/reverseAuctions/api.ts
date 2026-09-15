@@ -74,14 +74,33 @@ export type ReverseAuction = {
     estimatedValue?: number | string | null;
     currency?: string | null;
     requiredBy?: string | null;
+    // Procurement Intent
+    whatAreYouBuying?: string | null;
     category?: string | null;
+    subCategory?: string | null;
+    urgencyPriority?: string | null;
     deliveryLocation?: string | null;
+    // Commercial & Payment Terms
+    paymentTerms?: string | null;
+    deliveryTerms?: string | null;
+    freightIncluded?: boolean | null;
+    gstIncluded?: boolean | null;
+    penaltyClause?: string | null;
+    // Timeline & Schedule
+    packetType?: string | null;
+    submissionStartDate?: string | null;
+    submissionEndDate?: string | null;
+    bidValidityDays?: number | null;
+    clarificationAllowed?: boolean | null;
+    clarificationDeadline?: string | null;
+    bidStartDate?: string | null;
+    bidClosingDate?: string | null;
+    // Evaluation
+    evaluationMethod?: string | null;
+    // Items, documents, consignees
     items?: Array<{ itemName?: string; description?: string | null; quantity?: number | string | null; unitOfMeasure?: string | null; estimatedUnitPrice?: number | string | null }>;
     documents?: Array<{ name?: string; fileName?: string | null; required?: boolean }>;
     consigneeDetails?: Array<{ name?: string; location?: string; quantity?: number | string }>;
-    paymentTerms?: string | null;
-    bidStartDate?: string | null;
-    bidClosingDate?: string | null;
   } | null;
 };
 
@@ -116,28 +135,28 @@ export const reverseAuctionApi = {
     const qs = new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)])).toString();
     return api.get(`/api/reverse-auctions?${qs}`, { headers: headers(), skipCache: true }).then(res => json<{ auctions: ReverseAuction[]; total: number }>(res));
   },
-  get: (id: number) =>
-    api.get(`/api/reverse-auctions/${id}`, { headers: headers(), skipCache: true }).then(res => json<ReverseAuction & { bids?: any[] }>(res)),
+  get: (id: number | string) =>
+    api.get(`/api/reverse-auctions/${encodeURIComponent(String(id))}`, { headers: headers(), skipCache: true }).then(res => json<ReverseAuction & { bids?: any[] }>(res)),
   create: (data: Record<string, unknown>) =>
     api.post('/api/reverse-auctions', data, { headers: headers() }).then(res => json<ReverseAuction>(res)),
-  inviteSellers: (id: number, sellers: Array<{ sellerOrgId: number; sellerUserId?: number }>) =>
-    api.post(`/api/reverse-auctions/${id}/invite-sellers`, { sellers }, { headers: headers() }).then(res => json<any>(res)),
-  join: (id: number) =>
-    api.post(`/api/reverse-auctions/${id}/join`, {}, { headers: headers() }).then(res => json<any>(res)),
-  transition: (id: number, action: 'schedule' | 'start' | 'pause' | 'resume' | 'close' | 'cancel', body: Record<string, unknown> = {}) =>
-    api.post(`/api/reverse-auctions/${id}/${action}`, body, { headers: headers() }).then(res => json<ReverseAuction>(res)),
-  liveSummary: (id: number) =>
-    api.get(`/api/reverse-auctions/${id}/live-summary`, { headers: headers(), skipCache: true }).then(res => json<any>(res)),
-  participants: (id: number) =>
-    api.get(`/api/reverse-auctions/${id}/participants`, { headers: headers(), skipCache: true }).then(res => json<{ participants: ReverseAuctionParticipant[] }>(res)),
-  bids: (id: number) =>
-    api.get(`/api/reverse-auctions/${id}/bids`, { headers: headers(), skipCache: true }).then(res => json<{ bids: ReverseAuctionBid[] }>(res)),
-  placeBid: (id: number, amount: number) =>
-    api.post(`/api/reverse-auctions/${id}/bids`, { amount }, { headers: headers() }).then(res => json<any>(res)),
-  result: (id: number) =>
-    api.get(`/api/reverse-auctions/${id}/result`, { headers: headers(), skipCache: true }).then(res => json<any>(res)),
-  recommendAward: (id: number, participantId?: number) =>
-    api.post(`/api/reverse-auctions/${id}/award-recommendation`, { participantId }, { headers: headers() }).then(res => json<any>(res)),
+  inviteSellers: (id: number | string, sellers: Array<{ sellerOrgId: number; sellerUserId?: number }>) =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/invite-sellers`, { sellers }, { headers: headers() }).then(res => json<any>(res)),
+  join: (id: number | string) =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/join`, {}, { headers: headers() }).then(res => json<any>(res)),
+  transition: (id: number | string, action: 'schedule' | 'start' | 'pause' | 'resume' | 'close' | 'cancel', body: Record<string, unknown> = {}) =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/${action}`, body, { headers: headers() }).then(res => json<ReverseAuction>(res)),
+  liveSummary: (id: number | string) =>
+    api.get(`/api/reverse-auctions/${encodeURIComponent(String(id))}/live-summary`, { headers: headers(), skipCache: true }).then(res => json<any>(res)),
+  participants: (id: number | string) =>
+    api.get(`/api/reverse-auctions/${encodeURIComponent(String(id))}/participants`, { headers: headers(), skipCache: true }).then(res => json<{ participants: ReverseAuctionParticipant[] }>(res)),
+  bids: (id: number | string) =>
+    api.get(`/api/reverse-auctions/${encodeURIComponent(String(id))}/bids`, { headers: headers(), skipCache: true }).then(res => json<{ bids: ReverseAuctionBid[] }>(res)),
+  placeBid: (id: number | string, amount: number) =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/bids`, { amount }, { headers: headers() }).then(res => json<any>(res)),
+  result: (id: number | string) =>
+    api.get(`/api/reverse-auctions/${encodeURIComponent(String(id))}/result`, { headers: headers(), skipCache: true }).then(res => json<any>(res)),
+  recommendAward: (id: number | string, participantId?: number) =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/award-recommendation`, { participantId }, { headers: headers() }).then(res => json<any>(res)),
   startFromBids: (data: {
     procurementId: number | string;
     title?: string;
@@ -157,16 +176,16 @@ export const reverseAuctionApi = {
       vendorName?: string;
     }>;
   }) => api.post('/api/reverse-auctions/start-from-bids', data, { headers: headers() }).then(res => json<ReverseAuction>(res)),
-  acceptAndGeneratePo: (id: number, data?: { participantId?: number; remarks?: string }) =>
-    api.post(`/api/reverse-auctions/${id}/accept-and-generate-po`, data || {}, { headers: headers() }).then(res => json<{ success: boolean; purchaseOrder: any; auction: ReverseAuction; winner: any }>(res)),
+  acceptAndGeneratePo: (id: number | string, data?: { participantId?: number; remarks?: string }) =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/accept-and-generate-po`, data || {}, { headers: headers() }).then(res => json<{ success: boolean; purchaseOrder: any; auction: ReverseAuction; winner: any }>(res)),
   getByProcurement: (procurementId: number | string) =>
     api.get(`/api/reverse-auctions/by-procurement/${encodeURIComponent(String(procurementId))}`, { headers: headers(), skipCache: true }).then(res => json<ReverseAuction | null>(res)),
-  clarifications: (id: number) =>
-    api.get(`/api/reverse-auctions/${id}/clarifications`, { headers: headers(), skipCache: true }).then(res => json<AuctionClarification[]>(res)),
-  askClarification: (id: number, question: string, visibility: 'PUBLIC' | 'PRIVATE' = 'PUBLIC') =>
-    api.post(`/api/reverse-auctions/${id}/clarifications`, { question, visibility }, { headers: headers() }).then(res => json<AuctionClarification>(res)),
-  replyClarification: (id: number, clarId: number, response: string) =>
-    api.post(`/api/reverse-auctions/${id}/clarifications/${clarId}/reply`, { response }, { headers: headers() }).then(res => json<AuctionClarification>(res))
+  clarifications: (id: number | string) =>
+    api.get(`/api/reverse-auctions/${encodeURIComponent(String(id))}/clarifications`, { headers: headers(), skipCache: true }).then(res => json<AuctionClarification[]>(res)),
+  askClarification: (id: number | string, question: string, visibility: 'PUBLIC' | 'PRIVATE' = 'PUBLIC') =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/clarifications`, { question, visibility }, { headers: headers() }).then(res => json<AuctionClarification>(res)),
+  replyClarification: (id: number | string, clarId: number, response: string) =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/clarifications/${clarId}/reply`, { response }, { headers: headers() }).then(res => json<AuctionClarification>(res))
 };
 
 export type AuctionClarification = {

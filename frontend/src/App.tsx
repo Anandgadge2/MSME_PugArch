@@ -140,7 +140,7 @@ import { MarketplaceHeader } from './features/marketplace/components/Marketplace
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
 import { SubUserActivationGate } from './features/auth/components/SubUserActivationGate';
-import { PageTableSkeleton, ProfileSkeleton, FormSectionSkeleton, StorefrontSkeleton, GridCardSkeleton } from './components/ui/skeleton';
+import { PageTableSkeleton, ProfileSkeleton, FormSectionSkeleton, StorefrontSkeleton, GridCardSkeleton, GrnDetailSkeleton } from './components/ui/skeleton';
 
 function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKey: string }) {
   React.useEffect(() => {
@@ -187,6 +187,10 @@ function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKe
  */
 function RouteFallback() {
   const pathname = usePathname() || '';
+
+  if (pathname.match(/^\/grn\/\d+$/)) {
+    return <GrnDetailSkeleton />;
+  }
 
   if (pathname.includes('/profile')) {
     return <ProfileSkeleton />;

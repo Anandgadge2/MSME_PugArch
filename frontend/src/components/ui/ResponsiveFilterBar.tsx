@@ -113,19 +113,19 @@ export function ResponsiveFilterBar({
         </div>
       ) : (
         /* Desktop / Tablet Single-Row Layout (when all filters fit on one line) */
-        <div className="hidden sm:flex sm:items-center sm:flex-nowrap gap-2 sm:gap-2.5 w-full min-w-0 overflow-x-auto scrollbar-none">
-          <div className={cn(searchWrapperClassName || "w-52 md:w-60 lg:w-64 xl:w-72 shrink-0")}>
+        <div className="hidden sm:flex sm:items-center sm:flex-nowrap gap-1.5 sm:gap-2 w-full min-w-0 overflow-x-auto scrollbar-none py-0.5">
+          <div className={cn(searchWrapperClassName || "min-w-[140px] max-w-[220px] xl:max-w-xs flex-1 shrink")}>
             {searchInput}
           </div>
 
           {filters && (
-            <div className={cn("flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1", filtersClassName || "flex-wrap")}>
+            <div className={cn("flex items-center gap-1.5 sm:gap-2 min-w-0 flex-nowrap shrink-0", filtersClassName)}>
               {filters}
             </div>
           )}
 
           {(primaryViewToggle || endContent) && (
-            <div className="ml-auto flex items-center gap-2 shrink-0">
+            <div className="ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
               {endContent}
               {primaryViewToggle}
             </div>

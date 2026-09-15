@@ -16,7 +16,7 @@ const formatWhen = (value?: string | null) => {
 };
 
 interface AuctionClarificationPanelProps {
-  auctionId: number;
+  auctionId: number | string;
   /** Sellers ask questions; the buyer/manager answers. */
   role: 'seller' | 'buyer';
   /** Closed/awarded auctions no longer accept questions. */

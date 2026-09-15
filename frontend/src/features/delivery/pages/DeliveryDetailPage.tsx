@@ -144,17 +144,17 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <Card className={cn('overflow-hidden rounded-2xl border-slate-200/80 bg-white/95 shadow-xs transition-shadow duration-300 hover:shadow-sm', className)}>
+    <Card className={cn('overflow-hidden rounded-xl border-slate-200/80 bg-white/95 shadow-xs transition-shadow duration-300 hover:shadow-sm', className)}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2.5 sm:gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50/80 focus:outline-hidden"
+        className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 sm:px-4 sm:py-2.5 text-left transition-colors hover:bg-slate-50/80 focus:outline-hidden"
       >
-        <span className="flex items-center gap-2.5">
+        <span className="flex items-center gap-2">
           {Icon && (
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0f766e]/10 text-[#0f766e]">
-              <Icon className="h-4 w-4" />
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#0f766e]/10 text-[#0f766e]">
+              <Icon className="h-3.5 w-3.5" />
             </span>
           )}
           <span className={sectionHeader}>{title}</span>
@@ -166,7 +166,7 @@ function CollapsibleSection({
           />
         </span>
       </button>
-      {open && <div className="border-t border-slate-100/90 px-4 py-4 sm:px-5 sm:py-5">{children}</div>}
+      {open && <div className="border-t border-slate-100/90 px-3.5 py-3 sm:px-4 sm:py-3.5">{children}</div>}
     </Card>
   );
 }
@@ -255,24 +255,24 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   const trackingNo = delivery.trackingNumber || `DLV-${delivery.id}`;
 
   return (
-    <div className="space-y-5">
-      {/* ─── Premium Header Card ─── */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-r from-white via-slate-50/50 to-teal-50/30 p-5 shadow-xs sm:p-6">
-        <div className="absolute top-0 right-0 h-32 w-32 translate-x-8 -translate-y-8 rounded-full bg-[#0f766e]/5 blur-2xl pointer-events-none" />
+    <div className="space-y-4">
+      {/* ─── Premium Compact Header Card ─── */}
+      <div className="relative overflow-hidden rounded-xl border border-slate-200/80 bg-gradient-to-r from-white via-slate-50/50 to-teal-50/30 p-3.5 shadow-xs sm:p-4">
+        <div className="absolute top-0 right-0 h-28 w-28 translate-x-8 -translate-y-8 rounded-full bg-[#0f766e]/5 blur-2xl pointer-events-none" />
         
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex min-w-0 items-start gap-3.5 sm:gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#12335f] to-[#07172e] text-white shadow-sm ring-4 ring-[#12335f]/10">
-              <Package className="h-6 w-6" />
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#12335f] to-[#07172e] text-white shadow-xs ring-2 ring-[#12335f]/10">
+              <Package className="h-4.5 w-4.5" />
             </span>
             <div className="min-w-0">
               {/* Top Reference Bar */}
-              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <div className="flex flex-wrap items-center gap-1.5 mb-1">
                 <DeliveryStatusBadge status={delivery.status} size="sm" />
                 <button
                   type="button"
                   onClick={() => copyToClipboard(poNumber, 'PO Number')}
-                  className="group inline-flex items-center gap-1.5 rounded-full bg-slate-100 hover:bg-slate-200/80 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-700 transition-colors"
+                  className="group inline-flex items-center gap-1 rounded-full bg-slate-100 hover:bg-slate-200/80 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-700 transition-colors"
                   title="Click to copy Purchase Order number"
                 >
                   <span className="text-slate-400 font-semibold">PO:</span>
@@ -283,47 +283,46 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
               </div>
 
               {/* Order Title */}
-              <h1 className="text-xl font-black tracking-tight text-slate-950 break-words sm:text-2xl lg:text-3xl">
+              <h1 className="text-base font-black tracking-tight text-slate-950 break-words sm:text-lg">
                 {po?.title || po?.poNumber || `Delivery #${delivery.id}`}
               </h1>
 
               {/* Counterparty Route */}
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 shadow-2xs border border-slate-200/80">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Supplier:</span>
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 text-[9px] font-bold text-slate-700">
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 shadow-2xs border border-slate-200/80 text-[10px]">
+                  <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">Supplier:</span>
+                  <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-100 text-[8px] font-bold text-slate-700">
                     {sellerName.charAt(0).toUpperCase()}
                   </span>
-                  <span className="font-bold text-slate-800 truncate max-w-[150px]">{sellerName}</span>
+                  <span className="font-bold text-slate-800 truncate max-w-[130px]">{sellerName}</span>
                 </span>
-                <ArrowRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 shadow-2xs border border-slate-200/80">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-[#0f766e]">Consignee:</span>
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-teal-100 text-[9px] font-bold text-[#0f766e]">
+                <ArrowRight className="h-3 w-3 text-slate-400 shrink-0" />
+                <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 shadow-2xs border border-slate-200/80 text-[10px]">
+                  <span className="text-[8px] font-black uppercase tracking-wider text-[#0f766e]">Consignee:</span>
+                  <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-teal-100 text-[8px] font-bold text-[#0f766e]">
                     {buyerName.charAt(0).toUpperCase()}
                   </span>
-                  <span className="font-bold text-slate-800 truncate max-w-[150px]">{buyerName}</span>
+                  <span className="font-bold text-slate-800 truncate max-w-[130px]">{buyerName}</span>
                 </span>
               </div>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2 md:self-start">
-           
+          <div className="flex items-center gap-2 self-start shrink-0">
             <Button
               variant="outline"
               onClick={onClose || (() => window.history.back())}
-              className="h-9.5 rounded-xl border-slate-200 bg-white px-3.5 text-xs font-black uppercase text-slate-700 hover:bg-slate-50 shadow-2xs"
+              className="h-8 rounded-lg border-slate-200 bg-white px-3 text-[11px] font-black uppercase text-slate-700 hover:bg-slate-50 shadow-2xs"
             >
               Back
             </Button>
             <Button
               variant="outline"
               onClick={() => detailQuery.refetch()}
-              className="h-9.5 rounded-xl border-[#0f766e] bg-[#0f766e] px-4 text-xs font-black uppercase text-white hover:bg-[#0d665f] shadow-2xs"
+              className="h-8 rounded-lg border-[#0f766e] bg-[#0f766e] px-3.5 text-[11px] font-black uppercase text-white hover:bg-[#0d665f] shadow-2xs"
             >
-              <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', isFetching && 'animate-spin')} /> Refresh
+              <RefreshCw className={cn('mr-1.5 h-3 w-3', isFetching && 'animate-spin')} /> Refresh
             </Button>
           </div>
         </div>
@@ -331,130 +330,103 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
 
       {/* ─── Delivery Overview Command Center ─── */}
       <CollapsibleSection title="Delivery Command Center" icon={Package} defaultOpen>
-        <div className="space-y-4">
-          {/* Top Status & SLA Banner */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-100 bg-gradient-to-r from-teal-50/60 via-emerald-50/30 to-sky-50/40 p-3.5 sm:p-4">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#0f766e] shadow-xs border border-teal-100">
-                <Truck className="h-5 w-5 dt-bounce-soft" />
+        {/* 4 Crisp, High-Density Metric Tiles */}
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+          {/* Tile 1: Logistics & Carrier */}
+          <div className="group rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Logistics & Carrier</span>
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-teal-50 text-[#0f766e]">
+                <Truck className="h-3 w-3" />
               </span>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Current Movement Status</p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                  <span className="text-base font-black text-slate-950 sm:text-lg">
-                    {DELIVERY_STATUS_LABELS[delivery.status] || delivery.status}
-                  </span>
-                  <DeliveryStatusBadge status={delivery.status} size="sm" />
-                </div>
-              </div>
             </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="rounded-xl border border-slate-200/80 bg-white px-3.5 py-1.5 shadow-2xs">
-                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Estimated Delivery Date</p>
-                <p className="text-xs font-black text-slate-900 flex items-center gap-1.5 mt-0.5">
-                  <Calendar className="h-3.5 w-3.5 text-[#0f766e]" />
-                  {formatDate(delivery.expectedDelivery || po?.expectedDelivery)}
-                </p>
+            <p className="mt-1 text-xs font-black text-slate-900 truncate">
+              {delivery.carrierName || delivery.logisticsPartnerName || 'Assigned Courier'}
+            </p>
+            <div className="mt-1.5 flex items-center justify-between rounded-md bg-slate-50 px-2 py-1 border border-slate-100">
+              <div className="min-w-0 pr-1">
+                <span className="block text-[7px] font-bold uppercase text-slate-400">AWB Tracking No</span>
+                <span className="font-mono text-[10px] font-bold text-slate-700 truncate block">{trackingNo}</span>
               </div>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(trackingNo, 'Tracking Number')}
+                className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-[#0f766e] transition-colors"
+                aria-label="Copy Tracking Number"
+                title="Copy Tracking Number"
+              >
+                <Copy className="h-3 w-3" />
+              </button>
+            </div>
+            <p className="mt-1 text-[9px] font-semibold text-slate-500 flex items-center gap-1 truncate">
+              <MapPin className="h-2.5 w-2.5 text-slate-400 shrink-0" />
+              Location: {delivery.currentLocation || 'In Transit'}
+            </p>
+          </div>
+
+          {/* Tile 2: Destination & Address */}
+          <div className="group rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Delivery Destination</span>
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-sky-50 text-sky-600">
+                <MapPin className="h-3 w-3" />
+              </span>
+            </div>
+            <p className="mt-1 text-xs font-black text-slate-900 truncate">
+              {buyerName}
+            </p>
+            <p className="mt-1 text-[10px] font-semibold text-slate-600 line-clamp-2 leading-relaxed" title={po?.deliveryAddress || 'Address not specified'}>
+              {po?.deliveryAddress || 'Address not specified'}
+            </p>
+          </div>
+
+          {/* Tile 3: Financial & Settlement */}
+          <div className="group rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Order Value & Escrow</span>
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-50 text-emerald-600">
+                <Wallet className="h-3 w-3" />
+              </span>
+            </div>
+            <p className="mt-1 text-sm font-black text-slate-950">
+              {formatCurrency(po?.amount || po?.totalValue)}
+            </p>
+            <div className="mt-1.5 flex items-center justify-between">
+              <span className="text-[9px] font-bold text-slate-500">Escrow State:</span>
+              <span className={cn(
+                'rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider',
+                delivery.settlement?.status === 'RELEASED' ? 'bg-emerald-100 text-emerald-800' :
+                delivery.settlement?.status === 'APPROVED' ? 'bg-teal-100 text-[#0f766e]' :
+                'bg-slate-100 text-slate-600'
+              )}>
+                {delivery.settlement?.status || 'FUNDS SECURED'}
+              </span>
             </div>
           </div>
 
-          {/* 4 Rich Metric Tiles */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {/* Tile 1: Logistics & Carrier */}
-            <div className="group rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Logistics & Carrier</span>
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-teal-50 text-[#0f766e]">
-                  <Truck className="h-3.5 w-3.5" />
-                </span>
-              </div>
-              <p className="mt-1 text-xs font-black text-slate-900 truncate">
-                {delivery.carrierName || delivery.logisticsPartnerName || 'Assigned Courier'}
-              </p>
-              <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-50 px-2.5 py-1.5 border border-slate-100">
-                <div className="min-w-0 pr-1">
-                  <span className="block text-[8px] font-bold uppercase text-slate-400">AWB Tracking No</span>
-                  <span className="font-mono text-[11px] font-bold text-slate-700 truncate block">{trackingNo}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(trackingNo, 'Tracking Number')}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-[#0f766e] transition-colors"
-                  aria-label="Copy Tracking Number"
-                  title="Copy Tracking Number"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <p className="mt-1.5 text-[10px] font-semibold text-slate-500 flex items-center gap-1 truncate">
-                <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
-                Location: {delivery.currentLocation || 'In Transit'}
-              </p>
+          {/* Tile 4: Next Milestone & Schedule */}
+          <div className="group rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Schedule & Milestone</span>
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-indigo-50 text-indigo-600">
+                <Layers className="h-3 w-3" />
+              </span>
             </div>
-
-            {/* Tile 2: Destination & Address */}
-            <div className="group rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Delivery Destination</span>
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
-                  <MapPin className="h-3.5 w-3.5" />
-                </span>
-              </div>
-              <p className="mt-1 text-xs font-black text-slate-900 truncate">
-                {buyerName}
-              </p>
-              <p className="mt-1.5 text-[11px] font-semibold text-slate-600 line-clamp-2 leading-relaxed" title={po?.deliveryAddress || 'Address not specified'}>
-                {po?.deliveryAddress || 'Address not specified'}
-              </p>
-            </div>
-
-            {/* Tile 3: Financial & Settlement */}
-            <div className="group rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Order Value & Escrow</span>
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                  <Wallet className="h-3.5 w-3.5" />
-                </span>
-              </div>
-              <p className="mt-1 text-base font-black text-slate-950">
-                {formatCurrency(po?.amount || po?.totalValue)}
-              </p>
-              <div className="mt-2 flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-500">Escrow State:</span>
-                <span className={cn(
-                  'rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
-                  delivery.settlement?.status === 'RELEASED' ? 'bg-emerald-100 text-emerald-800' :
-                  delivery.settlement?.status === 'APPROVED' ? 'bg-teal-100 text-[#0f766e]' :
-                  'bg-slate-100 text-slate-600'
-                )}>
-                  {delivery.settlement?.status || 'FUNDS SECURED'}
-                </span>
-              </div>
-            </div>
-
-            {/* Tile 4: Next Milestone */}
-            <div className="group rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Next Milestone</span>
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                  <Layers className="h-3.5 w-3.5" />
-                </span>
-              </div>
-              <p className="mt-1 text-xs font-black text-slate-900 truncate">
+            <div className="mt-1 flex items-center justify-between">
+              <p className="text-xs font-black text-slate-900 truncate">
                 {nextManualStatus ? DELIVERY_STATUS_LABELS[nextManualStatus] : 'Fully Completed'}
               </p>
-              <div className="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-500">
-                <span>SLA Health:</span>
-                <span className="font-extrabold text-[#0f766e]">{delivery.slaStatus || 'ON_TIME'}</span>
-              </div>
-              {delivery.packageWeightKg && (
-                <p className="mt-1 text-[9px] font-bold text-slate-400">
-                  Pkg: {delivery.packageWeightKg} kg • {delivery.packageCount || 1} unit(s)
-                </p>
-              )}
+              <span className="text-[9px] font-extrabold text-[#0f766e]">{delivery.slaStatus || 'ON_TIME'}</span>
             </div>
+            <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-bold text-slate-700">
+              <Calendar className="h-3 w-3 text-[#0f766e] shrink-0" />
+              <span>ETA: {formatDate(delivery.expectedDelivery || po?.expectedDelivery)}</span>
+            </div>
+            {delivery.packageWeightKg && (
+              <p className="mt-1 text-[8px] font-bold text-slate-400">
+                Pkg: {delivery.packageWeightKg} kg • {delivery.packageCount || 1} unit(s)
+              </p>
+            )}
           </div>
         </div>
       </CollapsibleSection>
@@ -479,14 +451,14 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
       )}
 
       {/* ─── Main Content Grid & Right Action Rail ─── */}
-      <div className={cn('grid grid-cols-1 gap-5', isSellerTrackingView ? 'xl:grid-cols-[minmax(0,1fr)_380px]' : 'xl:grid-cols-[minmax(0,1fr)_390px]')}>
-        <div className="space-y-5">
-          <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-5">
+      <div className={cn('grid grid-cols-1 gap-4', isSellerTrackingView ? 'xl:grid-cols-[minmax(0,1fr)_360px]' : 'xl:grid-cols-[minmax(0,1fr)_370px]')}>
+        <div className="space-y-4">
+          <section className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:p-4">
             <SectionHeading
               icon={Truck}
               title="Live Tracking & Milestones"
               meta={
-                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-slate-500">
                   Real-Time Updates
                 </span>
               }
@@ -496,7 +468,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
 
           {!isSellerTrackingView && (
             <>
-              <div className="grid gap-5 lg:grid-cols-2">
+              <div className="grid gap-4 lg:grid-cols-2">
                 <DpExtensionSection delivery={delivery} accessRole={accessRole} />
                 <LiquidatedDamagesCard deliveryId={delivery.id} />
               </div>
@@ -507,7 +479,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
         </div>
 
         {/* ─── Right Action Rail ─── */}
-        <aside className="space-y-5 xl:sticky xl:top-4 xl:self-start">
+        <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
           {accessRole === 'seller' && (
             <ManualTrackingActions delivery={delivery} latestManual={latestManual} onRefresh={() => detailQuery.refetch()} />
           )}
@@ -544,12 +516,12 @@ function SectionHeading({
   meta?: React.ReactNode;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0f766e]/10 text-[#0f766e] ring-1 ring-[#0f766e]/20">
-          <Icon className="h-4 w-4" />
+    <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0f766e]/10 text-[#0f766e] ring-1 ring-[#0f766e]/20">
+          <Icon className="h-3.5 w-3.5" />
         </span>
-        <h2 className="text-sm font-black uppercase tracking-wider text-slate-950">{title}</h2>
+        <h2 className="text-xs font-black uppercase tracking-wider text-slate-950">{title}</h2>
       </div>
       {meta}
     </div>
@@ -568,7 +540,7 @@ function DocumentsPanel({
   const records = docs || [];
 
   return (
-    <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-5">
+    <section className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:p-4">
       <SectionHeading
         icon={FileText}
         title="Delivery Documents"
