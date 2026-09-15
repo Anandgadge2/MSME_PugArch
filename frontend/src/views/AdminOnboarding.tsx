@@ -3366,6 +3366,7 @@ export default function AdminOnboarding() {
                           </div>
                           <div className="flex items-center space-x-2">
                             <button
+                              type="button"
                               onClick={() =>
                                 handleUpdateSectionStatus(
                                   selectedItem._id,
@@ -3373,8 +3374,9 @@ export default function AdminOnboarding() {
                                   "approved",
                                 )
                               }
+                              aria-label="Approve Submitted Verification Documents"
                               className={cn(
-                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm",
+                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500",
                                 selectedItem.sectionStatus?.documents ===
                                   "approved"
                                   ? "bg-green-500 border-green-600 text-white"
@@ -3384,9 +3386,11 @@ export default function AdminOnboarding() {
                               <Check className="h-4 w-4" />
                             </button>
                             <button
+                              type="button"
                               onClick={() => openRejectionModal("documents")}
+                              aria-label="Reject Submitted Verification Documents"
                               className={cn(
-                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm",
+                                "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500",
                                 selectedItem.sectionStatus?.documents ===
                                   "rejected"
                                   ? "bg-red-500 border-red-600 text-white"
@@ -3401,49 +3405,71 @@ export default function AdminOnboarding() {
                         {(() => {
                           const { sellerDocuments, legacyDocuments } = getSellerOnboardingDocuments(selectedItem.profile);
                           return (
-                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                               {/* Render sellerDocuments (relational) */}
                               {sellerDocuments.length > 0 ? (
                                 sellerDocuments.map((doc: any) => {
                                   const file = doc.fileAsset;
                                   if (!file) return null;
+                                  const fileName = getDocumentFileName(file, `${doc.documentType || "Document"} File`);
+                                  const uploadedAt = doc.uploadedAt || getDocumentUploadedAt(file);
+                                  const status = doc.verificationStatus || "PENDING";
                                   return (
-                                    <div key={doc.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2 flex flex-col justify-between">
-                                      <div>
-                                        <div className="flex items-center justify-between">
-                                          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
+                                    <div
+                                      key={doc.id}
+                                      className="h-full min-w-0 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 flex flex-col justify-between transition-all hover:bg-slate-50 hover:border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+                                    >
+                                      <div className="space-y-1 min-w-0">
+                                        <div className="flex items-start justify-between gap-2 min-w-0 pb-0.5">
+                                          <span
+                                            className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate min-w-0 block"
+                                            title={doc.documentType}
+                                          >
                                             {doc.documentType}
                                           </span>
-                                          <Badge variant="default" className={cn(
-                                            "text-[9px] font-bold px-1.5 py-0.5",
-                                            doc.verificationStatus === 'APPROVED' ? "bg-green-50 text-green-700 border-green-200" :
-                                              doc.verificationStatus === 'REJECTED' ? "bg-red-50 text-red-700 border-red-200" :
-                                                "bg-yellow-50 text-yellow-700 border-yellow-200"
-                                          )}>
-                                            {doc.verificationStatus}
+                                          <Badge
+                                            variant="default"
+                                            className={cn(
+                                              "shrink-0 text-[9px] font-bold px-2 py-0.5 whitespace-nowrap",
+                                              status === "APPROVED"
+                                                ? "bg-green-50 text-green-700 border-green-200"
+                                                : status === "REJECTED"
+                                                  ? "bg-red-50 text-red-700 border-red-200"
+                                                  : "bg-yellow-50 text-yellow-700 border-yellow-200"
+                                            )}
+                                          >
+                                            {status}
                                           </Badge>
                                         </div>
-                                        <p className="text-xs font-bold text-slate-700 mt-1 line-clamp-1" title={file.originalName}>
-                                          {file.originalName}
+                                        <p
+                                          className="text-xs font-bold text-slate-700 truncate mt-1 block min-w-0"
+                                          title={fileName}
+                                        >
+                                          {fileName}
                                         </p>
-                                        {doc.uploadedAt && (
-                                          <p className="text-[9px] text-slate-400 mt-0.5">
-                                            Uploaded: {formatDate(doc.uploadedAt)}
+                                        {uploadedAt && (
+                                          <p className="text-[10px] text-slate-400 mt-1 truncate">
+                                            Uploaded: {formatDate(uploadedAt)}
                                           </p>
                                         )}
                                         {doc.remarks && (
-                                          <p className="text-[10px] text-slate-500 mt-1 italic">
+                                          <p
+                                            className="text-[10px] text-slate-500 mt-1 italic truncate"
+                                            title={doc.remarks}
+                                          >
                                             Note: {doc.remarks}
                                           </p>
                                         )}
                                       </div>
-                                      <div className="pt-2 border-t border-slate-100 mt-2">
+                                      <div className="pt-2.5 border-t border-slate-200/80 mt-3 flex items-center justify-between">
                                         <button
                                           type="button"
                                           onClick={() => handleViewDocument(file, doc.documentType)}
-                                          className="text-xs font-bold text-[#12335f] hover:underline inline-flex items-center gap-1"
+                                          className="text-xs font-bold text-[#12335f] hover:text-[#0d274b] hover:underline inline-flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#12335f]/30 rounded transition-colors"
+                                          aria-label={`View ${doc.documentType || "document"}`}
                                         >
-                                          <Eye className="h-3 w-3" /> View Document
+                                          <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                          <span>View Document</span>
                                         </button>
                                       </div>
                                     </div>
@@ -3451,8 +3477,74 @@ export default function AdminOnboarding() {
                                 })
                               ) : null}
 
-                              {sellerDocuments.length === 0 && (
-                                <div className="col-span-full py-4 text-center text-xs text-slate-400 font-medium">
+                              {/* Render legacyDocuments if any */}
+                              {legacyDocuments.length > 0 &&
+                                legacyDocuments.map(([key, url]: [string, any]) => {
+                                  const documentFiles = getDocumentFiles(url).filter(getDocumentUrl);
+                                  if (documentFiles.length === 0) return null;
+                                  const label = getDocumentLabel(key);
+                                  return documentFiles.map((file: any, index: number) => {
+                                    const fileName = getDocumentFileName(file, `${label} Document`);
+                                    const uploadedAt = getDocumentUploadedAt(file);
+                                    const cardKey = `legacy-${key}-${index}-${file?.fileId || file?.url || fileName}`;
+                                    const status = "PENDING";
+                                    return (
+                                      <div
+                                        key={cardKey}
+                                        className="h-full min-w-0 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 flex flex-col justify-between transition-all hover:bg-slate-50 hover:border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+                                      >
+                                        <div className="space-y-1 min-w-0">
+                                          <div className="flex items-start justify-between gap-2 min-w-0 pb-0.5">
+                                            <span
+                                              className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate min-w-0 block"
+                                              title={label}
+                                            >
+                                              {label}
+                                            </span>
+                                            <Badge
+                                              variant="default"
+                                              className="shrink-0 text-[9px] font-bold px-2 py-0.5 whitespace-nowrap bg-yellow-50 text-yellow-700 border-yellow-200"
+                                            >
+                                              {status}
+                                            </Badge>
+                                          </div>
+                                          <p
+                                            className="text-xs font-bold text-slate-700 truncate mt-1 block min-w-0"
+                                            title={fileName}
+                                          >
+                                            {fileName}
+                                          </p>
+                                          {uploadedAt && (
+                                            <p className="text-[10px] text-slate-400 mt-1 truncate">
+                                              Uploaded: {formatDate(uploadedAt)}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <div className="pt-2.5 border-t border-slate-200/80 mt-3 flex items-center justify-between">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleViewDocument(
+                                                { fileId: file?.fileId, url: getDocumentUrl(file) },
+                                                label,
+                                              )
+                                            }
+                                            className="text-xs font-bold text-[#12335f] hover:text-[#0d274b] hover:underline inline-flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#12335f]/30 rounded transition-colors"
+                                            aria-label={`View ${label} document${documentFiles.length > 1 ? ` ${index + 1}` : ""}`}
+                                          >
+                                            <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                            <span>
+                                              View Document{documentFiles.length > 1 ? ` ${index + 1}` : ""}
+                                            </span>
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  });
+                                })}
+
+                              {sellerDocuments.length === 0 && legacyDocuments.length === 0 && (
+                                <div className="col-span-full py-6 text-center text-xs text-slate-400 font-medium">
                                   No uploaded documents found for this seller profile.
                                 </div>
                               )}

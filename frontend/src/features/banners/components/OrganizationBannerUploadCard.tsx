@@ -93,8 +93,8 @@ export function OrganizationBannerUploadCard() {
 
       setUpload({ fileId, url, name: json?.file?.originalName || optimized.name });
       setImageUrl('');
-      setValidationSuccess(`Verified 16:9 Banner (${ratioInfo}) uploaded successfully!`);
-      setMessage('Image verified and uploaded. Preview your 16:9 slide below before submitting.');
+      setValidationSuccess(`Verified Banner (${ratioInfo}) uploaded successfully!`);
+      setMessage('Image verified and uploaded. Preview your slide below before submitting.');
     } catch (err) {
       setValidationError(err instanceof Error ? err.message : 'Unable to upload banner image');
     } finally {
@@ -110,7 +110,7 @@ export function OrganizationBannerUploadCard() {
     setValidationSuccess('');
     setPendingInvalidFile(null);
 
-    // Compulsory 16:9 Aspect Ratio & Resolution Validation
+    // Landscape Aspect Ratio & Resolution Validation
     const check = await validateBannerFile(file);
     if (!check.valid) {
       setValidationError(check.error || 'Invalid banner aspect ratio.');
@@ -119,7 +119,7 @@ export function OrganizationBannerUploadCard() {
       return;
     }
 
-    await executeUpload(file, `${check.width}×${check.height}px (16:9)`);
+    await executeUpload(file, `${check.width}×${check.height}px (${check.ratioDisplay})`);
     event.target.value = '';
   };
 
@@ -148,11 +148,11 @@ export function OrganizationBannerUploadCard() {
       return;
     }
 
-    // Compulsory 16:9 check for manual URL input
+    // Landscape aspect ratio check for manual URL input
     if (url && url.startsWith('http')) {
       const check = await validateBannerUrl(url);
       if (!check.valid) {
-        setValidationError(check.error || 'The entered image URL does not match compulsory 16:9 aspect ratio.');
+        setValidationError(check.error || 'The entered image URL does not match a supported landscape aspect ratio.');
         return;
       }
     }
@@ -327,14 +327,14 @@ export function OrganizationBannerUploadCard() {
               />
             </div>
 
-            {/* Compulsory 16:9 Requirement Box */}
+            {/* Supported Aspect Ratio Guidance Box */}
             <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-slate-700 space-y-1">
               <div className="flex items-center gap-1.5 font-black text-[#12335f]">
                 <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
-                <span>Compulsory Aspect Ratio: 16:9 (1920 × 1080 px)</span>
+                <span>Supported Aspect Ratios: 16:9, 16:10, 3:2, 4:3, or Panoramic</span>
               </div>
               <p className="text-[11px] font-medium leading-relaxed text-slate-600">
-                All marketplace hero banners must strictly adhere to a <strong>16:9 widescreen ratio</strong> (ideal 1920×1080 px, minimum 1280×720 px). Images with other aspect ratios will be blocked to ensure every banner displays at the exact same size.
+                Marketplace hero banners natively support standard landscape ratios (recommended 1920×1080 px or 1600×1200 px, min 800×360 px). Images scale responsively across desktop and mobile screens without unneeded cropping.
               </p>
             </div>
 
@@ -395,14 +395,22 @@ export function OrganizationBannerUploadCard() {
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm">
               <div className="relative aspect-[16/9] w-full overflow-hidden">
                 {preview && !previewError ? (
-                  <img
-                    src={preview}
-                    alt="Banner preview"
-                    referrerPolicy="no-referrer"
-                    crossOrigin="anonymous"
-                    onError={() => setPreviewError(true)}
-                    className="h-full w-full object-cover"
-                  />
+                  <div className="relative h-full w-full">
+                    <img
+                      src={preview}
+                      alt=""
+                      aria-hidden="true"
+                      className="absolute inset-0 h-full w-full object-cover blur-xl opacity-45 scale-105 pointer-events-none"
+                    />
+                    <img
+                      src={preview}
+                      alt="Banner preview"
+                      referrerPolicy="no-referrer"
+                      crossOrigin="anonymous"
+                      onError={() => setPreviewError(true)}
+                      className="relative z-10 h-full w-full object-contain drop-shadow-md"
+                    />
+                  </div>
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 bg-slate-900/40">
                     <UploadCloud className="h-8 w-8 opacity-40 animate-pulse text-slate-400" />
@@ -411,7 +419,7 @@ export function OrganizationBannerUploadCard() {
                 )}
 
                 {/* Clean Contrast Overlay for text readability */}
-                <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/45 to-transparent w-[80%]" />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/45 to-transparent w-[80%] pointer-events-none" />
                 
                 {/* Content overlaid on the image */}
                 <div className="absolute inset-0 flex flex-col justify-between p-4 sm:p-5 select-none text-left">

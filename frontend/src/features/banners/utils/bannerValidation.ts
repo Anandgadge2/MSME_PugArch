@@ -19,17 +19,28 @@ export const BANNER_ASPECT_RATIO = {
   RATIO_X: 16,
   RATIO_Y: 9,
   TARGET_RATIO: 16 / 9, // 1.7777...
-  MIN_RATIO: 1.70,
-  MAX_RATIO: 1.86,
+  // Supported aspect ratios: 4:3 (1.33:1), 3:2 (1.50:1), 16:10 (1.60:1), 16:9 (1.78:1), and Panoramic up to 21:9 (2.33:1)
+  MIN_RATIO: 1.25,
+  MAX_RATIO: 2.50,
   RECOMMENDED_WIDTH: 1920,
   RECOMMENDED_HEIGHT: 1080,
-  MIN_WIDTH: 1280,
-  MIN_HEIGHT: 720,
+  MIN_WIDTH: 800,
+  MIN_HEIGHT: 360,
   MAX_FILE_SIZE_MB: 10
 } as const;
 
+export const formatAspectRatioLabel = (ratio: number): string => {
+  if (ratio >= 1.70 && ratio <= 1.86) return '16:9 Widescreen';
+  if (ratio >= 1.55 && ratio < 1.70) return '16:10 Landscape';
+  if (ratio >= 1.45 && ratio < 1.55) return '3:2 Landscape';
+  if (ratio >= 1.25 && ratio < 1.45) return '4:3 Standard';
+  if (ratio > 1.86 && ratio <= 2.50) return `${ratio.toFixed(2)}:1 Panoramic`;
+  return `${ratio.toFixed(2)}:1`;
+};
+
 /**
  * Validates an image file's dimensions, aspect ratio, and file type.
+ * Supports standard landscape hero banner aspect ratios (16:9, 16:10, 3:2, 4:3, Panoramic).
  */
 export const validateBannerFile = (file: File): Promise<BannerValidationResult> => {
   return new Promise((resolve) => {
@@ -79,7 +90,7 @@ export const validateBannerFile = (file: File): Promise<BannerValidationResult> 
         }
 
         const ratio = width / height;
-        const ratioDisplay = `${(ratio).toFixed(2)}:1`;
+        const ratioDisplay = formatAspectRatioLabel(ratio);
 
         // 4. Minimum resolution check
         if (width < BANNER_ASPECT_RATIO.MIN_WIDTH || height < BANNER_ASPECT_RATIO.MIN_HEIGHT) {
@@ -89,19 +100,30 @@ export const validateBannerFile = (file: File): Promise<BannerValidationResult> 
             height,
             ratio,
             ratioDisplay,
-            error: `Resolution Too Low: Your image is ${width} × ${height} px. Banners must be at least ${BANNER_ASPECT_RATIO.MIN_WIDTH} × ${BANNER_ASPECT_RATIO.MIN_HEIGHT} px (16:9 widescreen) to ensure crisp display across desktop and mobile screens.`
+            error: `Resolution Too Low: Your image is ${width} × ${height} px. Banners must be at least ${BANNER_ASPECT_RATIO.MIN_WIDTH} × ${BANNER_ASPECT_RATIO.MIN_HEIGHT} px to ensure crisp display across desktop and mobile screens.`
           });
         }
 
-        // 5. Compulsory 16:9 Aspect Ratio check
-        if (ratio < BANNER_ASPECT_RATIO.MIN_RATIO || ratio > BANNER_ASPECT_RATIO.MAX_RATIO) {
+        // 5. Landscape Aspect Ratio check (supports 16:9, 16:10, 3:2, 4:3, up to 21:9 panoramic)
+        if (ratio < BANNER_ASPECT_RATIO.MIN_RATIO) {
           return resolve({
             valid: false,
             width,
             height,
             ratio,
             ratioDisplay,
-            error: `Compulsory Aspect Ratio Mismatch: Your image is ${width} × ${height} px (${ratioDisplay}). All marketplace hero banners must strictly have a 16:9 widescreen aspect ratio (ideal 1920 × 1080 px or 1280 × 720 px) to display uniformly without cropping or distortion.`
+            error: `Aspect Ratio Warning: Your image is portrait or too tall (${width} × ${height} px, ${ratio.toFixed(2)}:1). Hero banners must be landscape (such as 16:9, 16:10, 3:2, 4:3, or panoramic) to display responsively across viewports.`
+          });
+        }
+
+        if (ratio > BANNER_ASPECT_RATIO.MAX_RATIO) {
+          return resolve({
+            valid: false,
+            width,
+            height,
+            ratio,
+            ratioDisplay,
+            error: `Aspect Ratio Warning: Your image is an extreme narrow strip (${width} × ${height} px, ${ratio.toFixed(2)}:1). Maximum supported panoramic ratio is 21:9 (2.4:1).`
           });
         }
 
@@ -110,7 +132,7 @@ export const validateBannerFile = (file: File): Promise<BannerValidationResult> 
           width,
           height,
           ratio,
-          ratioDisplay: '16:9',
+          ratioDisplay,
         });
       };
 
@@ -144,7 +166,7 @@ export const validateBannerFile = (file: File): Promise<BannerValidationResult> 
 };
 
 /**
- * Validates an image URL's dimensions and 16:9 aspect ratio.
+ * Validates an image URL's dimensions and landscape aspect ratio.
  */
 export const validateBannerUrl = (url: string): Promise<BannerValidationResult> => {
   return new Promise((resolve) => {
@@ -179,7 +201,7 @@ export const validateBannerUrl = (url: string): Promise<BannerValidationResult> 
       }
 
       const ratio = width / height;
-      const ratioDisplay = `${(ratio).toFixed(2)}:1`;
+      const ratioDisplay = formatAspectRatioLabel(ratio);
 
       if (width < BANNER_ASPECT_RATIO.MIN_WIDTH || height < BANNER_ASPECT_RATIO.MIN_HEIGHT) {
         return resolve({
@@ -188,18 +210,29 @@ export const validateBannerUrl = (url: string): Promise<BannerValidationResult> 
           height,
           ratio,
           ratioDisplay,
-          error: `Resolution Too Low: URL image is ${width} × ${height} px. Banners must be at least ${BANNER_ASPECT_RATIO.MIN_WIDTH} × ${BANNER_ASPECT_RATIO.MIN_HEIGHT} px in 16:9 ratio.`
+          error: `Resolution Too Low: URL image is ${width} × ${height} px. Banners must be at least ${BANNER_ASPECT_RATIO.MIN_WIDTH} × ${BANNER_ASPECT_RATIO.MIN_HEIGHT} px.`
         });
       }
 
-      if (ratio < BANNER_ASPECT_RATIO.MIN_RATIO || ratio > BANNER_ASPECT_RATIO.MAX_RATIO) {
+      if (ratio < BANNER_ASPECT_RATIO.MIN_RATIO) {
         return resolve({
           valid: false,
           width,
           height,
           ratio,
           ratioDisplay,
-          error: `Compulsory Aspect Ratio Mismatch: URL image is ${width} × ${height} px (${ratioDisplay}). Banners must strictly have a 16:9 widescreen ratio (1920 × 1080 px or 1280 × 720 px).`
+          error: `Aspect Ratio Warning: URL image is portrait or too tall (${width} × ${height} px, ${ratio.toFixed(2)}:1). Hero banners must be landscape (16:9, 16:10, 3:2, 4:3, or panoramic).`
+        });
+      }
+
+      if (ratio > BANNER_ASPECT_RATIO.MAX_RATIO) {
+        return resolve({
+          valid: false,
+          width,
+          height,
+          ratio,
+          ratioDisplay,
+          error: `Aspect Ratio Warning: URL image is an extreme narrow strip (${width} × ${height} px, ${ratio.toFixed(2)}:1). Maximum supported panoramic ratio is 21:9 (2.4:1).`
         });
       }
 
@@ -208,7 +241,7 @@ export const validateBannerUrl = (url: string): Promise<BannerValidationResult> 
         width,
         height,
         ratio,
-        ratioDisplay: '16:9'
+        ratioDisplay
       });
     };
 
@@ -220,7 +253,7 @@ export const validateBannerUrl = (url: string): Promise<BannerValidationResult> 
         height: 1080,
         ratio: 16 / 9,
         ratioDisplay: '16:9',
-        warning: 'Could not verify remote image dimensions due to remote host CORS restrictions. Ensure the image conforms to 16:9 (1920 × 1080 px).'
+        warning: 'Could not verify remote image dimensions due to remote host CORS restrictions. Ensure the image conforms to a landscape ratio (16:9, 16:10, 3:2, 4:3, or panoramic).'
       });
     };
 
@@ -229,7 +262,7 @@ export const validateBannerUrl = (url: string): Promise<BannerValidationResult> 
 };
 
 /**
- * Automatic client-side crop to 16:9 (1920x1080) for user convenience.
+ * Optional client-side crop to 16:9 (1920x1080) for user convenience if an image is portrait or extreme.
  */
 export const cropImageTo16by9 = (file: File): Promise<File> => {
   return new Promise((resolve, reject) => {

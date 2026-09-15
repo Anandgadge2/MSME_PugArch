@@ -38,12 +38,24 @@ export function HeroBanner({ banners }: Props) {
     const [current, setCurrent] = useState(0);
     const [fading, setFading] = useState(false);
     const [currentImg, setCurrentImg] = useState<string>(() => resolveImageSrc(slides[0]?.imageUrl, 0));
+    const [aspectRatio, setAspectRatio] = useState<number>(16 / 9);
     const [touchStart, setTouchStart] = useState<number | null>(null);
     const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
     useEffect(() => {
         const url = slides[current]?.imageUrl;
-        setCurrentImg(resolveImageSrc(url, current));
+        const resolved = resolveImageSrc(url, current);
+        setCurrentImg(resolved);
+
+        if (resolved && typeof window !== 'undefined') {
+            const img = new Image();
+            img.src = resolved;
+            img.onload = () => {
+                if (img.naturalWidth && img.naturalHeight) {
+                    setAspectRatio(img.naturalWidth / img.naturalHeight);
+                }
+            };
+        }
     }, [slides, current]);
 
     const goTo = useCallback((idx: number) => {
@@ -83,6 +95,8 @@ export function HeroBanner({ banners }: Props) {
     const ctaText = slide?.ctaText || (ctaLink ? 'View Details' : '');
     const activeImageSrc = currentImg || resolveImageSrc(slide?.imageUrl, current);
 
+    const safeRatio = Math.min(Math.max(aspectRatio, 1.25), 2.4);
+
     const handleCtaClick = (e: React.MouseEvent<HTMLAnchorElement>, link: string) => {
         if (link.startsWith('#')) {
             e.preventDefault();
@@ -108,7 +122,11 @@ export function HeroBanner({ banners }: Props) {
 
     return (
         <section
-            className="group/hero relative overflow-hidden bg-slate-950 w-full aspect-[2/1] min-h-[280px] max-h-[80vh]"
+            style={{
+                aspectRatio: `${safeRatio}`,
+                maxHeight: 'min(75vh, 640px)',
+            }}
+            className="group/hero relative overflow-hidden bg-slate-950 w-full min-h-[290px] xs:min-h-[310px] sm:min-h-[350px] md:min-h-[400px] transition-[aspect-ratio] duration-500 ease-out"
             aria-label="Marketplace Featured Hero Banner"
             role="region"
             aria-roledescription="carousel"
@@ -126,8 +144,8 @@ export function HeroBanner({ banners }: Props) {
                             src={activeImageSrc}
                             alt=""
                             aria-hidden="true"
-                            className={`absolute inset-0 w-full h-full object-cover object-center blur-2xl md:blur-3xl scale-110 opacity-55 brightness-75 transition-opacity duration-700 ${
-                                fading ? 'opacity-0' : 'opacity-55'
+                            className={`absolute inset-0 w-full h-full object-cover object-center blur-2xl md:blur-3xl scale-110 opacity-50 brightness-75 transition-opacity duration-700 pointer-events-none ${
+                                fading ? 'opacity-0' : 'opacity-50'
                             }`}
                         />
 
@@ -138,10 +156,16 @@ export function HeroBanner({ banners }: Props) {
                             alt={slide?.title || 'Marketplace Hero Banner'}
                             loading="eager"
                             referrerPolicy="no-referrer"
+                            onLoad={(e) => {
+                                const img = e.currentTarget;
+                                if (img.naturalWidth && img.naturalHeight) {
+                                    setAspectRatio(img.naturalWidth / img.naturalHeight);
+                                }
+                            }}
                             onError={() => {
                                 setCurrentImg(DEFAULT_IMAGES[current % DEFAULT_IMAGES.length]);
                             }}
-                            className={`absolute inset-0 w-full h-full object-cover object-center transition-all duration-700 ease-out brightness-[1.02] contrast-[1.02] drop-shadow-2xl ${
+                            className={`absolute inset-0 w-full h-full object-contain object-center transition-all duration-700 ease-out brightness-[1.02] contrast-[1.02] drop-shadow-2xl ${
                                 fading ? 'opacity-0 scale-98' : 'opacity-100 scale-100'
                             }`}
                         />
@@ -149,8 +173,8 @@ export function HeroBanner({ banners }: Props) {
                 ) : null}
 
                 {/* Text readability gradients (calibrated for WCAG AA contrast on both mobile & desktop) */}
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/65 to-slate-950/25 md:bg-gradient-to-r md:from-slate-950/95 md:via-slate-950/60 md:to-transparent w-full md:w-[65%] lg:w-[55%] pointer-events-none" />
-                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950/40 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/55 to-slate-950/20 md:bg-gradient-to-r md:from-slate-950/95 md:via-slate-950/60 md:to-transparent w-full md:w-[65%] lg:w-[55%] pointer-events-none" />
+                <div className="absolute inset-x-0 bottom-0 h-12 sm:h-16 bg-gradient-to-t from-slate-950/40 to-transparent pointer-events-none" />
             </div>
 
             {/* Side Navigation Arrow - Left */}
@@ -195,7 +219,7 @@ export function HeroBanner({ banners }: Props) {
             </div>
 
             {/* Hero Main Content Container */}
-            <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-4 sm:py-8 md:py-10 pb-12 sm:pb-14 lg:pb-16 flex flex-col justify-center h-full">
+            <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-3 sm:py-8 md:py-10 pb-8 sm:pb-14 lg:pb-16 flex flex-col justify-center h-full">
                 <div className="w-full max-w-full sm:max-w-xl lg:max-w-2xl">
                     <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
                         

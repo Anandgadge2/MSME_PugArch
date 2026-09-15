@@ -234,7 +234,7 @@ export default function AdminBannerManagementPage() {
       if (!publicUrl) throw new Error('Upload completed but no image URL was returned.');
 
       setForm(prev => ({ ...prev, imageUrl: publicUrl }));
-      setValidationSuccess(`Verified 16:9 Banner (${ratioInfo}) uploaded successfully to GCP Storage!`);
+      setValidationSuccess(`Verified Banner (${ratioInfo}) uploaded successfully to GCP Storage!`);
       setMessage('Image uploaded directly to GCP Storage!');
     } catch (err) {
       setValidationError(err instanceof Error ? err.message : 'Unable to upload banner image');
@@ -251,7 +251,7 @@ export default function AdminBannerManagementPage() {
     setValidationSuccess('');
     setPendingInvalidFile(null);
 
-    // Compulsory 16:9 aspect ratio and resolution validation
+    // Landscape aspect ratio and resolution validation
     const check = await validateBannerFile(file);
     if (!check.valid) {
       setValidationError(check.error || 'Invalid banner aspect ratio.');
@@ -260,7 +260,7 @@ export default function AdminBannerManagementPage() {
       return;
     }
 
-    await executeUpload(file, `${check.width}×${check.height}px (16:9)`);
+    await executeUpload(file, `${check.width}×${check.height}px (${check.ratioDisplay})`);
     event.target.value = '';
   };
 
@@ -291,11 +291,11 @@ export default function AdminBannerManagementPage() {
       return;
     }
 
-    // Compulsory 16:9 aspect ratio check for manual URL input
+    // Landscape aspect ratio check for manual URL input
     if (form.imageUrl.trim().startsWith('http')) {
       const urlCheck = await validateBannerUrl(form.imageUrl.trim());
       if (!urlCheck.valid) {
-        setValidationError(urlCheck.error || 'Image URL does not match compulsory 16:9 aspect ratio.');
+        setValidationError(urlCheck.error || 'Image URL does not match a supported landscape aspect ratio.');
         return;
       }
     }
@@ -484,7 +484,7 @@ export default function AdminBannerManagementPage() {
                 <div>
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                      Banner Image Preview (16:9 Widescreen)
+                      Banner Image Preview
                     </span>
                     {form.imageUrl && (
                       <button
@@ -501,27 +501,37 @@ export default function AdminBannerManagementPage() {
                     )}
                   </div>
                   
-                  {/* Exact 16:9 Preview Box */}
-                  <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-inner">
+                  {/* Adaptive Preview Box with Ambient Background */}
+                  <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-inner">
                     {form.imageUrl ? (
-                      <img
-                        src={imageSrc(form.imageUrl)}
-                        alt="Banner Preview"
-                        referrerPolicy="no-referrer"
-                        crossOrigin="anonymous"
-                        className="h-full w-full object-cover"
-                      />
+                      <div className="relative h-full w-full">
+                        {/* Ambient blur backdrop to eliminate black borders */}
+                        <img
+                          src={imageSrc(form.imageUrl)}
+                          alt=""
+                          aria-hidden="true"
+                          className="absolute inset-0 h-full w-full object-cover blur-xl opacity-45 scale-105 pointer-events-none"
+                        />
+                        {/* Full sharp preview image without cropping */}
+                        <img
+                          src={imageSrc(form.imageUrl)}
+                          alt="Banner Preview"
+                          referrerPolicy="no-referrer"
+                          crossOrigin="anonymous"
+                          className="relative z-10 h-full w-full object-contain drop-shadow-md"
+                        />
+                      </div>
                     ) : (
                       <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-slate-400 p-4 text-center">
                         <ImagePlus className="h-8 w-8 text-slate-500" />
-                        <span className="text-xs font-bold">No 16:9 image selected</span>
-                        <span className="text-[10px] text-slate-500">Requires 16:9 aspect ratio (1920 × 1080 px)</span>
+                        <span className="text-xs font-bold">No banner image selected</span>
+                        <span className="text-[10px] text-slate-500">Supports 16:9, 16:10, 3:2, 4:3, or Panoramic (min 800×360 px)</span>
                       </div>
                     )}
                     {form.imageUrl && (
-                      <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-r from-black/85 via-black/45 to-transparent p-3.5">
+                      <div className="absolute inset-0 z-20 flex flex-col justify-end bg-gradient-to-r from-black/85 via-black/45 to-transparent p-3.5 pointer-events-none">
                         <span className="self-start mb-1 px-2 py-0.5 rounded-full bg-emerald-500/80 text-[9px] font-black text-white uppercase tracking-wider">
-                          16:9 Verified
+                          Ready for Display
                         </span>
                         <h4 className="line-clamp-1 max-w-md text-xs font-black leading-tight text-white drop-shadow-sm">
                           {form.title || 'Headline Title Preview'}
