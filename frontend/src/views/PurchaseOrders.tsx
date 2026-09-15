@@ -5,6 +5,7 @@ import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck
 import type { DocumentConfig } from '../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../features/payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../features/payments/components/PaymentReceiptViewModal';
+import { RepeatPurchaseOrderModal } from '../features/purchaseOrders/components/RepeatPurchaseOrderModal';
 
 const moneyPdf = (val: any, currency = 'INR') => {
   const num = Number(val || 0);
@@ -358,54 +359,9 @@ export default function PurchaseOrders() {
   const { data: activeDelivery } = useDeliveryByPO(viewingOrder?.id);
 
   const [repeatingOrder, setRepeatingOrder] = useState<PurchaseOrderDto | null>(null);
-  const [repeatQuantity, setRepeatQuantity] = useState(1);
-  const [repeatAddress, setRepeatAddress] = useState('');
-  const [repeatDeliveryDate, setRepeatDeliveryDate] = useState('');
-  const [repeatSubmitting, setRepeatSubmitting] = useState(false);
 
   const handleOpenRepeatModal = (order: PurchaseOrderDto) => {
     setRepeatingOrder(order);
-    const firstItem = order.items?.[0];
-    setRepeatQuantity(firstItem ? Number(firstItem.quantity) || 1 : 1);
-    setRepeatAddress(order.deliveryAddress || '');
-    const defaultDate = new Date();
-    defaultDate.setDate(defaultDate.getDate() + 14);
-    setRepeatDeliveryDate(defaultDate.toISOString().split('T')[0]);
-  };
-
-  const handleConfirmRepeatOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!repeatingOrder) return;
-    if (repeatQuantity <= 0) {
-      toast.error('Quantity must be greater than zero');
-      return;
-    }
-    if (!repeatAddress.trim()) {
-      toast.error('Delivery Address is required');
-      return;
-    }
-    if (!repeatDeliveryDate) {
-      toast.error('Delivery Date is required');
-      return;
-    }
-
-    setRepeatSubmitting(true);
-    try {
-      await api.post(`/api/purchase-orders/${repeatingOrder.id}/repeat`, {
-        quantity: repeatQuantity,
-        deliveryAddress: repeatAddress.trim(),
-        expectedDelivery: new Date(repeatDeliveryDate).toISOString()
-      });
-      toast.success('Repeat purchase order placed successfully!');
-      setRepeatingOrder(null);
-      setViewingOrder(null);
-      reload();
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message || 'Failed to place repeat purchase order');
-    } finally {
-      setRepeatSubmitting(false);
-    }
   };
   const viewerScope = `${user?.role || 'guest'}-${user?.id || 'none'}`;
 
@@ -1936,79 +1892,14 @@ export default function PurchaseOrders() {
         </div>
       )}
       {repeatingOrder && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
-          <div className="w-full max-w-md overflow-hidden rounded-[24px] bg-white shadow-2xl ring-1 ring-slate-200">
-            <div className="border-b border-slate-100 bg-slate-50/50 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <RefreshCw className="h-5 w-5 text-[#12335f]" />
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Repeat Purchase Order</h3>
-              </div>
-              <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                Replicating completed order <span className="font-bold text-slate-800">{repeatingOrder.poNumber}</span>.
-              </p>
-            </div>
-            <form onSubmit={handleConfirmRepeatOrder} className="p-5 space-y-4 text-xs font-semibold text-slate-700">
-              <div className="rounded-[18px] bg-slate-50 p-3 ring-1 ring-slate-200/50">
-                <span className="text-[9px] font-black uppercase tracking-wider text-slate-500">Product / Material</span>
-                <p className="mt-1 text-xs font-bold text-slate-900">{repeatingOrder.items?.[0]?.itemName || repeatingOrder.title}</p>
-                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-slate-200/60 pt-2 text-[11px]">
-                  <div>
-                    <span className="text-slate-500 block">Unit Price</span>
-                    <span className="font-bold text-slate-900">{formatCurrency(repeatingOrder.items?.[0]?.unitPrice || repeatingOrder.amount)}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Supplier</span>
-                    <span className="font-bold text-slate-900">{repeatingOrder.seller?.name || 'Seller'}</span>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Quantity</label>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  required
-                  value={repeatQuantity}
-                  onChange={(e) => setRepeatQuantity(Number(e.target.value))}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Expected Delivery Date</label>
-                <input
-                  type="date"
-                  required
-                  value={repeatDeliveryDate}
-                  onChange={(e) => setRepeatDeliveryDate(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Delivery Address</label>
-                <textarea
-                  required
-                  rows={2}
-                  value={repeatAddress}
-                  onChange={(e) => setRepeatAddress(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
-                />
-              </div>
-              <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Estimated Value</span>
-                <span className="text-sm font-black text-[#12335f]">
-                  {formatCurrency((Number(repeatingOrder.items?.[0]?.unitPrice) || Number(repeatingOrder.amount)) * repeatQuantity)}
-                </span>
-              </div>
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-                <Button type="button" variant="outline" onClick={() => setRepeatingOrder(null)} className="h-9 text-[10px] font-black uppercase">Cancel</Button>
-                <Button type="submit" disabled={repeatSubmitting} className="h-9 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445]">
-                  {repeatSubmitting ? 'Placing Order...' : 'Confirm Order'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <RepeatPurchaseOrderModal
+          order={repeatingOrder}
+          onClose={() => setRepeatingOrder(null)}
+          onSuccess={() => {
+            setViewingOrder(null);
+            reload();
+          }}
+        />
       )}
 
       {uploadProofOrder && (
