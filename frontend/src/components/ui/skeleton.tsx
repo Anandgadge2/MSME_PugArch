@@ -505,6 +505,143 @@ export function ProfileSkeleton() {
     );
 }
 
+export function BuyerShowcaseFormSkeleton() {
+    return (
+        <div className="space-y-6 animate-in fade-in duration-200" role="status" aria-busy="true" aria-label="Loading showcase profile form">
+            <Skeleton className="h-5 w-56 rounded-md" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {[
+                    'w-36', // Organization Name *
+                    'w-36', // Department Name *
+                    'w-40', // Type of Organisation *
+                    'w-36', // Registration Number
+                    'w-28', // GST Number
+                    'w-28', // PAN Number
+                    'w-20', // City
+                    'w-20', // State
+                    'w-24', // Pincode
+                    'w-28', // Official Email
+                    'w-28', // Official Phone
+                    'w-28', // Website URL
+                ].map((labelWidth, idx) => (
+                    <div key={idx} className="space-y-2">
+                        <Skeleton className={cn("h-3 rounded", labelWidth)} />
+                        <Skeleton className="h-11 w-full rounded-xl" />
+                    </div>
+                ))}
+            </div>
+
+            <div className="border-t border-slate-100 pt-6 mt-6 space-y-4">
+                <Skeleton className="h-4 w-52 rounded-md" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                        <Skeleton className="h-3 w-40 rounded" />
+                        <Skeleton className="h-11 w-full rounded-xl" />
+                    </div>
+                    <div className="space-y-2">
+                        <Skeleton className="h-3 w-40 rounded" />
+                        <Skeleton className="h-11 w-full rounded-xl" />
+                    </div>
+                </div>
+            </div>
+
+            <div className="pt-6 flex justify-end">
+                <Skeleton className="h-14 w-56 rounded-2xl" />
+            </div>
+        </div>
+    );
+}
+
+export function BuyerProfileSkeleton() {
+    return (
+        <div
+            role="status"
+            aria-busy="true"
+            aria-label="Loading buyer profile"
+            className="flex flex-col lg:flex-row min-h-screen bg-slate-50 animate-in fade-in duration-200"
+        >
+            <span className="sr-only">Loading buyer settings and profile details...</span>
+
+            {/* Mobile/Tablet Horizontal Tabs Skeleton */}
+            <div className="lg:hidden w-full bg-white border-b border-gray-200 sticky top-0 z-30 shadow-xs">
+                <div className="flex flex-row overflow-x-auto no-scrollbar px-4 py-3 gap-2 whitespace-nowrap">
+                    <Skeleton className="h-9 w-44 rounded-full shrink-0" />
+                    <Skeleton className="h-9 w-36 rounded-full shrink-0" />
+                    <Skeleton className="h-9 w-36 rounded-full shrink-0" />
+                    <Skeleton className="h-9 w-28 rounded-full shrink-0" />
+                    <Skeleton className="h-9 w-28 rounded-full shrink-0" />
+                </div>
+            </div>
+
+            {/* Desktop Vertical Persistent Sidebar Skeleton */}
+            <div className="hidden lg:block w-72 flex-shrink-0 bg-white border-r border-gray-200 min-h-screen shadow-xs overflow-y-auto py-6">
+                <div className="px-6 mb-4">
+                    <Skeleton className="h-3 w-28 rounded" />
+                </div>
+                <div className="space-y-1">
+                    {/* Active item: Organization Showcase Profile */}
+                    <div className="flex w-full items-center gap-3 px-8 py-3.5 border-l-4 border-blue-600 bg-slate-50/50">
+                        <Skeleton className="h-4 w-4 rounded shrink-0" />
+                        <Skeleton className="h-4 w-44 rounded" />
+                    </div>
+                    {/* Remaining 6 items */}
+                    {[
+                        'w-36', // Organisation Address
+                        'w-36', // Delivery Addresses
+                        'w-28', // Update Mobile
+                        'w-24', // Change Email
+                        'w-32', // Change Password
+                        'w-36', // Deactivate Account
+                    ].map((width, idx) => (
+                        <div key={idx} className="flex w-full items-center gap-3 px-8 py-3.5 border-l-4 border-transparent">
+                            <Skeleton className="h-4 w-4 rounded shrink-0" />
+                            <Skeleton className={cn("h-4 rounded", width)} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Main Content Area Skeleton */}
+            <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-5xl mx-auto w-full">
+                <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <Skeleton className="h-2.5 w-24 rounded mb-2" />
+                        <Skeleton className="h-8 w-64 rounded-lg" />
+                    </div>
+                    {/* User profile badge */}
+                    <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs self-start sm:self-auto">
+                        <Skeleton className="h-9 w-9 rounded-xl shrink-0" />
+                        <div className="pr-3 space-y-1.5">
+                            <Skeleton className="h-3 w-28 rounded" />
+                            <Skeleton className="h-2.5 w-20 rounded" />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden bg-white">
+                    <div className="p-5 sm:p-6 md:p-8 space-y-6">
+                        {/* Showcase Sub-tabs */}
+                        <div className="flex border-b border-slate-200 overflow-x-auto no-scrollbar gap-2 mb-6">
+                            <div className="px-4 py-2.5 border-b-2 border-[#12335f]">
+                                <Skeleton className="h-3.5 w-36 rounded" />
+                            </div>
+                            <div className="px-4 py-2.5 border-b-2 border-transparent">
+                                <Skeleton className="h-3.5 w-28 rounded" />
+                            </div>
+                            <div className="px-4 py-2.5 border-b-2 border-transparent">
+                                <Skeleton className="h-3.5 w-40 rounded" />
+                            </div>
+                        </div>
+
+                        {/* Form Details */}
+                        <BuyerShowcaseFormSkeleton />
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+}
+
 export function SettingsSkeleton() {
     return (
         <div className="space-y-6 animate-in fade-in duration-200 max-w-4xl mx-auto p-4 sm:p-6">

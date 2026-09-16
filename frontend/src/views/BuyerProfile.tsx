@@ -41,7 +41,7 @@ import { MSME_TYPES } from '../constants/dropdowns';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
 import { Pagination } from '../features/shared/Pagination';
 import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
-import { ProfileSkeleton } from '../components/ui/skeleton';
+import { BuyerProfileSkeleton, BuyerShowcaseFormSkeleton } from '../components/ui/skeleton';
 import { DataTable, ColumnDef } from '../components/ui/data-table';
 
 interface SidebarNavItem {
@@ -52,9 +52,8 @@ interface SidebarNavItem {
 }
 
 const SIDEBAR_NAV: SidebarNavItem[] = [
-  { id: 'showcase_profile', label: 'Organization Showcase Profile', icon: Building2 },
-  { id: 'address', label: 'Organisation Address', icon: MapPin },
-  { id: 'delivery_addresses', label: 'Delivery Addresses', icon: MapPin, path: '/buyer/address-book' },
+  { id: 'showcase_profile', label: 'Org Profile', icon: Building2 },
+  { id: 'address', label: 'Org Address', icon: MapPin },
   { id: 'mobile', label: 'Update Mobile', icon: Phone },
   { id: 'email', label: 'Change Email', icon: Mail },
   { id: 'password', label: 'Change Password', icon: Lock },
@@ -1189,7 +1188,7 @@ export default function BuyerProfile() {
   ], [selectedItemIds, items]);
 
   if (loading) {
-    return <ProfileSkeleton />;
+    return <BuyerProfileSkeleton />;
   }
 
   return (
@@ -1312,9 +1311,7 @@ export default function BuyerProfile() {
                 </div>
 
                 {showcaseLoading ? (
-                  <div className="flex h-[200px] items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-[#12335f]" />
-                  </div>
+                  <BuyerShowcaseFormSkeleton />
                 ) : (
                   <>
                     {/* Tab Content: Details */}

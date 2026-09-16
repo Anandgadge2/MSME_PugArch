@@ -2642,7 +2642,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           paymentTerms: r.paymentTerms || respData.paymentTerms || 'As per tender',
           makeBrand: r.makeBrand || respData.makeBrand || 'Standard',
           documents: r.documents || respData.documents || [],
-          lineItems: r.lineItems || respData.lineItems || [],
+          lineItems: (Array.isArray(r.lineItems) && r.lineItems.length ? r.lineItems : (Array.isArray(respData.lineItems) && respData.lineItems.length ? respData.lineItems : (Array.isArray(respData.lineQuotes) && respData.lineQuotes.length ? respData.lineQuotes : (Array.isArray(r.lineQuotes) ? r.lineQuotes : [])))),
           message: r.message || r.remarks || r.rfqNotes || '',
           seller: r.seller || {
             name: contactPerson,
@@ -4855,14 +4855,14 @@ const reviewLineItemsColumns: ColumnDef<any>[] = [
     cell: (item, idx) => (
       <div>
         <span className="font-bold text-slate-900">{item.itemName || item.name || item.description || `Item #${idx + 1}`}</span>
-        {item.remarks && <p className="text-[10px] font-normal text-slate-400 mt-0.5">{item.remarks}</p>}
+        {item.remarks && <p className="text-[10.5px] font-normal text-slate-500 mt-0.5">{item.remarks}</p>}
       </div>
     ),
   },
   {
     key: 'makeBrand',
     header: 'Make / Brand',
-    cell: (item) => <span className="text-slate-600">{item.makeBrand || item.brand || '—'}</span>,
+    cell: (item) => <span className="text-slate-700 font-medium">{item.makeBrand || item.brand || '—'}</span>,
   },
   {
     key: 'quantity',
@@ -4883,7 +4883,7 @@ const reviewLineItemsColumns: ColumnDef<any>[] = [
     align: 'right',
     cell: (item) => {
       const uPrice = Number(item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0);
-      return <span className="tabular-nums font-bold">₹{uPrice.toLocaleString('en-IN')}</span>;
+      return <span className="tabular-nums font-bold text-slate-900">₹{uPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
     },
   },
   {
@@ -4892,7 +4892,7 @@ const reviewLineItemsColumns: ColumnDef<any>[] = [
     align: 'right',
     cell: (item) => {
       const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
-      return <span className="tabular-nums text-slate-600">{gst}%</span>;
+      return <span className="tabular-nums font-semibold text-slate-700">{gst}%</span>;
     },
   },
   {
@@ -4906,7 +4906,7 @@ const reviewLineItemsColumns: ColumnDef<any>[] = [
       const tot = item.lineTotal != null || item.totalAmount != null
         ? Number(item.lineTotal ?? item.totalAmount)
         : uPrice * q * (1 + gst / 100);
-      return <span className="font-black text-indigo-700 tabular-nums">₹{tot.toLocaleString('en-IN')}</span>;
+      return <span className="font-black text-slate-900 tabular-nums">₹{tot.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
     },
   },
 ];
@@ -4946,15 +4946,21 @@ export function SellerQuotationReviewModal({
   const submittedAt = participation.submittedAt || participation.createdAt || participation.updatedAt;
   const statusStr = String(participation.submissionStatus || participation.status || 'Submitted').toUpperCase();
 
-  const lineItems: any[] = Array.isArray(participation.lineItems)
+  const lineItems: any[] = Array.isArray(participation.lineItems) && participation.lineItems.length
     ? participation.lineItems
-    : (Array.isArray(participation.responseData?.lineItems)
+    : (Array.isArray(participation.responseData?.lineItems) && participation.responseData.lineItems.length
       ? participation.responseData.lineItems
-      : (Array.isArray(participation.acknowledgement?.responseData?.lineItems)
-        ? participation.acknowledgement.responseData.lineItems
-        : (Array.isArray(participation.acknowledgement?.lineItems)
-          ? participation.acknowledgement.lineItems
-          : [])));
+      : (Array.isArray(participation.responseData?.lineQuotes) && participation.responseData.lineQuotes.length
+        ? participation.responseData.lineQuotes
+        : (Array.isArray(participation.lineQuotes) && participation.lineQuotes.length
+          ? participation.lineQuotes
+          : (Array.isArray(participation.acknowledgement?.responseData?.lineItems) && participation.acknowledgement.responseData.lineItems.length
+            ? participation.acknowledgement.responseData.lineItems
+            : (Array.isArray(participation.acknowledgement?.responseData?.lineQuotes) && participation.acknowledgement.responseData.lineQuotes.length
+              ? participation.acknowledgement.responseData.lineQuotes
+              : (Array.isArray(participation.acknowledgement?.lineItems)
+                ? participation.acknowledgement.lineItems
+                : []))))));
   const docs: any[] = Array.isArray(participation.documents) ? participation.documents : (Array.isArray(participation.responseData?.documents) ? participation.responseData.documents : []);
   const message = participation.offeredItemDescription || participation.message || participation.responseData?.message || '';
 

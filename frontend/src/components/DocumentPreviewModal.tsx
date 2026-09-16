@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ZoomIn, ZoomOut, RotateCw, RefreshCw, Download } from 'lucide-react';
 import type { DocumentPreview } from '../lib/files';
 
@@ -44,6 +45,7 @@ export function DocumentPreviewModal({
   }, [previewDocument]);
 
   if (!previewDocument) return null;
+  if (typeof document === 'undefined') return null;
 
   const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 3));
   const handleZoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.5));
@@ -62,9 +64,9 @@ export function DocumentPreviewModal({
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-[99999999] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:p-4"
       onWheel={handleOverlayWheel}
     >
       <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-[2rem]">
@@ -191,7 +193,8 @@ export function DocumentPreviewModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

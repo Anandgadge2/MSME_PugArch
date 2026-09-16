@@ -134,46 +134,7 @@ export const GeMSellerSidebar: React.FC<GeMSellerSidebarProps> = ({
           ))}
         </div>
 
-        {/* <div className="py-2 border-t border-gray-100">
-          <div className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase">Optional</div>
-          {optionalItems.map(item => (
-            <SidebarItem
-              key={item.id}
-              id={item.id}
-              label={item.label}
-              status={sectionStatus[item.id] || 'pending'}
-              isActive={currentSection === item.id}
-              onClick={(id) => {
-                onSectionChange(id);
-                if (onClose) onClose();
-              }}
-            />
-          ))}
-        </div> */}
-
-        {/* <div className="py-2 bg-gray-50/50 border-t border-gray-100 text-gray-500 font-semibold text-sm px-4 py-3 opacity-60">
-           11. Vendor Assessment
-        </div> */}
-
-        {/* <div className="py-2 border-t border-gray-100">
-          <div className="px-4 py-2 text-[10px] font-bold text-[#12335f] uppercase">Account Settings</div>
-          {accountItems.map(item => (
-            <AccountSidebarItem
-              key={item.id}
-              id={item.id}
-              label={item.label}
-              isActive={currentSection === item.id}
-              onClick={(id) => {
-                onSectionChange(id);
-                if (onClose) onClose();
-              }}
-            />
-          ))}
-        </div> */}
-
-        {/* <div className="py-2 bg-gray-50/50 border-t border-gray-100 text-gray-500 font-semibold text-sm px-4 py-3 opacity-60 mb-10">
-           13. User Management
-        </div> */}
+       
       </div>
     </>
   );

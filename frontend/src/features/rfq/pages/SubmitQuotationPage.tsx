@@ -28,6 +28,7 @@ import {
   AlertCircle,
   Circle,
   Truck,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
@@ -37,11 +38,11 @@ import { SupplierAgreementPolicyContent } from '../../../components/compliance/C
 import { cn } from '../../../lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCookieValue } from '../../../lib/auth';
-import { BASE_URL, api } from '../../../lib/api';
+import { BASE_URL, api, resolveMediaUrl } from '../../../lib/api';
 import { EmdCard, EmdInfo, isEmdApplicable } from '../components/EmdCard';
 import { EmdPaymentModal } from '../components/EmdPaymentModal';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
-import { getDocumentPreviewMode, type DocumentPreview } from '../../../lib/files';
+import { getDocumentPreviewMode, getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
 import { parseQuoteRequestItems, cleanItemName } from '../utils/quoteItemParser';
 import { formatDate, formatDateTime, formatTime } from '../../shared/format';
 
@@ -233,7 +234,8 @@ const normalizeOwnResponse = (raw: any) => {
     responseData: {
       ...responseData,
       documents,
-      lineItems
+      lineItems,
+      lineQuotes: toArray(responseData.lineQuotes).length ? toArray(responseData.lineQuotes) : lineItems
     },
     offeredPrice: firstPresent(raw.offeredPrice, responseData.offeredPrice, raw.quotedAmount, raw.totalAmount, responseData.quotedAmount, responseData.totalAmount),
     offeredQuantity: firstPresent(raw.offeredQuantity, responseData.offeredQuantity, responseData.quantity),
@@ -272,6 +274,16 @@ const participationToOwnResponse = (participation: any) => {
   ]);
   const supportingAttachment = findSupportingAttachment({ ...participation, responseData }, documents);
 
+  const lineItems = toArray(participation.lineItems).length
+    ? toArray(participation.lineItems)
+    : toArray(responseData.lineItems).length
+    ? toArray(responseData.lineItems)
+    : toArray(responseData.lineQuotes).length
+    ? toArray(responseData.lineQuotes)
+    : toArray(participation.lineQuotes).length
+    ? toArray(participation.lineQuotes)
+    : [];
+
   return normalizeOwnResponse({
     id: participation.id,
     status: participation.status || participation.submissionStatus || 'SUBMITTED',
@@ -288,11 +300,11 @@ const participationToOwnResponse = (participation: any) => {
     responseData: {
       ...responseData,
       documents,
-      lineItems: toArray(participation.lineItems).length ? toArray(participation.lineItems) : toArray(responseData.lineItems),
-      lineQuotes: toArray(responseData.lineQuotes)
+      lineItems,
+      lineQuotes: toArray(responseData.lineQuotes).length ? toArray(responseData.lineQuotes) : lineItems
     },
     documents,
-    lineItems: toArray(participation.lineItems).length ? toArray(participation.lineItems) : toArray(responseData.lineItems)
+    lineItems
   });
 };
 
@@ -1206,28 +1218,38 @@ export default function SubmitQuotationPage() {
   const documents = Array.isArray(rfqData?.documents) ? rfqData?.documents : [];
 
   // Buyer-requested documents come from three shapes depending on how the procurement was
+  // Buyer-requested documents come from multiple shapes depending on how the procurement was
   // created: wizard payload.documents ({name, required}), marketplace requiredDocuments
-  // (string[]), or attached requirement documents. Merge + dedupe by name.
+  // (string[]), attached requirement documents, technical packet, etc. Merge + dedupe by name.
   const requestedDocs = React.useMemo(() => {
     const out: Array<{ name: string; required: boolean }> = [];
-    const seen = new Set<string>();
+    const seen = new Map<string, number>();
     const push = (name: unknown, required: boolean) => {
       const label = String(name || '').trim();
       const key = label.toLowerCase();
-      if (!label || seen.has(key)) return;
-      seen.add(key);
+      if (!label) return;
+      if (seen.has(key)) {
+        const existingIdx = seen.get(key)!;
+        if (required && !out[existingIdx].required) {
+          out[existingIdx].required = true;
+        }
+        return;
+      }
+      seen.set(key, out.length);
       out.push({ name: label, required });
     };
 
     // 1. Authoritative: payload / technicalPacket documents array with explicit required flags
     const payloadDocs = rfqData?.payload?.documents ||
       rfqData?.payload?.documentsRequested ||
+      rfqData?.payload?.technicalPacket?.documents ||
       rfqData?.technicalPacket?.documents ||
-      rfqData?.payload?.technicalPacket?.documents;
+      queryData?.requirement?.payload?.documents ||
+      queryData?.requirement?.technicalPacket?.documents;
 
     if (Array.isArray(payloadDocs) && payloadDocs.length > 0) {
       payloadDocs.forEach((d: any) => {
-        const name = typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName);
+        const name = typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName || d?.title);
         const isReq = typeof d === 'object' && d !== null ? Boolean(d?.required === true || d?.isRequired === true) : false;
         push(name, isReq);
       });
@@ -1236,23 +1258,37 @@ export default function SubmitQuotationPage() {
     // 2. Attached requirement documents
     if (Array.isArray(documents) && documents.length > 0) {
       documents.forEach((d: any) => {
-        const name = typeof d === 'string' ? d : (d?.documentType || d?.name || d?.documentName);
+        const name = typeof d === 'string' ? d : (d?.documentType || d?.name || d?.documentName || d?.title);
         push(name, typeof d === 'object' && d !== null ? Boolean(d?.required === true) : false);
       });
     }
 
-    // 3. Fallback requiredDocuments / requestedDocuments strings ONLY if payloadDocs didn't provide documents
-    if (out.length === 0) {
-      if (Array.isArray(rfqData?.requiredDocuments)) {
-        rfqData.requiredDocuments.forEach((d: any) => push(typeof d === 'string' ? d : d?.name, true));
-      }
-      if (Array.isArray(rfqData?.requestedDocuments)) {
-        rfqData.requestedDocuments.forEach((d: any) => push(typeof d === 'string' ? d : d?.name, true));
+    // 3. Buyer-specified requiredDocuments and requestedDocuments arrays across all procurement shapes
+    const reqDocArrays = [
+      rfqData?.requiredDocuments,
+      rfqData?.requestedDocuments,
+      queryData?.requirement?.requiredDocuments,
+      queryData?.requirement?.requestedDocuments,
+      rfqData?.payload?.requiredDocuments,
+      rfqData?.payload?.requiredDocs,
+      rfqData?.payload?.documentsRequired,
+      rfqData?.payload?.rules?.requiredDocuments,
+      rfqData?.payload?.rules?.documentsRequired,
+      rfqData?.payload?.rateContractConfig?.requiredDocuments,
+      rfqData?.payload?.tender?.requiredDocuments,
+      rfqData?.payload?.wizardData?.requiredDocuments,
+      rfqData?.technicalPacket?.requiredDocuments,
+      rfqData?.payload?.technicalPacket?.requiredDocuments,
+    ];
+
+    for (const arr of reqDocArrays) {
+      if (Array.isArray(arr) && arr.length > 0) {
+        arr.forEach((d: any) => push(typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName), true));
       }
     }
 
     return out;
-  }, [rfqData, documents]);
+  }, [rfqData, documents, queryData]);
 
   // Initialise upload slots per requested document and quote rows per buyer line item
   const restoredLineQuotesKeyRef = useRef<any>(null);
@@ -1260,53 +1296,94 @@ export default function SubmitQuotationPage() {
     const currentId = rfqData?.id || requirementId;
     if (!rfqData || !currentId) return;
 
+    const saved = ownResponse?.responseData || ownResponse || {};
+    const extractLines = (...candidates: any[]): any[] => {
+      for (const cand of candidates) {
+        if (Array.isArray(cand) && cand.length > 0) return cand;
+      }
+      return [];
+    };
+    const savedLines = extractLines(
+      saved.lineItems,
+      saved.lineQuotes,
+      ownResponse?.lineItems,
+      ownResponse?.lineQuotes,
+      ownResponse?.responseData?.lineItems,
+      ownResponse?.responseData?.lineQuotes,
+      queryData?.ownResponse?.lineItems,
+      queryData?.ownResponse?.responseData?.lineItems
+    );
+
+    const rawSavedDocsList: any[] = [
+      ...toArray(ownResponse?.responseData?.documents),
+      ...toArray(ownResponse?.responseData?.requestedDocuments),
+      ...toArray(ownResponse?.documents),
+      ...toArray(ownResponse?.requestedDocuments),
+      ...toArray(saved.documents),
+      ...toArray(saved.requestedDocuments)
+    ];
+
+    // Include primary response attachment if present and not already listed
+    if (ownResponse?.attachmentUrl && !rawSavedDocsList.some((d: any) => (d?.fileUrl || d?.url) === ownResponse.attachmentUrl)) {
+      rawSavedDocsList.push({
+        id: 'att-main',
+        name: ownResponse.attachmentFileName || 'Quotation Attachment',
+        fileName: ownResponse.attachmentFileName || fileNameFromUrl(ownResponse.attachmentUrl) || 'Quotation Attachment',
+        fileUrl: ownResponse.attachmentUrl,
+        url: ownResponse.attachmentUrl,
+        fileSize: ownResponse.attachmentFileSize,
+        taggedAs: 'Quotation Supporting Document'
+      });
+    }
+
+    const savedDocs = dedupeDocuments(rawSavedDocsList);
+
     const ownRespId = ownResponse?.id || (ownResponse ? 'present' : 'none');
-    const restoreKey = `${currentId}_${ownRespId}`;
+    const restoreKey = `${currentId}_${ownRespId}_${savedLines.length}_${savedDocs.length}`;
     if (restoredLineQuotesKeyRef.current === restoreKey) return;
     restoredLineQuotesKeyRef.current = restoreKey;
 
-    const saved = ownResponse?.responseData || ownResponse || {};
-    const savedDocs: any[] = Array.isArray(saved.documents)
-      ? saved.documents
-      : Array.isArray(saved.requestedDocuments)
-      ? saved.requestedDocuments
-      : Array.isArray(ownResponse?.documents)
-      ? ownResponse.documents
-      : Array.isArray(ownResponse?.responseData?.documents)
-      ? ownResponse.responseData.documents
-      : [];
-
-    const savedLines: any[] = Array.isArray(saved.lineQuotes)
-      ? saved.lineQuotes
-      : Array.isArray(saved.lineItems)
-      ? saved.lineItems
-      : Array.isArray(ownResponse?.responseData?.lineQuotes)
-      ? ownResponse.responseData.lineQuotes
-      : Array.isArray(ownResponse?.responseData?.lineItems)
-      ? ownResponse.responseData.lineItems
-      : Array.isArray(ownResponse?.lineQuotes)
-      ? ownResponse.lineQuotes
-      : Array.isArray(ownResponse?.lineItems)
-      ? ownResponse.lineItems
-      : [];
-
     const restoreSaved = !!ownResponse;
+    const matchedSavedKeys = new Set<string>();
 
-    setDocUploads(requestedDocs.map((doc, idx) => {
-      const match = restoreSaved
-        ? (savedDocs.find(d => String(d?.name || d?.documentType || '').toLowerCase().trim() === doc.name.toLowerCase().trim()) || savedDocs[idx])
-        : null;
+    // 1. Map requestedDocs to existing uploaded files or create upload slots
+    const requestedUploads: RequestedDocUpload[] = requestedDocs.map((doc, idx) => {
+      let match: any = null;
+      if (restoreSaved) {
+        match = savedDocs.find(d => {
+          const docKey = String(d?.fileAssetId || d?.id || d?.fileUrl || d?.url || d?.fileName || d?.name || '');
+          if (matchedSavedKeys.has(docKey)) return false;
+          const candidateName = String(d?.taggedAs || d?.name || d?.documentType || '').toLowerCase().trim();
+          return candidateName === doc.name.toLowerCase().trim();
+        });
+        if (!match && savedDocs[idx]) {
+          const fallbackDoc = savedDocs[idx];
+          const fallbackKey = String(fallbackDoc?.fileAssetId || fallbackDoc?.id || fallbackDoc?.fileUrl || fallbackDoc?.url || fallbackDoc?.fileName || fallbackDoc?.name || '');
+          if (!matchedSavedKeys.has(fallbackKey)) {
+            match = fallbackDoc;
+          }
+        }
+      }
+
+      if (match) {
+        const matchKey = String(match?.fileAssetId || match?.id || match?.fileUrl || match?.url || match?.fileName || match?.name || '');
+        if (matchKey) matchedSavedKeys.add(matchKey);
+      }
+
       const uniqueId = `doc-init-${idx}-${match?.fileAssetId || match?.id || Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      return match?.fileAssetId || match?.fileUrl || match?.url
+      const hasFile = Boolean(match?.fileAssetId || match?.fileUrl || match?.url || match?.fileName);
+
+      return hasFile
         ? {
             ...doc,
             id: uniqueId,
             fileAssetId: match.fileAssetId || match.id,
             fileName: match.fileName || match.name || doc.name,
             fileUrl: match.fileUrl || match.url || '',
+            fileSize: match.fileSize,
             status: 'done' as const,
             progress: 100,
-            taggedAs: doc.name
+            taggedAs: match.taggedAs || doc.name
           }
         : {
             ...doc,
@@ -1314,23 +1391,82 @@ export default function SubmitQuotationPage() {
             status: 'empty' as const,
             progress: 0
           };
-    }));
+    });
 
-    setLineQuotes(itemsList.map((item, idx) => {
-      const match = restoreSaved
-        ? (savedLines.find(l => String(l?.itemName || l?.name || '').toLowerCase().trim() === String(item.itemName).toLowerCase().trim()) || savedLines[idx])
-        : null;
-      return {
+    // 2. Preserve ALL extra/unmatched saved documents so uploaded documents are never lost or blank!
+    const extraUploads: RequestedDocUpload[] = [];
+    if (restoreSaved) {
+      savedDocs.forEach((d: any, extraIdx: number) => {
+        const docKey = String(d?.fileAssetId || d?.id || d?.fileUrl || d?.url || d?.fileName || d?.name || '');
+        if (docKey && matchedSavedKeys.has(docKey)) return;
+        const hasFile = Boolean(d?.fileAssetId || d?.fileUrl || d?.url || d?.fileName || d?.name);
+        if (!hasFile) return;
+
+        matchedSavedKeys.add(docKey);
+        extraUploads.push({
+          id: `doc-saved-${extraIdx}-${d.fileAssetId || d.id || Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: d.taggedAs || d.name || d.fileName || 'Compliance Document',
+          required: Boolean(d.required),
+          fileName: d.fileName || d.name || 'Document',
+          fileUrl: d.fileUrl || d.url || '',
+          fileSize: d.fileSize,
+          status: 'done' as const,
+          progress: 100,
+          taggedAs: d.taggedAs || d.name || 'Compliance Document'
+        });
+      });
+    }
+
+    setDocUploads([...requestedUploads, ...extraUploads]);
+
+    // 3. Populate line quotes: if the seller previously saved/submitted custom lines, preserve ALL of them!
+    if (restoreSaved && savedLines.length > 0) {
+      const restored = savedLines.map((line: any, idx: number) => {
+        const matchingBuyerItem = itemsList.find(i => String(i.itemName).toLowerCase().trim() === String(line?.itemName || line?.name || '').toLowerCase().trim()) || (idx < itemsList.length ? itemsList[idx] : null);
+        const resolvedName = line?.itemName || line?.name || line?.itemDescription || matchingBuyerItem?.itemName || `Item #${idx + 1}`;
+        const rawUnitPrice = line?.unitPrice ?? line?.unitRate ?? line?.rate ?? line?.price ?? '';
+        return {
+          itemName: resolvedName,
+          quantity: line?.quantity != null ? line.quantity : (matchingBuyerItem?.quantity != null ? matchingBuyerItem.quantity : 1),
+          unitOfMeasure: line?.unitOfMeasure || line?.unit || line?.uom || matchingBuyerItem?.unitOfMeasure || 'Nos',
+          unitPrice: rawUnitPrice !== '' && rawUnitPrice != null ? String(rawUnitPrice) : '',
+          gstPercent: line?.gstPercent != null ? String(line?.gstPercent) : (line?.gstPercentage != null ? String(line?.gstPercentage) : '18'),
+          makeBrand: line?.makeBrand || line?.brand || '',
+          remarks: line?.remarks || ''
+        };
+      });
+
+      // If buyer requirement had more items than seller saved, append them
+      if (itemsList.length > savedLines.length) {
+        const coveredNames = new Set(restored.map(r => r.itemName.toLowerCase().trim()));
+        itemsList.forEach((buyerItem, idx) => {
+          if (!coveredNames.has(buyerItem.itemName.toLowerCase().trim()) && idx >= savedLines.length) {
+            restored.push({
+              itemName: buyerItem.itemName,
+              quantity: buyerItem.quantity != null ? buyerItem.quantity : 1,
+              unitOfMeasure: buyerItem.unitOfMeasure || 'Nos',
+              unitPrice: '',
+              gstPercent: '18',
+              makeBrand: '',
+              remarks: ''
+            });
+          }
+        });
+      }
+
+      setLineQuotes(restored);
+    } else {
+      setLineQuotes(itemsList.map(item => ({
         itemName: item.itemName,
-        quantity: match?.quantity != null ? match.quantity : (item.quantity != null ? item.quantity : 1),
-        unitOfMeasure: match?.unitOfMeasure || item?.unitOfMeasure || 'Nos',
-        unitPrice: match?.unitPrice != null ? String(match.unitPrice) : '',
-        gstPercent: match?.gstPercent != null ? String(match.gstPercent) : '18',
-        makeBrand: match?.makeBrand || match?.brand || '',
-        remarks: match?.remarks || ''
-      };
-    }));
-  }, [rfqData, ownResponse, requestedDocs, itemsList, requirementId]);
+        quantity: item.quantity != null ? item.quantity : 1,
+        unitOfMeasure: item.unitOfMeasure || 'Nos',
+        unitPrice: '',
+        gstPercent: '18',
+        makeBrand: '',
+        remarks: ''
+      })));
+    }
+  }, [rfqData, ownResponse, requestedDocs, itemsList, requirementId, queryData?.ownResponse]);
 
   // Line-quote totals: when the seller prices per line, keep the headline offered price/qty in sync.
   const lineTotals = React.useMemo(() => {
@@ -1362,14 +1498,19 @@ export default function SubmitQuotationPage() {
   // Function declaration (hoisted) so saveDraft, defined earlier in the component, can call it.
   function buildResponseData() {
     const docs = docUploads
-      .filter(doc => doc.status === 'done' && (doc.fileAssetId || doc.fileUrl))
+      .filter(doc => doc.status === 'done' && (doc.fileAssetId || doc.fileUrl || (doc as any).url || doc.fileName))
       .map(doc => {
-        const item: any = { name: doc.name };
+        const item: any = {
+          name: doc.taggedAs || doc.name || doc.fileName,
+          taggedAs: doc.taggedAs || doc.name,
+          fileName: doc.fileName || doc.name,
+          fileUrl: doc.fileUrl || (doc as any).url || '',
+          url: doc.fileUrl || (doc as any).url || '',
+        };
         if (doc.fileAssetId && !isNaN(Number(doc.fileAssetId)) && Number(doc.fileAssetId) > 0) {
           item.fileAssetId = Number(doc.fileAssetId);
         }
-        if (doc.fileName) item.fileName = doc.fileName;
-        if (doc.fileUrl) item.fileUrl = doc.fileUrl;
+        if (doc.fileSize) item.fileSize = doc.fileSize;
         return item;
       });
     const lines = lineQuotes
@@ -1513,13 +1654,54 @@ export default function SubmitQuotationPage() {
     setLineQuotes(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handlePreviewDocument = (item: any) => {
-    const url = item.fileUrl || item.url || '';
-    if (!url) return;
+  const handlePreviewDocument = async (item: any) => {
+    if (!item) return;
+    const rawUrl = item.fileUrl || item.url || '';
+    const fileName = item.fileName || item.name || item.file?.name || 'Document Preview';
+
+    // If it's a local File object and no server url
+    if (!rawUrl && item.file instanceof File) {
+      try {
+        const blobUrl = URL.createObjectURL(item.file);
+        setPreviewDocument({
+          label: fileName,
+          url: blobUrl,
+          mode: getDocumentPreviewMode(blobUrl, item.file.type || '', fileName.split('.').pop() || '')
+        });
+        return;
+      } catch (err) {
+        console.error('Failed to create preview for local file:', err);
+      }
+    }
+
+    if (!rawUrl) {
+      toast.error('Preview is not available for this document.');
+      return;
+    }
+
+    try {
+      const prev = await getFileAssetPreview(
+        {
+          id: item.fileAssetId || item.id,
+          fileAssetId: item.fileAssetId,
+          url: rawUrl,
+          fileName,
+        },
+        fileName
+      );
+      if (prev) {
+        setPreviewDocument(prev);
+        return;
+      }
+    } catch {
+      // Fallback to direct resolution below
+    }
+
+    const resolved = resolveMediaUrl(rawUrl) || rawUrl;
     setPreviewDocument({
-      label: item.fileName || item.name || 'Document Preview',
-      url,
-      mode: getDocumentPreviewMode(url, '', (item.fileName || item.name || '').split('.').pop() || '')
+      label: fileName,
+      url: resolved,
+      mode: getDocumentPreviewMode(resolved, item.file?.type || '', fileName.split('.').pop() || '')
     });
   };
 
@@ -1905,7 +2087,9 @@ export default function SubmitQuotationPage() {
               label: 'Requested Documents',
               icon: Paperclip,
               iconColor: 'text-purple-500',
-              count: requestedDocs.length > 0 ? requestedDocs.length : undefined,
+              count: requestedDocs.length > 0
+                ? requestedDocs.length
+                : (docUploads.filter(d => d.status === 'done').length > 0 ? docUploads.filter(d => d.status === 'done').length : undefined),
               hasError: !!errors.requestedDocs,
             },
             {
@@ -2029,7 +2213,7 @@ export default function SubmitQuotationPage() {
                 {lineTotals.total > 0 && (
                   <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
                     <span className="text-slate-500 font-medium">
-                      Item-wise total: <strong className="text-slate-800 font-bold">₹{lineTotals.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong>
+                      Item-wise total: <strong className="text-slate-800 font-bold">₹{lineTotals.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                     </span>
                     {String(lineTotals.total) !== String(offeredPrice) && !isReadOnly && (
                       <button
@@ -2211,47 +2395,80 @@ export default function SubmitQuotationPage() {
               </p>
 
               {uploadState ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2.5">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100 text-[#12335f]">
-                      <FileText className="h-4 w-4" />
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100 text-[#12335f]">
+                        <FileText className="h-4 w-4" aria-hidden="true" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        {(uploadState.url || uploadState.file) && uploadState.status !== 'uploading' ? (
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewDocument(uploadState)}
+                            className="text-left group/fn block max-w-full cursor-pointer"
+                            title="Click to preview document"
+                            aria-label={`Preview ${uploadState.file?.name || uploadState.fileName || 'Attachment'}`}
+                          >
+                            <p className="text-xs font-bold text-slate-800 group-hover/fn:text-[#12335f] group-hover/fn:underline truncate">
+                              {uploadState.file?.name || uploadState.fileName || 'Attachment'}
+                            </p>
+                          </button>
+                        ) : (
+                          <p className="text-xs font-bold text-slate-800 truncate">
+                            {uploadState.file?.name || uploadState.fileName || 'Attachment'}
+                          </p>
+                        )}
+                        {(uploadState.file?.size || uploadState.fileSize) && (
+                          <p className="text-[10px] font-medium text-slate-500">
+                            {(((uploadState.file?.size || uploadState.fileSize || 0) / 1024)).toFixed(1)} KB
+                          </p>
+                        )}
+                        {uploadState.status === 'uploading' && (
+                          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className="h-full rounded-full bg-[#12335f] transition-all duration-300"
+                              style={{ width: `${uploadState.progress}%` }}
+                            />
+                          </div>
+                        )}
+                        {uploadState.status === 'done' && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                            <span className="text-[10px] font-bold text-emerald-700">Uploaded</span>
+                          </div>
+                        )}
+                        {uploadState.status === 'error' && (
+                          <p className="text-[10px] font-bold text-red-600 mt-1">{uploadState.error || 'Upload failed'}</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-slate-800 truncate">
-                        {uploadState.file?.name || uploadState.fileName || 'Attachment'}
-                      </p>
-                      {(uploadState.file?.size || uploadState.fileSize) && (
-                        <p className="text-[10px] font-medium text-slate-500">
-                          {(((uploadState.file?.size || uploadState.fileSize || 0) / 1024)).toFixed(1)} KB
-                        </p>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {(uploadState.url || uploadState.file) && uploadState.status !== 'uploading' && (
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewDocument(uploadState)}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-[#12335f] shadow-2xs transition-colors cursor-pointer"
+                          title="Preview Document"
+                          aria-label={`Preview ${uploadState.file?.name || uploadState.fileName || 'Attachment'}`}
+                        >
+                          <Eye className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                          <span>Preview</span>
+                        </button>
                       )}
-                      {uploadState.status === 'uploading' && (
-                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                          <div
-                            className="h-full rounded-full bg-[#12335f] transition-all duration-300"
-                            style={{ width: `${uploadState.progress}%` }}
-                          />
-                        </div>
-                      )}
-                      {uploadState.status === 'done' && (
-                        <div className="flex items-center gap-1 mt-1">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                          <span className="text-[10px] font-bold text-emerald-700">Uploaded</span>
-                        </div>
-                      )}
-                      {uploadState.status === 'error' && (
-                        <p className="text-[10px] font-bold text-red-600 mt-1">{uploadState.error || 'Upload failed'}</p>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={removeFile}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors cursor-pointer"
+                          title="Remove uploaded document"
+                          aria-label="Remove uploaded document"
+                        >
+                          <X className="h-4 w-4" aria-hidden="true" />
+                        </button>
                       )}
                     </div>
-                    {!isReadOnly && (
-                      <button
-                        type="button"
-                        onClick={removeFile}
-                        className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition cursor-pointer"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
                   </div>
                 </div>
               ) : isReadOnly ? (
@@ -2368,7 +2585,7 @@ export default function SubmitQuotationPage() {
                     </div>
                     <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
                       <span className="text-slate-600 font-medium">Subtotal (incl. GST): </span>
-                      <span className="font-black text-[#12335f]">₹{lineTotals.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                      <span className="font-black text-[#12335f]">₹{lineTotals.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     {!isReadOnly && lineTotals.total > 0 && (
                       <button
@@ -2420,12 +2637,13 @@ export default function SubmitQuotationPage() {
                 <table data-ux-wrapped="true" className="min-w-[860px] w-full text-left border-collapse text-xs">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider">ITEM</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right">QTY / UNIT</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">UNIT PRICE (₹)</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-24">GST %</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-36">MAKE / BRAND</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-32">LINE TOTAL (₹)</th>
+                      <th scope="col" className="px-3.5 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-12 text-center">#</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider">ITEM DESCRIPTION</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right">QTY / UNIT</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">UNIT PRICE (₹)</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-24">GST %</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-36">MAKE / BRAND</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">LINE TOTAL (₹)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -2434,11 +2652,25 @@ export default function SubmitQuotationPage() {
                       const hasPrice = line.unitPrice !== '' && Number.isFinite(price) && price >= 0;
                       const lineTotal = hasPrice ? price * (Number(line.quantity) || 0) * (1 + (Number(line.gstPercent) || 0) / 100) : 0;
                       return (
-                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-4 py-3 text-xs font-bold text-slate-900">
-                            {idx < itemsList.length ? (
+                        <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-3.5 py-3 text-center text-xs font-bold text-slate-400 align-middle">
+                            {idx + 1}
+                          </td>
+                          <td className="px-4 py-3 text-xs font-bold text-slate-900 align-middle">
+                            {isReadOnly ? (
+                              <div className="space-y-0.5">
+                                <span className="text-xs font-bold text-slate-900 leading-snug block">
+                                  {line.itemName || `Item #${idx + 1}`}
+                                </span>
+                                {(line.remarks || (idx < itemsList.length && itemsList[idx]?.description)) && (
+                                  <p className="text-[10.5px] font-normal text-slate-500 leading-tight">
+                                    {line.remarks || itemsList[idx]?.description}
+                                  </p>
+                                )}
+                              </div>
+                            ) : idx < itemsList.length ? (
                               <>
-                                {line.itemName}
+                                <span className="text-xs font-bold text-slate-900 block">{line.itemName}</span>
                                 {itemsList[idx]?.description && (
                                   <p className="mt-0.5 text-[10px] font-medium text-slate-500 line-clamp-1">{itemsList[idx].description}</p>
                                 )}
@@ -2449,90 +2681,126 @@ export default function SubmitQuotationPage() {
                                   type="text"
                                   value={line.itemName}
                                   onChange={e => updateLineQuote(idx, { itemName: e.target.value })}
-                                  disabled={isReadOnly}
+                                  aria-label={`Item description for item ${idx + 1}`}
                                   placeholder="Item Name / Service"
-                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
                                 />
-                                {!isReadOnly && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveCustomLine(idx)}
-                                    className="text-red-500 hover:text-red-700 p-1 cursor-pointer shrink-0"
-                                    title="Remove item"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveCustomLine(idx)}
+                                  className="text-red-500 hover:text-red-700 p-1 cursor-pointer shrink-0"
+                                  title="Remove item"
+                                  aria-label={`Remove item ${idx + 1}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
                               </div>
                             )}
                           </td>
-                          <td className="px-4 py-2 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
+                          <td className="px-4 py-2.5 text-right align-middle">
+                            {isReadOnly ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                  {Number(line.quantity || 0).toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">
+                                  {line.unitOfMeasure || 'Nos'}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={line.quantity}
+                                  onChange={e => updateLineQuote(idx, { quantity: e.target.value })}
+                                  aria-label={`Quantity for ${line.itemName || 'item ' + (idx + 1)}`}
+                                  placeholder="1"
+                                  className="h-8 w-24 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                />
+                                <span className="text-[10px] font-bold text-slate-500 uppercase shrink-0 min-w-[28px] text-left">
+                                  {line.unitOfMeasure || 'Nos'}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-right align-middle">
+                            {isReadOnly ? (
+                              hasPrice ? (
+                                <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                  ₹{price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              ) : (
+                                <span className="text-xs font-medium text-slate-400">—</span>
+                              )
+                            ) : (
                               <input
                                 type="number"
                                 min="0"
-                                step="any"
-                                value={line.quantity}
-                                onChange={e => updateLineQuote(idx, { quantity: e.target.value })}
-                                disabled={isReadOnly}
-                                placeholder="1"
-                                className="h-8 w-24 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+                                step="0.01"
+                                value={line.unitPrice}
+                                onChange={e => updateLineQuote(idx, { unitPrice: e.target.value })}
+                                aria-label={`Unit price for ${line.itemName || 'item ' + (idx + 1)}`}
+                                placeholder="0.00"
+                                className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
                               />
-                              <span className="text-[10px] font-bold text-slate-500 uppercase shrink-0 min-w-[28px] text-left">
-                                {line.unitOfMeasure || 'Nos'}
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-right align-middle">
+                            {isReadOnly ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200/70 tabular-nums">
+                                {line.gstPercent !== '' && line.gstPercent != null ? `${line.gstPercent}%` : '0%'}
                               </span>
-                            </div>
+                            ) : (
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.1"
+                                value={line.gstPercent}
+                                onChange={e => updateLineQuote(idx, { gstPercent: e.target.value })}
+                                aria-label={`GST percent for ${line.itemName || 'item ' + (idx + 1)}`}
+                                placeholder="18"
+                                className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                              />
+                            )}
                           </td>
-                          <td className="px-4 py-2 text-right">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={line.unitPrice}
-                              onChange={e => updateLineQuote(idx, { unitPrice: e.target.value })}
-                              disabled={isReadOnly}
-                              placeholder="0.00"
-                              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
-                            />
+                          <td className="px-4 py-2.5 text-left align-middle">
+                            {isReadOnly ? (
+                              line.makeBrand ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200/60">
+                                  {line.makeBrand}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-400 font-normal italic">—</span>
+                              )
+                            ) : (
+                              <input
+                                type="text"
+                                value={line.makeBrand}
+                                onChange={e => updateLineQuote(idx, { makeBrand: e.target.value })}
+                                aria-label={`Make or brand for ${line.itemName || 'item ' + (idx + 1)}`}
+                                placeholder="Optional"
+                                className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                              />
+                            )}
                           </td>
-                          <td className="px-4 py-2 text-right">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.1"
-                              value={line.gstPercent}
-                              onChange={e => updateLineQuote(idx, { gstPercent: e.target.value })}
-                              disabled={isReadOnly}
-                              placeholder="18"
-                              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
-                            />
-                          </td>
-                          <td className="px-4 py-2">
-                            <input
-                              type="text"
-                              value={line.makeBrand}
-                              onChange={e => updateLineQuote(idx, { makeBrand: e.target.value })}
-                              disabled={isReadOnly}
-                              placeholder="Optional"
-                              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-xs font-extrabold text-slate-900 text-right tabular-nums">
-                            {hasPrice ? `₹${lineTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
+                          <td className="px-4 py-3 text-xs font-black text-slate-900 text-right tabular-nums align-middle">
+                            {hasPrice ? `₹${lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
                   {lineTotals.priced > 0 && (
-                    <tfoot className="bg-slate-50 border-t border-slate-200">
+                    <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-medium">
                       <tr>
-                        <td colSpan={5} className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-600 text-right">
-                          Total ({lineTotals.priced}/{lineQuotes.length} items priced, incl. GST)
+                        <td colSpan={6} className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-700 text-right">
+                          Total ({lineTotals.priced} of {lineQuotes.length} items priced, incl. GST):
                         </td>
-                        <td className="px-4 py-3 text-sm font-extrabold text-[#12335f] text-right tabular-nums">
-                          ₹{lineTotals.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        <td className="px-4 py-3 text-sm font-black text-[#12335f] text-right tabular-nums">
+                          ₹{lineTotals.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                       </tr>
                     </tfoot>
@@ -2610,6 +2878,9 @@ export default function SubmitQuotationPage() {
                       const isDocUploading = docUploads.some(
                         d => d.status === 'uploading' && (d.taggedAs || d.name)?.trim().toLowerCase() === doc.name.trim().toLowerCase()
                       );
+                      const matchedUpload = docUploads.find(
+                        d => d.status === 'done' && (d.taggedAs || d.name)?.trim().toLowerCase() === doc.name.trim().toLowerCase() && (d.fileUrl || d.url)
+                      );
 
                       return (
                         <div
@@ -2643,38 +2914,50 @@ export default function SubmitQuotationPage() {
                               </span>
                             )}
                           </div>
-                          {!isReadOnly && (
-                            <label className={cn(
-                              "inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-bold transition shadow-2xs cursor-pointer shrink-0",
-                              isDocUploading
-                                ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none"
-                                : "border-[#12335f] bg-[#12335f]/5 text-[#12335f] hover:bg-[#12335f] hover:text-white"
-                            )}>
-                              {isDocUploading ? (
-                                <>
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  <span>Uploading...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Upload className="h-3.5 w-3.5" />
-                                  <span>{isCovered ? 'Replace' : 'Upload'}</span>
-                                  <input
-                                    type="file"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
-                                    className="hidden"
-                                    disabled={isDocUploading}
-                                    onChange={e => {
-                                      if (e.target.files?.length) {
-                                        handleUploadFiles(e.target.files, doc.name);
-                                      }
-                                      e.target.value = '';
-                                    }}
-                                  />
-                                </>
-                              )}
-                            </label>
-                          )}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isCovered && matchedUpload && (
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewDocument(matchedUpload)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer shrink-0"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                <span>Preview</span>
+                              </button>
+                            )}
+                            {!isReadOnly && (
+                              <label className={cn(
+                                "inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-bold transition shadow-2xs cursor-pointer shrink-0",
+                                isDocUploading
+                                  ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none"
+                                  : "border-[#12335f] bg-[#12335f]/5 text-[#12335f] hover:bg-[#12335f] hover:text-white"
+                              )}>
+                                {isDocUploading ? (
+                                  <>
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    <span>Uploading...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Upload className="h-3.5 w-3.5" />
+                                    <span>{isCovered ? 'Replace' : 'Upload'}</span>
+                                    <input
+                                      type="file"
+                                      accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
+                                      className="hidden"
+                                      disabled={isDocUploading}
+                                      onChange={e => {
+                                        if (e.target.files?.length) {
+                                          handleUploadFiles(e.target.files, doc.name);
+                                        }
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </>
+                                )}
+                              </label>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -2724,6 +3007,9 @@ export default function SubmitQuotationPage() {
             {/* Card 3: Uploaded Files List with Dropdown Tagging */}
             {docUploads.filter(d => d.status !== 'empty').length > 0 && (
               <div className="space-y-2.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  SUBMITTED / UPLOADED DOCUMENTS ({docUploads.filter(d => d.status !== 'empty').length})
+                </p>
                 {docUploads.filter(d => d.status !== 'empty').map((item: any, idx: number) => {
                   const docKey = item.id || `doc-${idx}-${item.fileName || 'file'}`;
                   const isUploading = item.status === 'uploading';
@@ -2747,7 +3033,7 @@ export default function SubmitQuotationPage() {
                           <p className="text-xs font-bold text-slate-900 truncate">
                             {item.fileName || item.name}
                           </p>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex flex-wrap items-center gap-2 mt-0.5">
                             {item.fileSize ? (
                               <span className="text-[11px] font-medium text-slate-500">{formatBytes(item.fileSize)}</span>
                             ) : null}
@@ -2763,6 +3049,11 @@ export default function SubmitQuotationPage() {
                               </span>
                             ) : (
                               <span className="text-[11px] font-bold text-red-600">{item.error || 'Upload error'}</span>
+                            )}
+                            {(item.taggedAs || item.name) && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-[#12335f] text-[10px] font-bold">
+                                Tag: {item.taggedAs || item.name}
+                              </span>
                             )}
                           </div>
                           {/* Progress bar visible at the time of uploading only */}
@@ -2783,7 +3074,7 @@ export default function SubmitQuotationPage() {
                           <select
                             value={item.taggedAs || ''}
                             onChange={e => handleTagDocument(item.id || docKey, e.target.value)}
-                            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs transition focus:border-[#12335f] focus:outline-hidden"
+                            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs transition focus:border-[#12335f] focus:outline-hidden cursor-pointer"
                             title="Tag as required document..."
                           >
                             <option value="">Tag as required document...</option>
@@ -2804,6 +3095,16 @@ export default function SubmitQuotationPage() {
                             <Eye className="h-3.5 w-3.5" /> Preview
                           </button>
                         )}
+                        {(item.fileUrl || item.url) && !isUploading && (
+                          <a
+                            href={item.fileUrl || item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" /> Open
+                          </a>
+                        )}
                         {!isReadOnly && !isUploading && (
                           <button
                             type="button"
@@ -2817,6 +3118,21 @@ export default function SubmitQuotationPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Empty State when no buyer requirements and no uploaded documents */}
+            {requestedDocs.length === 0 && docUploads.filter(d => d.status !== 'empty').length === 0 && (
+              <div className="flex flex-col items-center justify-center p-8 rounded-2xl border border-slate-200/80 bg-slate-50/50 text-center space-y-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white border border-slate-200/80 shadow-2xs text-slate-400">
+                  <FileText className="h-6 w-6 text-slate-400" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-800">No Compliance Documents</h3>
+                <p className="text-xs text-slate-500 max-w-md">
+                  {isReadOnly
+                    ? 'No specific compliance documents were requested by the buyer or submitted for this quotation.'
+                    : 'The buyer did not mandate specific compliance documents. You can still upload optional compliance documents, certificates, or brochures using the upload area above.'}
+                </p>
               </div>
             )}
 
@@ -2874,19 +3190,27 @@ export default function SubmitQuotationPage() {
             {/* Quotation Executive Summary Card */}
             <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-5 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Quotation Summary Review</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
+              <div className={cn("grid gap-3.5 pt-1", lineQuotes.length > 0 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" : "grid-cols-2 sm:grid-cols-4")}>
                 <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 shadow-2xs">
                   <span className="text-[10px] uppercase font-bold text-slate-400">Total Price</span>
-                  <p className="text-base font-black text-[#12335f] mt-0.5">
-                    {offeredPrice ? `₹${Number(offeredPrice).toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
+                  <p className="text-base font-black text-[#12335f] mt-0.5 tabular-nums">
+                    {offeredPrice ? `₹${Number(offeredPrice).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                   </p>
                 </div>
                 <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 shadow-2xs">
                   <span className="text-[10px] uppercase font-bold text-slate-400">Total Quantity</span>
-                  <p className="text-base font-extrabold text-slate-800 mt-0.5">
+                  <p className="text-base font-extrabold text-slate-800 mt-0.5 tabular-nums">
                     {offeredQuantity || '—'}
                   </p>
                 </div>
+                {lineQuotes.length > 0 && (
+                  <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 shadow-2xs">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Priced Items</span>
+                    <p className="text-base font-extrabold text-slate-800 mt-0.5 tabular-nums">
+                      {lineTotals.priced} / {lineQuotes.length}
+                    </p>
+                  </div>
+                )}
                 <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 shadow-2xs">
                   <span className="text-[10px] uppercase font-bold text-slate-400">Delivery Timeline</span>
                   <p className="text-sm font-bold text-slate-800 mt-0.5 truncate">

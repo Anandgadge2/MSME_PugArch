@@ -140,7 +140,7 @@ import { MarketplaceHeader } from './features/marketplace/components/Marketplace
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
 import { SubUserActivationGate } from './features/auth/components/SubUserActivationGate';
-import { PageTableSkeleton, ProfileSkeleton, FormSectionSkeleton, StorefrontSkeleton, GridCardSkeleton, GrnDetailSkeleton } from './components/ui/skeleton';
+import { PageTableSkeleton, ProfileSkeleton, BuyerProfileSkeleton, FormSectionSkeleton, StorefrontSkeleton, GridCardSkeleton, GrnDetailSkeleton } from './components/ui/skeleton';
 
 function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKey: string }) {
   React.useEffect(() => {
@@ -190,6 +190,10 @@ function RouteFallback() {
 
   if (pathname.match(/^\/grn\/\d+$/)) {
     return <GrnDetailSkeleton />;
+  }
+
+  if (pathname === '/buyer/profile') {
+    return <BuyerProfileSkeleton />;
   }
 
   if (pathname.includes('/profile')) {
@@ -428,7 +432,11 @@ function Redirect({ to }: { to: string }) {
     router.replace(to);
   }, [router, to, currentPath]);
 
-  return null;
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#0b2447] border-t-transparent" />
+    </div>
+  );
 }
 
 import { usePermissions } from './hooks/useOrgRole';
@@ -731,7 +739,13 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     }
     if (/^\/marketplace\/products\/-?\d+$/.test(pathname)) return <MarketplaceProductDetail />;
     if (/^\/marketplace\/services\/-?\d+$/.test(pathname)) return <MarketplaceServiceDetail />;
-    if (/^\/marketplace\/requirements\/-?\d+$/.test(pathname)) return <BuyerRequirementDetailsPage />;
+    {
+      const reqDetailMatch = pathname.match(/^\/marketplace\/requirements\/([^/]+)$/);
+      if (reqDetailMatch) {
+        const rawReqId = reqDetailMatch[1];
+        return <Redirect to={`/bids/${rawReqId}`} />;
+      }
+    }
 
     // Public seller/vendor store — accessible to everyone
     if (/^\/vendors\/-?\d+$/.test(pathname) || /^\/sellers\/-?\d+$/.test(pathname) || /^\/seller\/-?\d+$/.test(pathname) || /^\/marketplace\/sellers\/-?\d+$/.test(pathname) || /^\/marketplace\/vendors\/-?\d+$/.test(pathname)) return <MarketplaceSellerStore />;
