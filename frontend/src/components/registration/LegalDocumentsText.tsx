@@ -61,9 +61,6 @@ export function GtcContent() {
         <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Public Sector Undertakings</span></li>
         <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Private Companies</span></li>
         <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Industries</span></li>
-        <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Educational Institutions</span></li>
-        <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Hospitals</span></li>
-        <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>NGOs</span></li>
         <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Cooperatives</span></li>
         <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Registered Business Organizations</span></li>
       </ul>
@@ -1831,9 +1828,7 @@ export function ConsentPolicyContent() {
         <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Service Providers</span></li>
         <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Government Departments</span></li>
         <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Public Sector Organizations</span></li>
-        <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Educational Institutions</span></li>
         <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Cooperatives</span></li>
-        <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>NGOs</span></li>
         <li className="flex items-start gap-2"><span className="text-[#0b2447] font-bold shrink-0">•</span><span>Other registered users of the Portal</span></li>
       </ul>
       <h3 id="3--user-consent" className="text-sm font-black text-[#0b2447] mt-6 mb-2 border-l-4 border-[#0b2447] pl-3 uppercase tracking-wide">3. USER CONSENT</h3>

@@ -1577,10 +1577,6 @@ export default function BuyerOnboarding() {
                       <option value="LLP">LLP</option>
                       <option value="Proprietorship">Proprietorship</option>
                       <option value="Startup">Startup</option>
-                      <option value="NGO / Trust">NGO / Trust</option>
-                      <option value="Educational Institution">Educational Institution</option>
-                      <option value="Primary User (HOD)">Primary User (HOD)</option>
-                      <option value="Primary User (Co-operative)">Primary User (Co-operative)</option>
                     </Select>
                     <SearchableSelect
                       label="Industry / Sector"
