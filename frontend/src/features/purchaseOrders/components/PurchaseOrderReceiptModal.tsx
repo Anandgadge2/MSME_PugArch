@@ -660,20 +660,7 @@ export function PurchaseOrderReceiptModal({
 
           {/* Right: Actions */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isGeneratingPdf}
-              onClick={handleDirectDownloadPdf}
-              className="h-8 sm:h-8.5 px-2.5 sm:px-3 text-xs font-bold rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white gap-1.5 cursor-pointer transition-all shrink-0 whitespace-nowrap"
-              title="Download PDF directly"
-              aria-label="Download PDF directly"
-            >
-              <Download className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">Download PDF</span>
-              <span className="sm:hidden">PDF</span>
-            </Button>
+            
 
             <Button
               type="button"
