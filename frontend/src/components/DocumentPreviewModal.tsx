@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ZoomIn, ZoomOut, RotateCw, RefreshCw, Download } from 'lucide-react';
 import type { DocumentPreview } from '../lib/files';
+import { FocusTrap } from './ui/FocusTrap';
 
 const getDocumentPreviewUrl = (url: string) => {
   if (!url) return url;
@@ -69,132 +70,141 @@ export function DocumentPreviewModal({
       className="fixed inset-0 z-[99999999] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:p-4"
       onWheel={handleOverlayWheel}
     >
-      <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-[2rem]">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
-          <div className="min-w-0">
-            <h3 className="truncate text-sm font-black uppercase text-slate-900 sm:text-lg">{previewDocument.label}</h3>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Document Preview</p>
+      <FocusTrap onEscape={onClose} className="w-full max-w-6xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="doc-preview-title"
+          className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-[2rem]"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
+            <div className="min-w-0">
+              <h3 id="doc-preview-title" className="truncate text-sm font-black uppercase text-slate-900 sm:text-lg">{previewDocument.label}</h3>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Document Preview</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+              <a
+                href={previewDocument.url}
+                download={previewDocument.label || 'document'}
+                className="inline-flex h-9 sm:h-10 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 sm:px-4 text-[10px] font-black uppercase text-white shadow-sm transition-all hover:bg-blue-700 active:scale-95"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Download Document</span>
+                <span className="sm:hidden">Download</span>
+              </a>
+              <a
+                href={previewDocument.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-[10px] font-black uppercase text-slate-600 transition-all hover:bg-slate-50 sm:inline-flex"
+              >
+                Open Original
+              </a>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close preview"
+                className="inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-all hover:bg-slate-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-            <a
-              href={previewDocument.url}
-              download={previewDocument.label || 'document'}
-              className="inline-flex h-9 sm:h-10 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 sm:px-4 text-[10px] font-black uppercase text-white shadow-sm transition-all hover:bg-blue-700 active:scale-95"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Download Document</span>
-              <span className="sm:hidden">Download</span>
-            </a>
-            <a
-              href={previewDocument.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-[10px] font-black uppercase text-slate-600 transition-all hover:bg-slate-50 sm:inline-flex"
-            >
-              Open Original
-            </a>
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-all hover:bg-slate-50"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-        <div className="relative flex-1 bg-slate-100 overflow-hidden">
-          {previewDocument.mode === 'image' && (
-            <>
-              {/* Scrollable image container */}
-              <div ref={scrollContainerRef} className="h-full w-full overflow-auto overscroll-contain p-4">
-                <div className="flex min-h-full w-full">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={previewDocument.url}
-                    alt={previewDocument.label}
-                    style={{
-                      transform: `rotate(${rotation}deg)`,
-                      width: `${scale * 100}%`,
-                      maxWidth: scale === 1 ? '100%' : 'none',
-                      height: 'auto',
-                      transition: 'transform 0.2s ease-in-out, width 0.15s ease-in-out',
-                    }}
-                    className="m-auto rounded-xl bg-white shadow-lg object-contain"
-                  />
+          <div className="relative flex-1 bg-slate-100 overflow-hidden">
+            {previewDocument.mode === 'image' && (
+              <>
+                {/* Scrollable image container */}
+                <div ref={scrollContainerRef} className="h-full w-full overflow-auto overscroll-contain p-4">
+                  <div className="flex min-h-full w-full">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={previewDocument.url}
+                      alt={previewDocument.label}
+                      style={{
+                        transform: `rotate(${rotation}deg)`,
+                        width: `${scale * 100}%`,
+                        maxWidth: scale === 1 ? '100%' : 'none',
+                        height: 'auto',
+                        transition: 'transform 0.2s ease-in-out, width 0.15s ease-in-out',
+                      }}
+                      className="m-auto object-contain select-none"
+                      draggable={false}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Floating Glassmorphism Toolbar */}
-              <div className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 sm:gap-1.5 rounded-full border border-slate-200/60 bg-white/95 px-3 py-1.5 sm:px-4 sm:py-2 shadow-lg backdrop-blur-md z-10 max-w-[95vw]">
-                <button
-                  type="button"
-                  onClick={handleZoomOut}
-                  className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95"
-                  title="Zoom Out"
-                >
-                  <ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </button>
-                
-                <span className="min-w-[2.8rem] sm:min-w-[3.5rem] text-center text-[11px] sm:text-xs font-bold text-slate-600 font-mono">
-                  {Math.round(scale * 100)}%
-                </span>
-
-                <button
-                  type="button"
-                  onClick={handleZoomIn}
-                  className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95"
-                  title="Zoom In"
-                >
-                  <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </button>
-
-                <div className="h-4 w-px bg-slate-200 mx-0.5 sm:mx-1" />
-
-                <button
-                  type="button"
-                  onClick={handleRotate}
-                  className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95"
-                  title="Rotate Right"
-                >
-                  <RotateCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95"
-                  title="Reset Zoom & Rotation"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </button>
-              </div>
-            </>
-          )}
-          {previewDocument.mode === 'pdf' && (
-            <iframe
-              src={previewDocument.url}
-              title={previewDocument.label}
-              className="h-full w-full"
-            />
-          )}
-          {previewDocument.mode === 'office' && (
-            <iframe
-              src={getOfficePreviewUrl(previewDocument.url)}
-              title={previewDocument.label}
-              className="h-full w-full"
-            />
-          )}
-          {previewDocument.mode === 'google' && (
-            <iframe
-              src={getDocumentPreviewUrl(previewDocument.url)}
-              title={previewDocument.label}
-              className="h-full w-full"
-            />
-          )}
+                {/* Floating controls toolbar */}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-xl backdrop-blur-md">
+                  <button
+                    type="button"
+                    onClick={handleZoomOut}
+                    disabled={scale <= 0.5}
+                    title="Zoom Out"
+                    aria-label="Zoom Out"
+                    className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-30"
+                  >
+                    <ZoomOut className="h-4 w-4" />
+                  </button>
+                  <span className="min-w-[3.5rem] text-center text-xs font-black text-slate-700">
+                    {Math.round(scale * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleZoomIn}
+                    disabled={scale >= 3}
+                    title="Zoom In"
+                    aria-label="Zoom In"
+                    className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-30"
+                  >
+                    <ZoomIn className="h-4 w-4" />
+                  </button>
+                  <div className="mx-1 h-4 w-px bg-slate-200" />
+                  <button
+                    type="button"
+                    onClick={handleRotate}
+                    title="Rotate 90°"
+                    aria-label="Rotate 90 degrees"
+                    className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100"
+                  >
+                    <RotateCw className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    title="Reset View"
+                    aria-label="Reset View"
+                    className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
+              </>
+            )}
+            {previewDocument.mode === 'pdf' && (
+              <iframe
+                src={previewDocument.url}
+                title={previewDocument.label}
+                className="h-full w-full"
+              />
+            )}
+            {previewDocument.mode === 'office' && (
+              <iframe
+                src={getOfficePreviewUrl(previewDocument.url)}
+                title={previewDocument.label}
+                className="h-full w-full"
+              />
+            )}
+            {previewDocument.mode === 'google' && (
+              <iframe
+                src={getDocumentPreviewUrl(previewDocument.url)}
+                title={previewDocument.label}
+                className="h-full w-full"
+              />
+            )}
+          </div>
         </div>
-      </div>
+      </FocusTrap>
     </div>,
     document.body
   );
 }
-

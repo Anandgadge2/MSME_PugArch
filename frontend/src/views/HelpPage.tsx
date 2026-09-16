@@ -39,6 +39,7 @@ import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import type { DocumentPreview } from '../lib/files';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { MarketplaceFooter } from '../features/marketplace/components/MarketplaceFooter';
 
 type RoleCategory = 'buyer' | 'seller' | 'shg' | 'admin';
 
@@ -1122,6 +1123,7 @@ export default function HelpPage() {
           onClose={() => setPreviewDoc(null)}
         />
       )}
+      {!user && <MarketplaceFooter />}
     </div>
   );
 }

@@ -121,7 +121,10 @@ export function MarketplaceFooter() {
                         <ul className="space-y-2">
                             {[
                                 { label: 'Terms & Conditions', href: '/terms-of-use' },
-                                { label: 'Website Policies & Privacy', href: '/website-policies' },
+                                { label: 'Website Policies & Privacy', href: '/privacy-policy' },
+                                { label: 'Vendor Verification Policy', href: '/vendor-verification-policy' },
+                                { label: 'Order Placement Policy', href: '/order-placement-policy' },
+                                { label: 'Cancellation & Refund Policy', href: '/refund-cancellation-policy' },
                                 { label: 'Copyright Policy', href: '/copyright' },
                                 { label: 'Hyperlinking Policy', href: '/hyperlinking-policy' },
                                 { label: 'Public Procurement Disclaimer', href: '/disclaimer' },
@@ -201,7 +204,11 @@ export function MarketplaceFooter() {
                     <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] font-medium text-slate-400">
                         <Link href="/terms-of-use" className="hover:text-white transition-colors">Terms of Use</Link>
                         <span className="text-slate-600">•</span>
-                        <Link href="/website-policies" className="hover:text-white transition-colors">Privacy Policy</Link>
+                        <Link href="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link>
+                        <span className="text-slate-600">•</span>
+                        <Link href="/disclaimer" className="hover:text-white transition-colors">Disclaimer</Link>
+                        <span className="text-slate-600">•</span>
+                        <Link href="/sitemap" className="hover:text-white transition-colors">Sitemap</Link>
                         <span className="text-slate-600">•</span>
                         <span className="text-slate-300">
                             Last Updated: {formatDate(new Date())}

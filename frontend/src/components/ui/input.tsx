@@ -4,7 +4,8 @@ import { Eye, EyeOff } from "lucide-react";
 
 const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { label?: string, error?: string, isValid?: boolean }>(
   ({ className, type, label, error, isValid, value, required, ...props }, ref) => {
-    const id = React.useId();
+    const id = props.id || React.useId();
+    const errorId = `${id}-error`;
     const [showPassword, setShowPassword] = React.useState(false);
     const isPassword = type === "password";
 
@@ -22,6 +23,8 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
             id={id}
             type={isPassword ? (showPassword ? "text" : "password") : type}
             required={required}
+            aria-invalid={!!error}
+            aria-describedby={error ? errorId : props["aria-describedby"]}
             className={cn(
               "flex h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3 py-1.5 text-xs ring-offset-white file:border-0 file:bg-transparent file:text-xs file:font-medium placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all sm:text-xs",
               isPassword && "pr-10",
@@ -38,13 +41,14 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
               suppressHydrationWarning
               type="button"
               onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
               className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors focus:outline-none"
             >
               {showPassword ? <EyeOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
             </button>
           )}
         </div>
-        {error && <p className="text-[10px] sm:text-xs text-red-500">{error}</p>}
+        {error && <p id={errorId} role="alert" className="text-[10px] sm:text-xs text-red-500">{error}</p>}
       </div>
     );
   }
@@ -53,7 +57,8 @@ Input.displayName = "Input";
 
 const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string, error?: string }>(
   ({ className, label, error, children, value, required, ...props }, ref) => {
-    const id = React.useId();
+    const id = props.id || React.useId();
+    const errorId = `${id}-error`;
     return (
       <div className="w-full min-w-0 space-y-1">
         {label && (
@@ -66,6 +71,8 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
           suppressHydrationWarning
           id={id}
           required={required}
+          aria-invalid={!!error}
+          aria-describedby={error ? errorId : props["aria-describedby"]}
           className={cn(
             "h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3 py-1 text-xs ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all sm:text-xs",
             className,
@@ -77,7 +84,7 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
         >
           {children}
         </select>
-        {error && <p className="text-[10px] sm:text-xs text-red-500">{error}</p>}
+        {error && <p id={errorId} role="alert" className="text-[10px] sm:text-xs text-red-500">{error}</p>}
       </div>
     );
   }

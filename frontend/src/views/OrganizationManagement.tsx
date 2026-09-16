@@ -770,7 +770,12 @@ export default function OrganizationManagement() {
 
       {/* Feature Flags Modal */}
       {isFeatureModalOpen && selectedOrg && (
-        <div className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div 
+          className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Access Flags for ${selectedOrg.organizationName}`}
+        >
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white">
               <h3 className="font-extrabold text-lg flex items-center gap-2">
@@ -858,7 +863,12 @@ export default function OrganizationManagement() {
 
       {/* Verification Modal */}
       {isVerifyModalOpen && selectedOrg && (
-        <div className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div 
+          className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Verify Stakeholder ${selectedOrg.organizationName}`}
+        >
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white">
               <h3 className="font-extrabold text-lg flex items-center gap-2">
@@ -911,7 +921,12 @@ export default function OrganizationManagement() {
 
       {/* Blacklist / Restriction Modal */}
       {isBlacklistModalOpen && selectedOrg && (
-        <div className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div 
+          className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Platform Restriction Desk for ${selectedOrg.organizationName}`}
+        >
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white">
               <h3 className="font-extrabold text-lg flex items-center gap-2">
@@ -976,7 +991,14 @@ export default function OrganizationManagement() {
 
       {/* Company Detail Dialog */}
       {detailOrg && (
-        <div ref={detailModalContainerRef} className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setDetailOrg(null)}>
+        <div 
+          ref={detailModalContainerRef} 
+          className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4" 
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Stakeholder Profile Dossier for ${detailOrg.organizationName}`}
+          onClick={() => setDetailOrg(null)}
+        >
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white relative">
               <button onClick={() => setDetailOrg(null)} className="absolute right-4 top-4 rounded-md border border-white/20 bg-white/10 p-2 text-white hover:bg-white/20" aria-label="Close">
@@ -1166,7 +1188,12 @@ export default function OrganizationManagement() {
 
       {/* Organization Lifecycle & GST Reuse Modal */}
       {lifecycleOrg && lifecycleAction && (
-        <div className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div 
+          className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Operational Status Configuration for ${lifecycleOrg.organizationName}`}
+        >
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className={cn(
               "p-5 text-white border-b-4 border-[#c5a556]",
@@ -1259,7 +1286,13 @@ export default function OrganizationManagement() {
 
       {/* Scope Stats Dialog (Users / Products / Services list) */}
       {scopeOrg && (
-        <div className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setScopeOrg(null)}>
+        <div 
+          className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4" 
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Operational Scope Configuration for ${scopeOrg.organizationName}`}
+          onClick={() => setScopeOrg(null)}
+        >
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white relative">
               <button onClick={() => setScopeOrg(null)} className="absolute right-4 top-4 rounded-md border border-white/20 bg-white/10 p-2 text-white hover:bg-white/20" aria-label="Close">

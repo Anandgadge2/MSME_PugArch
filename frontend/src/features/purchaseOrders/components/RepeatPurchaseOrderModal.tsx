@@ -20,6 +20,7 @@ import { formatCurrency, formatDate } from '../../shared/format';
 import type { PurchaseOrderDto } from '../../shared/types';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
+import { FocusTrap } from '../../../components/ui/FocusTrap';
 
 export interface RepeatPurchaseOrderModalProps {
   order: PurchaseOrderDto;
@@ -135,7 +136,8 @@ export function RepeatPurchaseOrderModal({
       aria-modal="true"
       aria-labelledby="repeat-order-title"
     >
-      <div className="max-h-[92vh] w-full max-w-xl overflow-hidden rounded-[24px] border border-slate-200/90 bg-white shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+      <FocusTrap onEscape={onClose} className="w-full max-w-xl">
+        <div className="max-h-[92vh] w-full max-w-xl overflow-hidden rounded-[24px] border border-slate-200/90 bg-white shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
         
         {/* Top Header - Portal Navy Gradient */}
         <div className="relative overflow-hidden bg-gradient-to-r from-[#07172e] via-[#12335f] to-[#1e4b8a] text-white px-6 py-5 shrink-0">
@@ -444,10 +446,10 @@ export function RepeatPurchaseOrderModal({
               <RefreshCw className={cn("h-3.5 w-3.5", submitting && "animate-spin")} />
               {submitting ? 'Placing Order...' : 'Confirm Repeat Order'}
             </Button>
+            </div>
           </div>
         </div>
-
-      </div>
+      </FocusTrap>
     </div>
   );
 }

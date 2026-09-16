@@ -34,6 +34,7 @@ import rbacRoutes from './rbac.routes.js';
 import navigationRoutes from './navigation.routes.js';
 import emdRoutes from './emd.routes.js';
 import transaction2faRoutes from '../modules/auth/transaction-2fa.routes.js';
+import consentRoutes from './consent.routes.js';
 
 const API_VERSION = 'v1';
 
@@ -120,6 +121,7 @@ router.use('/', prcCracRoutes);
 router.use('/', rbacRoutes);
 router.use('/', navigationRoutes);
 router.use('/', emdRoutes);
+router.use('/consent', consentRoutes);
 
   return router;
 };

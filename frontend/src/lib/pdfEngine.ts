@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatCurrency, formatDate } from '../features/shared/format';
+import { maskPAN, maskGSTIN } from './maskPii';
 
 /**
  * Enterprise PDF Engine for MSME Procurement Portal
@@ -158,8 +159,8 @@ export class PdfEngine {
       if (p.address) lines.push(`Address: ${p.address}`);
       if (p.email) lines.push(`Email: ${p.email}`);
       if (p.phone) lines.push(`Phone: ${p.phone}`);
-      if (p.gstin) lines.push(`GSTIN: ${p.gstin}`);
-      if (p.pan) lines.push(`PAN: ${p.pan}`);
+      if (p.gstin) lines.push(`GSTIN: ${maskGSTIN(p.gstin)}`);
+      if (p.pan) lines.push(`PAN: ${maskPAN(p.pan)}`);
       if (p.details && p.details.length > 0) {
         lines.push(...p.details);
       }

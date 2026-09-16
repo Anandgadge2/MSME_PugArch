@@ -1689,12 +1689,12 @@ export default function BuyerOnboarding() {
                           </div>
                         </div>
                         <div className="flex gap-3 shrink-0 self-end sm:self-auto">
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === true} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: true }))} className="accent-blue-600 h-3.5 w-3.5" />
+                          <label htmlFor="buyer-jharsuguda-yes" className="flex items-center gap-1.5 cursor-pointer">
+                            <input id="buyer-jharsuguda-yes" type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === true} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: true }))} className="accent-blue-600 h-3.5 w-3.5" />
                             <span className="text-xs uppercase font-bold text-emerald-700">Yes</span>
                           </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === false} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: false }))} className="accent-blue-600 h-3.5 w-3.5" />
+                          <label htmlFor="buyer-jharsuguda-no" className="flex items-center gap-1.5 cursor-pointer">
+                            <input id="buyer-jharsuguda-no" type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === false} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: false }))} className="accent-blue-600 h-3.5 w-3.5" />
                             <span className="text-xs uppercase font-semibold text-slate-500">No</span>
                           </label>
                         </div>
@@ -1988,12 +1988,12 @@ export default function BuyerOnboarding() {
                 {activeSection === 'account' && (
                   <div className="max-w-2xl space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
                     <div className="space-y-2">
-                      <label className="flex items-start gap-2.5 cursor-pointer group">
-                        <input type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
+                      <label htmlFor="buyer-declaration" className="flex items-start gap-2.5 cursor-pointer group">
+                        <input id="buyer-declaration" type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
                         <span className="text-xs text-slate-600 font-medium">I confirm that the information provided is accurate. <span className="text-red-500 font-bold">*</span></span>
                       </label>
-                      <label className="flex items-start gap-2.5 cursor-pointer group">
-                        <input type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
+                      <label htmlFor="buyer-agree-terms" className="flex items-start gap-2.5 cursor-pointer group">
+                        <input id="buyer-agree-terms" type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
                         <span className="text-xs text-slate-600 font-medium">I agree to the platform Terms & Conditions. <span className="text-red-500 font-bold">*</span></span>
                       </label>
                     </div>
@@ -2002,12 +2002,14 @@ export default function BuyerOnboarding() {
                       
                       {(user?.mobile || formData.mobile) ? (
                         <div className="mt-2 space-y-1.5">
-                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Select OTP Channel</label>
-                          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-0.5 rounded-lg max-w-xs">
+                          <label id="otp-channel-label" className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Select OTP Channel</label>
+                          <div role="radiogroup" aria-labelledby="otp-channel-label" className="grid grid-cols-2 gap-2 bg-slate-100 p-0.5 rounded-lg max-w-xs">
                             {(['email', 'sms'] as const).map((ch) => (
                               <button
                                 key={ch}
                                 type="button"
+                                role="radio"
+                                aria-checked={submissionChannel === ch}
                                 disabled={buyerSubmissionOtpSent}
                                 onClick={() => setSubmissionChannel(ch)}
                                 className={`py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all ${

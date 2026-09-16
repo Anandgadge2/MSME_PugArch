@@ -1,0 +1,275 @@
+--- PAGE 1 ---
+PRIVACY POLICY 
+JSG SMILE – Jharsuguda Supplier & MSME Integrated Local Exchange 
+Website: www.jsgsmile.in 
+Effective Date: [DD/MM/YYYY] 
+ 
+1. INTRODUCTION 
+JSG SMILE (www.jsgsmile.in) (“Portal”) is a procurement facilitation platform established 
+under the guidance of the District Industries Centre (DIC), Jharsuguda, Government of 
+Odisha, to promote business opportunities between Large Buyers and Micro, Small and 
+Medium Enterprises (MSMEs) operating within Jharsuguda District. 
+This Privacy Policy describes how information is collected, used, stored, processed, 
+disclosed, and protected when users access or use the Portal. 
+By accessing, registering, or using the Portal, you consent to the practices described in this 
+Privacy Policy. 
+ 
+2. PURPOSE OF DATA COLLECTION 
+The Portal collects information for the following purposes: 
+• User registration and verification 
+• MSME onboarding and validation 
+• Buyer onboarding and validation 
+• Facilitating procurement opportunities 
+• Transaction management 
+• Payment tracking and settlement facilitation 
+• Communication and notifications 
+• Compliance with legal and regulatory requirements 
+• Platform analytics and improvement 
+• Government reporting and policy analysis 
+• Fraud detection and prevention 
+ 
+--- PAGE 2 ---
+3. INFORMATION WE COLLECT 
+3.1 Personal Information 
+The Portal may collect: 
+• Full Name 
+• Designation 
+• Mobile Number 
+• Email Address 
+• Address 
+• Identity Documents 
+• Photograph 
+• Signature 
+• Authorized Signatory Information 
+ 
+3.2 Business Information 
+For Suppliers and MSMEs: 
+• Enterprise Name 
+• Udyam Registration Number 
+• GSTIN 
+• PAN 
+• Business Address 
+• Product and Service Information 
+• Manufacturing Capacity 
+• Certifications 
+• Bank Account Details 
+For Buyers: 
+• Organization Name 
+• Registration Details 
+• GSTIN (where applicable) 
+• Authorized Representative Information 
+• Procurement Requirements 
+ 
+--- PAGE 3 ---
+3.3 Transaction Information 
+The Portal may collect: 
+• Orders 
+• Quotations 
+• RFQs 
+• Purchase Orders 
+• Payment References 
+• Transaction Status 
+• Settlement Information 
+• Refund Requests 
+• Delivery Confirmations 
+ 
+3.4 Technical Information 
+The Portal may automatically collect: 
+• IP Address 
+• Browser Information 
+• Device Information 
+• Operating System 
+• Login Activity 
+• Usage Statistics 
+• Cookies and Similar Technologies 
+• Location Information (where permitted) 
+ 
+4. HOW WE USE YOUR INFORMATION 
+Information collected may be used for: 
+• Creating and managing user accounts 
+• Verifying eligibility 
+• Facilitating communication between Buyers and Suppliers 
+• Processing transactions 
+• Providing customer support 
+• Sending notifications and alerts 
+• Monitoring compliance 
+--- PAGE 4 ---
+• Preventing fraud and misuse 
+• Improving Portal functionality 
+• Generating reports and analytics 
+• Supporting government initiatives and policy decisions 
+ 
+5. PAYMENT INFORMATION 
+The Portal may integrate with authorized third-party payment gateway providers. 
+The Portal does not store: 
+• Debit Card Numbers 
+• Credit Card Numbers 
+• CVV Details 
+• Internet Banking Credentials 
+• UPI PINs 
+Payment information is processed directly by authorized payment service providers in 
+accordance with applicable laws and industry security standards. 
+ 
+6. SHARING OF INFORMATION 
+The Portal may share information with: 
+6.1 Government Authorities 
+Information may be shared with: 
+• District Administration Jharsuguda 
+• District Industries Centre (DIC) 
+• Government of Odisha 
+• Statutory Authorities 
+• Regulatory Bodies 
+where required for administrative, regulatory, policy, audit, compliance, or legal purposes. 
+ 
+--- PAGE 5 ---
+6.2 Buyers and Suppliers 
+Information necessary for transaction facilitation may be shared between participating 
+Buyers and Suppliers. 
+ 
+6.3 Service Providers 
+Information may be shared with authorized: 
+• Payment Gateway Providers 
+• SMS Providers 
+• Email Service Providers 
+• Cloud Hosting Providers 
+• Technology Service Providers 
+• Security and Compliance Partners 
+subject to confidentiality obligations. 
+ 
+6.4 Legal Compliance 
+Information may be disclosed when required: 
+• By law 
+• By court order 
+• By regulatory authority 
+• During investigations 
+• To prevent fraud or unlawful activity 
+ 
+7. DATA STORAGE AND RETENTION 
+User information shall be retained: 
+• For as long as necessary to provide services. 
+• To comply with legal obligations. 
+• For audit and reporting requirements. 
+• For dispute resolution purposes. 
+• For fraud prevention and compliance monitoring. 
+The Portal may retain certain records even after account closure where legally required. 
+--- PAGE 6 ---
+ 
+8. DATA SECURITY 
+The Portal implements reasonable administrative, technical, and organizational 
+safeguards including: 
+• Secure Servers 
+• Encryption Mechanisms 
+• Access Controls 
+• Authentication Measures 
+• Monitoring Systems 
+• Security Audits 
+While reasonable measures are taken, no electronic system can guarantee absolute 
+security. 
+ 
+9. COOKIES POLICY 
+The Portal may use cookies and similar technologies to: 
+• Improve user experience 
+• Maintain login sessions 
+• Analyze usage patterns 
+• Enhance Portal performance 
+• Provide customized content 
+Users may manage cookie preferences through browser settings. 
+ 
+10. USER RIGHTS 
+Subject to applicable laws, users may request: 
+• Access to their information 
+• Correction of inaccurate information 
+• Updating of records 
+• Withdrawal of certain consents 
+• Closure of accounts 
+--- PAGE 7 ---
+Such requests may be subject to verification and legal requirements. 
+ 
+11. ACCURACY OF INFORMATION 
+Users are responsible for ensuring that all information submitted through the Portal is 
+accurate, complete, and up to date. 
+The Portal shall not be responsible for consequences arising from inaccurate or 
+incomplete information provided by users. 
+ 
+12. THIRD-PARTY SERVICES 
+The Portal may contain links to third-party websites, applications, or services. 
+The Portal is not responsible for: 
+• Content 
+• Privacy Practices 
+• Security Measures 
+• Terms of Use 
+of third-party platforms. 
+Users are encouraged to review applicable third-party policies. 
+ 
+13. CHILDREN’S PRIVACY 
+The Portal is intended for use by businesses, institutions, and adults. 
+Individuals below 18 years of age should not register or use the Portal without lawful 
+authorization. 
+ 
+14. GOVERNMENT REPORTING AND ANALYTICS 
+Users acknowledge that anonymized, aggregated, and non-personal data may be used for: 
+• Economic development analysis 
+--- PAGE 8 ---
+• MSME growth assessment 
+• Procurement trend analysis 
+• Government reporting 
+• Policy formulation 
+• Program monitoring 
+Such information may be published in reports without identifying individual users unless 
+legally required. 
+ 
+15. FRAUD PREVENTION AND COMPLIANCE 
+The Portal reserves the right to: 
+• Verify submitted information 
+• Conduct KYC validation 
+• Review suspicious transactions 
+• Restrict access where necessary 
+• Share information with competent authorities for investigation of suspected fraud 
+or unlawful activities 
+ 
+16. CROSS-PLATFORM COMMUNICATION 
+Users consent to receive communications through: 
+• Email 
+• SMS 
+• Mobile Notifications 
+• WhatsApp (where applicable) 
+• Telephone Calls 
+• Portal Notifications 
+for service-related and administrative purposes. 
+Users may opt out of non-essential communications where permitted. 
+ 
+--- PAGE 9 ---
+17. LIMITATION OF LIABILITY 
+District Administration Jharsuguda, District Industries Centre (DIC), Government of 
+Odisha, Technology Partner, Portal Operator, and their officers shall not be liable for: 
+• Unauthorized access caused by user negligence 
+• Internet interruptions 
+• Cyber attacks beyond reasonable control 
+• Third-party service failures 
+• Data loss caused by force majeure events 
+ 
+18. CHANGES TO THIS PRIVACY POLICY 
+The Portal reserves the right to modify this Privacy Policy at any time. 
+Updated versions shall become effective upon publication on www.jsgsmile.in. 
+Continued use of the Portal constitutes acceptance of the revised Privacy Policy. 
+ 
+19. GRIEVANCE AND CONTACT INFORMATION 
+For privacy-related concerns, users may contact: 
+Portal Administrator 
+JSG SMILE (www.jsgsmile.in) 
+District Industries Centre (DIC), Jharsuguda 
+Government of Odisha 
+Email: [Insert Official Email ID] 
+Phone: [Insert Contact Number] 
+ 
+20. CONSENT 
+By registering, accessing, or using JSG SMILE (www.jsgsmile.in), the User expressly 
+acknowledges and agrees that: 
+• They have read and understood this Privacy Policy. 
+--- PAGE 10 ---
+• They consent to the collection and processing of their information as described 
+herein. 
+• They authorize the Portal to use such information for lawful operational, 
+administrative, compliance, reporting, and facilitation purposes. 
+This consent shall remain valid until withdrawn in accordance with applicable laws and 
+Portal procedures. 

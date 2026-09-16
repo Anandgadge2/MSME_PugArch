@@ -50,6 +50,7 @@ import { downloadCsv } from '../../shared/exportUtils';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Loader2 } from '../../../components/ui/loader';
+import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { api } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
@@ -4453,18 +4454,20 @@ function ModalShell({ title, children, onCancel, wide }: { title: string; childr
       className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4"
       onClick={onCancel}
     >
-      <section
-        ref={modalScrollRef}
-        tabIndex={-1}
-        className={cn('max-h-[92vh] w-full overflow-y-auto rounded-t-md bg-white p-4 shadow-xl sm:rounded-md overscroll-contain focus:outline-none', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 id="master-admin-modal-title" className="text-base font-black text-slate-950">{title}</h2>
-          <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-xs font-black" onClick={onCancel} aria-label="Close dialog">Close</Button>
-        </div>
-        <div className="space-y-4">{children}</div>
-      </section>
+      <FocusTrap onEscape={onCancel} className={cn('w-full flex justify-center', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}>
+        <section
+          ref={modalScrollRef}
+          tabIndex={-1}
+          className="max-h-[92vh] w-full overflow-y-auto rounded-t-md bg-white p-4 shadow-xl sm:rounded-md overscroll-contain focus:outline-none"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 id="master-admin-modal-title" className="text-base font-black text-slate-950">{title}</h2>
+            <Button type="button" variant="outline" className="h-8 rounded-md px-2 text-xs font-black" onClick={onCancel} aria-label="Close dialog">Close</Button>
+          </div>
+          <div className="space-y-4">{children}</div>
+        </section>
+      </FocusTrap>
     </div>
   );
 }

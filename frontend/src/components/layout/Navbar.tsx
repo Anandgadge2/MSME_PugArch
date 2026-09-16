@@ -678,6 +678,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       {/* Mobile Overlay */}
       {isOpen && (
         <div
+          aria-hidden="true"
           className="fixed inset-0 bg-blue-800/50 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
         />

@@ -950,7 +950,12 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
 function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: DeliveryDto; onClose: () => void }) {
     if (kind === 'dispatch-details') {
         return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-3 sm:p-6 overflow-y-auto">
+            <div 
+                className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-3 sm:p-6 overflow-y-auto"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Dispatch Order Fulfillment"
+            >
                 <div className="w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
                     <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] via-[#12335f] to-[#1e40af] px-6 py-4 text-white shrink-0">
                         <div className="flex items-center gap-3">
@@ -1031,7 +1036,12 @@ function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: Del
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
+        <div 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label={kindToLabel(kind)}
+        >
             <div className="w-full max-w-md max-h-[90vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col">
                 <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
                     <div>
@@ -2047,6 +2057,9 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
             {isViewInvoiceModalOpen && (
                 <div 
                     className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-3 sm:p-5"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Tax Invoice Registry"
                     onClick={(e) => {
                         if (e.target === e.currentTarget) {
                             closeInvoiceModal();
@@ -2266,7 +2279,12 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
             {/* Stamp & Signature Branding Modal */}
             {isBrandingModalOpen && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+                <div 
+                    className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Stamp & Signature Setup"
+                >
                     <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                             <div>

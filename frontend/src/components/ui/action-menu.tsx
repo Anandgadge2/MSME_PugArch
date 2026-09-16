@@ -80,21 +80,60 @@ export function ActionMenu({
       }
     };
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsOpen(false);
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
     };
 
     if (isOpen) {
       document.addEventListener('mousedown', handleOutsideClick);
       document.addEventListener('keydown', handleEsc);
+      // Focus first item when menu opens
+      const timer = setTimeout(() => {
+        const firstItem = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])');
+        firstItem?.focus();
+      }, 50);
+      return () => {
+        document.removeEventListener('mousedown', handleOutsideClick);
+        document.removeEventListener('keydown', handleEsc);
+        clearTimeout(timer);
+      };
     }
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('keydown', handleEsc);
-    };
   }, [isOpen]);
+
+  const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!menuRef.current) return;
+    const items = Array.from(
+      menuRef.current.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])')
+    );
+    if (items.length === 0) return;
+
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = (currentIndex + 1) % items.length;
+      items[nextIndex]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIndex = (currentIndex - 1 + items.length) % items.length;
+      items[prevIndex]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (e.key === 'Tab') {
+      // Close menu on Tab out
+      setIsOpen(false);
+    }
+  };
 
   const closeAndCall = (fn?: () => void) => {
     setIsOpen(false);
+    triggerRef.current?.focus();
     if (fn) fn();
   };
 
@@ -103,8 +142,10 @@ export function ActionMenu({
       <button
         type="button"
         ref={triggerRef}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
         className={cn(
-          "flex items-center justify-center h-8 w-8 p-0 rounded-lg border transition-colors outline-none",
+          "flex items-center justify-center h-8 w-8 p-0 rounded-lg border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-indigo-600",
           isOpen ? "bg-slate-100 text-slate-900 border-slate-300 shadow-inner" : "border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-50 bg-white shadow-sm hover:shadow"
         )}
         onClick={(e) => { 
@@ -121,21 +162,28 @@ export function ActionMenu({
       {isOpen && typeof document !== 'undefined' && createPortal(
         <div
           ref={menuRef}
+          role="menu"
+          aria-label="Action options"
+          onKeyDown={handleMenuKeyDown}
           style={style}
           className="flex flex-col min-w-[140px] bg-white border border-slate-200 rounded-xl shadow-xl py-1 animate-in fade-in zoom-in-95 duration-100"
           onClick={(e) => e.stopPropagation()}
         >
           <button
+            role="menuitem"
+            tabIndex={-1}
             onClick={() => closeAndCall(onView)}
-            className="flex items-center gap-2.5 w-full px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-2.5 w-full px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus:bg-slate-100 focus:outline-none transition-colors"
           >
             <Eye className="h-4 w-4 text-slate-400" /> View
           </button>
           
           {onEdit && (
             <button
+              role="menuitem"
+              tabIndex={-1}
               onClick={() => closeAndCall(onEdit)}
-              className="flex items-center gap-2.5 w-full px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-2.5 w-full px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus:bg-slate-100 focus:outline-none transition-colors"
             >
               <Edit3 className="h-4 w-4 text-blue-500" /> Edit
             </button>
@@ -143,11 +191,13 @@ export function ActionMenu({
           
           {onDelete && (
             <>
-              <div className="h-px bg-slate-100 my-1 mx-2" />
+              <div className="h-px bg-slate-100 my-1 mx-2" role="separator" />
               <button
+                role="menuitem"
+                tabIndex={-1}
                 disabled={isDeleteDisabled}
                 onClick={() => closeAndCall(onDelete)}
-                className="flex items-center gap-2.5 w-full px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-2.5 w-full px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 focus:bg-rose-100 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <Trash2 className="h-4 w-4 text-rose-500" /> Delete
               </button>
