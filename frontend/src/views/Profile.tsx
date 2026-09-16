@@ -21,12 +21,14 @@ export default function Profile() {
         router.replace('/buyer/profile');
       } else if (user.role === 'seller') {
         if (isShgUser(user)) {
-          router.replace('/shg/profile');
+          router.replace('/shg/settings');
         } else {
           router.replace('/seller/settings');
         }
       } else if (user.role === 'shg') {
-        router.replace('/shg/profile');
+        router.replace('/shg/settings');
+      } else if (user.role === 'master_admin') {
+        router.replace('/master-admin/settings');
       }
     }
   }, [user, loading, router]);

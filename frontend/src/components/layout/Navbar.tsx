@@ -574,7 +574,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     // Seller Administration
     { label: 'Administration', icon: Settings, roles: ['seller', 'shg'], children: [
       { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['seller', 'shg'], permission: 'team.member.view' },
-      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller', 'shg'], permission: 'organization.view' }
+      { label: 'Settings', path: isShgAccount ? '/shg/settings' : '/seller/settings', icon: Settings, roles: ['seller', 'shg'], permission: 'organization.view' }
     ] },
     // Seller Disputes
     { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'], permission: 'dispute.view' },
@@ -1369,12 +1369,14 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                       router.push('/buyer/profile');
                     } else if (user?.role === 'seller') {
                       if (isShgUser(user)) {
-                        router.push('/shg/profile');
+                        router.push('/shg/settings');
                       } else {
                         router.push('/seller/settings');
                       }
                     } else if (user?.role === 'shg') {
-                      router.push('/shg/profile');
+                      router.push('/shg/settings');
+                    } else if (user?.role === 'master_admin') {
+                      router.push('/master-admin/settings');
                     } else {
                       router.push('/profile');
                     }
