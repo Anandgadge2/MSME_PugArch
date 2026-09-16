@@ -313,8 +313,15 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
   const active = children.some(child => isSidebarRouteActive(child.path, pathname, currentPathWithQuery));
 
   if (!children.length) {
+    const isOpportunities = item.label === 'Opportunities' || item.path?.includes('/opportunities');
     return item.path ? (
-      <SidebarNavLink item={item} isActive={isSidebarRouteActive(item.path, pathname, currentPathWithQuery)} isCollapsed={isCollapsed} onClose={onClose} count={counts?.[item.path]} />
+      <SidebarNavLink
+        item={item}
+        isActive={isSidebarRouteActive(item.path, pathname, currentPathWithQuery)}
+        isCollapsed={isCollapsed}
+        onClose={onClose}
+        count={isOpportunities ? undefined : counts?.[item.path]}
+      />
     ) : null;
   }
 
@@ -397,8 +404,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       const auctionsCount = Number(data.auctionsCount || 0);
       const rateContractsCount = Number(data.rateContractsCount || 0);
 
-      const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount + rateContractsCount;
-
       return {
         '/seller/opportunities/rfqs': rfqsCount,
         '/seller/opportunities/rfps': rfpsCount,
@@ -406,7 +411,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         '/seller/opportunities/invitations': invitationsCount,
         '/seller/opportunities/auctions': auctionsCount,
         '/seller/opportunities/rate-contracts': rateContractsCount,
-        '/shg/opportunities': allCount,
         '/shg/opportunities/rfqs': rfqsCount,
         '/shg/opportunities/rfps': rfpsCount,
         '/shg/opportunities/open-tenders': openTendersCount,

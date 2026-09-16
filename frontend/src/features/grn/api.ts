@@ -46,7 +46,7 @@ export interface GrnDto {
     updatedAt: string;
     items: GrnItemDto[];
     documents: GrnDocumentDto[];
-    organization?: { id: number; name: string; code?: string };
+    organization?: { id: number; organizationName?: string; name?: string; organizationType?: string };
     receivedBy: { id: number; name: string; email: string; mobile?: string | null };
     purchaseOrder?: {
         id: number;
