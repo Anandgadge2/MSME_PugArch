@@ -61,16 +61,17 @@ const grnIncludes = {
         },
         orderBy: { createdAt: 'desc' as const }
     },
+    organization: { select: { id: true, name: true, code: true } },
     purchaseOrder: {
         select: {
             id: true, poNumber: true, title: true, amount: true, status: true,
-            sellerId: true, buyerId: true,
-            seller: { select: { id: true, name: true, email: true } },
-            buyer: { select: { id: true, name: true, email: true } },
+            sellerId: true, buyerId: true, deliveryAddress: true, createdAt: true,
+            seller: { select: { id: true, name: true, email: true, mobile: true } },
+            buyer: { select: { id: true, name: true, email: true, mobile: true } },
             items: { select: { id: true, productId: true, quantity: true, unitPrice: true } }
         }
     },
-    receivedBy: { select: { id: true, name: true, email: true } }
+    receivedBy: { select: { id: true, name: true, email: true, mobile: true } }
 };
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────

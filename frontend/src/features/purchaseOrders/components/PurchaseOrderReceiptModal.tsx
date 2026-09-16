@@ -2,7 +2,6 @@
 
 import React, { useEffect, useLayoutEffect, useState, useRef } from 'react';
 import {
-  Printer,
   Download,
   X,
   ArrowLeft,
@@ -26,11 +25,14 @@ import {
   Package,
   Building2,
   Hash,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { toast } from 'sonner';
 import { api } from '../../../lib/api';
 import { cn } from '../../../lib/utils';
+import type { DocumentConfig } from '../../../lib/pdfEngine';
 
 export interface PurchaseOrderItemDto {
   id?: number;
@@ -184,7 +186,7 @@ export function PurchaseOrderReceiptModal({
   // Auto-fit page state to ensure the entire receipt is 100% visible on screen without scrolling
   const canvasRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
-  const [zoomMode, setZoomMode] = useState<'fit' | '100%'>('fit');
+  const [zoomMode, setZoomMode] = useState<'fit' | '100%' | 'custom'>('fit');
   const [scaleFactor, setScaleFactor] = useState<number>(1);
   const [sheetDims, setSheetDims] = useState<{ w: number; h: number }>({ w: 800, h: 650 });
 
@@ -208,16 +210,20 @@ export function PurchaseOrderReceiptModal({
         return;
       }
 
+      if (zoomMode === 'custom') {
+        return;
+      }
+
       // Available space inside canvas minus comfortable padding
-      const availH = canvas.clientHeight - 20;
-      const availW = canvas.clientWidth - 20;
+      const availH = canvas.clientHeight - 32;
+      const availW = canvas.clientWidth - 32;
 
       if (unscaledH > 0 && availH > 0 && unscaledW > 0 && availW > 0) {
         const fitScaleY = availH / unscaledH;
         const fitScaleX = availW / unscaledW;
         // Best scale to fit both height and width completely within screen
-        const bestScale = Math.min(fitScaleY, fitScaleX, 1);
-        setScaleFactor(Math.max(0.35, Math.min(1, Number(bestScale.toFixed(3)))));
+        const bestScale = Math.min(fitScaleY, fitScaleX);
+        setScaleFactor(Math.max(0.35, Math.min(1.25, Number(bestScale.toFixed(2)))));
       }
     };
 
@@ -369,20 +375,83 @@ export function PurchaseOrderReceiptModal({
   const fillerRowCount = Math.max(0, 3 - displayItems.length);
   const fillerRows = Array.from({ length: fillerRowCount });
 
-  const handlePrint = () => {
-    if (onPrint) {
-      onPrint(order);
-    } else {
-      window.print();
-    }
-  };
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-  const handleDownload = () => {
+  const handleDirectDownloadPdf = async () => {
+    if (isGeneratingPdf) return;
+
     if (onDownloadPdf) {
       onDownloadPdf(order);
-    } else {
-      toast.info('Downloading PDF receipt...');
-      window.print();
+      return;
+    }
+
+    try {
+      setIsGeneratingPdf(true);
+      toast.loading('Generating PDF receipt...', { id: 'po-pdf-dl' });
+      const { PdfEngine } = await import('../../../lib/pdfEngine');
+
+      const config: DocumentConfig = {
+        documentTitle: 'Receipt Purchase Order',
+        documentNumber: order.poNumber || `PO-${order.id}`,
+        dateStr: poDate,
+        status: readableStatus(order.status),
+        parties: [
+          {
+            title: 'Vendor / Seller',
+            name: sellerOrg,
+            address: sellerAddress,
+            phone: sellerContact !== 'Procurement Desk' ? sellerContact : undefined,
+          },
+          {
+            title: 'Ship To / Buyer',
+            name: buyerOrg,
+            address: deliveryAddress,
+            details: [
+              `Ship Via: ${shipVia}`,
+              `Tracking: ${trackingNumber}`,
+            ],
+          },
+        ],
+        infoGrid: {
+          'PO Number': order.poNumber || `PO-${order.id}`,
+          'Date': poDate,
+          'Due Date': dueDate,
+          'Ship Via': shipVia,
+          'Tracking Number': trackingNumber,
+          'Payment Terms': order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice',
+        },
+        tableHeaders: ['Sr.', 'Product Description', 'Quantity', 'Unit Price', 'Total'],
+        tableData: displayItems.map((item, idx) => [
+          String(idx + 1),
+          item.name + (item.specs ? `\n${item.specs}` : ''),
+          String(item.quantity),
+          `₹${formatNumber(item.unitPrice)}`,
+          `₹${formatNumber(item.total)}`,
+        ]),
+        financials: {
+          subtotal: subtotal,
+          shipping: 0,
+          totalTax: taxAmount,
+          grandTotal: grandTotal,
+        },
+        notes: [
+          '1. Please deliver to the designated address by the due date.',
+          `2. Payment Terms: ${order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice'}.`,
+          `3. If you have any questions, contact ${sellerContact || 'the designated procurement officer'}.`,
+          ...(order.metadata?.notes ? [`4. ${order.metadata.notes}`] : []),
+        ],
+      };
+
+      const engine = new PdfEngine('p');
+      const doc = engine.generate(config);
+      const filename = `${order.poNumber || `PO-${order.id}`}.pdf`;
+      doc.save(filename);
+      toast.success('PDF downloaded directly', { id: 'po-pdf-dl' });
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+      toast.error('Failed to download PDF. Please try again.', { id: 'po-pdf-dl' });
+    } finally {
+      setIsGeneratingPdf(false);
     }
   };
 
@@ -452,7 +521,7 @@ export function PurchaseOrderReceiptModal({
           'flex flex-col bg-white overflow-hidden shadow-2xl transition-all duration-300 w-full',
           isFullscreen
             ? 'h-full w-full rounded-none'
-            : 'h-[92vh] max-h-[95vh] max-w-6xl rounded-2xl border border-slate-200'
+            : 'h-[92vh] max-h-[95vh] max-w-[880px] rounded-2xl border border-slate-200'
         )}
       >
         {/* Top Control Header Bar (Hidden in Print) */}
@@ -532,7 +601,19 @@ export function PurchaseOrderReceiptModal({
 
             {/* Zoom / Page Fit Switcher when in Receipt tab */}
             {activeTab === 'receipt' && (
-              <div className="hidden lg:flex items-center bg-white/10 p-0.5 rounded-xl border border-white/15 gap-0.5 shrink-0">
+              <div className="hidden sm:flex items-center bg-white/10 p-0.5 rounded-xl border border-white/15 gap-0.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setZoomMode('custom');
+                    setScaleFactor(prev => Math.max(0.4, Number((prev - 0.1).toFixed(2))));
+                  }}
+                  className="h-6.5 w-6.5 flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                  title="Zoom Out"
+                  aria-label="Zoom Out"
+                >
+                  <ZoomOut className="h-3 w-3" aria-hidden="true" />
+                </button>
                 <button
                   type="button"
                   onClick={() => setZoomMode('fit')}
@@ -544,20 +625,35 @@ export function PurchaseOrderReceiptModal({
                   )}
                   title="Fit whole page in window without scrolling"
                 >
-                  Fit Page {zoomMode === 'fit' && scaleFactor < 1 && `(${Math.round(scaleFactor * 100)}%)`}
+                  Fit Page ({Math.round(scaleFactor * 100)}%)
                 </button>
                 <button
                   type="button"
-                  onClick={() => setZoomMode('100%')}
+                  onClick={() => {
+                    setZoomMode('100%');
+                    setScaleFactor(1);
+                  }}
                   className={cn(
                     'px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap',
-                    zoomMode === '100%'
+                    zoomMode === '100%' || (zoomMode === 'custom' && scaleFactor === 1)
                       ? 'bg-white text-slate-950 shadow-sm'
                       : 'text-white/70 hover:text-white hover:bg-white/5'
                   )}
                   title="View at regular 100% actual size"
                 >
                   100%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setZoomMode('custom');
+                    setScaleFactor(prev => Math.min(1.5, Number((prev + 0.1).toFixed(2))));
+                  }}
+                  className="h-6.5 w-6.5 flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                  title="Zoom In"
+                  aria-label="Zoom In"
+                >
+                  <ZoomIn className="h-3 w-3" aria-hidden="true" />
                 </button>
               </div>
             )}
@@ -569,24 +665,15 @@ export function PurchaseOrderReceiptModal({
               type="button"
               variant="outline"
               size="sm"
-              onClick={handlePrint}
-              className="h-8 sm:h-8.5 px-2 sm:px-2.5 text-xs font-bold rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white gap-1.5 cursor-pointer transition-all shrink-0 whitespace-nowrap"
-              title="Print Purchase Order"
-            >
-              <Printer className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">Print</span>
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleDownload}
-              className="h-8 sm:h-8.5 px-2 sm:px-2.5 text-xs font-bold rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white gap-1.5 cursor-pointer transition-all shrink-0 whitespace-nowrap"
-              title="Download PDF"
+              disabled={isGeneratingPdf}
+              onClick={handleDirectDownloadPdf}
+              className="h-8 sm:h-8.5 px-2.5 sm:px-3 text-xs font-bold rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white gap-1.5 cursor-pointer transition-all shrink-0 whitespace-nowrap"
+              title="Download PDF directly"
+              aria-label="Download PDF directly"
             >
               <Download className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">PDF</span>
+              <span className="hidden sm:inline">Download PDF</span>
+              <span className="sm:hidden">PDF</span>
             </Button>
 
             <Button
@@ -629,26 +716,30 @@ export function PurchaseOrderReceiptModal({
             /* 1st Page Format: RECEIPT PURCHASE ORDER (Exact Match to Image 1) */
             <div className="min-h-full w-full p-3 sm:p-6 flex flex-col items-center justify-start sm:justify-center overflow-x-auto">
               <div
-                className="po-scale-wrapper relative flex justify-center items-center mx-auto my-auto shrink-0 transition-all duration-150"
-              style={{
-                width: sheetDims.w ? `${Math.round(sheetDims.w * scaleFactor)}px` : '800px',
-                height: sheetDims.h ? `${Math.round(sheetDims.h * scaleFactor)}px` : 'auto',
-              }}
-            >
-              <div
-                ref={sheetRef}
-                id="po-receipt-print-sheet"
+                className="po-scale-wrapper relative mx-auto my-auto shrink-0 transition-all duration-150"
                 style={{
-                  width: '800px',
-                  maxWidth: '800px',
-                  transform: scaleFactor !== 1 ? `scale(${scaleFactor})` : undefined,
-                  transformOrigin: 'top left',
+                  width: `${Math.round((sheetDims.w || 800) * scaleFactor)}px`,
+                  height: `${Math.round((sheetDims.h || 650) * scaleFactor)}px`,
+                  position: 'relative',
                 }}
-                className={cn(
-                  "bg-white text-slate-900 rounded-sm border-2 border-black p-4 sm:p-5 flex flex-col justify-between shrink-0 transition-shadow",
-                  canvasBg === 'light' ? "shadow-2xl shadow-slate-400/50" : "shadow-2xl shadow-black/80"
-                )}
               >
+                <div
+                  ref={sheetRef}
+                  id="po-receipt-print-sheet"
+                  style={{
+                    width: '800px',
+                    maxWidth: '800px',
+                    transform: scaleFactor !== 1 ? `scale(${scaleFactor})` : undefined,
+                    transformOrigin: 'top left',
+                    position: scaleFactor !== 1 ? 'absolute' : 'relative',
+                    left: 0,
+                    top: 0,
+                  }}
+                  className={cn(
+                    "bg-white text-slate-900 rounded-sm border-2 border-black p-4 sm:p-5 flex flex-col justify-between shrink-0 transition-shadow",
+                    canvasBg === 'light' ? "shadow-2xl shadow-slate-400/50" : "shadow-2xl shadow-black/80"
+                  )}
+                >
                 <div>
                   {/* Header Title */}
                   <div className="text-center pb-1 mb-2.5">
@@ -1262,15 +1353,20 @@ export function PurchaseOrderReceiptModal({
 
           <div className="flex items-center gap-2 shrink-0">
             <Button
+              type="button"
               variant="outline"
-              onClick={handleDownload}
-              className="h-9 text-xs font-black uppercase tracking-wider rounded-xl border-slate-300 hover:bg-slate-50 px-3.5 whitespace-nowrap"
+              disabled={isGeneratingPdf}
+              onClick={handleDirectDownloadPdf}
+              className="h-9 text-xs font-black uppercase tracking-wider rounded-xl border-slate-300 hover:bg-slate-50 px-3.5 whitespace-nowrap cursor-pointer"
+              title="Download PDF directly"
+              aria-label="Download PDF directly"
             >
-              <Download className="mr-1.5 h-3.5 w-3.5 text-slate-600" /> Download PO
+              <Download className="mr-1.5 h-3.5 w-3.5 text-slate-600" aria-hidden="true" /> Download PDF
             </Button>
             <Button
+              type="button"
               onClick={onClose}
-              className="h-9 bg-slate-900 text-xs font-black uppercase tracking-wider text-white hover:bg-slate-800 rounded-xl px-4 shadow-sm whitespace-nowrap"
+              className="h-9 bg-slate-900 text-xs font-black uppercase tracking-wider text-white hover:bg-slate-800 rounded-xl px-4 shadow-sm whitespace-nowrap cursor-pointer"
             >
               Close
             </Button>

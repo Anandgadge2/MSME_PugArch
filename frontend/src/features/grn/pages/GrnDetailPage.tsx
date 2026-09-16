@@ -17,7 +17,6 @@ import {
     ExternalLink,
     FileText,
     Package,
-    Printer,
     Send,
     ShieldAlert,
     ShieldCheck,
@@ -39,6 +38,7 @@ import { useApproveGrn, useGrn, useRejectGrn, useSubmitGrn } from '../hooks';
 import type { GrnStatus } from '../api';
 import { DataTable } from '../../../components/ui/data-table';
 import { PurchaseOrderReceiptModal } from '../../purchaseOrders/components/PurchaseOrderReceiptModal';
+import { downloadGrnPdf } from '../lib/grnPdfGenerator';
 
 const STATUS_CONFIG: Record<GrnStatus, { label: string; tone: string; icon: typeof Clock }> = {
     DRAFT: {
@@ -87,6 +87,7 @@ export default function GrnDetailPage({ id }: Props) {
     const [showApprove, setShowApprove] = useState(false);
     const [copied, setCopied] = useState(false);
     const [viewingOrder, setViewingOrder] = useState<any | null>(null);
+    const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
     if (!canViewGrn) {
         return (
@@ -143,8 +144,18 @@ export default function GrnDetailPage({ id }: Props) {
         }
     };
 
-    const handlePrint = () => {
-        window.print();
+    const handleDownloadPdf = () => {
+        if (!grn) return;
+        try {
+            setIsDownloadingPdf(true);
+            downloadGrnPdf(grn);
+            notify.success('Goods Receipt Note (GRN) PDF downloaded successfully');
+        } catch (err: any) {
+            console.error('Failed to generate GRN PDF:', err);
+            notify.error('Failed to download GRN PDF: ' + (err?.message || 'Unknown error'));
+        } finally {
+            setIsDownloadingPdf(false);
+        }
     };
 
     return (
@@ -187,12 +198,17 @@ export default function GrnDetailPage({ id }: Props) {
                 <div className="flex flex-wrap items-center gap-2 shrink-0 print:hidden">
                     <Button
                         variant="outline"
-                        onClick={handlePrint}
-                        className="border-slate-200 text-slate-700 hover:bg-slate-50 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5"
-                        title="Print GRN receipt"
+                        onClick={handleDownloadPdf}
+                        disabled={isDownloadingPdf}
+                        className="border-[#12335f]/20 bg-white text-[#12335f] hover:bg-[#12335f]/5 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all"
+                        title="Download official Goods Receipt Note (GRN) PDF"
                     >
-                        <Printer className="h-3.5 w-3.5 text-slate-500" />
-                        Print Summary
+                        {isDownloadingPdf ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#12335f]" />
+                        ) : (
+                            <Download className="h-3.5 w-3.5 text-[#12335f]" />
+                        )}
+                        Download GRN
                     </Button>
 
                     {canSubmit && (
