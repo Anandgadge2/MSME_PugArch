@@ -26,6 +26,7 @@ interface MarketplaceItemCardProps {
     showCompare?: boolean;
     showRequestQuote?: boolean;
     hideSeller?: boolean;
+    priority?: boolean;
     className?: string;
 }
 
@@ -40,6 +41,7 @@ export function MarketplaceItemCard({
     itemType,
     showAddToCart = true,
     hideSeller = false,
+    priority = false,
     className,
 }: MarketplaceItemCardProps) {
     const type = inferItemType(item, itemType);
@@ -124,8 +126,9 @@ export function MarketplaceItemCard({
                         <img
                             src={imageUrl}
                             alt={item.name}
-                            loading="lazy"
+                            loading={priority ? 'eager' : 'lazy'}
                             decoding="async"
+                            fetchPriority={priority ? 'high' : 'auto'}
                             onError={() => setImageFailed(true)}
                             className="h-full w-full object-contain p-2 mix-blend-multiply transition-transform duration-200 ease-out group-hover:scale-105"
                         />

@@ -1733,7 +1733,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                     isBuyerAadhaarReady ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500"
                                   )}
                                 >
-                                  {mobileAvailability === 'checking' ? 'Checking...' : 'Verify with DigiLocker / MeriPehchaan'}
+                                  {mobileAvailability === 'checking' ? 'Checking...' : 'Verify with DigiLocker'}
                                 </Button>
                               </div>
                             </>
@@ -2049,7 +2049,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                     isAadhaarReady && !mobileAlreadyRegistered && mobileAvailability !== 'checking' ? "bg-[#12335f] text-white hover:bg-slate-800" : "bg-slate-200 text-slate-500 cursor-not-allowed"
                                   )}
                                 >
-                                  {mobileAvailability === 'checking' ? 'Checking...' : 'Verify with DigiLocker / MeriPehchaan'}
+                                  {mobileAvailability === 'checking' ? 'Checking...' : 'Verify with DigiLocker'}
                                 </Button>
                               </div>
                             </>
@@ -2062,7 +2062,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                               <div className="flex items-center justify-between gap-2.5 sm:gap-3 text-green-700">
                                 <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                                   <CheckCircle2 className="h-5 w-5 fill-green-600 text-green-600" />
-                                  <p className="text-sm font-bold">Identity verified through DigiLocker/MeriPehchaan</p>
+                                  <p className="text-sm font-bold">Identity verified through DigiLocker</p>
                                 </div>
                                 <button
                                   type="button"

@@ -25,10 +25,14 @@ import {
     Search,
     Send,
     ShieldCheck,
+    ShoppingCart,
     Smile,
     Trash2,
     UploadCloud,
     UserRound,
+    ArrowRight,
+    ExternalLink,
+    AlertCircle,
     X
 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
@@ -600,6 +604,28 @@ function ConversationList({
     );
 }
 
+interface ParsedQuoteData {
+    ref: string | null;
+    amount: string | null;
+    timeline: string | null;
+    notes: string | null;
+}
+
+function parseQuotationMessage(content?: string): ParsedQuoteData | null {
+    if (!content || !content.includes('Formal Quotation Submitted')) return null;
+    const refMatch = content.match(/Quotation Ref\*\*?:\s*([^\n]+)/i);
+    const amountMatch = content.match(/Total Amount\*\*?:\s*([^\n]+)/i);
+    const timelineMatch = content.match(/Delivery Timeline\*\*?:\s*([^\n]+)/i);
+    const notesMatch = content.match(/Terms & Notes\*\*?:\s*([^\n]+)/i);
+
+    return {
+        ref: refMatch ? refMatch[1].trim() : null,
+        amount: amountMatch ? amountMatch[1].trim() : null,
+        timeline: timelineMatch ? timelineMatch[1].trim() : null,
+        notes: notesMatch ? notesMatch[1].trim() : null
+    };
+}
+
 function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) {
     const { user } = useAuth();
     const router = useRouter();
@@ -629,6 +655,38 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
     const [uploadedAttachments, setUploadedAttachments] = useState<UploadedFileAsset[]>([]);
     const [uploadingFiles, setUploadingFiles] = useState<Array<{ id: string; name: string; progress: number }>>([]);
     const [uploadError, setUploadError] = useState<string | null>(null);
+
+    const [acceptModalQuote, setAcceptModalQuote] = useState<{
+        responseId: number;
+        amount: number;
+        responseNumber?: string;
+        deliveryTimeline?: string;
+        notes?: string;
+    } | null>(null);
+    const [isAcceptingQuote, setIsAcceptingQuote] = useState(false);
+
+    const handleAcceptQuotation = async (quoteResponseId: number, title?: string) => {
+        try {
+            setIsAcceptingQuote(true);
+            const res = await runWithToast(() => postApi<any>(`/api/quote-responses/${quoteResponseId}/accept`, { title: title || 'Direct Purchase from Quotation' }), {
+                loading: 'Accepting quotation and generating Purchase Order...',
+                success: 'Quotation accepted! Purchase Order issued.',
+                error: (err: any) => err?.message || 'Failed to accept quotation'
+            });
+            void queryClient.invalidateQueries({ queryKey: ['conversations', 'detail', id] });
+            void queryClient.invalidateQueries({ queryKey: ['conversations', 'list'] });
+            void queryClient.invalidateQueries({ queryKey: ['quote-requests'] });
+            void queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+            setAcceptModalQuote(null);
+            if (res?.purchaseOrder?.id) {
+                router.push('/orders');
+            }
+        } catch (err) {
+            console.error('Failed to accept quotation', err);
+        } finally {
+            setIsAcceptingQuote(false);
+        }
+    };
 
     useEffect(() => {
         if (conversation?.id && conversation.unreadCount) {
@@ -673,6 +731,12 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
     const buyer = conversation.buyer;
     const seller = conversation.seller;
     const counterpart = conversation.buyerId === Number(user?.id) ? seller : buyer;
+    const quoteReqId = conversation.quoteRequest?.id || (() => {
+        const m = conversation.subject?.match(/Quote Request #(\d+)/i);
+        return m ? Number(m[1]) : null;
+    })();
+    const submittedQuote = conversation.quoteRequest?.quoteResponses?.find((r: any) => r.status === 'SUBMITTED' || r.status === 'ACCEPTED') || conversation.quoteRequest?.quoteResponses?.[0];
+    const isQuoteAccepted = submittedQuote?.status === 'ACCEPTED' || conversation.quoteRequest?.status === 'accepted';
     const hasComposerContent = content.trim().length > 0 || uploadedAttachments.length > 0;
     const isUploading = uploadingFiles.length > 0;
     const lastSeenText = formatLastSeen(counterpart);
@@ -955,6 +1019,7 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                     const submittedQuote = conversation.quoteRequest?.quoteResponses?.find((r: any) => r.status === 'SUBMITTED' || r.status === 'ACCEPTED') || conversation.quoteRequest?.quoteResponses?.[0];
                     const isSeller = user?.role === 'seller';
                     const isBuyer = user?.role === 'buyer';
+                    const isAccepted = submittedQuote?.status === 'ACCEPTED' || conversation.quoteRequest?.status === 'accepted';
 
                     return (
                         <div className="flex flex-col gap-2 border-b border-indigo-100 bg-gradient-to-r from-indigo-50/90 via-blue-50/70 to-slate-50 px-4 py-2 sm:flex-row sm:items-center sm:justify-between shadow-2xs">
@@ -968,8 +1033,12 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                             {quoteReqId ? `RFQ #${quoteReqId}` : 'Quote Request'}
                                         </span>
                                         {submittedQuote && (
-                                            <span className="rounded-full bg-emerald-100 px-2 py-0.2 text-[10px] font-bold text-emerald-800">
+                                            <span className={cn(
+                                                "rounded-full px-2 py-0.5 text-[10px] font-bold",
+                                                isAccepted ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800"
+                                            )}>
                                                 ₹{Number(submittedQuote.totalAmount || 0).toLocaleString('en-IN')}
+                                                {isAccepted ? ' · Accepted' : ' · Quoted'}
                                             </span>
                                         )}
                                     </div>
@@ -991,21 +1060,49 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                         {submittedQuote ? 'Edit Quote' : 'Create Quote'}
                                     </Button>
                                 )}
-                                {isBuyer && submittedQuote && (
+                                {isBuyer && isAccepted && (
                                     <Button
                                         size="sm"
-                                        className="h-7 bg-emerald-600 text-[11px] text-white hover:bg-emerald-700"
-                                        onClick={() => {
-                                            const targetId = quoteReqId || conversation.quoteRequest?.id;
-                                            if (targetId) {
-                                                router.push(`/buyer/rfq/${targetId}/compare?conversationId=${conversation.id}`);
-                                            } else {
-                                                router.push(`/buyer/rfq/compare?conversationId=${conversation.id}`);
-                                            }
-                                        }}
+                                        className="h-7 bg-[#12335f] text-[11px] font-bold text-white hover:bg-[#0b1f3a]"
+                                        onClick={() => router.push('/orders')}
                                     >
-                                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Accept Quote
+                                        <ShoppingCart className="mr-1 h-3.5 w-3.5" /> View Order (PO)
                                     </Button>
+                                )}
+                                {isBuyer && !isAccepted && submittedQuote && (
+                                    <>
+                                        <Button
+                                            size="sm"
+                                            className="h-7 bg-emerald-600 text-[11px] font-bold text-white hover:bg-emerald-700 shadow-xs"
+                                            onClick={() => {
+                                                if (submittedQuote.id) {
+                                                    setAcceptModalQuote({
+                                                        responseId: submittedQuote.id,
+                                                        amount: Number(submittedQuote.totalAmount || 0),
+                                                        responseNumber: submittedQuote.responseNumber || undefined,
+                                                        deliveryTimeline: submittedQuote.deliveryDays ? `${submittedQuote.deliveryDays} Days` : undefined,
+                                                        notes: (submittedQuote as any).notes || undefined
+                                                    });
+                                                } else {
+                                                    const targetId = quoteReqId || conversation.quoteRequest?.id;
+                                                    router.push(targetId ? `/buyer/rfq/${targetId}/compare?conversationId=${conversation.id}` : `/buyer/rfq/compare?conversationId=${conversation.id}`);
+                                                }
+                                            }}
+                                        >
+                                            <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Accept Quote
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 border-slate-300 text-[11px] font-semibold hover:bg-slate-100"
+                                            onClick={() => {
+                                                const targetId = quoteReqId || conversation.quoteRequest?.id;
+                                                router.push(targetId ? `/buyer/rfq/${targetId}/compare?conversationId=${conversation.id}` : `/buyer/rfq/compare?conversationId=${conversation.id}`);
+                                            }}
+                                        >
+                                            <FileText className="mr-1 h-3.5 w-3.5" /> Review
+                                        </Button>
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -1034,6 +1131,7 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                 const msgDate = formatChatDateHeader(message.createdAt);
                                 const showDateHeader = msgDate !== lastDate;
                                 lastDate = msgDate;
+                                const parsedQuote = !isDeleted ? parseQuotationMessage(message.content) : null;
 
                                 return (
                                     <div key={message.id} className="space-y-3">
@@ -1089,7 +1187,8 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                             {/* The Message Bubble */}
                                             <div
                                                 className={cn(
-                                                    'relative max-w-[85%] sm:max-w-[72%] rounded-2xl px-3.5 py-2 text-xs shadow-xs transition',
+                                                    'relative rounded-2xl px-3.5 py-2 text-xs shadow-xs transition',
+                                                    parsedQuote ? 'w-full max-w-[95%] sm:max-w-[460px]' : 'max-w-[85%] sm:max-w-[72%]',
                                                     isMe
                                                         ? 'bg-[#12335f] text-white rounded-br-xs'
                                                         : 'bg-white text-slate-900 border border-slate-200/80 rounded-bl-xs'
@@ -1119,6 +1218,153 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                                 {/* Content */}
                                                 {isDeleted ? (
                                                     <p className="italic text-white/60 text-[11px]">🚫 This message was deleted</p>
+                                                ) : parsedQuote ? (
+                                                    <div className={cn(
+                                                        "my-1 rounded-xl border p-3.5 transition shadow-2xs",
+                                                        isMe
+                                                            ? "border-indigo-400/40 bg-white/10 text-white"
+                                                            : "border-indigo-200/80 bg-gradient-to-br from-indigo-50/70 via-blue-50/40 to-white text-slate-900"
+                                                    )}>
+                                                        {/* Header with icon, title, and status */}
+                                                        <div className="flex items-center justify-between gap-2 border-b border-indigo-200/40 pb-2 mb-2.5">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className={cn(
+                                                                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-2xs",
+                                                                    isMe ? "bg-emerald-500 text-white" : "bg-[#12335f] text-white"
+                                                                )}>
+                                                                    <FileCheck className="h-4 w-4" />
+                                                                </div>
+                                                                <div>
+                                                                    <h4 className={cn("text-xs font-black uppercase tracking-wider", isMe ? "text-white" : "text-[#12335f]")}>
+                                                                        Formal Quotation
+                                                                    </h4>
+                                                                    {parsedQuote.ref && (
+                                                                        <p className={cn("text-[10px] font-mono", isMe ? "text-indigo-200" : "text-slate-500")}>
+                                                                            Ref: {parsedQuote.ref}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <span className={cn(
+                                                                "rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide",
+                                                                isQuoteAccepted
+                                                                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                                                    : "bg-amber-100 text-amber-800 border border-amber-300"
+                                                            )}>
+                                                                {isQuoteAccepted ? 'Accepted' : 'Submitted'}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Quoted Amount & Key Details */}
+                                                        <div className="grid grid-cols-2 gap-2 my-2">
+                                                            <div className={cn("rounded-lg p-2 border", isMe ? "bg-black/20 border-white/10" : "bg-white border-slate-200/80")}>
+                                                                <p className={cn("text-[9px] font-black uppercase tracking-wider", isMe ? "text-indigo-200" : "text-slate-500")}>
+                                                                    Total Amount
+                                                                </p>
+                                                                <p className={cn("text-sm font-black mt-0.5", isMe ? "text-emerald-300" : "text-emerald-700")}>
+                                                                    {parsedQuote.amount || (submittedQuote?.totalAmount ? `₹${Number(submittedQuote.totalAmount).toLocaleString('en-IN')}` : '—')}
+                                                                </p>
+                                                            </div>
+                                                            <div className={cn("rounded-lg p-2 border", isMe ? "bg-black/20 border-white/10" : "bg-white border-slate-200/80")}>
+                                                                <p className={cn("text-[9px] font-black uppercase tracking-wider", isMe ? "text-indigo-200" : "text-slate-500")}>
+                                                                    Delivery Timeline
+                                                                </p>
+                                                                <p className={cn("text-xs font-bold mt-0.5", isMe ? "text-white" : "text-slate-800")}>
+                                                                    {parsedQuote.timeline || (submittedQuote?.deliveryDays ? `${submittedQuote.deliveryDays} Days` : 'As specified')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        {parsedQuote.notes && (
+                                                            <div className={cn("mb-2.5 rounded-lg px-2.5 py-1.5 text-[10px]", isMe ? "bg-white/5 text-indigo-100" : "bg-slate-50 text-slate-700 border border-slate-100")}>
+                                                                <span className="font-bold">Terms & Notes: </span>{parsedQuote.notes}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Action Buttons for Buyer */}
+                                                        {user?.role === 'buyer' && (
+                                                            <div className="mt-2.5 pt-2 border-t border-indigo-200/40 space-y-2">
+                                                                {!isQuoteAccepted ? (
+                                                                    <>
+                                                                        <div className="flex flex-wrap items-center gap-2">
+                                                                            <Button
+                                                                                size="sm"
+                                                                                className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] shadow-sm flex-1 sm:flex-initial"
+                                                                                onClick={() => {
+                                                                                    const targetResponseId = submittedQuote?.id;
+                                                                                    if (targetResponseId) {
+                                                                                        setAcceptModalQuote({
+                                                                                            responseId: targetResponseId,
+                                                                                            amount: Number(submittedQuote.totalAmount || 0),
+                                                                                            responseNumber: parsedQuote.ref || submittedQuote.responseNumber || undefined,
+                                                                                            deliveryTimeline: parsedQuote.timeline || undefined,
+                                                                                            notes: parsedQuote.notes || undefined
+                                                                                        });
+                                                                                    } else {
+                                                                                        const targetId = quoteReqId || conversation.quoteRequest?.id;
+                                                                                        router.push(targetId ? `/buyer/rfq/${targetId}/compare?conversationId=${conversation.id}` : `/buyer/rfq/compare?conversationId=${conversation.id}`);
+                                                                                    }
+                                                                                }}
+                                                                            >
+                                                                                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Accept Quote & Issue PO
+                                                                            </Button>
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                className={cn("h-8 text-[11px] font-bold", isMe ? "border-white/20 text-white hover:bg-white/10" : "border-slate-300 text-slate-700 hover:bg-slate-100")}
+                                                                                onClick={() => {
+                                                                                    const targetId = quoteReqId || conversation.quoteRequest?.id;
+                                                                                    router.push(targetId ? `/buyer/rfq/${targetId}/compare?conversationId=${conversation.id}` : `/buyer/rfq/compare?conversationId=${conversation.id}`);
+                                                                                }}
+                                                                            >
+                                                                                <FileText className="mr-1.5 h-3.5 w-3.5" /> Review Comparison
+                                                                            </Button>
+                                                                        </div>
+                                                                        <p className={cn("text-[9.5px] font-medium leading-tight", isMe ? "text-indigo-200" : "text-slate-500")}>
+                                                                            ⚡ Direct Purchase: Accepting this quotation directly creates a binding Purchase Order (PO) with the seller at the quoted price.
+                                                                        </p>
+                                                                    </>
+                                                                ) : (
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                                                                            <CheckCircle2 className="h-3.5 w-3.5" /> Purchase Order Generated
+                                                                        </span>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            className="h-7 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-[10px] font-bold"
+                                                                            onClick={() => router.push('/orders')}
+                                                                        >
+                                                                            <ShoppingCart className="mr-1 h-3 w-3" /> View Orders
+                                                                        </Button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Action for Seller */}
+                                                        {user?.role === 'seller' && (
+                                                            <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between">
+                                                                <span className="text-[10px] text-indigo-200 font-medium">
+                                                                    {isQuoteAccepted ? 'Quotation has been accepted by buyer.' : 'Quotation submitted to buyer.'}
+                                                                </span>
+                                                                {!isQuoteAccepted && (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="h-7 border-indigo-200/40 bg-white/10 text-white hover:bg-white/20 text-[10px]"
+                                                                        onClick={() => {
+                                                                            const url = quoteReqId
+                                                                                ? `/seller/rfq/submit-quotation?conversationId=${conversation.id}&quoteRequestId=${quoteReqId}`
+                                                                                : `/seller/rfq/submit-quotation?conversationId=${conversation.id}`;
+                                                                            router.push(url);
+                                                                        }}
+                                                                    >
+                                                                        <FileCheck className="mr-1 h-3 w-3" /> Edit Quote
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 ) : (
                                                     <p className="whitespace-pre-wrap font-medium leading-relaxed text-wrap-anywhere">
                                                         {message.content?.startsWith('[Replying to') ? message.content.split('\n').slice(1).join('\n') : message.content}
@@ -1398,6 +1644,77 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                     currentUserId={Number(user?.id || 0)}
                     onClose={() => setForwardMessageItem(null)}
                 />
+            )}
+
+            {/* Accept Quotation Modal */}
+            {acceptModalQuote && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs p-4">
+                    <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
+                            <div>
+                                <h3 className="text-sm font-black uppercase tracking-widest">Accept Quotation & Issue PO</h3>
+                                {acceptModalQuote.responseNumber && (
+                                    <p className="mt-0.5 font-mono text-[10px] text-white/70">Ref: {acceptModalQuote.responseNumber}</p>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => !isAcceptingQuote && setAcceptModalQuote(null)}
+                                disabled={isAcceptingQuote}
+                                className="rounded-md p-1 text-white/80 hover:bg-white/10"
+                                aria-label="Close dialog"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">Agreed Quoted Amount</p>
+                                <p className="text-2xl font-black text-emerald-700 mt-0.5">
+                                    ₹{acceptModalQuote.amount ? Number(acceptModalQuote.amount).toLocaleString('en-IN') : '—'}
+                                </p>
+                                {acceptModalQuote.deliveryTimeline && (
+                                    <p className="text-xs font-semibold text-emerald-950 mt-1">
+                                        Delivery Timeline: {acceptModalQuote.deliveryTimeline}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3.5 text-xs text-blue-950 space-y-1.5">
+                                <p className="font-bold flex items-center gap-1.5 text-blue-900">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Direct Purchase from Quoted Rates
+                                </p>
+                                <p className="text-[11px] text-slate-600 leading-normal">
+                                    Confirming this will formally accept the seller's quotation and generate a binding Purchase Order (PO) under your organization. The order will be immediately dispatched to the seller.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-5 py-3.5">
+                            <Button
+                                variant="outline"
+                                onClick={() => setAcceptModalQuote(null)}
+                                disabled={isAcceptingQuote}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={() => handleAcceptQuotation(acceptModalQuote.responseId)}
+                                disabled={isAcceptingQuote}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                            >
+                                {isAcceptingQuote ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Issuing PO...
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle2 className="mr-2 h-4 w-4" /> Confirm & Issue PO
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
             )}
         </Card>
     );

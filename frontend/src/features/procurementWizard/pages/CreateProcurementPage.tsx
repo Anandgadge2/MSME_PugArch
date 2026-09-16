@@ -53,6 +53,8 @@ import { Button } from '../../../components/ui/button';
 import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
 import { OrderPlacementPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
 import { DataTable, type ColumnDef } from '@/components/ui/data-table';
+import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
+import { getFileAssetPreview, openFileAsset, type DocumentPreview } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
 import { useOrgRole } from '../../../hooks/useOrgRole';
@@ -3479,6 +3481,7 @@ function EnterpriseDocumentDropzone({
   onRemoveAttachment,
   token,
   defaultCategory = 'Technical Specification',
+  onPreviewAttachment,
 }: {
   onUploadFile: (file: File, category: string) => Promise<void>;
   isUploading: boolean;
@@ -3486,6 +3489,7 @@ function EnterpriseDocumentDropzone({
   onRemoveAttachment: (attachmentId: string) => void;
   token: string | null;
   defaultCategory?: string;
+  onPreviewAttachment?: (attachment: ItemAttachment) => void;
 }) {
   const [selectedCategory, setSelectedCategory] = useState(defaultCategory);
   const [customDocName, setCustomDocName] = useState('');
@@ -3505,103 +3509,17 @@ function EnterpriseDocumentDropzone({
 
   return (
     <div className="space-y-3">
-      {/* Category selector & optional custom label */}
-      <div className="grid grid-cols-1 gap-2">
-        <div>
-          <label className="block text-[10px] font-bold uppercase text-slate-500 tracking-wider mb-1">
-            Document Type
-          </label>
-          <select
-            value={selectedCategory}
-            onChange={e => setSelectedCategory(e.target.value)}
-            className="w-full h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition-all"
-          >
-            {DOCUMENT_CATEGORIES.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.label}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <input
-            type="text"
-            value={customDocName}
-            onChange={e => setCustomDocName(e.target.value)}
-            placeholder="Custom label / note (Optional)"
-            className="w-full h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 shadow-2xs placeholder:text-slate-400 focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition-all"
-            maxLength={100}
-          />
-        </div>
-      </div>
-
-      {/* Drag & Drop Dropzone */}
-      <div
-        onDragOver={e => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDragOver(true);
-        }}
-        onDragLeave={e => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDragOver(false);
-        }}
-        onDrop={e => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDragOver(false);
-          handleFileSelection(e.dataTransfer.files);
-        }}
-        onClick={() => fileInputRef.current?.click()}
-        className={cn(
-          "group relative cursor-pointer rounded-xl border-2 border-dashed p-4 text-center transition-all duration-200 select-none",
-          isDragOver
-            ? "border-[#12335f] bg-blue-50/80 ring-2 ring-[#12335f]/20 scale-[0.99]"
-            : "border-slate-300 bg-slate-50/60 hover:border-[#12335f]/60 hover:bg-slate-100/50"
-        )}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
-          multiple
-          onChange={e => handleFileSelection(e.target.files)}
-          className="hidden"
-          disabled={isUploading}
-        />
-        <div className="flex flex-col items-center justify-center gap-1.5">
-          <div className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110",
-            isUploading ? "bg-blue-100 text-[#12335f]" : "bg-[#12335f]/10 text-[#12335f]"
-          )}>
-            {isUploading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <FolderUp className="h-4 w-4" />
-            )}
-          </div>
-          <div>
-            <p className="text-xs font-bold text-slate-800">
-              {isUploading ? 'Uploading file...' : (
-                <>
-                  <span className="text-[#12335f] underline underline-offset-2">Browse</span> or drag & drop file
-                </>
-              )}
-            </p>
-            <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-              PDF, Word, Excel, Images (up to 10MB)
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Attached files list */}
+      {/* Attached files list - Displayed first for immediate viewing */}
       {attachments.length > 0 && (
-        <div className="space-y-1.5 pt-1">
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
-            <span>Attached Files ({attachments.length})</span>
-            <span className="text-[10px] text-slate-400 font-medium">Encrypted Storage</span>
+        <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+              <FileCheck className="h-4 w-4 text-emerald-600" />
+              Uploaded Documents ({attachments.length})
+            </span>
+            <span className="text-[10px] text-slate-500 font-semibold">Click View to preview any document</span>
           </div>
-          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+          <div className="max-h-56 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
             {attachments.map(att => {
               const fileType = getFileTypeDetails(att.fileName);
               const viewUrl = `/api/files/${att.fileAssetId}/view?token=${encodeURIComponent(token || (typeof window !== 'undefined' ? localStorage.getItem('token') || '' : ''))}`;
@@ -3609,43 +3527,42 @@ function EnterpriseDocumentDropzone({
               return (
                 <div
                   key={att.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-200/90 bg-white p-2 shadow-2xs transition-all hover:border-slate-300 group"
+                  className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 shadow-2xs transition-all hover:border-slate-300 hover:shadow-xs group"
                 >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded text-[9px] font-black border", fileType.bg)}>
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-black border", fileType.bg)}>
                       {fileType.ext}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] font-bold text-slate-900 truncate" title={att.fileName}>
+                        <span className="text-xs font-bold text-slate-900 truncate" title={att.fileName}>
                           {att.fileName}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-[9px] text-slate-400 font-semibold">
-                        {att.name && att.name !== att.fileName ? <span className="text-slate-600 font-bold">{att.name}</span> : null}
+                      <div className="flex items-center gap-2 text-[10px] text-slate-400 font-semibold mt-0.5">
+                        {att.name && att.name !== att.fileName ? <span className="text-slate-600 font-bold bg-slate-100 px-1.5 py-0.2 rounded text-[9px]">{att.name}</span> : null}
                         {att.fileSize ? <span>{formatFileSize(att.fileSize)}</span> : null}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0 ml-1.5">
-                    <a
-                      href={viewUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex h-6.5 items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-bold text-slate-700 hover:bg-slate-100 hover:text-[#12335f]"
-                      title="Preview Document"
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    <button
+                      type="button"
+                      onClick={() => onPreviewAttachment ? onPreviewAttachment(att) : window.open(viewUrl, '_blank')}
+                      className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-xs font-black text-[#12335f] hover:bg-blue-100 hover:border-blue-300 transition-all cursor-pointer shadow-3xs"
+                      title={`Preview ${att.fileName}`}
                     >
-                      <Eye className="h-3 w-3 text-slate-500" />
+                      <Eye className="h-3.5 w-3.5 text-blue-600" />
                       <span>View</span>
-                    </a>
+                    </button>
                     <button
                       type="button"
                       onClick={() => onRemoveAttachment(att.id)}
-                      className="inline-flex h-6.5 w-6.5 items-center justify-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
                       title="Remove attachment"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
@@ -3654,6 +3571,102 @@ function EnterpriseDocumentDropzone({
           </div>
         </div>
       )}
+
+      {/* Upload New / Additional Document Section */}
+      <div className="space-y-3 pt-1">
+        <div className="text-[11px] font-bold text-slate-700">
+          {attachments.length > 0 ? '+ Upload Another Document' : 'Upload Specification / Document'}
+        </div>
+
+        {/* Category selector & optional custom label */}
+        <div className="grid grid-cols-1 gap-2">
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-slate-500 tracking-wider mb-1">
+              Document Type
+            </label>
+            <select
+              value={selectedCategory}
+              onChange={e => setSelectedCategory(e.target.value)}
+              className="w-full h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition-all"
+            >
+              {DOCUMENT_CATEGORIES.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <input
+              type="text"
+              value={customDocName}
+              onChange={e => setCustomDocName(e.target.value)}
+              placeholder="Custom label / note (Optional)"
+              className="w-full h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 shadow-2xs placeholder:text-slate-400 focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition-all"
+              maxLength={100}
+            />
+          </div>
+        </div>
+
+        {/* Drag & Drop Dropzone */}
+        <div
+          onDragOver={e => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragOver(true);
+          }}
+          onDragLeave={e => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragOver(false);
+          }}
+          onDrop={e => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragOver(false);
+            handleFileSelection(e.dataTransfer.files);
+          }}
+          onClick={() => fileInputRef.current?.click()}
+          className={cn(
+            "group relative cursor-pointer rounded-xl border-2 border-dashed p-4 text-center transition-all duration-200 select-none",
+            isDragOver
+              ? "border-[#12335f] bg-blue-50/80 ring-2 ring-[#12335f]/20 scale-[0.99]"
+              : "border-slate-300 bg-slate-50/60 hover:border-[#12335f]/60 hover:bg-slate-100/50"
+          )}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
+            multiple
+            onChange={e => handleFileSelection(e.target.files)}
+            className="hidden"
+            disabled={isUploading}
+          />
+          <div className="flex flex-col items-center justify-center gap-1.5">
+            <div className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110",
+              isUploading ? "bg-blue-100 text-[#12335f]" : "bg-[#12335f]/10 text-[#12335f]"
+            )}>
+              {isUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FolderUp className="h-4 w-4" />
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-800">
+                {isUploading ? 'Uploading file...' : (
+                  <>
+                    <span className="text-[#12335f] underline underline-offset-2">Browse</span> or drag & drop file
+                  </>
+                )}
+              </p>
+              <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                PDF, Word, Excel, Images (up to 10MB)
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -3664,13 +3677,29 @@ function QuickDocumentModal({
   onClose,
   onSaveAttachments,
   token,
+  onPreviewAttachment,
 }: {
   item: ItemRow;
   onClose: () => void;
   onSaveAttachments: (updatedAttachments: ItemAttachment[]) => void;
   token: string | null;
+  onPreviewAttachment?: (attachment: ItemAttachment) => void;
 }) {
-  const [attachments, setAttachments] = useState<ItemAttachment[]>(() => item.attachments || []);
+  const [attachments, setAttachments] = useState<ItemAttachment[]>(() => {
+    if (item.attachments && item.attachments.length > 0) {
+      return item.attachments;
+    }
+    if (item.fileAssetId && item.specificationFileName) {
+      return [{
+        id: makeId(),
+        name: 'Technical Specification',
+        fileAssetId: item.fileAssetId,
+        fileName: item.specificationFileName,
+        uploadedAt: new Date().toISOString(),
+      }];
+    }
+    return [];
+  });
   const [isUploading, setIsUploading] = useState(false);
 
   const handleUpload = async (file: File, category: string) => {
@@ -3720,9 +3749,11 @@ function QuickDocumentModal({
     toast.info('Document removed');
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-[999990] p-4 animate-in fade-in duration-150"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200">
@@ -3759,6 +3790,7 @@ function QuickDocumentModal({
             onRemoveAttachment={handleRemove}
             token={token}
             defaultCategory="Technical Specification"
+            onPreviewAttachment={onPreviewAttachment}
           />
         </div>
 
@@ -3776,7 +3808,8 @@ function QuickDocumentModal({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -3788,6 +3821,7 @@ function ItemDrawerOrModal({
   onSave,
   onSaveAndAddAnother,
   token,
+  onPreviewDocument,
 }: {
   isOpen: boolean;
   item: ItemRow | null;
@@ -3795,6 +3829,7 @@ function ItemDrawerOrModal({
   onSave: (item: ItemRow) => void;
   onSaveAndAddAnother: (item: ItemRow) => void;
   token: string | null;
+  onPreviewDocument?: (doc: any, label?: string) => void;
 }) {
   const [formData, setFormData] = useState<ItemRow | null>(item);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -4243,6 +4278,7 @@ function ItemDrawerOrModal({
               onRemoveAttachment={handleRemoveAttachment}
               token={token}
               defaultCategory="Technical Specification"
+              onPreviewAttachment={onPreviewDocument ? (att => onPreviewDocument(att, att.fileName)) : undefined}
             />
           </div>
         </div>
@@ -4309,6 +4345,61 @@ function ItemsDetailsForm({
   const { data: activeCart, isLoading: isCartLoading } = useActiveCart({ enabled: true });
   const [uploadingFile, setUploadingFile] = useState(false);
   const [quickDocItem, setQuickDocItem] = useState<ItemRow | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+
+  const handlePreviewDoc = async (doc: any, label = 'Document') => {
+    try {
+      const fileAssetId = doc?.fileAssetId || doc?.id || (typeof doc === 'number' ? doc : undefined);
+      const fileName = doc?.fileName || doc?.originalName || doc?.name || label;
+      const fileUrl = doc?.fileUrl || doc?.url || (fileAssetId ? `/api/files/${fileAssetId}/view` : undefined);
+
+      if (fileAssetId || fileUrl) {
+        try {
+          const prev = await getFileAssetPreview(
+            {
+              id: fileAssetId,
+              fileAssetId,
+              url: fileUrl,
+              fileName,
+              mimeType: doc?.mimeType,
+            },
+            fileName
+          );
+          if (prev) {
+            setPreviewDocument(prev);
+            return;
+          }
+        } catch (e) {
+          console.warn('Modal preview fallback to openFileAsset:', e);
+        }
+
+        await openFileAsset(
+          {
+            id: fileAssetId,
+            fileAssetId,
+            originalName: fileName,
+            url: fileUrl,
+          },
+          fileName
+        );
+      } else {
+        toast.error('Document file asset ID not found');
+      }
+    } catch (err: any) {
+      console.error('Preview error:', err);
+      toast.error(err?.message || 'Unable to preview document');
+    }
+  };
+
+  const handlePreviewItemDoc = (item: ItemRow) => {
+    const attachmentsList = item.attachments || [];
+    const primaryDoc = attachmentsList[0] || (item.fileAssetId ? { fileAssetId: item.fileAssetId, fileName: item.specificationFileName || `${item.name || 'Item'} Specification`, name: item.name } : null);
+    if (!primaryDoc) {
+      setQuickDocItem(item);
+      return;
+    }
+    handlePreviewDoc(primaryDoc, primaryDoc.fileName || item.name || 'Specification');
+  };
 
   // Line Item Handlers
   const handleAddNewItem = (itemType: 'Product' | 'Service' = 'Product') => {
@@ -4739,10 +4830,10 @@ function ItemsDetailsForm({
     {
       key: 'type',
       header: 'Type',
-      width: 'w-24',
+      width: 'w-[7%]',
       cell: (item: any) => (
         <span className={cn(
-          "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
+          "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
           item.itemType === 'Service'
             ? "border border-purple-200 bg-purple-50 text-purple-700"
             : "border border-blue-200 bg-blue-50 text-blue-700"
@@ -4754,9 +4845,9 @@ function ItemsDetailsForm({
     {
       key: 'name',
       header: 'Item / Service Name',
-      width: 'w-56',
+      width: 'w-[18%]',
       cell: (item: any) => (
-        <div className="font-black text-slate-900 text-xs">
+        <div className="font-black text-slate-900 text-xs truncate max-w-full" title={item.name}>
           {item.name || <span className="text-rose-500 italic">Unnamed Item</span>}
         </div>
       )
@@ -4764,11 +4855,12 @@ function ItemsDetailsForm({
     {
       key: 'specifications',
       header: 'Specifications / Scope',
-      cellClassName: 'text-slate-600 font-medium max-w-[240px]',
+      width: 'w-[18%]',
+      cellClassName: 'text-slate-600 font-medium',
       cell: (item: any) => {
         const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
         return (
-          <span className="line-clamp-2" title={descText || undefined}>
+          <span className="line-clamp-2 text-xs" title={descText || undefined}>
             {descText ? descText : <span className="text-slate-400 italic">No description</span>}
           </span>
         );
@@ -4777,10 +4869,10 @@ function ItemsDetailsForm({
     {
       key: 'quantity',
       header: 'Qty & UOM',
-      width: 'w-28',
+      width: 'w-[9%]',
       align: 'center',
       cell: (item: any) => (
-        <div>
+        <div className="truncate">
           <span className="font-extrabold text-slate-900">{item.quantity}</span>{' '}
           <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit}</span>
         </div>
@@ -4789,12 +4881,12 @@ function ItemsDetailsForm({
     {
       key: 'rate',
       header: 'Est. Unit Rate',
-      width: 'w-28',
+      width: 'w-[9%]',
       align: 'right',
       cellClassName: 'font-extrabold text-slate-900',
       cell: (item: any) => (
         Number(item.unitPrice || 0) > 0 ? (
-          <span>₹{Number(item.unitPrice).toLocaleString('en-IN')}</span>
+          <span className="truncate">₹{Number(item.unitPrice).toLocaleString('en-IN')}</span>
         ) : (
           <span className="text-slate-400 font-normal">-</span>
         )
@@ -4803,18 +4895,18 @@ function ItemsDetailsForm({
     {
       key: 'hsn',
       header: 'HSN / SAC',
-      width: 'w-24',
+      width: 'w-[7%]',
       align: 'center',
-      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600',
+      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate',
       cell: (item: any) => item.hsn_sac_code || <span className="text-slate-400">-</span>
     },
     {
       key: 'brand',
       header: 'Brand & Policy',
-      width: 'w-32',
+      width: 'w-[11%]',
       cell: (item: any) => (
-        <div>
-          <div className="text-slate-800 text-[11px] font-bold truncate max-w-[120px]">
+        <div className="min-w-0">
+          <div className="text-slate-800 text-[11px] font-bold truncate max-w-full" title={item.brand_preference}>
             {item.brand_preference || 'Any Brand'}
           </div>
           <div className="mt-0.5">
@@ -4834,7 +4926,7 @@ function ItemsDetailsForm({
     {
       key: 'documents',
       header: 'Documents & Specs',
-      width: 'w-40',
+      width: 'w-[11%]',
       cell: (item: any) => {
         const attachmentsList = item.attachments || [];
         const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
@@ -4845,18 +4937,18 @@ function ItemsDetailsForm({
             <button
               type="button"
               onClick={() => setQuickDocItem(item)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2 py-1 text-[10px] font-extrabold text-emerald-800 hover:bg-emerald-100 transition-colors"
-              title="Click to view or manage attachments"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 hover:bg-emerald-100 hover:border-emerald-300 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 transition-all cursor-pointer shadow-3xs"
+              title="Click to view all uploaded documents"
             >
               <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
-              <span className="truncate max-w-[90px]">
+              <span>
                 {docCount} file{docCount === 1 ? '' : 's'}
               </span>
             </button>
             <button
               type="button"
               onClick={() => setQuickDocItem(item)}
-              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
               title="Add more documents"
             >
               <Plus className="h-3 w-3" />
@@ -4866,7 +4958,7 @@ function ItemsDetailsForm({
           <button
             type="button"
             onClick={() => setQuickDocItem(item)}
-            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all"
+            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all cursor-pointer"
             title="Attach specification or drawing"
           >
             <FilePlus className="h-3 w-3 text-slate-400" />
@@ -4878,17 +4970,17 @@ function ItemsDetailsForm({
     {
       key: 'actions',
       header: 'Actions',
-      width: 'w-28',
+      width: 'w-[10%]',
       align: 'right',
       cell: (item: any) => (
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center justify-end gap-1">
           <button
             type="button"
             onClick={() => {
               setSelectedItemForEdit(item);
               setShowItemDrawer(true);
             }}
-            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors"
+            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors cursor-pointer shrink-0"
             title="Edit specifications"
           >
             Edit
@@ -4896,7 +4988,7 @@ function ItemsDetailsForm({
           <button
             type="button"
             onClick={() => handleDuplicateItem(item)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
             title="Duplicate line item"
           >
             <Copy className="h-3.5 w-3.5" />
@@ -4904,7 +4996,7 @@ function ItemsDetailsForm({
           <button
             type="button"
             onClick={() => handleRemoveItem(item.id)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer shrink-0"
             title="Delete line item"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -5204,7 +5296,8 @@ function ItemsDetailsForm({
         columns={procurementItemColumns}
         keyExtractor={(item: any, idx) => item.id || idx}
         showSrNo={false}
-        minWidth="min-w-[1100px]"
+        minWidth="w-full min-w-0"
+        scrollWrapperClassName="overflow-x-hidden"
         rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
         emptyTitle="No items or services added yet"
         emptyDescription="Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
@@ -5286,6 +5379,7 @@ function ItemsDetailsForm({
         onSave={handleSaveItem}
         onSaveAndAddAnother={handleSaveAndAddAnother}
         token={token}
+        onPreviewDocument={handlePreviewDoc}
       />
 
       {/* Quick Document Manager Modal */}
@@ -5297,8 +5391,15 @@ function ItemsDetailsForm({
             handleSaveItemQuickAttachments(quickDocItem.id, updatedAtts);
           }}
           token={token}
+          onPreviewAttachment={att => handlePreviewDoc(att, att.fileName)}
         />
       )}
+
+      {/* In-App Direct Document Preview Modal */}
+      <DocumentPreviewModal
+        previewDocument={previewDocument}
+        onClose={() => setPreviewDocument(null)}
+      />
     </div>
   );
 }

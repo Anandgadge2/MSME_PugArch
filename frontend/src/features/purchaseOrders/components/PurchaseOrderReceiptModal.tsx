@@ -2,7 +2,6 @@
 
 import React, { useEffect, useLayoutEffect, useState, useRef } from 'react';
 import {
-  Printer,
   Download,
   X,
   ArrowLeft,
@@ -23,11 +22,17 @@ import {
   Moon,
   Upload,
   Receipt,
+  Package,
+  Building2,
+  Hash,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { toast } from 'sonner';
 import { api } from '../../../lib/api';
 import { cn } from '../../../lib/utils';
+import type { DocumentConfig } from '../../../lib/pdfEngine';
 
 export interface PurchaseOrderItemDto {
   id?: number;
@@ -91,8 +96,8 @@ export interface PurchaseOrderReceiptModalProps {
   onCreateInvoice?: (order: PurchaseOrderDto) => void;
   onManageDispatch?: (order: PurchaseOrderDto) => void;
   onRepeatOrder?: (order: PurchaseOrderDto) => void;
-  onUploadSlip?: (order: PurchaseOrderDto) => void;
-  onViewSlip?: (order: PurchaseOrderDto) => void;
+  onUploadPaymentSlip?: (order: PurchaseOrderDto) => void;
+  onViewPaymentSlip?: (order: PurchaseOrderDto) => void;
   activeDelivery?: any;
 }
 
@@ -140,15 +145,7 @@ const formatNumber = (val?: number | string | null) => {
   return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const maskEmail = (email?: string | null) => {
-  if (!email || typeof email !== 'string') return '';
-  const parts = email.split('@');
-  if (parts.length !== 2) return email;
-  const name = parts[0];
-  const domain = parts[1];
-  if (name.length <= 2) return `${name}***@${domain}`;
-  return `${name.slice(0, 2)}${'*'.repeat(Math.min(name.length - 2, 8))}@${domain}`;
-};
+
 
 // Neutral Minimal Theme (Clean, official monochrome enterprise receipt format)
 export const NEUTRAL_MINIMAL_THEME = {
@@ -177,8 +174,8 @@ export function PurchaseOrderReceiptModal({
   onCreateInvoice,
   onManageDispatch,
   onRepeatOrder,
-  onUploadSlip,
-  onViewSlip,
+  onUploadPaymentSlip,
+  onViewPaymentSlip,
   activeDelivery,
 }: PurchaseOrderReceiptModalProps) {
   const [order, setOrder] = useState<PurchaseOrderDto | null>(initialOrder);
@@ -189,9 +186,10 @@ export function PurchaseOrderReceiptModal({
   // Auto-fit page state to ensure the entire receipt is 100% visible on screen without scrolling
   const canvasRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
-  const [zoomMode, setZoomMode] = useState<'fit' | '100%'>('100%');
+  const [zoomMode, setZoomMode] = useState<'fit' | '100%' | 'custom'>('fit');
   const [scaleFactor, setScaleFactor] = useState<number>(1);
   const [sheetDims, setSheetDims] = useState<{ w: number; h: number }>({ w: 800, h: 650 });
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const currentTheme = NEUTRAL_MINIMAL_THEME;
 
@@ -213,16 +211,20 @@ export function PurchaseOrderReceiptModal({
         return;
       }
 
+      if (zoomMode === 'custom') {
+        return;
+      }
+
       // Available space inside canvas minus comfortable padding
-      const availH = canvas.clientHeight - 20;
-      const availW = canvas.clientWidth - 20;
+      const availH = canvas.clientHeight - 32;
+      const availW = canvas.clientWidth - 32;
 
       if (unscaledH > 0 && availH > 0 && unscaledW > 0 && availW > 0) {
         const fitScaleY = availH / unscaledH;
         const fitScaleX = availW / unscaledW;
         // Best scale to fit both height and width completely within screen
-        const bestScale = Math.min(fitScaleY, fitScaleX, 1);
-        setScaleFactor(Math.max(0.35, Math.min(1, Number(bestScale.toFixed(3)))));
+        const bestScale = Math.min(fitScaleY, fitScaleX);
+        setScaleFactor(Math.max(0.35, Math.min(1.25, Number(bestScale.toFixed(2)))));
       }
     };
 
@@ -309,7 +311,7 @@ export function PurchaseOrderReceiptModal({
     order.seller?.sellerProfile?.contactPerson ||
     order.seller?.name ||
     order.seller?.mobile ||
-    (order.seller?.email ? maskEmail(order.seller.email) : 'Procurement Desk');
+    (order.seller?.email || 'Procurement Desk');
 
   // Extract Buyer Information
   const buyerOrg =
@@ -318,7 +320,10 @@ export function PurchaseOrderReceiptModal({
     order.buyer?.buyerProfile?.department ||
     order.buyer?.name ||
     'ABC Corporation';
-
+  const buyerAddress =
+    order.buyer?.organization?.address ||
+    order.buyer?.buyerProfile?.address ||
+    order.buyer?.organization?.city;
   const deliveryAddress =
     order.deliveryAddress ||
     order.buyer?.organization?.address ||
@@ -371,20 +376,81 @@ export function PurchaseOrderReceiptModal({
   const fillerRowCount = Math.max(0, 3 - displayItems.length);
   const fillerRows = Array.from({ length: fillerRowCount });
 
-  const handlePrint = () => {
-    if (onPrint) {
-      onPrint(order);
-    } else {
-      window.print();
-    }
-  };
+  const handleDirectDownloadPdf = async () => {
+    if (isGeneratingPdf) return;
 
-  const handleDownload = () => {
     if (onDownloadPdf) {
       onDownloadPdf(order);
-    } else {
-      toast.info('Downloading PDF receipt...');
-      window.print();
+      return;
+    }
+
+    try {
+      setIsGeneratingPdf(true);
+      toast.loading('Generating PDF receipt...', { id: 'po-pdf-dl' });
+      const { PdfEngine } = await import('../../../lib/pdfEngine');
+
+      const config: DocumentConfig = {
+        documentTitle: 'Receipt Purchase Order',
+        documentNumber: order.poNumber || `PO-${order.id}`,
+        dateStr: poDate,
+        status: readableStatus(order.status),
+        parties: [
+          {
+            title: 'Vendor / Seller',
+            name: sellerOrg,
+            address: sellerAddress,
+            phone: sellerContact !== 'Procurement Desk' ? sellerContact : undefined,
+          },
+          {
+            title: 'Ship To / Buyer',
+            name: buyerOrg,
+            address: deliveryAddress,
+            details: [
+              `Ship Via: ${shipVia}`,
+              `Tracking: ${trackingNumber}`,
+            ],
+          },
+        ],
+        infoGrid: {
+          'PO Number': order.poNumber || `PO-${order.id}`,
+          'Date': poDate,
+          'Due Date': dueDate,
+          'Ship Via': shipVia,
+          'Tracking Number': trackingNumber,
+          'Payment Terms': order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice',
+        },
+        tableHeaders: ['Sr.', 'Product Description', 'Quantity', 'Unit Price', 'Total'],
+        tableData: displayItems.map((item, idx) => [
+          String(idx + 1),
+          item.name + (item.specs ? `\n${item.specs}` : ''),
+          String(item.quantity),
+          `₹${formatNumber(item.unitPrice)}`,
+          `₹${formatNumber(item.total)}`,
+        ]),
+        financials: {
+          subtotal: subtotal,
+          shipping: 0,
+          totalTax: taxAmount,
+          grandTotal: grandTotal,
+        },
+        notes: [
+          '1. Please deliver to the designated address by the due date.',
+          `2. Payment Terms: ${order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice'}.`,
+          `3. If you have any questions, contact ${sellerContact || 'the designated procurement officer'}.`,
+          ...(order.metadata?.notes ? [`4. ${order.metadata.notes}`] : []),
+        ],
+      };
+
+      const engine = new PdfEngine('p');
+      const doc = engine.generate(config);
+      const filename = `${order.poNumber || `PO-${order.id}`}.pdf`;
+      doc.save(filename);
+      toast.success('PDF downloaded directly', { id: 'po-pdf-dl' });
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+      toast.error('Failed to download PDF. Please try again.', { id: 'po-pdf-dl' });
+    } finally {
+      setIsGeneratingPdf(false);
     }
   };
 
@@ -454,28 +520,28 @@ export function PurchaseOrderReceiptModal({
           'flex flex-col bg-white overflow-hidden shadow-2xl transition-all duration-300 w-full',
           isFullscreen
             ? 'h-full w-full rounded-none'
-            : 'max-h-[95vh] max-w-5xl rounded-2xl border border-slate-200'
+            : 'h-[92vh] max-h-[95vh] max-w-[880px] rounded-2xl border border-slate-200'
         )}
       >
         {/* Top Control Header Bar (Hidden in Print) */}
-        <header className="no-print bg-[#0b1f3a] text-white px-4 sm:px-6 py-3 shrink-0 flex items-center justify-between border-b border-white/10 shadow-md">
+        <header className="no-print bg-[#0b1f3a] text-white px-2.5 sm:px-4 py-2 sm:py-2.5 shrink-0 flex items-center justify-between border-b border-white/10 shadow-md gap-1.5 sm:gap-2 overflow-hidden">
           {/* Left: Navigation, PO info */}
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 min-w-0">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="h-9 px-3 text-white/90 hover:text-white hover:bg-white/10 text-xs font-bold rounded-xl gap-1.5 transition-all"
+              className="h-8 sm:h-8.5 px-2 sm:px-2.5 text-white/90 hover:text-white hover:bg-white/10 text-xs font-bold rounded-xl gap-1 transition-all shrink-0 cursor-pointer"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               <span className="hidden sm:inline">Back</span>
             </Button>
 
-            <div className="h-4 w-px bg-white/20 hidden sm:block" />
+            <div className="h-4 w-px bg-white/20 hidden sm:block shrink-0" />
 
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="font-mono font-black text-sm sm:text-base text-white tracking-tight truncate">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              <span className="font-mono font-black text-xs sm:text-sm text-white tracking-tight whitespace-nowrap">
                 {order.poNumber}
               </span>
               <button
@@ -486,137 +552,126 @@ export function PurchaseOrderReceiptModal({
                     toast.success('PO Number copied to clipboard');
                   }
                 }}
-                className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all shrink-0 cursor-pointer"
                 title="Copy PO Number"
+                aria-label="Copy PO Number"
               >
-                <Copy className="h-3 w-3" />
+                <Copy className="h-3 w-3" aria-hidden="true" />
               </button>
             </div>
 
-            <span className="hidden md:inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-300">
+            <span className="hidden xl:inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 shrink-0">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
               {readableStatus(order.status)}
             </span>
           </div>
 
-          {/* Center: View Mode Toggle & Theme Options */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center bg-white/10 p-1 rounded-xl border border-white/15">
+          {/* Center: View Mode Toggle */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <div className="flex items-center bg-white/10 p-0.5 rounded-xl border border-white/15 shrink-0">
               <button
                 type="button"
                 onClick={() => setActiveTab('receipt')}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer',
+                  'flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap',
                   activeTab === 'receipt'
                     ? 'bg-white text-slate-950 shadow-sm'
                     : 'text-white/80 hover:text-white hover:bg-white/5'
                 )}
               >
-                <FileText className="h-3.5 w-3.5" />
-                <span>Receipt (1st Page)</span>
+                <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Receipt</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('audit')}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer',
+                  'flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap',
                   activeTab === 'audit'
                     ? 'bg-white text-slate-950 shadow-sm'
                     : 'text-white/80 hover:text-white hover:bg-white/5'
                 )}
               >
-                <Clock className="h-3.5 w-3.5" />
+                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
                 <span className="hidden sm:inline">Audit & Tracking</span>
+                <span className="sm:hidden">Audit</span>
               </button>
             </div>
 
-
-            {/* Zoom / Page Fit Switcher (Active on receipt tab) */}
-            {/* {activeTab === 'receipt' && (
-              <div className="hidden sm:flex items-center bg-white/10 p-1 rounded-xl border border-white/15 gap-1">
+            {/* Zoom / Page Fit Switcher when in Receipt tab */}
+            {activeTab === 'receipt' && (
+              <div className="hidden sm:flex items-center bg-white/10 p-0.5 rounded-xl border border-white/15 gap-0.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setZoomMode('100%')}
-                  className={cn(
-                    'px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer',
-                    zoomMode === '100%'
-                      ? 'bg-white text-slate-950 shadow-sm'
-                      : 'text-white/70 hover:text-white hover:bg-white/5'
-                  )}
-                  title="View at regular 100% actual size"
+                  onClick={() => {
+                    setZoomMode('custom');
+                    setScaleFactor(prev => Math.max(0.4, Number((prev - 0.1).toFixed(2))));
+                  }}
+                  className="h-6.5 w-6.5 flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                  title="Zoom Out"
+                  aria-label="Zoom Out"
                 >
-                  Regular Size (100%)
+                  <ZoomOut className="h-3 w-3" aria-hidden="true" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setZoomMode('fit')}
                   className={cn(
-                    'px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer',
+                    'px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap',
                     zoomMode === 'fit'
                       ? 'bg-white text-slate-950 shadow-sm'
                       : 'text-white/70 hover:text-white hover:bg-white/5'
                   )}
                   title="Fit whole page in window without scrolling"
                 >
-                  Fit Page {zoomMode === 'fit' && `(${Math.round(scaleFactor * 100)}%)`}
+                  Fit Page ({Math.round(scaleFactor * 100)}%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setZoomMode('100%');
+                    setScaleFactor(1);
+                  }}
+                  className={cn(
+                    'px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap',
+                    zoomMode === '100%' || (zoomMode === 'custom' && scaleFactor === 1)
+                      ? 'bg-white text-slate-950 shadow-sm'
+                      : 'text-white/70 hover:text-white hover:bg-white/5'
+                  )}
+                  title="View at regular 100% actual size"
+                >
+                  100%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setZoomMode('custom');
+                    setScaleFactor(prev => Math.min(1.5, Number((prev + 0.1).toFixed(2))));
+                  }}
+                  className="h-6.5 w-6.5 flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                  title="Zoom In"
+                  aria-label="Zoom In"
+                >
+                  <ZoomIn className="h-3 w-3" aria-hidden="true" />
                 </button>
               </div>
-            )} */}
+            )}
           </div>
 
-          {/* Right: Actions & Canvas Toggle */}
-          <div className="flex items-center gap-2">
-            {/* Canvas Backdrop Toggle (Light Studio vs Dark Studio) */}
-            {/* <button
-              type="button"
-              onClick={() => setCanvasBg(prev => prev === 'light' ? 'dark' : 'light')}
-              className="inline-flex h-8 sm:h-9 items-center gap-1.5 px-2.5 text-xs font-bold rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20 transition-all cursor-pointer"
-              title={`Toggle Canvas (${canvasBg === 'light' ? 'Light Studio' : 'Dark Studio'})`}
-            >
-              {canvasBg === 'light' ? (
-                <>
-                  <Moon className="h-3.5 w-3.5 text-blue-200" />
-                  <span className="hidden xl:inline text-[10px] font-black uppercase tracking-wider">Dark Canvas</span>
-                </>
-              ) : (
-                <>
-                  <Sun className="h-3.5 w-3.5 text-amber-300" />
-                  <span className="hidden xl:inline text-[10px] font-black uppercase tracking-wider">Light Canvas</span>
-                </>
-              )}
-            </button> */}
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handlePrint}
-              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white gap-1.5 cursor-pointer transition-all"
-            >
-              <Printer className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Print PO</span>
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleDownload}
-              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white gap-1.5 cursor-pointer transition-all"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Download PDF</span>
-            </Button>
+          {/* Right: Actions */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            
 
             <Button
               type="button"
               variant="ghost"
               size="icon"
               onClick={() => setIsFullscreen(!isFullscreen)}
-              className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-all hidden lg:flex"
+              className="h-8 w-8 sm:h-8.5 sm:w-8.5 text-white/80 hover:text-white hover:bg-white/15 rounded-xl transition-all shrink-0 cursor-pointer"
               title={isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+              aria-label={isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
             >
-              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              {isFullscreen ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
             </Button>
 
             <Button
@@ -624,10 +679,11 @@ export function PurchaseOrderReceiptModal({
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+              className="h-8 w-8 sm:h-8.5 sm:w-8.5 bg-white/10 text-white hover:bg-rose-600 hover:text-white rounded-xl transition-all shrink-0 ml-0.5 cursor-pointer"
               title="Close"
+              aria-label="Close modal"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
         </header>
@@ -636,33 +692,40 @@ export function PurchaseOrderReceiptModal({
         <div
           ref={canvasRef}
           className={cn(
-            "flex-1 overflow-auto p-2 sm:p-3 flex justify-center items-center transition-colors duration-200",
-            canvasBg === 'light' ? "bg-white" : "bg-slate-950"
+            "flex-1 min-h-0 overflow-y-auto overflow-x-hidden transition-colors duration-200",
+            activeTab === 'receipt'
+              ? (canvasBg === 'light' ? "bg-slate-100/90" : "bg-slate-950")
+              : "bg-slate-50/70"
           )}
         >
           {activeTab === 'receipt' ? (
             /* 1st Page Format: RECEIPT PURCHASE ORDER (Exact Match to Image 1) */
-            <div
-              className="po-scale-wrapper relative flex justify-center items-center mx-auto my-auto shrink-0 transition-all duration-150"
-              style={{
-                width: sheetDims.w ? `${Math.round(sheetDims.w * scaleFactor)}px` : '800px',
-                height: sheetDims.h ? `${Math.round(sheetDims.h * scaleFactor)}px` : 'auto',
-              }}
-            >
+            <div className="min-h-full w-full p-3 sm:p-6 flex flex-col items-center justify-start sm:justify-center overflow-x-auto">
               <div
-                ref={sheetRef}
-                id="po-receipt-print-sheet"
+                className="po-scale-wrapper relative mx-auto my-auto shrink-0 transition-all duration-150"
                 style={{
-                  width: '800px',
-                  maxWidth: '800px',
-                  transform: scaleFactor !== 1 ? `scale(${scaleFactor})` : undefined,
-                  transformOrigin: 'top left',
+                  width: `${Math.round((sheetDims.w || 800) * scaleFactor)}px`,
+                  height: `${Math.round((sheetDims.h || 650) * scaleFactor)}px`,
+                  position: 'relative',
                 }}
-                className={cn(
-                  "bg-white text-slate-900 rounded-sm border-2 border-black p-4 sm:p-5 flex flex-col justify-between shrink-0 transition-shadow",
-                  canvasBg === 'light' ? "shadow-2xl shadow-slate-400/50" : "shadow-2xl shadow-black/80"
-                )}
               >
+                <div
+                  ref={sheetRef}
+                  id="po-receipt-print-sheet"
+                  style={{
+                    width: '800px',
+                    maxWidth: '800px',
+                    transform: scaleFactor !== 1 ? `scale(${scaleFactor})` : undefined,
+                    transformOrigin: 'top left',
+                    position: scaleFactor !== 1 ? 'absolute' : 'relative',
+                    left: 0,
+                    top: 0,
+                  }}
+                  className={cn(
+                    "bg-white text-slate-900 rounded-sm border-2 border-black p-4 sm:p-5 flex flex-col justify-between shrink-0 transition-shadow",
+                    canvasBg === 'light' ? "shadow-2xl shadow-slate-400/50" : "shadow-2xl shadow-black/80"
+                  )}
+                >
                 <div>
                   {/* Header Title */}
                   <div className="text-center pb-1 mb-2.5">
@@ -791,26 +854,36 @@ export function PurchaseOrderReceiptModal({
                 </div>
               </div>
             </div>
-          ) : (
-            /* Audit & Workflow Tracking View (Retains Image 2 functionality) */
-            <div className="w-full max-w-4xl space-y-5">
-              {/* Order Title & Badges Card */}
-              <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-3.5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-1">
-                      Order Title & Reference
-                    </span>
-                    <h3 className="text-base sm:text-lg font-black text-slate-900 leading-snug">
-                      {order.title}
+          </div>
+        ) : (
+          /* Audit & Workflow Tracking View */
+          <div className="min-h-full w-full py-5 sm:py-7 px-3 sm:px-6 lg:px-8 flex justify-center">
+            <div className={cn("w-full space-y-5 transition-all duration-200", isFullscreen ? "max-w-6xl 2xl:max-w-7xl" : "max-w-5xl")}>
+              {/* Order Title & Overview Card */}
+              <div className="rounded-2xl bg-white p-5 sm:p-6 border border-slate-200/90 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        Purchase Order
+                      </span>
+                      <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200">
+                        {order.poNumber || `PO-${order.id}`}
+                      </span>
+                    </div>
+                    <h3 className="text-base sm:text-xl font-black text-slate-900 leading-snug break-words">
+                      {order.title || 'Official Procurement Order'}
                     </h3>
                   </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
-                      Total
+                  <div className="text-left sm:text-right shrink-0 bg-slate-50 sm:bg-transparent p-3 sm:p-0 rounded-xl border sm:border-0 border-slate-100">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                      Total PO Amount
                     </span>
-                    <span className="text-base sm:text-lg font-black text-[#12335f] font-mono">
-                      {formatCurrency(order.amount || order.totalValue)}
+                    <span className="text-lg sm:text-2xl font-black text-[#12335f] font-mono">
+                      {formatCurrency(grandTotal)}
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-400 block">
+                      Base: ₹{formatNumber(subtotal)} | 18% GST: ₹{formatNumber(taxAmount)}
                     </span>
                   </div>
                 </div>
@@ -818,7 +891,7 @@ export function PurchaseOrderReceiptModal({
                 <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
                   <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-emerald-800 shadow-2xs">
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    {readableStatus(order.status)}
+                    Status: {readableStatus(order.status)}
                   </span>
 
                   {order.paymentTerms && (
@@ -835,6 +908,114 @@ export function PurchaseOrderReceiptModal({
                     </span>
                   )}
                 </div>
+
+                {/* 4 Summary Stat Tiles */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">PO Date</span>
+                    <p className="text-xs font-bold text-slate-800">{formatDate(order.createdAt)}</p>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Expected Delivery</span>
+                    <p className="text-xs font-bold text-slate-800">{formatDate(order.expectedDelivery)}</p>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Buyer Organization</span>
+                    <p className="text-xs font-bold text-slate-800 truncate" title={order.buyer?.name || buyerOrg}>{order.buyer?.name || buyerOrg}</p>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Supplier Organization</span>
+                    <p className="text-xs font-bold text-slate-800 truncate" title={order.seller?.name || sellerOrg}>{order.seller?.name || sellerOrg}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Purchased Products / Line Items Table Card */}
+              <div className="rounded-2xl bg-white border border-slate-200/90 shadow-sm overflow-hidden">
+                <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-[#12335f]">
+                      <Package className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900">
+                        Purchased Items & Line Specifications
+                      </h4>
+                      <p className="text-[11px] font-semibold text-slate-400">
+                        {displayItems.length} line item{displayItems.length === 1 ? '' : 's'} in order
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg">
+                    Total: <span className="font-mono text-slate-900 font-black">₹{formatNumber(grandTotal)}</span>
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/80 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                        <th className="py-3 px-4 w-12 text-center">#</th>
+                        <th className="py-3 px-4">Item & Description</th>
+                        <th className="py-3 px-4 text-center w-24">Qty</th>
+                        <th className="py-3 px-4 text-right w-32">Unit Price</th>
+                        <th className="py-3 px-4 text-right w-36">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {displayItems.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3 px-4 text-center font-mono font-bold text-slate-400">
+                            {idx + 1}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-slate-900">{item.name}</div>
+                            {item.specs && (
+                              <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                                {item.specs}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center font-mono font-bold text-slate-800">
+                            {item.quantity}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono text-slate-700">
+                            ₹{formatNumber(item.unitPrice)}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                            ₹{formatNumber(item.total)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t-2 border-slate-200 bg-slate-50/90 text-xs font-bold text-slate-700">
+                      <tr>
+                        <td colSpan={3} className="py-2.5 px-4 text-right text-slate-500 uppercase tracking-wider text-[10px] font-black">
+                          Subtotal
+                        </td>
+                        <td colSpan={2} className="py-2.5 px-4 text-right font-mono font-bold text-slate-900">
+                          ₹{formatNumber(subtotal)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colSpan={3} className="py-2.5 px-4 text-right text-slate-500 uppercase tracking-wider text-[10px] font-black">
+                          Taxes / GST (18% Included)
+                        </td>
+                        <td colSpan={2} className="py-2.5 px-4 text-right font-mono font-bold text-slate-900">
+                          ₹{formatNumber(taxAmount)}
+                        </td>
+                      </tr>
+                      <tr className="border-t border-slate-200 bg-[#12335f]/5 text-slate-950 font-black">
+                        <td colSpan={3} className="py-3 px-4 text-right text-[#12335f] uppercase tracking-wider text-xs font-black">
+                          Grand Total Amount
+                        </td>
+                        <td colSpan={2} className="py-3 px-4 text-right font-mono text-sm sm:text-base font-black text-[#12335f]">
+                          ₹{formatNumber(grandTotal)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
 
               {/* Fulfillment Parties & Settings Grid */}
@@ -850,7 +1031,7 @@ export function PurchaseOrderReceiptModal({
 
                   <div className="space-y-3.5">
                     {/* Buyer Info */}
-                    <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                    <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3.5 border border-slate-100">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 font-bold text-xs">
                         BY
                       </div>
@@ -858,32 +1039,42 @@ export function PurchaseOrderReceiptModal({
                         <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
                           Buyer (Requester)
                         </span>
-                        <p className="text-xs font-black text-slate-900 truncate">
+                        <p className="text-xs font-black text-slate-900">
                           {order.buyer?.name || buyerOrg}
                         </p>
                         {order.buyer?.email && (
-                          <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">
-                            {maskEmail(order.buyer.email)}
+                          <p className="text-[10px] font-semibold text-slate-500 font-mono">
+                            {order.buyer.email}
+                          </p>
+                        )}
+                        {order.deliveryAddress && (
+                          <p className="text-[10px] text-slate-600 mt-1 break-words leading-relaxed">
+                            {order.deliveryAddress}
                           </p>
                         )}
                       </div>
                     </div>
 
                     {/* Seller Info */}
-                    <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                    <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3.5 border border-slate-100">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs">
                         SL
                       </div>
                       <div className="min-w-0 flex-1">
                         <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
-                          Seller (Provider)
+                           Seller (Provider)
                         </span>
-                        <p className="text-xs font-black text-slate-900 truncate">
+                        <p className="text-xs font-black text-slate-900">
                           {order.seller?.name || sellerOrg}
                         </p>
                         {order.seller?.email && (
-                          <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">
-                            {maskEmail(order.seller.email)}
+                          <p className="text-[10px] font-semibold text-slate-500 font-mono">
+                            {order.seller.email}
+                          </p>
+                        )}
+                        {sellerAddress && (
+                          <p className="text-[10px] text-slate-600 mt-1 break-words leading-relaxed">
+                            {sellerAddress}
                           </p>
                         )}
                       </div>
@@ -914,11 +1105,11 @@ export function PurchaseOrderReceiptModal({
                     {order.deliveryAddress && (
                       <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-100">
                         <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
                             Delivery Address
                           </span>
-                          <p title={order.deliveryAddress} className="text-xs font-semibold text-slate-700 leading-relaxed line-clamp-2">
+                          <p className="text-xs font-semibold text-slate-800 leading-relaxed break-words whitespace-normal">
                             {order.deliveryAddress}
                           </p>
                         </div>
@@ -964,7 +1155,7 @@ export function PurchaseOrderReceiptModal({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white/80 rounded-xl p-3 border border-blue-100/80 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white/90 rounded-xl p-3.5 border border-blue-100/80 text-xs">
                     {activeDelivery.carrierName && (
                       <div>
                         <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Carrier Partner</span>
@@ -974,7 +1165,21 @@ export function PurchaseOrderReceiptModal({
                     {activeDelivery.trackingNumber && (
                       <div>
                         <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Tracking Number</span>
-                        <p className="font-mono font-bold text-slate-900 truncate">{activeDelivery.trackingNumber}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono font-bold text-slate-900 truncate">{activeDelivery.trackingNumber}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(activeDelivery.trackingNumber);
+                              toast.success('Tracking number copied');
+                            }}
+                            className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                            title="Copy Tracking Number"
+                            aria-label="Copy Tracking Number"
+                          >
+                            <Copy className="h-3 w-3" aria-hidden="true" />
+                          </button>
+                        </div>
                       </div>
                     )}
                     {activeDelivery.expectedDelivery && (
@@ -1051,26 +1256,27 @@ export function PurchaseOrderReceiptModal({
                 </div>
               </div>
             </div>
-          )}
+          </div>
+        )}
         </div>
 
-        {/* Bottom Action Footer (Hidden in Print) */}
-        <footer className="no-print border-t border-slate-200 bg-white px-4 sm:px-6 py-2 shrink-0 flex flex-wrap items-center justify-between gap-2 shadow-md">
-          <div className="flex flex-wrap items-center gap-2">
+        {/* Bottom Action Footer (Hidden in Print) - Single Row */}
+        <footer className="no-print border-t border-slate-200 bg-white px-4 sm:px-6 py-2.5 shrink-0 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar shadow-md">
+          <div className="flex items-center gap-2 shrink-0">
             {isSeller && isIssued && onAccept && onReject && (
               <>
                 <Button
                   onClick={() => onAccept(order)}
-                  className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-4"
+                  className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
                 >
-                  <CheckCircle2 className="mr-1.5 h-4 w-4" /> Accept PO
+                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Accept PO
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => onReject(order)}
-                  className="h-9 border-rose-200 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-xl px-4"
+                  className="h-9 border-rose-200 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-xl px-3.5 whitespace-nowrap"
                 >
-                  <XCircle className="mr-1.5 h-4 w-4" /> Reject PO
+                  <XCircle className="mr-1.5 h-3.5 w-3.5" /> Reject PO
                 </Button>
               </>
             )}
@@ -1078,77 +1284,75 @@ export function PurchaseOrderReceiptModal({
             {isSeller && isAccepted && onCreateInvoice && (
               <Button
                 onClick={() => onCreateInvoice(order)}
-                className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-4"
+                className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
               >
-                <FileText className="mr-1.5 h-4 w-4" /> Create Invoice
+                <FileText className="mr-1.5 h-3.5 w-3.5" /> Create Invoice
               </Button>
             )}
 
             {isSeller && (isAccepted || viewingStatusLower === 'delivered') && onManageDispatch && (
               <Button
                 onClick={() => onManageDispatch(order)}
-                className="h-9 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-4"
+                className="h-9 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-3.5 whitespace-nowrap"
               >
-                <Truck className="mr-1.5 h-4 w-4" /> Delivery / Manage Dispatch
+                <Truck className="mr-1.5 h-3.5 w-3.5" /> Delivery / Manage Dispatch
               </Button>
             )}
 
             {isBuyer && !['cancelled', 'delivered'].includes(viewingStatusLower) && onCancel && (
               <Button
                 onClick={() => onCancel(order)}
-                className="h-9 border-rose-200 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-xl px-4"
+                className="h-9 border-rose-200 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-xl px-3.5 whitespace-nowrap"
               >
-                <XCircle className="mr-1.5 h-4 w-4" /> Cancel PO
+                <XCircle className="mr-1.5 h-3.5 w-3.5" /> Cancel PO
+              </Button>
+            )}
+
+            {isBuyer && viewingStatusLower !== 'cancelled' && onUploadPaymentSlip && (
+              <Button
+                onClick={() => onUploadPaymentSlip(order)}
+                className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+              >
+                <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Slip
+              </Button>
+            )}
+
+            {onViewPaymentSlip && viewingStatusLower !== 'cancelled' && (
+              <Button
+                variant="outline"
+                onClick={() => onViewPaymentSlip(order)}
+                className="h-9 border-indigo-200 text-xs font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 rounded-xl px-3.5 whitespace-nowrap"
+              >
+                <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> Payment Slip
               </Button>
             )}
 
             {isBuyer && viewingStatusLower === 'delivered' && onRepeatOrder && (
               <Button
                 onClick={() => onRepeatOrder(order)}
-                className="h-9 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-4"
+                className="h-9 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-3.5 whitespace-nowrap"
               >
-                <RefreshCw className="mr-1.5 h-4 w-4" /> Repeat Order
-              </Button>
-            )}
-
-            {isBuyer && viewingStatusLower !== 'cancelled' && onUploadSlip && (
-              <Button
-                onClick={() => onUploadSlip(order)}
-                className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-4"
-              >
-                <Upload className="mr-1.5 h-4 w-4" /> Upload Slip
-              </Button>
-            )}
-
-            {viewingStatusLower !== 'cancelled' && onViewSlip && (
-              <Button
-                variant="outline"
-                onClick={() => onViewSlip(order)}
-                className="h-9 border-slate-300 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-xl px-4"
-              >
-                <Receipt className="mr-1.5 h-4 w-4 text-slate-600" /> Payment Slip
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Repeat Order
               </Button>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Button
+              type="button"
               variant="outline"
-              onClick={handlePrint}
-              className="h-9 text-xs font-black uppercase tracking-wider rounded-xl border-slate-300 hover:bg-slate-50 px-4"
+              disabled={isGeneratingPdf}
+              onClick={handleDirectDownloadPdf}
+              className="h-9 text-xs font-black uppercase tracking-wider rounded-xl border-slate-300 hover:bg-slate-50 px-3.5 whitespace-nowrap cursor-pointer"
+              title="Download PDF directly"
+              aria-label="Download PDF directly"
             >
-              <Printer className="mr-1.5 h-4 w-4 text-slate-600" /> Print PO
+              <Download className="mr-1.5 h-3.5 w-3.5 text-slate-600" aria-hidden="true" /> Download PDF
             </Button>
             <Button
-              variant="outline"
-              onClick={handleDownload}
-              className="h-9 text-xs font-black uppercase tracking-wider rounded-xl border-slate-300 hover:bg-slate-50 px-4"
-            >
-              <Download className="mr-1.5 h-4 w-4 text-slate-600" /> Download PDF
-            </Button>
-            <Button
+              type="button"
               onClick={onClose}
-              className="h-9 bg-slate-900 text-xs font-black uppercase tracking-wider text-white hover:bg-slate-800 rounded-xl px-5 shadow-sm"
+              className="h-9 bg-slate-900 text-xs font-black uppercase tracking-wider text-white hover:bg-slate-800 rounded-xl px-4 shadow-sm whitespace-nowrap cursor-pointer"
             >
               Close
             </Button>

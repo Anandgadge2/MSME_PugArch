@@ -56,6 +56,7 @@ export interface DataTableProps<T> {
   srNoHeader?: string;
   srNoWidth?: string;
   minWidth?: string;
+  scrollWrapperClassName?: string;
   className?: string;
   tableClassName?: string;
   caption?: string;
@@ -90,6 +91,7 @@ export function DataTable<T>({
   srNoHeader = 'Sr. No',
   srNoWidth = 'w-[4%]',
   minWidth = 'min-w-[1000px]',
+  scrollWrapperClassName,
   className,
   tableClassName,
   caption,
@@ -153,7 +155,7 @@ export function DataTable<T>({
         className
       )}
     >
-      <div className="overflow-x-auto w-full max-w-full">
+      <div className={cn("overflow-x-auto w-full max-w-full", scrollWrapperClassName)}>
         <table
           className={cn(
             "w-full border-collapse text-left text-xs table-fixed",

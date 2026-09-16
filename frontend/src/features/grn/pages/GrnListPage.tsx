@@ -13,9 +13,10 @@ import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
 import { usePermissions } from '../../../hooks/useOrgRole';
 import { EntityIdLink } from '../../shared/EntityIdLink';
-import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
+import { EmptyState, InlineError } from '../../shared/FeatureStates';
 import { formatDateTime, formatRelative } from '../../shared/format';
 import { KpiCard } from '../../shared/KpiCard';
+import { Skeleton } from '../../../components/ui/skeleton';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination, useResponsiveViewMode } from '../../shared/hooks';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
@@ -180,7 +181,13 @@ export default function GrnListPage() {
     const visibleGrns = useMemo(() => {
         const text = search.trim().toLowerCase();
         return [...grns].filter(g => {
-            if (filter !== 'ALL' && g.status !== filter) return false;
+            if (filter !== 'ALL') {
+                if (filter === 'APPROVED') {
+                    if (g.status !== 'APPROVED' && g.status !== 'PARTIAL') return false;
+                } else if (g.status !== filter) {
+                    return false;
+                }
+            }
             if (filterPo !== 'ALL' && g.purchaseOrder?.poNumber !== filterPo) return false;
             if (filterSeller !== 'ALL' && g.purchaseOrder?.seller?.name !== filterSeller) return false;
             
@@ -349,16 +356,17 @@ export default function GrnListPage() {
 
     return (
         <div className="space-y-6">
-            {/* KPI Cards Grid */}
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3">
+            {/* KPI Cards Grid - 4 Columns */}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <KpiCard
                     label="Total"
                     value={counts.ALL}
                     subtext="All goods receipts"
                     icon={ClipboardList}
                     active={filter === 'ALL'}
-                    onClick={() => setFilter('ALL')}
-                    color="indigo"
+                    onClick={() => { setFilter('ALL'); setPage(1); }}
+                    tone="indigo"
+                    loading={isLoading}
                 />
                 <KpiCard
                     label="Draft"
@@ -366,36 +374,30 @@ export default function GrnListPage() {
                     subtext="Draft GRNs"
                     icon={Clock}
                     active={filter === 'DRAFT'}
-                    onClick={() => setFilter('DRAFT')}
-                    color="slate"
+                    onClick={() => { setFilter('DRAFT'); setPage(1); }}
+                    tone="slate"
+                    loading={isLoading}
                 />
-                {/* <KpiCard
+                <KpiCard
                     label="Submitted"
                     value={counts.SUBMITTED}
-                    subtext="Submitted GRNs"
+                    subtext="Awaiting inspection"
                     icon={FileCheck2}
                     active={filter === 'SUBMITTED'}
-                    onClick={() => setFilter('SUBMITTED')}
-                    color="amber"
-                /> */}
+                    onClick={() => { setFilter('SUBMITTED'); setPage(1); }}
+                    tone="amber"
+                    loading={isLoading}
+                />
                 <KpiCard
                     label="Approved"
                     value={counts.APPROVED + counts.PARTIAL}
-                    subtext="Approved GRNs"
+                    subtext="Approved & accepted"
                     icon={CheckCircle2}
                     active={filter === 'APPROVED'}
-                    onClick={() => setFilter('APPROVED')}
-                    color="green"
+                    onClick={() => { setFilter('APPROVED'); setPage(1); }}
+                    tone="green"
+                    loading={isLoading}
                 />
-                {/* <KpiCard
-                    label="Rejected"
-                    value={counts.REJECTED}
-                    subtext="Rejected GRNs"
-                    icon={XCircle}
-                    active={filter === 'REJECTED'}
-                    onClick={() => setFilter('REJECTED')}
-                    color="red"
-                /> */}
             </div>
 
             {error && <InlineError message={(error as Error).message} onRetry={() => refetch()} />}
@@ -543,7 +545,11 @@ export default function GrnListPage() {
             </div>
 
             {isLoading ? (
-                <LoadingState label="Loading GRNs..." />
+                viewMode === 'grid' ? (
+                    <GrnGridSkeleton />
+                ) : (
+                    <GrnTableSkeleton />
+                )
             ) : grns.length === 0 ? (
                 <EmptyState title="No GRNs found" description={canCreate ? "Create one against an active Purchase Order to record the receipt of goods." : "No goods receipt notes recorded yet."} />
             ) : pageItems.length === 0 ? (
@@ -637,3 +643,127 @@ function InfoTile({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+function GrnTableSkeleton() {
+    return (
+        <div
+            role="status"
+            aria-busy="true"
+            aria-label="Loading goods receipt notes"
+            className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm"
+        >
+            <span className="sr-only">Loading goods receipt notes...</span>
+            <div className="overflow-x-auto w-full max-w-full">
+                <table className="w-full border-collapse text-left text-xs table-fixed min-w-[1000px]">
+                    <colgroup>
+                        <col className="w-[5%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[38%]" />
+                        <col className="w-[9%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[13%]" />
+                        <col className="w-[13%]" />
+                    </colgroup>
+                    <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/75">
+                            <th scope="col" className="py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 w-[5%]">
+                                <Skeleton className="h-3 w-6 rounded" />
+                            </th>
+                            <th scope="col" className="py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 w-[12%]">
+                                <Skeleton className="h-3 w-16 rounded" />
+                            </th>
+                            <th scope="col" className="py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 w-[38%]">
+                                <Skeleton className="h-3 w-28 rounded" />
+                            </th>
+                            <th scope="col" className="py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 w-[9%]">
+                                <Skeleton className="h-3 w-12 rounded" />
+                            </th>
+                            <th scope="col" className="py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 w-[10%]">
+                                <Skeleton className="h-3 w-14 rounded" />
+                            </th>
+                            <th scope="col" className="py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 w-[13%]">
+                                <Skeleton className="h-3 w-16 rounded" />
+                            </th>
+                            <th scope="col" className="py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 w-[13%]">
+                                <Skeleton className="h-3 w-16 rounded" />
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {Array.from({ length: 6 }).map((_, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/40 transition-colors">
+                                <td className="py-3.5 px-2 sm:px-2.5">
+                                    <Skeleton className="h-4 w-5 rounded" />
+                                </td>
+                                <td className="py-3.5 px-2 sm:px-2.5">
+                                    <Skeleton className="h-4 w-20 rounded" />
+                                </td>
+                                <td className="py-3.5 px-2 sm:px-2.5 space-y-1.5">
+                                    <Skeleton className="h-4 w-32 rounded" />
+                                    <Skeleton className="h-3 w-48 rounded" />
+                                    <Skeleton className="h-2.5 w-28 rounded" />
+                                </td>
+                                <td className="py-3.5 px-2 sm:px-2.5">
+                                    <Skeleton className="h-4 w-12 rounded" />
+                                </td>
+                                <td className="py-3.5 px-2 sm:px-2.5">
+                                    <Skeleton className="h-5 w-16 rounded-md" />
+                                </td>
+                                <td className="py-3.5 px-2 sm:px-2.5 space-y-1">
+                                    <Skeleton className="h-3.5 w-24 rounded" />
+                                    <Skeleton className="h-2.5 w-16 rounded" />
+                                </td>
+                                <td className="py-3.5 px-2 sm:px-2.5 space-y-1">
+                                    <Skeleton className="h-3.5 w-24 rounded" />
+                                    <Skeleton className="h-2.5 w-16 rounded" />
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
+function GrnGridSkeleton() {
+    return (
+        <div
+            role="status"
+            aria-busy="true"
+            aria-label="Loading goods receipt notes"
+            className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+        >
+            <span className="sr-only">Loading goods receipt notes...</span>
+            {Array.from({ length: 6 }).map((_, idx) => (
+                <div
+                    key={idx}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col justify-between"
+                >
+                    <div className="w-full space-y-3">
+                        <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+                            <div className="min-w-0 flex-1 space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <Skeleton className="h-5 w-5 rounded" />
+                                    <Skeleton className="h-3.5 w-24 rounded" />
+                                </div>
+                                <Skeleton className="h-4 w-32 rounded mt-1" />
+                                <Skeleton className="h-3 w-48 rounded" />
+                            </div>
+                            <Skeleton className="h-5 w-16 rounded-md shrink-0" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2.5 border-t border-slate-100 pt-3">
+                            {Array.from({ length: 4 }).map((__, tileIdx) => (
+                                <div key={tileIdx} className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-1.5">
+                                    <Skeleton className="h-2.5 w-14 rounded" />
+                                    <Skeleton className="h-3.5 w-20 rounded" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+

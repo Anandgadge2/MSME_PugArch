@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect, useState } from 'react';
 import {
   Check,
   CheckCircle2,
@@ -181,6 +181,64 @@ const buildTimeline = (
   );
 };
 
+/**
+ * Animated wrapper — uses IntersectionObserver to trigger staggered
+ * entrance animations for each timeline entry when it scrolls into view.
+ */
+function AnimatedEntry({
+  children,
+  index,
+  className
+}: {
+  children: React.ReactNode;
+  index: number;
+  className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    // Check if prefers-reduced-motion
+    const prefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReduced) {
+      setVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          // Stagger delay based on index
+          const delay = Math.min(index * 80, 400);
+          setTimeout(() => setVisible(true), delay);
+          observer.unobserve(el);
+        }
+      },
+      { threshold: 0.15, rootMargin: '0px 0px -30px 0px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [index]);
+
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        'transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
+        visible
+          ? 'opacity-100 translate-y-0 translate-x-0'
+          : 'opacity-0 translate-y-3 -translate-x-2',
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function DeliveryTimeline({ status, events = [], statusLogs = [] }: Props) {
   const merged = useMemo(() => buildTimeline(events, statusLogs), [events, statusLogs]);
 
@@ -191,6 +249,27 @@ export function DeliveryTimeline({ status, events = [], statusLogs = [] }: Props
   
   const progressPercent =
     TRACKING_PATH.length <= 1 ? 0 : Math.round((effectiveIndex / (TRACKING_PATH.length - 1)) * 100);
+
+  // Track progress bar animation
+  const [animatedProgress, setAnimatedProgress] = useState(0);
+  const progressRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = progressRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          // Animate progress bar with a slight delay
+          setTimeout(() => setAnimatedProgress(progressPercent), 200);
+          observer.unobserve(el);
+        }
+      },
+      { threshold: 0.3 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [progressPercent]);
 
   // Map each tracking step to its latest event date if available
   const stepDateMap = useMemo(() => {
@@ -204,137 +283,132 @@ export function DeliveryTimeline({ status, events = [], statusLogs = [] }: Props
   }, [merged]);
 
   return (
-    <div className="space-y-6">
-      {/* ─── Top Stage Tracker with Animated Progress Bar ─── */}
-      <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-b from-slate-50/70 via-white to-slate-50/40 p-4 shadow-xs sm:p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0f766e]/10 text-[#0f766e]">
-              <Sparkles className="h-3.5 w-3.5" />
+    <div className="space-y-4">
+      {/* ─── Compact Stage Tracker with Animated Progress Bar ─── */}
+      <div className="rounded-xl border border-slate-200/80 bg-gradient-to-b from-slate-50/70 via-white to-slate-50/40 p-3 shadow-xs sm:p-3.5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[#0f766e]/10 text-[#0f766e]">
+              <Sparkles className="h-3 w-3" />
             </span>
-            <span className="text-xs font-black uppercase tracking-wider text-slate-900">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-900">
               Shipment Progress Journey
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#0f766e]">
-              Stage {effectiveIndex + 1} of {TRACKING_PATH.length} • {progressPercent}% Completed
-            </span>
-          </div>
+          <span className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#0f766e]">
+            Stage {effectiveIndex + 1} of {TRACKING_PATH.length} • {progressPercent}% Completed
+          </span>
         </div>
 
-        {/* 5-Step Stepper Grid */}
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-5 sm:gap-3">
-          {TRACKING_PATH.map((step, idx) => {
-            const isCompleted = idx < effectiveIndex || (isAllDelivered && idx === effectiveIndex);
-            const isCurrent = idx === effectiveIndex && !isAllDelivered;
-            const StepIcon = STEP_ICONS[step] || Truck;
-            const stepDate = stepDateMap.get(step);
+        {/* Compact Horizontal Stepper — single row with connected dots */}
+        <div className="relative">
+          {/* Connection line behind steps */}
+          <div className="absolute top-4 left-4 right-4 h-0.5 bg-slate-200/80 sm:block hidden" />
+          <div
+            className="absolute top-4 left-4 h-0.5 bg-gradient-to-r from-emerald-500 to-[#0f766e] transition-all duration-1000 ease-out sm:block hidden"
+            style={{ width: `calc(${animatedProgress}% - 32px)` }}
+          />
 
-            return (
-              <div
-                key={step}
-                className={cn(
-                  'dt-fade-in-up group relative flex flex-col justify-between overflow-hidden rounded-xl border p-3 transition-all duration-300',
-                  isCompleted && 'border-emerald-200/90 bg-emerald-50/60 shadow-xs hover:border-emerald-300',
-                  isCurrent && 'border-[#0f766e] bg-gradient-to-b from-teal-50/90 via-white to-emerald-50/30 ring-2 ring-[#0f766e]/20 shadow-md shadow-teal-900/5',
-                  !isCompleted && !isCurrent && 'border-slate-200/70 bg-white/80 opacity-70 hover:opacity-90'
-                )}
-                style={{ animationDelay: `${idx * 40}ms` }}
-              >
-                {/* Active Glowing Indicator Bar */}
-                {isCurrent && (
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-500 via-[#0f766e] to-emerald-400" />
-                )}
+          <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+            {TRACKING_PATH.map((step, idx) => {
+              const isCompleted = idx < effectiveIndex || (isAllDelivered && idx === effectiveIndex);
+              const isCurrent = idx === effectiveIndex && !isAllDelivered;
+              const StepIcon = STEP_ICONS[step] || Truck;
+              const stepDate = stepDateMap.get(step);
 
-                <div className="flex items-start justify-between gap-2">
+              return (
+                <AnimatedEntry key={step} index={idx} className="relative z-10">
                   <div
                     className={cn(
-                      'relative flex h-8 w-8 items-center justify-center rounded-xl font-bold transition-transform duration-300 shadow-xs',
-                      isCompleted ? 'bg-emerald-600 text-white shadow-emerald-600/20' :
-                      isCurrent ? 'bg-[#0f766e] text-white dt-pulse-glow shadow-teal-600/30' :
-                      'bg-slate-100 text-slate-400'
+                      'flex flex-col items-center text-center gap-1 rounded-lg border px-1.5 py-2 transition-all duration-300',
+                      isCompleted && 'border-emerald-200/90 bg-emerald-50/60',
+                      isCurrent && 'border-[#0f766e] bg-gradient-to-b from-teal-50/90 to-emerald-50/30 ring-1 ring-[#0f766e]/20 shadow-sm',
+                      !isCompleted && !isCurrent && 'border-slate-200/60 bg-white/80 opacity-60'
                     )}
                   >
-                    {isCompleted ? (
-                      <Check className="h-4 w-4 stroke-[3]" />
-                    ) : isCurrent ? (
-                      <StepIcon className="h-4 w-4 dt-bounce-soft" />
-                    ) : (
-                      <span className="text-[11px] font-black">{idx + 1}</span>
+                    {/* Step circle */}
+                    <div
+                      className={cn(
+                        'relative flex h-7 w-7 items-center justify-center rounded-lg font-bold shadow-xs transition-all duration-300',
+                        isCompleted ? 'bg-emerald-600 text-white shadow-emerald-600/20' :
+                        isCurrent ? 'bg-[#0f766e] text-white dt-pulse-glow shadow-teal-600/30' :
+                        'bg-slate-100 text-slate-400'
+                      )}
+                    >
+                      {isCompleted ? (
+                        <Check className="h-3.5 w-3.5 stroke-[3]" />
+                      ) : isCurrent ? (
+                        <StepIcon className="h-3.5 w-3.5 dt-bounce-soft" />
+                      ) : (
+                        <span className="text-[10px] font-black">{idx + 1}</span>
+                      )}
+                    </div>
+
+                    {/* Status label */}
+                    {(isCompleted || isCurrent) && (
+                      <span className={cn(
+                        'text-[8px] font-extrabold uppercase tracking-wider',
+                        isCompleted ? 'text-emerald-700' : 'text-[#0f766e]'
+                      )}>
+                        {isCompleted ? '✓ Done' : 'Active'}
+                      </span>
+                    )}
+
+                    <p className={cn(
+                      'truncate text-[9px] font-black tracking-tight uppercase leading-tight w-full',
+                      isCompleted ? 'text-emerald-950' : isCurrent ? 'text-[#0f766e]' : 'text-slate-600'
+                    )}>
+                      {labelFor(step)}
+                    </p>
+                    <p className="truncate text-[8px] font-semibold text-slate-400 w-full leading-tight">
+                      {STEP_SUBTITLES[step] || `Step ${idx + 1}`}
+                    </p>
+                    {stepDate && (
+                      <p className="truncate text-[8px] font-bold text-slate-400 w-full">
+                        {formatDate(stepDate)}
+                      </p>
                     )}
                   </div>
-
-                  {isCurrent && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[#0f766e] px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-white shadow-xs">
-                      <span className="h-1 w-1 rounded-full bg-white animate-ping" />
-                      Active
-                    </span>
-                  )}
-                  {isCompleted && (
-                    <span className="inline-flex items-center text-[9px] font-extrabold text-emerald-700">
-                      ✓ Done
-                    </span>
-                  )}
-                </div>
-
-                <div className="mt-2.5 min-w-0">
-                  <p
-                    className={cn(
-                      'truncate text-[11px] font-black tracking-tight uppercase',
-                      isCompleted ? 'text-emerald-950' : isCurrent ? 'text-[#0f766e]' : 'text-slate-700'
-                    )}
-                  >
-                    {labelFor(step)}
-                  </p>
-                  <p className="mt-0.5 truncate text-[10px] font-semibold text-slate-500">
-                    {STEP_SUBTITLES[step] || `Step ${idx + 1}`}
-                  </p>
-                  {stepDate && (
-                    <p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">
-                      {formatDate(stepDate)}
-                    </p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                </AnimatedEntry>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Progress Track Bar */}
-        <div className="mt-4">
-          <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-200/70 p-0.5">
+        {/* Animated Progress Track Bar */}
+        <div className="mt-3" ref={progressRef}>
+          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-200/70">
             <div
-              className="dt-shimmer-bar h-full rounded-full bg-gradient-to-r from-emerald-500 via-[#0f766e] to-sky-500 shadow-[0_0_12px_rgba(15,118,110,0.4)] transition-all duration-700 ease-out"
-              style={{ width: `${progressPercent}%` }}
+              className="dt-shimmer-bar h-full rounded-full bg-gradient-to-r from-emerald-500 via-[#0f766e] to-sky-500 shadow-[0_0_8px_rgba(15,118,110,0.3)] transition-all duration-1000 ease-out"
+              style={{ width: `${animatedProgress}%` }}
             />
           </div>
-          <div className="mt-1.5 flex justify-between text-[9px] font-black uppercase tracking-widest text-slate-400">
+          <div className="mt-1 flex justify-between text-[8px] font-black uppercase tracking-widest text-slate-400">
             <span>Dispatched from Seller</span>
             <span>Handed to Buyer</span>
           </div>
         </div>
       </div>
 
-      {/* ─── Activity Log / Tracking History ─── */}
-      <div className="space-y-3">
+      {/* ─── Compact Activity Log / Tracking History ─── */}
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-            <Clock className="h-3.5 w-3.5 text-[#0f766e]" /> Milestone Activity History
+          <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+            <Clock className="h-3 w-3 text-[#0f766e]" /> Milestone Activity History
           </h3>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-500">
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-slate-500">
             {merged.length} {merged.length === 1 ? 'Record' : 'Records'}
           </span>
         </div>
 
-        <div className="relative space-y-3 pt-1">
+        <div className="relative space-y-1.5 pt-0.5">
           {merged.length > 0 && (
-            <div className="absolute bottom-4 left-4 top-4 w-0.5 bg-gradient-to-b from-[#0f766e] via-slate-200 to-slate-100" />
+            <div className="absolute bottom-2 left-3 top-2 w-px bg-gradient-to-b from-[#0f766e] via-slate-200 to-slate-100" />
           )}
 
           {merged.length === 0 ? (
-            <div className="dt-fade-in-up rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-8 text-center text-xs font-semibold text-slate-500">
-              <Package className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5 text-center text-[10px] font-semibold text-slate-500">
+              <Package className="mx-auto h-6 w-6 text-slate-300 mb-1.5" aria-hidden="true" />
               No milestone log events recorded yet. Updates will appear as the shipment progresses.
             </div>
           ) : (
@@ -348,78 +422,78 @@ export function DeliveryTimeline({ status, events = [], statusLogs = [] }: Props
                 String(event.status) === 'PICKED_UP';
 
               return (
-                <div
+                <AnimatedEntry
                   key={event.key}
-                  className="dt-slide-in relative flex items-start gap-3.5"
-                  style={{ animationDelay: `${idx * 50}ms` }}
+                  index={idx}
+                  className="relative flex items-start gap-2.5"
                 >
-                  {/* Timeline Dot / Icon */}
+                  {/* Timeline Dot / Icon — smaller */}
                   <div
                     className={cn(
-                      'z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-xs transition-all duration-300 ring-2',
+                      'z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg shadow-xs transition-all duration-300 ring-1',
                       isLatest
                         ? 'bg-[#0f766e] text-white ring-teal-200 shadow-teal-700/20'
                         : isTerminal
                         ? 'bg-emerald-600 text-white ring-emerald-200'
-                        : 'bg-white text-slate-600 ring-slate-200'
+                        : 'bg-white text-slate-500 ring-slate-200'
                     )}
                   >
                     {isTerminal ? (
-                      <CheckCircle2 className="h-4 w-4" />
+                      <CheckCircle2 className="h-3 w-3" />
                     ) : isMoving ? (
-                      <Truck className={cn('h-4 w-4', isLatest && 'dt-bounce-soft')} />
+                      <Truck className={cn('h-3 w-3', isLatest && 'dt-bounce-soft')} />
                     ) : (
-                      <Clock className="h-4 w-4" />
+                      <Clock className="h-3 w-3" />
                     )}
                   </div>
 
-                  {/* Card Body */}
+                  {/* Card Body — compact */}
                   <div
                     className={cn(
-                      'min-w-0 flex-1 rounded-xl border p-3 shadow-xs transition-all duration-200',
+                      'min-w-0 flex-1 rounded-lg border px-2.5 py-2 shadow-2xs transition-all duration-200',
                       isLatest
                         ? 'border-teal-200/90 bg-gradient-to-r from-teal-50/50 via-white to-white ring-1 ring-teal-500/10'
                         : 'border-slate-200/70 bg-white/95 hover:border-slate-300'
                     )}
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-black uppercase tracking-tight text-slate-900">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-tight text-slate-900">
                           {labelFor(event.status as string)}
                         </span>
                         {isLatest && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-800">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-px text-[7px] font-black uppercase tracking-widest text-emerald-800">
                             <span className="h-1 w-1 rounded-full bg-emerald-600 animate-ping" />
                             Latest
                           </span>
                         )}
                       </div>
-                      <span className="text-[10px] font-bold text-slate-400">
+                      <span className="text-[9px] font-bold text-slate-400">
                         {formatDate(event.occurredAt)}
                       </span>
                     </div>
 
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] font-semibold text-slate-500">
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] font-semibold text-slate-500">
                       {event.location && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-slate-700 font-bold">
-                          <MapPin className="h-3 w-3 text-slate-400" />
+                        <span className="inline-flex items-center gap-0.5 rounded bg-slate-100 px-1.5 py-0.5 text-slate-700 font-bold">
+                          <MapPin className="h-2.5 w-2.5 text-slate-400" />
                           {event.location}
                         </span>
                       )}
                       {event.actorRole && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-slate-700 font-bold uppercase">
-                          <User className="h-3 w-3 text-slate-400" />
+                        <span className="inline-flex items-center gap-0.5 rounded bg-slate-100 px-1.5 py-0.5 text-slate-700 font-bold uppercase">
+                          <User className="h-2.5 w-2.5 text-slate-400" />
                           {event.actorRole}
                         </span>
                       )}
                       {event.remarks && (
-                        <span className="text-slate-600">
-                          “{event.remarks}”
+                        <span className="text-slate-600 text-[9px]">
+                          &ldquo;{event.remarks}&rdquo;
                         </span>
                       )}
                     </div>
                   </div>
-                </div>
+                </AnimatedEntry>
               );
             })
           )}
@@ -428,4 +502,3 @@ export function DeliveryTimeline({ status, events = [], statusLogs = [] }: Props
     </div>
   );
 }
-

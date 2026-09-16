@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-    Search, Filter, MapPin, Package,
-    Wrench, Clock, Flame, CheckCircle, Landmark,
-    BadgeCheck, Eye, X, Grid2X2, List, Send,
-    ArrowUp, ArrowDown, ArrowUpDown
+    Search, MapPin, Package,
+    Wrench, Clock, Flame, CheckCircle,
+    BadgeCheck, Eye, X, Grid2X2, List,
+    ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -26,8 +26,6 @@ import {
 } from '../utils/procurementDisplay';
 import { useResponsiveViewMode } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
-import { KpiCard } from '../../shared/KpiCard';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { cn } from '../../../lib/utils';
 
@@ -101,19 +99,54 @@ function statusBadge(req: BuyerRequirement) {
     };
 }
 
+function getCleanLocation(req: BuyerRequirement): string {
+    const buyer = req.buyerOrganization;
+    if (buyer?.district && buyer?.state) {
+        return `${buyer.district}, ${buyer.state}`;
+    }
+    const raw = req.location || buyer?.district || buyer?.city || buyer?.state || '';
+    if (!raw) return 'Jharsuguda, Odisha';
+
+    let clean = raw
+        .replace(/^(Office\s+Delivery\s+Address|Delivery\s+Address|Site\s+Address)[:\s]*/gi, '')
+        .replace(/Contact:.*$/gi, '')
+        .replace(/\bPlot\s*No\.?[^,]+,\s*/gi, '')
+        .replace(/\b\d{6}\b/g, '')
+        .replace(/[-,\s]+$/g, '')
+        .trim();
+
+    const parts = clean.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length > 2) {
+        clean = parts.slice(-2).join(', ');
+    }
+    return clean || 'Jharsuguda, Odisha';
+}
+
+function formatQuantityWithUnit(qty?: number | string | null, unit?: string | null): string {
+    const n = qty != null && !isNaN(Number(qty)) && Number(qty) > 0 ? Number(qty) : null;
+    const u = (unit || '').trim();
+    if (n != null) {
+        return `${n.toLocaleString('en-IN')}${u ? ` ${u}` : ''}`;
+    }
+    if (u) {
+        return `1 ${u}`;
+    }
+    return '—';
+}
+
 const TABS = [
     { id: 'all', label: 'All Requirements' },
     { id: 'products', label: 'Products Only' },
     { id: 'services', label: 'Services Only' },
     { id: 'closing_soon', label: 'Closing Soon' },
     { id: 'large_industries', label: 'Large Industries' },
-    { id: 'government', label: 'Government' },
 ] as const;
 
 const SORT_OPTIONS = [
     { value: 'latest', label: 'Latest First' },
     { value: 'deadline', label: 'Deadline Soonest' },
-    { value: 'budget', label: 'Highest Budget' },
+    { value: 'quantity', label: 'Highest Quantity' },
+    { value: 'title', label: 'Title (A-Z)' },
 ];
 
 interface Props {
@@ -142,8 +175,10 @@ export function BuyerRequirementsList({
     const [sort, setSort] = useState('latest');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
     const [location, setLocation] = useState('');
-    const [minBudget, setMinBudget] = useState('');
-    const [maxBudget, setMaxBudget] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [methodFilter, setMethodFilter] = useState('');
+    const [timelineFilter, setTimelineFilter] = useState('');
+    const [discoveredLocations, setDiscoveredLocations] = useState<string[]>(['Jharsuguda, Odisha']);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(limit || 10);
     const [viewMode, setViewMode] = useResponsiveViewMode('marketplace:requirements:view-mode');
@@ -152,12 +187,21 @@ export function BuyerRequirementsList({
     const isSeller = user?.role === 'seller' || user?.role === 'admin' || user?.role === 'master_admin';
     const actionLabel = user ? (isSeller ? 'Submit Quote' : 'View Details') : 'Login to Submit';
 
+    const handleSortChange = (newSort: string) => {
+        setSort(newSort);
+        if (newSort === 'deadline' || newSort === 'title') {
+            setSortDir('asc');
+        } else {
+            setSortDir('desc');
+        }
+    };
+
     const handleSortHeader = (key: string) => {
         if (sort === key) {
             setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
         } else {
             setSort(key);
-            setSortDir(key === 'title' || key === 'buyer' || key === 'location' ? 'asc' : 'desc');
+            setSortDir(key === 'title' || key === 'buyer' || key === 'location' || key === 'timeline' || key === 'deadline' ? 'asc' : 'desc');
         }
     };
 
@@ -174,16 +218,37 @@ export function BuyerRequirementsList({
         }
 
         if (query.trim()) params.q = query.trim();
-        if (location.trim()) params.location = location.trim();
+        if (location.trim()) {
+            const districtPart = location.split(',')[0].trim();
+            params.location = districtPart || location.trim();
+        }
 
         return params;
     }, [buyerOrganizationId, tab, query, location, page, pageSize]);
 
     const { data, isLoading, isFetching } = useQuery({
-        queryKey: ['marketplaceRequirements', queryParams, sort, minBudget, maxBudget],
+        queryKey: ['marketplaceRequirements', queryParams, sort, sortDir, statusFilter, methodFilter, timelineFilter],
         queryFn: () => marketplaceApi.getRequirements(queryParams),
         staleTime: 60_000,
     });
+
+    // Dynamically track authentic locations discovered across data updates
+    useEffect(() => {
+        if (data?.requirements?.length) {
+            setDiscoveredLocations(prev => {
+                const set = new Set(prev);
+                set.add('Jharsuguda, Odisha');
+                data.requirements.forEach(r => {
+                    const loc = getCleanLocation(r);
+                    if (loc && loc !== '—') set.add(loc);
+                    if (r.buyerOrganization?.district) {
+                        set.add(`${r.buyerOrganization.district}, ${r.buyerOrganization.state || 'Odisha'}`);
+                    }
+                });
+                return Array.from(set).sort((a, b) => a.localeCompare(b));
+            });
+        }
+    }, [data?.requirements]);
 
     const processedRequirements = useMemo(() => {
         let rows: BuyerRequirement[] = data?.requirements || [];
@@ -242,33 +307,75 @@ export function BuyerRequirementsList({
             }
         });
 
-        // client-side budget filter
-        if (minBudget) {
-            rows = rows.filter(r => r.discloseEstimatedCost !== false && Number(r.budgetMax || r.budgetMin || 0) >= Number(minBudget));
+        // client-side status filter
+        if (statusFilter) {
+            rows = rows.filter(r => {
+                const code = String(r.computedStatus || r.status || '').toUpperCase();
+                if (statusFilter === 'OPEN') return code === 'OPEN' || code === 'OPEN_FOR_BIDDING' || code === 'PUBLISHED';
+                if (statusFilter === 'CLOSING_SOON') return code === 'CLOSING_SOON' || code === 'CLOSING_TODAY';
+                if (statusFilter === 'CLOSED') return code === 'CLOSED' || code === 'EXPIRED';
+                if (statusFilter === 'AWARDED') return code === 'AWARDED';
+                if (statusFilter === 'UNDER_EVALUATION') return code === 'UNDER_EVALUATION' || code === 'TECHNICAL_EVALUATION' || code === 'FINANCIAL_EVALUATION';
+                return true;
+            });
         }
 
-        if (maxBudget) {
-            rows = rows.filter(r => r.discloseEstimatedCost !== false && (r.budgetMin != null || r.budgetMax != null) && Number(r.budgetMin || r.budgetMax || 0) <= Number(maxBudget));
+        // client-side procurement method filter
+        if (methodFilter) {
+            rows = rows.filter(r => {
+                const method = String(r.canonicalMethod || r.procurementMethod || '').toUpperCase();
+                const title = String(r.title || '').toUpperCase();
+                if (methodFilter === 'RFQ') return method === 'RFQ' || method.includes('RFQ') || method.includes('DIRECT') || method.includes('CATALOG');
+                if (methodFilter === 'OPEN_TENDER') return method === 'OPEN_TENDER' || method.includes('OPEN') || title.includes('TENDER');
+                if (methodFilter === 'LIMITED_TENDER') return method === 'LIMITED_TENDER' || method.includes('LIMITED');
+                if (methodFilter === 'RATE_CONTRACT') return method === 'RATE_CONTRACT' || method.includes('RATE');
+                return true;
+            });
+        }
+
+        // client-side timeline filter
+        if (timelineFilter) {
+            const now = Date.now();
+            rows = rows.filter(r => {
+                const due = new Date(r.lastDate).getTime();
+                const daysRemaining = Math.ceil((due - now) / 86400000);
+                if (timelineFilter === '7d') return daysRemaining >= 0 && daysRemaining <= 7;
+                if (timelineFilter === '3d') return daysRemaining >= 0 && daysRemaining <= 3;
+                if (timelineFilter === 'urgent') return Boolean(r.isUrgent) || (daysRemaining >= 0 && daysRemaining <= 3);
+                return true;
+            });
+        }
+
+        // client-side location filter
+        if (location) {
+            const locLower = location.toLowerCase().trim();
+            const districtOnly = locLower.split(',')[0].trim();
+            rows = rows.filter(r => {
+                const clean = getCleanLocation(r).toLowerCase();
+                const raw = String(r.location || '').toLowerCase();
+                const orgDist = String(r.buyerOrganization?.district || '').toLowerCase();
+                return clean.includes(districtOnly) || raw.includes(districtOnly) || orgDist.includes(districtOnly);
+            });
         }
 
         return rows;
-    }, [data, sort, sortDir, minBudget, maxBudget]);
+    }, [data, sort, sortDir, statusFilter, methodFilter, timelineFilter, location]);
 
     const total = data?.total || processedRequirements.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const activeFilters = [location, minBudget, maxBudget].filter(Boolean).length;
+    const activeFilters = [location, statusFilter, methodFilter, timelineFilter].filter(Boolean).length;
 
     // Reset page on filter/search change
     useEffect(() => {
         setPage(1);
-    }, [tab, query, sort, location, minBudget, maxBudget, buyerOrganizationId]);
+    }, [tab, query, sort, location, statusFilter, methodFilter, timelineFilter, buyerOrganizationId]);
 
     const getRequirementHref = (req: BuyerRequirement) => {
         const sourceId = (req as any)?.requirementNumber || req?.sourceId || (req?.id ? Math.abs(req.id) : null);
         if (!sourceId) return '/marketplace/requirements';
 
         if (!isSeller) {
-            return `/marketplace/requirements/${sourceId}`;
+            return `/bids/${sourceId}`;
         }
 
         const method = String(req.canonicalMethod || req.procurementMethod || '').toUpperCase();
@@ -292,7 +399,7 @@ export function BuyerRequirementsList({
             return sellerRoutes.detail('REVERSE_AUCTION', (req as any)?.sourceId || sourceId);
         }
         
-        return `/marketplace/requirements/${sourceId}`;
+        return `/bids/${sourceId}`;
     };
 
     const handleViewDetails = (req: BuyerRequirement) => {
@@ -302,22 +409,6 @@ export function BuyerRequirementsList({
     const isLegacyRequirement = (req: BuyerRequirement) => {
         return req.sourceModel === 'REQUIREMENT' || req.id < 0;
     };
-
-    const kpis = useMemo(() => {
-        const raw = data?.requirements || [];
-        const totalCount = raw.length;
-        const openCount = raw.filter(r => !r.status || r.status === 'OPEN' || r.status === 'PUBLISHED').length;
-        const closingSoonCount = raw.filter(r => {
-            if (!r.lastDate) return false;
-            const diffDays = (new Date(r.lastDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
-            return diffDays > 0 && diffDays <= 7;
-        }).length;
-        const publicCount = raw.filter(r => {
-            const orgType = r.buyerOrganization?.organizationType;
-            return orgType === 'GOVERNMENT' || orgType === 'PSU' || r.isGovernmentTender || (r.canonicalMethod && r.canonicalMethod.includes('TENDER')) || (r.procurementMethod && r.procurementMethod.includes('TENDER')) || r.sourceModel === 'TENDER';
-        }).length || raw.filter(r => r.buyerOrganization?.organizationType === 'GOVERNMENT' || r.buyerOrganization?.organizationType === 'PSU' || r.buyerOrganization?.organizationType === 'PUBLIC_LIMITED').length || Math.max(1, Math.floor(totalCount * 0.7));
-        return { totalCount, openCount, closingSoonCount, publicCount };
-    }, [data]);
 
     const columns: ColumnDef<BuyerRequirement>[] = useMemo(() => [
         {
@@ -395,7 +486,7 @@ export function BuyerRequirementsList({
             sortKey: 'quantity',
             cell: (req) => (
                 <span className="text-slate-900 font-extrabold text-xs sm:text-sm whitespace-nowrap">
-                    {req.quantity || 'Estimated'} {req.unit || ''}
+                    {formatQuantityWithUnit(req.quantity, req.unit)}
                 </span>
             ),
         },
@@ -405,17 +496,14 @@ export function BuyerRequirementsList({
             width: 'w-[13%]',
             sortable: true,
             sortKey: 'location',
-            cell: (req) => {
-                const buyer = req.buyerOrganization;
-                return (
-                    <div className="flex items-start gap-1 text-slate-600 font-semibold text-xs">
-                        <MapPin className="h-3.5 w-3.5 text-[#8a6a2f] shrink-0 mt-0.5" />
-                        <span className="leading-snug">
-                            {req.location || buyer?.district || buyer?.city || buyer?.state || 'Jharsuguda, Odisha'}
-                        </span>
-                    </div>
-                );
-            },
+            cell: (req) => (
+                <div className="flex items-start gap-1 text-slate-600 font-semibold text-xs">
+                    <MapPin className="h-3.5 w-3.5 text-[#8a6a2f] shrink-0 mt-0.5" />
+                    <span className="leading-snug">
+                        {getCleanLocation(req)}
+                    </span>
+                </div>
+            ),
         },
         {
             key: 'timeline',
@@ -479,179 +567,217 @@ export function BuyerRequirementsList({
         <>
             {selected && <BidDetailModal bid={selected} onClose={() => setSelected(null)} />}
 
-            <div className="space-y-4">
-                {/* ── KPI Cards ── */}
-                <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <KpiCard
-                        label="Total Requirements"
-                        value={kpis.totalCount}
-                        loading={isLoading}
-                        subtext="Published requirements"
-                        icon={Package}
-                        tone="blue"
-                        active={tab === 'all'}
-                        onClick={() => setTab('all')}
-                    />
-                    <KpiCard
-                        label="Open & Active"
-                        value={kpis.openCount}
-                        loading={isLoading}
-                        subtext="Accepting supplier quotes"
-                        icon={Clock}
-                        tone="cyan"
-                        active={tab === 'open'}
-                        onClick={() => setTab('open')}
-                    />
-                    <KpiCard
-                        label="Closing Soon"
-                        value={kpis.closingSoonCount}
-                        loading={isLoading}
-                        subtext="Closing in 7 days"
-                        icon={Flame}
-                        tone="amber"
-                        active={tab === 'closing_soon'}
-                        onClick={() => setTab('closing_soon')}
-                    />
-                    <KpiCard
-                        label="Public Procurements"
-                        value={kpis.publicCount}
-                        loading={isLoading}
-                        subtext="Government & PSU contracts"
-                        icon={Landmark}
-                        tone="emerald"
-                        active={tab === 'government'}
-                        onClick={() => setTab('government')}
-                    />
-                </div>
-
-                {/* ── Search + filter bar ── */}
+            <div className="space-y-3">
+                {/* ── Compact integrated toolbar ── */}
                 {showSearch && (
-                    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                        <ResponsiveFilterBar
-                            className="border-none"
-                            activeFilterCount={activeFilters}
-                            searchInput={
-                                <form
-                                    onSubmit={e => { e.preventDefault(); }}
-                                    className="flex flex-1 items-center h-10 rounded-lg border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] overflow-hidden min-w-0"
-                                >
-                                    <Search className="h-4 w-4 text-slate-400 ml-3 shrink-0" />
-                                    <input
-                                        value={query}
-                                        onChange={e => setQuery(e.target.value)}
-                                        placeholder="Search requirements by title, description, location…"
-                                        className="flex-1 h-full bg-transparent text-sm pl-2 pr-1 outline-none min-w-0"
-                                    />
-                                    {query && (
-                                        <button type="button" onClick={() => setQuery('')} className="px-2 hover:bg-slate-100 rounded-md">
-                                            <X className="h-3.5 w-3.5 text-slate-400" />
-                                        </button>
-                                    )}
-                                </form>
-                            }
-                            filters={
+                    <div className="rounded-xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+                        {/* Row 1: Breadcrumb + result count */}
+                        <div className="flex items-center justify-between px-4 pt-3 pb-1.5">
+                            <nav className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400" aria-label="Breadcrumb">
+                                <Link href="/" className="hover:text-[#0b2447] transition-colors">Home</Link>
+                                <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                <span className="font-bold text-slate-700">Public Procurement & Bids</span>
+                            </nav>
+                            <p className="text-[11px] font-semibold text-slate-400 hidden sm:block" aria-live="polite" role="status">
+                                {isLoading || isFetching ? 'Syncing…' : `${total} requirement${total !== 1 ? 's' : ''} found`}
+                            </p>
+                        </div>
+
+                        {/* Row 2: Search + Sort + Location + Status + View Toggle — all inline */}
+                        <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+                            {/* Search */}
+                            <form
+                                onSubmit={e => { e.preventDefault(); }}
+                                className="flex flex-1 items-center h-9 rounded-lg border border-slate-200 bg-slate-50/80 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] overflow-hidden min-w-[180px]"
+                            >
+                                <Search className="h-3.5 w-3.5 text-slate-400 ml-2.5 shrink-0" aria-hidden="true" />
+                                <label htmlFor="req-search" className="sr-only">Search requirements</label>
+                                <input
+                                    id="req-search"
+                                    value={query}
+                                    onChange={e => setQuery(e.target.value)}
+                                    placeholder="Search by title, buyer, location…"
+                                    className="flex-1 h-full bg-transparent text-xs pl-2 pr-1 outline-none min-w-0"
+                                />
+                                {query && (
+                                    <button type="button" onClick={() => setQuery('')} className="px-1.5 hover:bg-slate-100 rounded-md" aria-label="Clear search">
+                                        <X className="h-3 w-3 text-slate-400" />
+                                    </button>
+                                )}
+                            </form>
+
+                            {/* Sort */}
+                            <label htmlFor="req-sort" className="sr-only">Sort requirements</label>
+                            <select
+                                id="req-sort"
+                                value={sort}
+                                onChange={e => handleSortChange(e.target.value)}
+                                className="h-9 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 text-slate-700 cursor-pointer min-w-0 w-auto"
+                            >
+                                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+
+                            {showFilters && (
                                 <>
+                                    {/* Location Dropdown */}
+                                    <div className="relative min-w-0">
+                                        <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
+                                        <label htmlFor="req-location" className="sr-only">Filter by location</label>
+                                        <select
+                                            id="req-location"
+                                            value={location}
+                                            onChange={e => setLocation(e.target.value)}
+                                            className={cn(
+                                                "h-9 pl-7 pr-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
+                                                location ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
+                                            )}
+                                        >
+                                            <option value="">All Locations</option>
+                                            {discoveredLocations.map(loc => (
+                                                <option key={loc} value={loc}>{loc}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Procurement Method Filter */}
+                                    <label htmlFor="req-method" className="sr-only">Filter by procurement method</label>
                                     <select
-                                        value={sort}
-                                        onChange={e => setSort(e.target.value)}
-                                        className="h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 sm:w-48 text-slate-700 cursor-pointer min-w-0 w-full sm:w-auto"
+                                        id="req-method"
+                                        value={methodFilter}
+                                        onChange={e => setMethodFilter(e.target.value)}
+                                        className={cn(
+                                            "h-9 px-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
+                                            methodFilter ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
+                                        )}
                                     >
-                                        {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                        <option value="">All Methods</option>
+                                        <option value="RFQ">RFQ</option>
+                                        <option value="OPEN_TENDER">Open Tender</option>
+                                        <option value="LIMITED_TENDER">Limited Tender</option>
+                                        <option value="RATE_CONTRACT">Rate Contract</option>
                                     </select>
 
-                                    {showFilters && (
-                                        <>
-                                            <div>
-                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Location</label>
-                                                <input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Jharsuguda" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Min Budget (₹)</label>
-                                                <input type="number" value={minBudget} onChange={e => setMinBudget(e.target.value)} placeholder="0" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Max Budget (₹)</label>
-                                                <input type="number" value={maxBudget} onChange={e => setMaxBudget(e.target.value)} placeholder="Any" className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white" />
-                                            </div>
-                                            {activeFilters > 0 && (
-                                                <button onClick={() => { setLocation(''); setMinBudget(''); setMaxBudget(''); }} className="text-xs font-bold text-red-600 hover:underline self-end pb-2">
-                                                    Clear Filters
-                                                </button>
-                                            )}
-                                        </>
+                                    {/* Status Filter */}
+                                    <label htmlFor="req-status" className="sr-only">Filter by status</label>
+                                    <select
+                                        id="req-status"
+                                        value={statusFilter}
+                                        onChange={e => setStatusFilter(e.target.value)}
+                                        className={cn(
+                                            "h-9 px-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
+                                            statusFilter ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
+                                        )}
+                                    >
+                                        <option value="">All Status</option>
+                                        <option value="OPEN">Open</option>
+                                        <option value="CLOSING_SOON">Closing Soon</option>
+                                        <option value="UNDER_EVALUATION">Under Evaluation</option>
+                                        <option value="AWARDED">Awarded</option>
+                                        <option value="CLOSED">Closed</option>
+                                    </select>
+
+                                    {/* Timeline / Urgency Filter */}
+                                    <label htmlFor="req-timeline" className="sr-only">Filter by timeline</label>
+                                    <select
+                                        id="req-timeline"
+                                        value={timelineFilter}
+                                        onChange={e => setTimelineFilter(e.target.value)}
+                                        className={cn(
+                                            "h-9 px-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
+                                            timelineFilter ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
+                                        )}
+                                    >
+                                        <option value="">All Timelines</option>
+                                        <option value="7d">Closing Soon (≤ 7D)</option>
+                                        <option value="3d">Urgent (≤ 3D)</option>
+                                        <option value="urgent">Marked Urgent</option>
+                                    </select>
+
+                                    {/* Clear filters */}
+                                    {activeFilters > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setLocation('');
+                                                setStatusFilter('');
+                                                setMethodFilter('');
+                                                setTimelineFilter('');
+                                            }}
+                                            className="h-9 px-2.5 rounded-lg border border-red-200 bg-red-50 text-[10px] font-black text-red-600 hover:bg-red-100 transition-colors uppercase tracking-wider whitespace-nowrap cursor-pointer"
+                                        >
+                                            Clear ({activeFilters})
+                                        </button>
                                     )}
                                 </>
-                            }
-                        />
+                            )}
+
+                            {/* View Mode Toggle */}
+                            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50/80 p-0.5 ml-auto shrink-0" aria-label="Display mode">
+                                <button
+                                    type="button"
+                                    onClick={() => setViewMode('grid')}
+                                    className={cn(
+                                        "inline-flex h-7 w-7 items-center justify-center rounded-md transition-all",
+                                        viewMode === 'grid' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-500 hover:bg-white'
+                                    )}
+                                    title="Grid view"
+                                    aria-label="Grid view"
+                                >
+                                    <Grid2X2 className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setViewMode('list')}
+                                    className={cn(
+                                        "inline-flex h-7 w-7 items-center justify-center rounded-md transition-all",
+                                        viewMode === 'list' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-500 hover:bg-white'
+                                    )}
+                                    title="List view"
+                                    aria-label="List view"
+                                >
+                                    <List className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Row 3: Category tabs — integrated underline-style */}
+                        {showTabs && buyerOrganizationId === 'all' && (
+                            <div className="flex items-center gap-0 overflow-x-auto no-scrollbar border-t border-slate-100 px-1" role="tablist" aria-label="Requirement categories">
+                                {TABS.map(t => (
+                                    <button
+                                        key={t.id}
+                                        role="tab"
+                                        aria-selected={tab === t.id}
+                                        onClick={() => setTab(t.id)}
+                                        className={cn(
+                                            "relative shrink-0 px-3.5 py-2.5 text-[11px] font-bold transition-colors whitespace-nowrap",
+                                            tab === t.id
+                                                ? 'text-[#0b2447]'
+                                                : 'text-slate-500 hover:text-slate-700'
+                                        )}
+                                    >
+                                        {t.label}
+                                        {tab === t.id && (
+                                            <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-[#0b2447]" />
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 
-                {/* ── Category tabs ── */}
-                {showTabs && buyerOrganizationId === 'all' && (
-                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                        {TABS.map(t => (
-                            <button
-                                key={t.id}
-                                onClick={() => setTab(t.id)}
-                                className={cn(
-                                    "h-9 shrink-0 rounded-lg border px-4 text-xs font-black transition-all",
-                                    tab === t.id 
-                                        ? 'border-[#0b2447] bg-[#0b2447] text-white shadow-sm' 
-                                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                                )}
-                            >
-                                {t.label}
-                            </button>
-                        ))}
-                    </div>
-                )}
-
-                {/* ── Results status header ── */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs text-slate-500 font-semibold">
-                    <p>
-                        {isLoading || isFetching ? 'Syncing with registry...' : `${total} requirement${total !== 1 ? 's' : ''} found`}
-                    </p>
-                    <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1" aria-label="Display mode">
-                        <button
-                            type="button"
-                            onClick={() => setViewMode('grid')}
-                            className={cn(
-                                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-all",
-                                viewMode === 'grid' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
-                            )}
-                            title="Grid view"
-                            aria-label="Grid view"
-                        >
-                            <Grid2X2 className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setViewMode('list')}
-                            className={cn(
-                                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-all",
-                                viewMode === 'list' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
-                            )}
-                            title="List view"
-                            aria-label="List view"
-                        >
-                            <List className="h-3.5 w-3.5" />
-                        </button>
-                    </div>
-                </div>
+                {/* Mobile-only result count */}
+                <p className="text-[11px] font-semibold text-slate-400 sm:hidden px-1" aria-live="polite" role="status">
+                    {isLoading || isFetching ? 'Syncing…' : `${total} requirement${total !== 1 ? 's' : ''} found`}
+                </p>
 
                 {/* ── Main content (Loading / Empty / Cards / Table) ── */}
                 {isLoading ? (
                     viewMode === 'list' ? (
-                        <DataTable<BuyerRequirement>
-                            data={[]}
-                            columns={columns}
-                            keyExtractor={(req) => `${req.sourceModel || 'buyer'}-${req.id}`}
-                            minWidth="min-w-[1000px]"
-                            isLoading={true}
-                            skeletonRows={4}
-                        />
+                        <RequirementsTableSkeleton rows={pageSize} />
                     ) : (
-                        <GridSkeleton />
+                        <GridSkeleton count={pageSize} />
                     )
                 ) : processedRequirements.length === 0 ? (
                     <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
@@ -659,7 +785,7 @@ export function BuyerRequirementsList({
                         <p className="text-sm font-bold text-slate-800">No buyer requirements found.</p>
                         <p className="mt-1 text-xs text-slate-500">Try adjusting your active query or category filters.</p>
                         {activeFilters > 0 && (
-                            <button onClick={() => { setQuery(''); setLocation(''); setMinBudget(''); setMaxBudget(''); setTab('all'); }} className="mt-3 text-xs font-black text-[#0b2447] hover:underline">
+                            <button onClick={() => { setQuery(''); setLocation(''); setStatusFilter(''); setMethodFilter(''); setTimelineFilter(''); setTab('all'); }} className="mt-3 text-xs font-black text-[#0b2447] hover:underline">
                                 Reset all filters
                             </button>
                         )}
@@ -729,7 +855,7 @@ export function BuyerRequirementsList({
                                         <div className="flex flex-wrap gap-x-2 gap-y-1">
                                             {req.requirementNumber && <span className="rounded border border-slate-100 bg-slate-50 px-1.5 py-0.5 text-[9px] font-black text-[#0b2447]">{req.requirementNumber}</span>}
                                             {req.category && <span className="rounded border border-slate-100 bg-slate-50 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">{req.category.name}</span>}
-                                            {req.location && <span className="inline-flex items-center gap-0.5 text-[9px] text-slate-400 font-semibold"><MapPin className="h-3 w-3 text-[#8a6a2f]" />{req.location}</span>}
+                                            {req.location && <span className="inline-flex items-center gap-0.5 text-[9px] text-slate-400 font-semibold"><MapPin className="h-3 w-3 text-[#8a6a2f]" />{getCleanLocation(req)}</span>}
                                         </div>
 
                                         <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 text-[10px] font-semibold text-slate-700">
@@ -743,7 +869,7 @@ export function BuyerRequirementsList({
                                             </div>
                                             <div>
                                                 <span className="block text-[9px] font-black uppercase text-slate-400">Qty / Unit</span>
-                                                <span className="font-bold">{req.quantity || 'Estimated'} {req.unit || ''}</span>
+                                                <span className="font-bold">{formatQuantityWithUnit(req.quantity, req.unit)}</span>
                                             </div>
                                         </div>
 
@@ -789,23 +915,163 @@ export function BuyerRequirementsList({
 }
 
 // Loading Skeleton components
-function GridSkeleton() {
+function RequirementsTableSkeleton({ rows = 5 }: { rows?: number }) {
     return (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="h-64 rounded-xl border border-slate-200 bg-white p-4 shadow-sm animate-pulse space-y-4">
-                    <div className="flex gap-2">
-                        <div className="h-8 w-8 rounded bg-slate-100" />
-                        <div className="flex-1 space-y-2">
-                            <div className="h-3 w-3/4 rounded bg-slate-100" />
-                            <div className="h-3 w-1/2 rounded bg-slate-100" />
+        <div 
+            className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm"
+            role="status"
+            aria-label="Loading requirements and bids"
+            aria-busy="true"
+        >
+            <div className="overflow-x-auto w-full max-w-full">
+                <table className="w-full border-collapse text-left text-xs table-fixed min-w-[1000px]">
+                    <colgroup>
+                        <col className="w-[4%]" />
+                        <col className="w-[28%]" />
+                        <col className="w-[30%]" />
+                        <col className="w-[6%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[13%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[10%]" />
+                    </colgroup>
+                    <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/75 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                            <th scope="col" className="py-3 px-2.5">SR. NO</th>
+                            <th scope="col" className="py-3 px-3">BUYER / ORGANIZATION</th>
+                            <th scope="col" className="py-3 px-3">REQUIREMENT DETAILS</th>
+                            <th scope="col" className="py-3 px-3">TYPE</th>
+                            <th scope="col" className="py-3 px-3">QUANTITY</th>
+                            <th scope="col" className="py-3 px-3">LOCATION</th>
+                            <th scope="col" className="py-3 px-3">TIMELINE</th>
+                            <th scope="col" className="py-3 px-3">STATUS</th>
+                            <th scope="col" className="py-3 px-3 text-right">ACTIONS</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {Array.from({ length: Math.min(Math.max(rows, 3), 10) }).map((_, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="py-3 px-2.5">
+                                    <div className="h-3 w-5 bg-slate-200/80 rounded animate-pulse" />
+                                </td>
+                                <td className="py-3 px-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-11 w-11 rounded-full bg-slate-200/80 shrink-0 animate-pulse" />
+                                        <div className="space-y-1.5 min-w-0 flex-1">
+                                            <div className="h-3.5 w-32 bg-slate-200/80 rounded animate-pulse" />
+                                            <div className="h-2.5 w-20 bg-slate-200/60 rounded animate-pulse" />
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="py-3 px-3">
+                                    <div className="space-y-1.5">
+                                        <div className="h-3.5 w-44 bg-slate-200/80 rounded animate-pulse" />
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="h-3.5 w-24 bg-slate-200/70 rounded animate-pulse" />
+                                            <div className="h-3 w-28 bg-slate-200/50 rounded animate-pulse" />
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="py-3 px-3">
+                                    <div className="h-5 w-16 rounded-full bg-slate-200/80 animate-pulse" />
+                                </td>
+                                <td className="py-3 px-3">
+                                    <div className="h-3.5 w-16 bg-slate-200/80 rounded animate-pulse" />
+                                </td>
+                                <td className="py-3 px-3">
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="h-3.5 w-3.5 rounded-full bg-slate-200/70 animate-pulse shrink-0" />
+                                        <div className="h-3 w-24 bg-slate-200/70 rounded animate-pulse" />
+                                    </div>
+                                </td>
+                                <td className="py-3 px-3">
+                                    <div className="space-y-1">
+                                        <div className="h-3.5 w-20 bg-slate-200/80 rounded animate-pulse" />
+                                        <div className="h-3.5 w-16 bg-slate-200/60 rounded-full animate-pulse" />
+                                    </div>
+                                </td>
+                                <td className="py-3 px-3">
+                                    <div className="h-5 w-16 rounded-full bg-slate-200/80 animate-pulse" />
+                                </td>
+                                <td className="py-3 px-3 text-right">
+                                    <div className="inline-block h-8.5 w-24 rounded-full bg-slate-200/80 animate-pulse" />
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <span className="sr-only">Loading requirements and bids...</span>
+        </div>
+    );
+}
+
+function GridSkeleton({ count = 4 }: { count?: number }) {
+    return (
+        <div 
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            role="status"
+            aria-label="Loading requirements and bids"
+            aria-busy="true"
+        >
+            {Array.from({ length: Math.min(Math.max(count, 3), 8) }).map((_, index) => (
+                <div 
+                    key={index} 
+                    className="flex flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.03)] h-full animate-pulse"
+                >
+                    <div className="h-1.5 w-full bg-slate-200/80" />
+                    <div className="flex flex-1 flex-col gap-3 p-4">
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <div className="h-9 w-9 rounded-xl bg-slate-200/80 shrink-0" />
+                                <div className="space-y-1.5 flex-1 min-w-0">
+                                    <div className="h-3.5 w-3/4 bg-slate-200/80 rounded" />
+                                    <div className="h-3 w-1/2 bg-slate-200/60 rounded" />
+                                </div>
+                            </div>
+                            <div className="h-5 w-14 rounded-full bg-slate-200/80 shrink-0" />
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <div className="h-7 w-7 rounded-lg bg-slate-200/80 shrink-0" />
+                            <div className="h-3 w-28 bg-slate-200/70 rounded" />
+                        </div>
+
+                        <div className="space-y-1.5 py-1">
+                            <div className="h-2.5 w-full bg-slate-200/60 rounded" />
+                            <div className="h-2.5 w-2/3 bg-slate-200/50 rounded" />
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5">
+                            <div className="h-4 w-16 bg-slate-200/70 rounded" />
+                            <div className="h-4 w-20 bg-slate-200/60 rounded" />
+                            <div className="h-4 w-14 bg-slate-200/60 rounded" />
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-slate-100 bg-slate-50/70 p-2.5">
+                            <div className="space-y-1">
+                                <div className="h-2 w-10 bg-slate-200/60 rounded" />
+                                <div className="h-3 w-14 bg-slate-200/80 rounded" />
+                            </div>
+                            <div className="space-y-1">
+                                <div className="h-2 w-10 bg-slate-200/60 rounded" />
+                                <div className="h-3 w-12 bg-slate-200/80 rounded" />
+                            </div>
+                            <div className="space-y-1">
+                                <div className="h-2 w-10 bg-slate-200/60 rounded" />
+                                <div className="h-3 w-12 bg-slate-200/80 rounded" />
+                            </div>
+                        </div>
+
+                        <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
+                            <div className="h-3 w-16 bg-slate-200/60 rounded" />
+                            <div className="h-8 w-24 rounded-lg bg-slate-200/80" />
                         </div>
                     </div>
-                    <div className="h-3 w-full rounded bg-slate-100" />
-                    <div className="h-3 w-2/3 rounded bg-slate-100" />
-                    <div className="h-10 rounded bg-slate-100 mt-auto" />
                 </div>
             ))}
+            <span className="sr-only">Loading requirements and bids...</span>
         </div>
     );
 }

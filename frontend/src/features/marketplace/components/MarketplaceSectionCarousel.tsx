@@ -93,7 +93,7 @@ export function MarketplaceSectionCarousel({
                     </div>
                 ) : items.length > 0 ? (
                     <div ref={scrollRef} className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-6 pt-2 px-2 sm:px-3 -mx-2 sm:-mx-3 no-scrollbar scroll-smooth xl:gap-5">
-                        {items.map((item) => (
+                        {items.map((item, idx) => (
                             <MarketplaceItemCard
                                 key={`${sectionKey}-${item.id}-${(item as any).itemType || ''}`}
                                 item={item}
@@ -101,6 +101,7 @@ export function MarketplaceSectionCarousel({
                                 showCompare={showCompare}
                                 showAddToCart={showAddToCart}
                                 showRequestQuote={showRequestQuote}
+                                priority={idx < 4}
                             />
                         ))}
                         {viewAllUrl && (

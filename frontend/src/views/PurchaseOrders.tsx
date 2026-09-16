@@ -5,6 +5,7 @@ import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck
 import type { DocumentConfig } from '../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../features/payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../features/payments/components/PaymentReceiptViewModal';
+import { RepeatPurchaseOrderModal } from '../features/purchaseOrders/components/RepeatPurchaseOrderModal';
 
 const moneyPdf = (val: any, currency = 'INR') => {
   const num = Number(val || 0);
@@ -17,7 +18,7 @@ import { api } from '../lib/api';
 import { openFileAsset } from '../lib/files';
 import { cn } from '../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../features/shared/FeatureStates';
-import { formatCurrency, formatDate, formatDateTime, formatTime, maskEmail } from '../features/shared/format';
+import { formatCurrency, formatDate, formatDateTime, formatTime } from '../features/shared/format';
 import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
@@ -462,54 +463,9 @@ export default function PurchaseOrders() {
   const { data: activeDelivery } = useDeliveryByPO(viewingOrder?.id);
 
   const [repeatingOrder, setRepeatingOrder] = useState<PurchaseOrderDto | null>(null);
-  const [repeatQuantity, setRepeatQuantity] = useState(1);
-  const [repeatAddress, setRepeatAddress] = useState('');
-  const [repeatDeliveryDate, setRepeatDeliveryDate] = useState('');
-  const [repeatSubmitting, setRepeatSubmitting] = useState(false);
 
   const handleOpenRepeatModal = (order: PurchaseOrderDto) => {
     setRepeatingOrder(order);
-    const firstItem = order.items?.[0];
-    setRepeatQuantity(firstItem ? Number(firstItem.quantity) || 1 : 1);
-    setRepeatAddress(order.deliveryAddress || '');
-    const defaultDate = new Date();
-    defaultDate.setDate(defaultDate.getDate() + 14);
-    setRepeatDeliveryDate(defaultDate.toISOString().split('T')[0]);
-  };
-
-  const handleConfirmRepeatOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!repeatingOrder) return;
-    if (repeatQuantity <= 0) {
-      toast.error('Quantity must be greater than zero');
-      return;
-    }
-    if (!repeatAddress.trim()) {
-      toast.error('Delivery Address is required');
-      return;
-    }
-    if (!repeatDeliveryDate) {
-      toast.error('Delivery Date is required');
-      return;
-    }
-
-    setRepeatSubmitting(true);
-    try {
-      await api.post(`/api/purchase-orders/${repeatingOrder.id}/repeat`, {
-        quantity: repeatQuantity,
-        deliveryAddress: repeatAddress.trim(),
-        expectedDelivery: new Date(repeatDeliveryDate).toISOString()
-      });
-      toast.success('Repeat purchase order placed successfully!');
-      setRepeatingOrder(null);
-      setViewingOrder(null);
-      reload();
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message || 'Failed to place repeat purchase order');
-    } finally {
-      setRepeatSubmitting(false);
-    }
   };
   const viewerScope = `${user?.role || 'guest'}-${user?.id || 'none'}`;
 
@@ -889,13 +845,13 @@ export default function PurchaseOrders() {
         {
           title: 'Buyer / Requesting Organization',
           name: order.buyer?.name || 'MSME Portal Buyer',
-          email: order.buyer?.email ? maskEmail(order.buyer.email) : undefined,
+          email: order.buyer?.email || undefined,
           address: order.deliveryAddress || 'Ship To: As per purchase order',
         },
         {
           title: 'Seller / Supplier Organization',
           name: order.seller?.name || 'MSME Portal Seller',
-          email: order.seller?.email ? maskEmail(order.seller.email) : undefined,
+          email: order.seller?.email || undefined,
           details: [`Seller ID: ${order.sellerId || '-'}`]
         }
       ],
@@ -991,7 +947,7 @@ export default function PurchaseOrders() {
       header: <SortHeader label="Party" columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} />,
       width: 'w-[14%]',
       cell: (order) => (
-        <span className="text-slate-600">{order.seller?.name || maskEmail(order.seller?.email) || `Seller #${order.sellerId || '-'}`}</span>
+        <span className="text-slate-600">{order.seller?.name || order.seller?.email || `Seller #${order.sellerId || '-'}`}</span>
       ),
     },
     {
@@ -1058,38 +1014,78 @@ export default function PurchaseOrders() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-2">
-        <KpiCard label="Open POs" value={openCount} subtext="Active purchase orders" icon={FileText} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} tone="blue" />
-        <KpiCard label="Delivered" value={deliveredCount} subtext="Completed deliveries" icon={CheckCircle2} onClick={() => setActiveTab('Delivered')} active={activeTab === 'Delivered'} tone="green" />
-        {/* <KpiCard label="Total Value" value={formatCurrency(totalSpend)} subtext="Cumulative purchase spend" icon={ShieldCheck} onClick={() => setActiveTab('All')} active={activeTab === 'All'} tone="indigo" />
-        <KpiCard label="Open Value" value={formatCurrency(poHealth.openValue)} subtext="Pending fulfillment value" icon={ShieldCheck} onClick={() => setActiveTab('Open')} active={activeTab === 'Open'} tone="amber" /> */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Open POs"
+          value={openCount}
+          subtext="Active purchase orders"
+          icon={FileText}
+          onClick={() => setActiveTab(prev => prev === 'Open' ? 'All' : 'Open')}
+          active={activeTab === 'Open'}
+          tone="blue"
+        />
+        <KpiCard
+          label="Delivered"
+          value={deliveredCount}
+          subtext="Completed deliveries"
+          icon={CheckCircle2}
+          onClick={() => setActiveTab(prev => prev === 'Delivered' ? 'All' : 'Delivered')}
+          active={activeTab === 'Delivered'}
+          tone="green"
+        />
+        <KpiCard
+          label={isBuyer ? 'Total Spend' : 'Total Order Value'}
+          value={formatCurrency(totalSpend)}
+          subtext={`${allOrders.length} total ${allOrders.length === 1 ? 'order' : 'orders'}`}
+          icon={CreditCard}
+          onClick={() => {
+            setActiveTab('All');
+            setStatusFilter('All Statuses');
+            setExpectedDateFilter('All Dates');
+          }}
+          active={activeTab === 'All' && statusFilter === 'All Statuses' && expectedDateFilter === 'All Dates'}
+          tone="indigo"
+        />
+        <KpiCard
+          label={isBuyer ? 'Pending Fulfillment' : 'Open Order Value'}
+          value={formatCurrency(poHealth.openValue)}
+          subtext={`${openCount} ${openCount === 1 ? 'order' : 'orders'} in pipeline`}
+          icon={Clock}
+          onClick={() => setActiveTab(prev => prev === 'Open' ? 'All' : 'Open')}
+          active={activeTab === 'Open'}
+          tone="amber"
+          badge={poHealth.deliveryRisk > 0 ? `${poHealth.deliveryRisk} SLA Risk` : undefined}
+          badgeColor="bg-rose-100 text-rose-800"
+        />
       </div>
 
       {error && <InlineError message={error} onRetry={reload} />}
 
       {/* ── Search + Filter + View Toggle Toolbar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+      <div className="rounded-xl border border-slate-200/90 bg-white p-2 sm:p-2.5 shadow-2xs">
         <ResponsiveFilterBar
           activeFilterCount={activeFiltersCount}
+          searchWrapperClassName="min-w-[140px] max-w-[200px] xl:max-w-[240px] flex-1 shrink"
+          filtersClassName="flex items-center gap-1.5 sm:gap-2 flex-nowrap shrink-0"
           searchInput={
             <div className="relative w-full">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <input
                 value={searchTerm}
                 onChange={event => setSearchTerm(event.target.value)}
-                placeholder="Search PO, title, party..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                placeholder="Search PO, party..."
+                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-8 pr-3 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
             </div>
           }
           filters={
             <>
               {/* Status */}
-              <div className="w-full sm:w-[130px]">
+              <div className="w-full sm:w-[110px]">
                 <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer"
                 >
                   <option value="All Statuses">Status: All</option>
                   {uniqueStatuses.map(s => (
@@ -1099,11 +1095,11 @@ export default function PurchaseOrders() {
               </div>
               
               {/* Party */}
-              <div className="w-full sm:w-[130px]">
+              <div className="w-full sm:w-[110px]">
                 <select
                   value={partyFilter}
                   onChange={e => setPartyFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer"
                 >
                   <option value="All Parties">Party: All</option>
                   {uniqueParties.map(p => (
@@ -1113,39 +1109,39 @@ export default function PurchaseOrders() {
               </div>
 
               {/* Value */}
-              <div className="w-full sm:w-[130px]">
+              <div className="w-full sm:w-[105px]">
                 <select
                   value={valueFilter}
                   onChange={e => setValueFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer"
                 >
                   <option value="All Values">Value: All</option>
-                  <option value="Below ₹10,000">Below ₹10,000</option>
-                  <option value="₹10,000 – ₹50,000">₹10,000 – ₹50,000</option>
-                  <option value="₹50,000 – ₹1,00,000">₹50,000 – ₹1,00,000</option>
-                  <option value="Above ₹1,00,000">Above ₹1,00,000</option>
+                  <option value="Below ₹10,000">Below ₹10k</option>
+                  <option value="₹10,000 – ₹50,000">₹10k–50k</option>
+                  <option value="₹50,000 – ₹1,00,000">₹50k–1L</option>
+                  <option value="Above ₹1,00,000">Above ₹1L</option>
                 </select>
               </div>
 
               {/* Expected */}
-              <div className="w-full sm:w-[130px]">
+              <div className="w-full sm:w-[110px]">
                 <select
                   value={expectedDateFilter}
                   onChange={e => setExpectedDateFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer"
                 >
                   <option value="All Dates">Expected: All</option>
                   <option value="Upcoming">Upcoming</option>
                   <option value="Overdue">Overdue</option>
-                  <option value="Custom Date Range">Custom Date Range</option>
+                  <option value="Custom Date Range">Custom Range</option>
                 </select>
               </div>
               
               {expectedDateFilter === 'Custom Date Range' && (
-                <div className="flex items-center flex-nowrap whitespace-nowrap gap-1 w-full sm:w-auto h-10">
-                  <input type="date" value={expectedDateCustom.start} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, start: e.target.value })} className="h-10 w-full sm:w-[115px] rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" title="Start Date" />
+                <div className="flex items-center flex-nowrap whitespace-nowrap gap-1 w-full sm:w-auto h-9">
+                  <input type="date" value={expectedDateCustom.start} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, start: e.target.value })} className="h-9 w-full sm:w-[95px] rounded-lg border border-slate-200 px-1.5 text-[11px] font-bold text-slate-700 outline-none" title="Start Date" />
                   <span className="text-slate-400 font-bold shrink-0">-</span>
-                  <input type="date" value={expectedDateCustom.end} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, end: e.target.value })} className="h-10 w-full sm:w-[115px] rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" title="End Date" />
+                  <input type="date" value={expectedDateCustom.end} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, end: e.target.value })} className="h-9 w-full sm:w-[95px] rounded-lg border border-slate-200 px-1.5 text-[11px] font-bold text-slate-700 outline-none" title="End Date" />
                 </div>
               )}
 
@@ -1156,13 +1152,13 @@ export default function PurchaseOrders() {
                 onClear={() => setUpdatedDateFilter({ start: '', end: '' })}
               />
               {activeFiltersCount > 0 && (
-                <Button variant="ghost" onClick={handleClearFilters} className="h-10 px-3 text-xs font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl shrink-0">
-                  Clear Filters
+                <Button variant="ghost" onClick={handleClearFilters} className="h-9 px-2.5 text-[11px] font-bold uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg shrink-0">
+                  Clear
                 </Button>
               )}
             </>
           }
-          viewToggle={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+          viewToggle={<ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />}
         />
       </div>
 
@@ -1209,7 +1205,7 @@ export default function PurchaseOrders() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 pt-1">
-                      <InfoTile label="Party" value={order.seller?.name || maskEmail(order.seller?.email) || `Seller #${order.sellerId || '-'}`} />
+                      <InfoTile label="Party" value={order.seller?.name || order.seller?.email || `Seller #${order.sellerId || '-'}`} />
                       <InfoTile label="Value" value={formatCurrency(order.amount || order.totalValue)} />
                       <InfoTile label="Expected" value={formatDate(order.expectedDelivery)} />
                       <InfoTile label="Created" value={formatDate(order.createdAt)} />
@@ -1270,7 +1266,6 @@ export default function PurchaseOrders() {
           </div>
         </div>
       )}
-
       {viewingOrder && (
         <PurchaseOrderReceiptModal
           order={viewingOrder}
@@ -1292,86 +1287,21 @@ export default function PurchaseOrders() {
             handleOpenDelivery(order as PurchaseOrderDto);
           }}
           onRepeatOrder={(order) => handleOpenRepeatModal(order as PurchaseOrderDto)}
-          onUploadSlip={(order) => setUploadProofOrder(order as PurchaseOrderDto)}
-          onViewSlip={(order) => setViewProofOrder(order as PurchaseOrderDto)}
+          onUploadPaymentSlip={(order) => setUploadProofOrder(order as PurchaseOrderDto)}
+          onViewPaymentSlip={(order) => setViewProofOrder(order as PurchaseOrderDto)}
           activeDelivery={activeDelivery}
         />
       )}
 
       {repeatingOrder && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
-          <div className="w-full max-w-md overflow-hidden rounded-[24px] bg-white shadow-2xl ring-1 ring-slate-200">
-            <div className="border-b border-slate-100 bg-slate-50/50 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <RefreshCw className="h-5 w-5 text-[#12335f]" />
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Repeat Purchase Order</h3>
-              </div>
-              <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                Replicating completed order <span className="font-bold text-slate-800">{repeatingOrder.poNumber}</span>.
-              </p>
-            </div>
-            <form onSubmit={handleConfirmRepeatOrder} className="p-5 space-y-4 text-xs font-semibold text-slate-700">
-              <div className="rounded-[18px] bg-slate-50 p-3 ring-1 ring-slate-200/50">
-                <span className="text-[9px] font-black uppercase tracking-wider text-slate-500">Product / Material</span>
-                <p className="mt-1 text-xs font-bold text-slate-900">{repeatingOrder.items?.[0]?.itemName || repeatingOrder.title}</p>
-                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-slate-200/60 pt-2 text-[11px]">
-                  <div>
-                    <span className="text-slate-500 block">Unit Price</span>
-                    <span className="font-bold text-slate-900">{formatCurrency(repeatingOrder.items?.[0]?.unitPrice || repeatingOrder.amount)}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Supplier</span>
-                    <span className="font-bold text-slate-900">{repeatingOrder.seller?.name || 'Seller'}</span>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Quantity</label>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  required
-                  value={repeatQuantity}
-                  onChange={(e) => setRepeatQuantity(Number(e.target.value))}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Expected Delivery Date</label>
-                <input
-                  type="date"
-                  required
-                  value={repeatDeliveryDate}
-                  onChange={(e) => setRepeatDeliveryDate(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Delivery Address</label>
-                <textarea
-                  required
-                  rows={2}
-                  value={repeatAddress}
-                  onChange={(e) => setRepeatAddress(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
-                />
-              </div>
-              <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Estimated Value</span>
-                <span className="text-sm font-black text-[#12335f]">
-                  {formatCurrency((Number(repeatingOrder.items?.[0]?.unitPrice) || Number(repeatingOrder.amount)) * repeatQuantity)}
-                </span>
-              </div>
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-                <Button type="button" variant="outline" onClick={() => setRepeatingOrder(null)} className="h-9 text-[10px] font-black uppercase">Cancel</Button>
-                <Button type="submit" disabled={repeatSubmitting} className="h-9 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445]">
-                  {repeatSubmitting ? 'Placing Order...' : 'Confirm Order'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <RepeatPurchaseOrderModal
+          order={repeatingOrder}
+          onClose={() => setRepeatingOrder(null)}
+          onSuccess={() => {
+            setViewingOrder(null);
+            reload();
+          }}
+        />
       )}
 
       {uploadProofOrder && (

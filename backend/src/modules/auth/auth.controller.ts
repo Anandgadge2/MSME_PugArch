@@ -1932,7 +1932,7 @@ export const authController = {
       if (roleToActivate === 'buyer') {
         const requestedVerificationMethod = String(req.body.profileData?.verificationMethod || registration.verificationMethod || '').trim();
         if (requestedVerificationMethod === 'aadhaar' && !(await hasVerifiedAadhaarKyc(userId))) {
-          return res.status(400).json({ message: 'Aadhaar must be verified with DigiLocker / MeriPehchaan before activating buyer registration.' });
+          return res.status(400).json({ message: 'Aadhaar must be verified with DigiLocker before activating buyer registration.' });
         }
         if (!user.buyerProfile) {
           await prisma.buyerProfile.create({

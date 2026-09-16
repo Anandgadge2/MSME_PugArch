@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   ZoomIn,
@@ -74,6 +75,7 @@ export function DocumentPreviewModal({
   }, [previewDocument, onClose]);
 
   if (!previewDocument) return null;
+  if (typeof document === 'undefined') return null;
 
   const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 3));
   const handleZoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.5));
@@ -130,9 +132,9 @@ export function DocumentPreviewModal({
   const badge = getFormatBadge();
   const BadgeIcon = badge.icon;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[1000000] flex items-center justify-center bg-slate-950/85 p-2 sm:p-4 backdrop-blur-md animate-in fade-in duration-150"
+      className="fixed inset-0 z-[99999999] flex items-center justify-center bg-slate-950/85 p-2 sm:p-4 backdrop-blur-md animate-in fade-in duration-150"
       onWheel={handleOverlayWheel}
       onClick={e => {
         if (e.target === e.currentTarget) onClose();
@@ -418,6 +420,7 @@ export function DocumentPreviewModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

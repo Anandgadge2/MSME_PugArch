@@ -300,8 +300,7 @@ const getPublicRequirementWhere = (user?: any) => {
     const isVerifiedSeller = user?.role === 'seller';
     const isAdmin = ['admin', 'master_admin'].includes(user?.role || '');
     return {
-        status: { in: ['PUBLISHED', 'OPEN'] },
-        lastDate: { gte: new Date() },
+        status: { in: ['PUBLISHED', 'OPEN', 'CLOSED', 'AWARDED', 'UNDER_REVIEW', 'EXPIRED'] },
         ...((isVerifiedSeller || isAdmin) ? {} : { visibility: 'PUBLIC' as const })
     };
 };
@@ -373,7 +372,7 @@ const mapLegacyRequirementToPublic = (requirement: any) => {
         description: requirement.description || requirement.title,
         quantity: totalQty > 0 ? totalQty : null,
         unit: primaryUnit,
-        location: [organization.city, organization.district, organization.state].filter(Boolean).join(', ') || directPurchase?.deliveryAddressText || null,
+        location: [organization.district || organization.city, organization.state].filter(Boolean).join(', ') || 'Jharsuguda, Odisha',
         budgetMin: requirement.estimatedValue || directPurchase?.totalAmount || null,
         budgetMax: requirement.estimatedValue || directPurchase?.totalAmount || null,
         lastDate: requiredBy,
@@ -424,9 +423,80 @@ const mapLegacyRequirementToPublic = (requirement: any) => {
 };
 
 const getPublicLegacyRequirementWhere = () => ({
-    status: { in: ['APPROVED', 'SOURCING'] },
-    AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
+    status: { in: ['APPROVED', 'SOURCING', 'FULFILLED', 'CLOSED', 'EXPIRED'] }
 });
+
+const mapProcurementBidToPublic = (bid: any) => {
+    if (!bid) return bid;
+    const org = bid.buyerOrganization || {};
+    const tp = (bid.technicalPacket || {}) as any;
+    const tpItems = Array.isArray(tp.items) ? tp.items : (Array.isArray(tp.lineItems) ? tp.lineItems : (Array.isArray(tp.boqTable) ? tp.boqTable : []));
+    const consignees = Array.isArray(tp.consigneeDetails) ? tp.consigneeDetails : [];
+
+    let resolvedQty: number | null = (bid.quantity != null && Number(bid.quantity) > 0) ? Number(bid.quantity) : null;
+    let resolvedUnit: string | null = bid.unit || null;
+
+    if (!resolvedQty && tpItems.length > 0) {
+        resolvedQty = tpItems.reduce((acc: number, it: any) => acc + Number(it.quantity || it.qty || 0), 0);
+        resolvedUnit = tpItems[0]?.unitOfMeasure || tpItems[0]?.unit || tpItems[0]?.uom || 'Nos';
+    }
+    if (!resolvedQty && consignees.length > 0) {
+        resolvedQty = consignees.reduce((acc: number, c: any) => acc + Number(c.quantity || 0), 0);
+        if (!resolvedUnit) {
+            resolvedUnit = tpItems[0]?.unitOfMeasure || tpItems[0]?.unit || 'Nos';
+        }
+    }
+    if (!resolvedUnit && resolvedQty) {
+        resolvedUnit = 'Nos';
+    }
+
+    const formatState = (st?: string) => {
+        if (!st) return '';
+        const trimmed = st.trim();
+        return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+    };
+    const cleanDistrict = bid.district || org.district || 'Jharsuguda';
+    const cleanState = formatState(bid.state || org.state || 'Odisha');
+    const cleanLocation = [cleanDistrict, cleanState].filter(Boolean).join(', ') || 'Jharsuguda, Odisha';
+
+    return decorateRequirement({
+        id: bid.id,
+        buyerId: bid.buyerId,
+        buyerOrganizationId: bid.buyerOrganizationId || org.id,
+        sourceModel: 'BID',
+        sourceId: bid.bidNumber || bid.id,
+        bidNumber: bid.bidNumber,
+        title: bid.title,
+        requirementType: (String(bid.bidType || '').toUpperCase().includes('SERVICE') || String(bid.procurementType || '').toUpperCase().includes('SERVICE')) ? 'SERVICE' : 'PRODUCT',
+        description: bid.description || bid.title,
+        quantity: resolvedQty,
+        unit: resolvedUnit,
+        location: cleanLocation,
+        budgetMin: bid.estimatedValue != null ? Number(bid.estimatedValue) : null,
+        budgetMax: bid.estimatedValue != null ? Number(bid.estimatedValue) : null,
+        lastDate: bid.endDate,
+        visibility: bid.visibility || 'PUBLIC',
+        status: bid.status === 'EXPIRED' ? 'CLOSED' : (bid.status || 'OPEN'),
+        isFeatured: false,
+        isUrgent: false,
+        approvedAt: bid.startDate || bid.createdAt,
+        createdAt: bid.createdAt,
+        updatedAt: bid.updatedAt,
+        category: bid.category ? { id: 0, name: bid.category, slug: bid.category.toLowerCase().replace(/\s+/g, '-') } : null,
+        buyerOrganization: {
+            id: bid.buyerOrganizationId || org.id || bid.buyerId,
+            organizationName: bid.buyerOrganizationName || org.organizationName || 'Verified Buyer',
+            organizationType: bid.buyerType || org.organizationType || 'PRIVATE',
+            district: cleanDistrict,
+            state: cleanState,
+            verificationStatus: org.verificationStatus || 'VERIFIED'
+        },
+        requirementNumber: bid.bidNumber,
+        procurementMethod: bid.procurementType,
+        canonicalMethod: bid.canonicalMethod || bid.procurementType,
+        technicalPacket: bid.technicalPacket
+    });
+};
 
 
 const loadLatestTenders = async (take = 6) => {
@@ -2490,6 +2560,36 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
             ]
         };
 
+        const pbWhere: any = {
+            approvalStatus: { in: ['APPROVED', 'PENDING'] },
+            status: { in: ['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED', 'EXPIRED'] },
+            visibility: 'PUBLIC'
+        };
+        if (query.q) {
+            pbWhere.OR = [
+                { title: { contains: query.q, mode: 'insensitive' } },
+                { description: { contains: query.q, mode: 'insensitive' } },
+                { bidNumber: { contains: query.q, mode: 'insensitive' } },
+                { deliveryLocation: { contains: query.q, mode: 'insensitive' } },
+                { district: { contains: query.q, mode: 'insensitive' } }
+            ];
+        }
+        if (query.type) pbWhere.bidType = { contains: query.type, mode: 'insensitive' };
+        if (query.tab === 'products') pbWhere.bidType = { not: 'SERVICE' };
+        if (query.tab === 'services') pbWhere.bidType = { contains: 'SERVICE', mode: 'insensitive' };
+        if (query.tab === 'closing_soon') pbWhere.endDate = { gte: new Date(), lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
+        if (query.tab === 'large_industries') pbWhere.buyerType = { contains: 'LARGE', mode: 'insensitive' };
+        if (query.tab === 'government') pbWhere.buyerType = { in: ['GOVERNMENT', 'PSU'] };
+        if (query.buyerOrganizationId) pbWhere.buyerOrganizationId = query.buyerOrganizationId;
+        if (query.location) {
+            pbWhere.OR = [
+                ...(pbWhere.OR || []),
+                { deliveryLocation: { contains: query.location, mode: 'insensitive' } },
+                { district: { contains: query.location, mode: 'insensitive' } },
+                { state: { contains: query.location, mode: 'insensitive' } }
+            ];
+        }
+
         const rawSort = String(req.query.sort || '').toLowerCase();
         let buyerOrderBy: any = [{ isUrgent: 'desc' }, { lastDate: 'asc' }, { createdAt: 'desc' }];
         if (rawSort === 'latest') {
@@ -2500,11 +2600,13 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
 
         const cacheKey = `cache:marketplace:requirements:${req.user?.id || 'anon'}:${JSON.stringify(req.query)}`;
         const cachedResult = await getOrSetCache(cacheKey, async () => {
-            const [buyerRequirements, buyerTotal, legacyRequirements, legacyTotal] = await Promise.all([
-                db.buyerRequirement.findMany({ where, orderBy: buyerOrderBy, take: pageSize * page, select: publicRequirementListSelect }),
-                db.buyerRequirement.count({ where }),
+            const [buyerRequirements, buyerTotal, legacyRequirements, legacyTotal, procurementBids, pbTotal] = await Promise.all([
+                db.buyerRequirement.findMany({ where, orderBy: buyerOrderBy, take: pageSize * page, select: publicRequirementListSelect }).catch(() => []),
+                db.buyerRequirement.count({ where }).catch(() => 0),
                 db.requirement.findMany({ where: legacyWhere, orderBy: [{ requiredBy: 'asc' }, { updatedAt: 'desc' }], take: pageSize * page, select: publicLegacyRequirementSelect }).catch(() => []),
-                db.requirement.count({ where: legacyWhere }).catch(() => 0)
+                db.requirement.count({ where: legacyWhere }).catch(() => 0),
+                db.procurementBid.findMany({ where: pbWhere, include: { buyerOrganization: true }, orderBy: [{ endDate: 'asc' }, { createdAt: 'desc' }], take: pageSize * page }).catch(() => []),
+                db.procurementBid.count({ where: pbWhere }).catch(() => 0)
             ]);
 
             const currentUserId = req.user?.id ? Number(req.user.id) : null;
@@ -2527,16 +2629,44 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
                 return true;
             });
 
-            const decoratedBuyer = buyerRequirements.map(decorateRequirement);
-            const buyerTitles = new Set(decoratedBuyer.map((b: any) => (b.title || '').trim().toLowerCase()));
-            const decoratedLegacy = filteredLegacy
-                .map(mapLegacyRequirementToPublic)
-                .filter((l: any) => !buyerTitles.has((l.title || '').trim().toLowerCase()));
+            const decoratedPb = (procurementBids || []).map(mapProcurementBidToPublic);
+            const decoratedLegacy = (filteredLegacy || []).map(mapLegacyRequirementToPublic);
+            const decoratedBuyer = (buyerRequirements || []).map(decorateRequirement);
 
-            const combined = [
-                ...decoratedBuyer,
-                ...decoratedLegacy
-            ].sort((a: any, b: any) => {
+            // Canonical indexing to prevent duplicate rows while showing authentic bid details
+            const combinedMap = new Map<string, any>();
+
+            // 1. Procurement bids have the richest authentic bid data & canonical bid numbers
+            for (const item of decoratedPb) {
+                const numKey = (item.requirementNumber || '').trim().toUpperCase();
+                const titleKey = `${(item.title || '').trim().toLowerCase()}::${item.buyerOrganizationId || item.buyerId || ''}`;
+                if (numKey) combinedMap.set(numKey, item);
+                combinedMap.set(titleKey, item);
+            }
+
+            // 2. Legacy requirements - if not already covered by procurementBid, include
+            for (const item of decoratedLegacy) {
+                const numKey = (item.requirementNumber || '').trim().toUpperCase();
+                const titleKey = `${(item.title || '').trim().toLowerCase()}::${item.buyerOrganizationId || item.buyerId || ''}`;
+                if (numKey && combinedMap.has(numKey)) continue;
+                if (combinedMap.has(titleKey)) continue;
+                if (numKey) combinedMap.set(numKey, item);
+                combinedMap.set(titleKey, item);
+            }
+
+            // 3. Buyer requirements - if not already covered, include
+            for (const item of decoratedBuyer) {
+                const numKey = (item.requirementNumber || '').trim().toUpperCase();
+                const titleKey = `${(item.title || '').trim().toLowerCase()}::${item.buyerOrganizationId || item.buyerId || ''}`;
+                if (numKey && !numKey.startsWith('REQ-') && combinedMap.has(numKey)) continue;
+                if (combinedMap.has(titleKey)) continue;
+                if (numKey) combinedMap.set(numKey, item);
+                combinedMap.set(titleKey, item);
+            }
+
+            const uniqueCombined = Array.from(new Set(combinedMap.values()));
+
+            const combined = uniqueCombined.sort((a: any, b: any) => {
                 if (rawSort === 'latest') {
                     return new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime();
                 }
@@ -2545,10 +2675,10 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
                 }
                 const urgent = Number(Boolean(b.isUrgent)) - Number(Boolean(a.isUrgent));
                 if (urgent) return urgent;
-                return new Date(a.lastDate || 0).getTime() - new Date(b.lastDate || 0).getTime();
+                return new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime();
             });
-            const total = buyerTotal + decoratedLegacy.length;
-            return { requirements: combined.slice(skip, skip + pageSize), total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+            const total = combined.length;
+            return { requirements: combined.slice(skip, skip + pageSize), total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
         }, 30);
         return ok(res, cachedResult);
     } catch (error) {
@@ -2592,6 +2722,14 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
             requirement = mapLegacyRequirementToPublic(legacyReq);
             isLegacy = true;
         } else {
+            const searchTokens = Array.from(new Set([
+                idToken,
+                idToken.replace(/^[A-Z]{2,5}-/, 'REQ-'),
+                idToken.replace(/^[A-Z]{2,5}-/, 'TND-'),
+                idToken.replace(/^[A-Z]{2,5}-/, 'RFQ-'),
+                idToken.replace(/^[A-Z]{2,5}-/, 'RFP-'),
+            ]));
+
             if (hasNumericId) {
                 const buyerReq = await db.buyerRequirement.findFirst({
                     where: { id },
@@ -2602,13 +2740,6 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                 }
             }
             if (!requirement) {
-                const searchTokens = Array.from(new Set([
-                    idToken,
-                    idToken.replace(/^[A-Z]{2,5}-/, 'REQ-'),
-                    idToken.replace(/^[A-Z]{2,5}-/, 'TND-'),
-                    idToken.replace(/^[A-Z]{2,5}-/, 'RFQ-'),
-                    idToken.replace(/^[A-Z]{2,5}-/, 'RFP-'),
-                ]));
                 const legacyReq = await db.requirement.findFirst({
                     where: {
                         OR: [
@@ -2665,6 +2796,18 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                             items: meta.itemRateSchedule || []
                         }
                     };
+                }
+            }
+
+            if (!requirement) {
+                const pbMatch = await db.procurementBid.findFirst({
+                    where: hasNumericId
+                        ? { OR: [{ id }, { bidNumber: idToken }] }
+                        : { bidNumber: { in: searchTokens } },
+                    include: { buyerOrganization: true }
+                }).catch(() => null);
+                if (pbMatch) {
+                    requirement = mapProcurementBidToPublic(pbMatch);
                 }
             }
         }
@@ -2725,20 +2868,17 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
             if (mirroredRequirement?.id) responseRequirementIds.add(mirroredRequirement.id);
         }
 
+        const safeReqId = typeof requirement.id === 'number' && requirement.id > 0 ? requirement.id : -999999;
         const [similarList, response] = await Promise.all([
             db.buyerRequirement.findMany({
                 where: {
                     ...getPublicRequirementWhere(req.user),
-                    id: { not: requirement.id },
-                    OR: [
-                        { categoryId: requirement.categoryId || undefined },
-                        { requirementType: requirement.requirementType }
-                    ]
+                    ...(safeReqId > 0 ? { id: { not: safeReqId } } : {})
                 },
                 take: 4,
-                orderBy: { lastDate: 'asc' },
+                orderBy: { createdAt: 'desc' },
                 select: publicRequirementListSelect
-            }),
+            }).catch(() => []),
             req.user?.role === 'seller'
                 ? db.requirementResponse.findFirst({
                     where: {

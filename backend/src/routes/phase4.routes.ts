@@ -2907,9 +2907,18 @@ router.get('/public/files/:id/view', asyncRoute(async (req: AuthRequest, res) =>
   });
   const filename = encodeURIComponent((file.asset as any).originalName || (file.asset as any).key || 'document');
 
+  const etag = `W/"${id}-${(file.asset as any)?.updatedAt ? new Date((file.asset as any).updatedAt).getTime() : file.buffer.length}"`;
+
   res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
+  res.setHeader('ETag', etag);
+
+  if (req.headers['if-none-match'] === etag) {
+    res.status(304);
+    return res.end();
+  }
+
   res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
   return res.end(file.buffer);
 }));
@@ -3025,10 +3034,24 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
   });
   const filename = encodeURIComponent((file.asset as any).originalName || (file.asset as any).key || 'document');
 
+  const isImage = (file.contentType || '').startsWith('image/');
+  const etag = `W/"${id}-${(file.asset as any)?.updatedAt ? new Date((file.asset as any).updatedAt).getTime() : file.buffer.length}"`;
+
   res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
-  res.setHeader('Cache-Control', req.user ? 'private, no-store' : 'public, max-age=3600');
+  res.setHeader('ETag', etag);
+
+  if (req.headers['if-none-match'] === etag) {
+    res.status(304);
+    return res.end();
+  }
+
+  if (isImage) {
+    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+  } else {
+    res.setHeader('Cache-Control', req.user ? 'private, no-store' : 'public, max-age=3600');
+  }
   return res.end(file.buffer);
 }));
 

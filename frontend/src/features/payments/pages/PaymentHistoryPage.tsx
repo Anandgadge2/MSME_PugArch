@@ -431,8 +431,12 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
 
   if (isKpisLoading) {
     return (
-      <div className="space-y-6 pt-4">
-        <PageTableSkeleton kpiCount={5} />
+      <div className="space-y-6">
+        <PageTableSkeleton
+          kpiCount={5}
+          title="Payment History"
+          subtitle="Payment status, escrow linkage, tax/TDS summary, and immutable ledger entries."
+        />
       </div>
     );
   }

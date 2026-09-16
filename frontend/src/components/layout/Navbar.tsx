@@ -36,6 +36,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   BarChart3,
+  FileCheck,
   FileSearch,
   Info,
   Check,
@@ -513,6 +514,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       { label: 'Create Procurement', path: '/buyer/procurement/create', icon: PlusCircle, roles: ['buyer'], permission: 'requirement.create' },
       { label: 'My Procurements', path: '/buyer/my-procurements', icon: ClipboardList, roles: ['buyer'], permission: 'requirement.view' },
       { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'], permission: 'requirement.create' },
+      { label: 'Quotations & RFQs', path: '/buyer/rfq/compare', icon: FileCheck, roles: ['buyer'], permission: 'requirement.view' },
       { label: 'Supplier Responses', path: '/buyer/procurement/responses', icon: FileText, roles: ['buyer'], permission: 'requirement.view' }
     ] },
     // Buyer Orders
@@ -572,7 +574,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     // Seller Administration
     { label: 'Administration', icon: Settings, roles: ['seller', 'shg'], children: [
       { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['seller', 'shg'], permission: 'team.member.view' },
-      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller', 'shg'], permission: 'organization.view' }
+      { label: 'Settings', path: isShgAccount ? '/shg/settings' : '/seller/settings', icon: Settings, roles: ['seller', 'shg'], permission: 'organization.view' }
     ] },
     // Seller Disputes
     { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'], permission: 'dispute.view' },
@@ -1299,11 +1301,6 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                 </span>
                 <span className="text-[9px] font-black text-[#12335f] uppercase tracking-widest opacity-80 flex items-center gap-1 leading-tight">
                   {displayRole}
-                  {orgName && (
-                    <span className="text-slate-400 font-semibold truncate max-w-[100px] normal-case" title={orgName}>
-                      • {orgName}
-                    </span>
-                  )}
                   <ChevronDown className="h-2.5 w-2.5 shrink-0 transition-transform duration-200" style={{ transform: isProfileDropdownOpen ? 'rotate(180deg)' : 'none' }} />
                 </span>
               </div>
@@ -1311,27 +1308,31 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
             {isProfileDropdownOpen && (
               <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200/90 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-50">
-                {/* Organization & User identity card */}
-                <div className="px-4 py-3.5 border-b border-slate-100 bg-slate-50/80">
-                  {orgName ? (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-slate-500">
-                        <Building2 className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Organization</span>
+                {/* User & Organization identity card */}
+                <div className="px-4 py-3.5 border-b border-slate-100 bg-slate-50/60">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-black text-slate-900 leading-snug">
+                      {user?.name || 'User'}
+                    </p>
+                    {user?.email && (
+                      <p className="text-xs font-semibold text-slate-500 break-all leading-normal" title={user.email}>
+                        {user.email}
+                      </p>
+                    )}
+                  </div>
+
+                  {orgName && (
+                    <div className="mt-2.5 rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-3xs">
+                      <div className="flex items-center gap-1.5 text-slate-500 mb-0.5">
+                        <Building2 className="h-3 w-3 text-[#12335f] shrink-0" />
+                        <span className="text-[9px] font-black uppercase tracking-wider text-[#12335f]">Organization</span>
                       </div>
-                      <p className="text-xs font-black text-slate-900 leading-snug break-words" title={orgName}>
+                      <p className="text-xs font-bold text-slate-800 break-words leading-tight" title={orgName}>
                         {orgName}
                       </p>
-                      <p className="text-[11px] text-slate-600 font-medium truncate pt-0.5">
-                        {user?.name} {user?.email ? <span className="text-slate-400">({user.email})</span> : null}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-0.5">
-                      <p className="text-xs font-black text-slate-900 truncate">{user?.name}</p>
-                      <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
                     </div>
                   )}
+
                   <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
                     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-[#12335f] text-white shadow-2xs">
                       {displayRole}
@@ -1364,61 +1365,52 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                 <button
                   onClick={() => {
                     setIsProfileDropdownOpen(false);
-                    router.push('/profile');
+                    if (user?.role === 'buyer') {
+                      router.push('/buyer/profile');
+                    } else if (user?.role === 'seller') {
+                      if (isShgUser(user)) {
+                        router.push('/shg/settings');
+                      } else {
+                        router.push('/seller/settings');
+                      }
+                    } else if (user?.role === 'shg') {
+                      router.push('/shg/settings');
+                    } else if (user?.role === 'master_admin') {
+                      router.push('/master-admin/settings');
+                    } else {
+                      router.push('/profile');
+                    }
                   }}
                   className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-[#12335f] transition-colors flex items-center gap-2 cursor-pointer"
                 >
                   <UserIcon className="h-4 w-4 text-slate-400" />
-                  My Profile & Organization Details
+                  My Profile
                 </button>
 
-                {/* DUAL ROLE SWITCHER / ACTIVATION */}
-                {(user?.role === 'buyer' || user?.role === 'seller') && (
+                {/* DUAL ROLE SWITCHER (Only shown if other profile already exists; activation hidden for now) */}
+                {(user?.role === 'buyer' || user?.role === 'seller') && (user?.role === 'seller' ? !!user?.buyerProfile : !!user?.sellerProfile) && (
                   <>
                     <div className="h-px bg-slate-100 my-1" />
-                    {(user?.role === 'seller' ? !!user?.buyerProfile : !!user?.sellerProfile) ? (
-                      <button
-                        onClick={() => {
-                          setIsProfileDropdownOpen(false);
-                          handleSwitchRole(user.role === 'seller' ? 'buyer' : 'seller');
-                        }}
-                        disabled={Boolean(roleAction)}
-                        className="w-full text-left px-4 py-2.5 text-xs font-black text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        {user.role === 'seller' ? (
-                          <>
-                            <Building2 className="h-4 w-4 text-indigo-500" />
-                            {roleAction === 'buyer' ? 'Switching to Buyer...' : 'Switch to Buyer View'}
-                          </>
-                        ) : (
-                          <>
-                            <Store className="h-4 w-4 text-indigo-500" />
-                            {roleAction === 'seller' ? 'Switching to Seller...' : 'Switch to Seller View'}
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setIsProfileDropdownOpen(false);
-                          setPendingActivateRole(user?.role === 'seller' ? 'buyer' : 'seller');
-                        }}
-                        disabled={Boolean(roleAction)}
-                        className="w-full text-left px-4 py-2.5 text-xs font-black text-amber-700 hover:bg-amber-50 hover:text-amber-800 transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        {user?.role === 'seller' ? (
-                          <>
-                            <Building2 className="h-4 w-4 text-amber-600" />
-                            {roleAction === 'buyer' ? 'Activating Buyer...' : 'Activate Buyer Profile'}
-                          </>
-                        ) : (
-                          <>
-                            <Store className="h-4 w-4 text-amber-600" />
-                            {roleAction === 'seller' ? 'Activating Seller...' : 'Activate Seller Profile'}
-                          </>
-                        )}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        setIsProfileDropdownOpen(false);
+                        handleSwitchRole(user.role === 'seller' ? 'buyer' : 'seller');
+                      }}
+                      disabled={Boolean(roleAction)}
+                      className="w-full text-left px-4 py-2.5 text-xs font-black text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 transition-colors flex items-center gap-2 cursor-pointer"
+                    >
+                      {user.role === 'seller' ? (
+                        <>
+                          <Building2 className="h-4 w-4 text-indigo-500" />
+                          {roleAction === 'buyer' ? 'Switching to Buyer...' : 'Switch to Buyer View'}
+                        </>
+                      ) : (
+                        <>
+                          <Store className="h-4 w-4 text-indigo-500" />
+                          {roleAction === 'seller' ? 'Switching to Seller...' : 'Switch to Seller View'}
+                        </>
+                      )}
+                    </button>
                   </>
                 )}
 

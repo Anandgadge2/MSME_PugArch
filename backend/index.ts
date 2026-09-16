@@ -6236,17 +6236,43 @@ app.post('/api/conversations/:id/quotation', authenticate, authorize('seller', '
     });
 
     // Post notification into chat
-    await prisma.message.create({
+    const message = await prisma.message.create({
       data: {
         conversationId: conversation.id,
         senderId: Number(req.user?.id),
         content: `📄 **Formal Quotation Submitted**\n\n- **Quotation Ref**: ${responseNumber}\n- **Total Amount**: ₹${finalAmount.toLocaleString('en-IN')}\n- **Delivery Timeline**: ${deliveryTimeline || (finalDeliveryDays ? `${finalDeliveryDays} Days` : 'As specified')}\n- **Terms & Notes**: ${finalNotes || 'Standard Terms'}\n\n*The buyer can now review and accept this quotation to generate a Purchase Order.*`
-      }
+      },
+      include: { attachments: true, sender: { select: messageSenderSelect } }
     });
 
     await prisma.conversation.update({
       where: { id: conversation.id },
       data: { lastMessageAt: new Date() }
+    });
+
+    const enrichedMessage = (await enrichMessageAttachments([message]))[0];
+    void publishConversationEvent(conversation.id, {
+      type: 'MESSAGE_CREATED',
+      conversationId: conversation.id,
+      message: enrichedMessage
+    });
+
+    void publishConversationEvent(conversation.id, {
+      type: 'QUOTATION_SUBMITTED',
+      conversationId: conversation.id,
+      quoteRequestId: quoteRequest.id,
+      quoteResponseId: quoteResponse.id,
+      totalAmount: finalAmount,
+      responseNumber
+    });
+
+    void notifyConversationParticipants({
+      actor: req.user!,
+      buyer: conversation.buyer,
+      seller: conversation.seller,
+      conversationId: conversation.id,
+      subject: conversation.subject,
+      title: 'Formal quotation submitted'
     });
 
     res.status(201).json({

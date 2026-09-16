@@ -22,7 +22,7 @@ import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
-import { ProcurementDetailUnifiedView } from '../components/ProcurementDetailUnifiedView';
+import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import RateContractDetailPage from './RateContractDetailPage';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
 
@@ -209,11 +209,13 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   }
 
   const isMatchingInitial = Boolean(
-    initialData && activeId && (
+    initialData && (
+      !activeId ||
       String(initialData.id).toLowerCase() === String(activeId).toLowerCase() ||
       String(initialData.requirementNumber || '').toLowerCase() === String(activeId).toLowerCase() ||
       String(initialData.bidNumber || '').toLowerCase() === String(activeId).toLowerCase() ||
-      String(initialData.displayId || '').toLowerCase() === String(activeId).toLowerCase()
+      String(initialData.displayId || '').toLowerCase() === String(activeId).toLowerCase() ||
+      String(initialData.sourceId || '').toLowerCase() === String(activeId).toLowerCase()
     )
   );
 
@@ -222,7 +224,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     queryKey: ['rfq-detail-bid', requestId],
     queryFn:  () => procurementBidApi.detail(requestId),
     enabled:  Boolean(requestId && (!explicitReqId || requestId !== explicitReqId)),
-    initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.sourceModel === 'PROCUREMENT_BID' || initialData?.bidNumber || initialData?.requirementNumber) ? initialData : undefined,
     staleTime: 60_000,
   });
 
@@ -230,7 +232,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     queryKey: ['rfq-detail-req', requirementId],
     queryFn:  async () => getApi<any>(`/api/marketplace/requirements/${requirementId}`),
     enabled:  !!requirementId,
-    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
+    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? (initialData.requirement || initialData) : undefined,
     staleTime: 60_000,
   });
 
@@ -329,7 +331,8 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     staleTime: 0, gcTime: 0,
   });
 
-  const isLoading = (!!requestId && bidLoading) || (!!requirementId && reqLoading);
+  const hasData = Boolean(bidData || reqData || initialData);
+  const isLoading = !hasData && ((!!requestId && bidLoading) || (!!requirementId && reqLoading));
 
   /* ── Buyer Seller Responses Query ── */
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
@@ -1027,37 +1030,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   /* ══════════════════════════════════════════════════════════════════════════
      LOADING SKELETON
      ══════════════════════════════════════════════════════════════════════════ */
-  if (isLoading) return (
-    <div className="min-h-screen bg-slate-50/70 p-6 space-y-6 animate-pulse">
-      <div className="mx-auto max-w-[1440px] space-y-6">
-        {/* Header Skeleton */}
-        <div className="h-32 bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4">
-          <div className="flex justify-between items-center">
-            <div className="h-5 w-48 bg-slate-200 rounded-lg" />
-            <div className="h-8 w-24 bg-slate-200 rounded-xl" />
-          </div>
-          <div className="h-8 w-2/3 bg-slate-200 rounded-lg" />
-        </div>
-        {/* Stats Strip Skeleton */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-20 bg-white rounded-2xl border border-slate-200/80 p-4 space-y-2" />
-          ))}
-        </div>
-        {/* 2-Column Body Skeleton */}
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
-          <div className="space-y-6">
-            <div className="h-64 bg-white rounded-2xl border border-slate-200/80 p-6" />
-            <div className="h-48 bg-white rounded-2xl border border-slate-200/80 p-6" />
-          </div>
-          <div className="space-y-6">
-            <div className="h-80 bg-white rounded-2xl border border-slate-200/80 p-6" />
-            <div className="h-48 bg-white rounded-2xl border border-slate-200/80 p-6" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  if (isLoading) {
+    return <ProcurementDetailSkeleton procurementTypeLabel={derivedProcurementLabel} />;
+  }
 
   /* ══════════════════════════════════════════════════════════════════════════
      ERROR / NOT FOUND STATE
