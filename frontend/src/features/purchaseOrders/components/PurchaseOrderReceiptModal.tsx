@@ -189,6 +189,7 @@ export function PurchaseOrderReceiptModal({
   const [zoomMode, setZoomMode] = useState<'fit' | '100%' | 'custom'>('fit');
   const [scaleFactor, setScaleFactor] = useState<number>(1);
   const [sheetDims, setSheetDims] = useState<{ w: number; h: number }>({ w: 800, h: 650 });
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const currentTheme = NEUTRAL_MINIMAL_THEME;
 
@@ -374,8 +375,6 @@ export function PurchaseOrderReceiptModal({
   // On screen, only add filler rows if items < 3 to ensure the entire page fits without scrolling
   const fillerRowCount = Math.max(0, 3 - displayItems.length);
   const fillerRows = Array.from({ length: fillerRowCount });
-
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const handleDirectDownloadPdf = async () => {
     if (isGeneratingPdf) return;
