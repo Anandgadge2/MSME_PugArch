@@ -107,7 +107,7 @@ const parseState = (state: string): { path: string; origin?: string } => {
         const allowedOrigins = [
           'https://www.jsgsmile.in',
           'https://jsgsmile.in',
-          'https://msme-pugarchdev-frontend.vercel.app',
+          'https://msme-pugarch-frontend.vercel.app',
           'http://localhost:3000'
         ];
         try {

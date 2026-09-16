@@ -19,7 +19,7 @@ export default function AadhaarKycPage() {
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-sm font-semibold text-slate-500">
-          Complete or review your DigiLocker / MeriPehchaan Aadhaar verification status.
+          Complete or review your DigiLocker Aadhaar verification status.
         </p>
       </div>
       <AadhaarVerificationCard />
