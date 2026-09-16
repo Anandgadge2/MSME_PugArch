@@ -140,13 +140,13 @@ const TABS = [
     { id: 'services', label: 'Services Only' },
     { id: 'closing_soon', label: 'Closing Soon' },
     { id: 'large_industries', label: 'Large Industries' },
-    { id: 'government', label: 'Government' },
 ] as const;
 
 const SORT_OPTIONS = [
     { value: 'latest', label: 'Latest First' },
     { value: 'deadline', label: 'Deadline Soonest' },
-    { value: 'budget', label: 'Highest Budget' },
+    { value: 'quantity', label: 'Highest Quantity' },
+    { value: 'title', label: 'Title (A-Z)' },
 ];
 
 interface Props {
@@ -176,6 +176,9 @@ export function BuyerRequirementsList({
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
     const [location, setLocation] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [methodFilter, setMethodFilter] = useState('');
+    const [timelineFilter, setTimelineFilter] = useState('');
+    const [discoveredLocations, setDiscoveredLocations] = useState<string[]>(['Jharsuguda, Odisha']);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(limit || 10);
     const [viewMode, setViewMode] = useResponsiveViewMode('marketplace:requirements:view-mode');
@@ -184,12 +187,21 @@ export function BuyerRequirementsList({
     const isSeller = user?.role === 'seller' || user?.role === 'admin' || user?.role === 'master_admin';
     const actionLabel = user ? (isSeller ? 'Submit Quote' : 'View Details') : 'Login to Submit';
 
+    const handleSortChange = (newSort: string) => {
+        setSort(newSort);
+        if (newSort === 'deadline' || newSort === 'title') {
+            setSortDir('asc');
+        } else {
+            setSortDir('desc');
+        }
+    };
+
     const handleSortHeader = (key: string) => {
         if (sort === key) {
             setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
         } else {
             setSort(key);
-            setSortDir(key === 'title' || key === 'buyer' || key === 'location' ? 'asc' : 'desc');
+            setSortDir(key === 'title' || key === 'buyer' || key === 'location' || key === 'timeline' || key === 'deadline' ? 'asc' : 'desc');
         }
     };
 
@@ -206,16 +218,37 @@ export function BuyerRequirementsList({
         }
 
         if (query.trim()) params.q = query.trim();
-        if (location.trim()) params.location = location.trim();
+        if (location.trim()) {
+            const districtPart = location.split(',')[0].trim();
+            params.location = districtPart || location.trim();
+        }
 
         return params;
     }, [buyerOrganizationId, tab, query, location, page, pageSize]);
 
     const { data, isLoading, isFetching } = useQuery({
-        queryKey: ['marketplaceRequirements', queryParams, sort, statusFilter],
+        queryKey: ['marketplaceRequirements', queryParams, sort, sortDir, statusFilter, methodFilter, timelineFilter],
         queryFn: () => marketplaceApi.getRequirements(queryParams),
         staleTime: 60_000,
     });
+
+    // Dynamically track authentic locations discovered across data updates
+    useEffect(() => {
+        if (data?.requirements?.length) {
+            setDiscoveredLocations(prev => {
+                const set = new Set(prev);
+                set.add('Jharsuguda, Odisha');
+                data.requirements.forEach(r => {
+                    const loc = getCleanLocation(r);
+                    if (loc && loc !== '—') set.add(loc);
+                    if (r.buyerOrganization?.district) {
+                        set.add(`${r.buyerOrganization.district}, ${r.buyerOrganization.state || 'Odisha'}`);
+                    }
+                });
+                return Array.from(set).sort((a, b) => a.localeCompare(b));
+            });
+        }
+    }, [data?.requirements]);
 
     const processedRequirements = useMemo(() => {
         let rows: BuyerRequirement[] = data?.requirements || [];
@@ -287,17 +320,55 @@ export function BuyerRequirementsList({
             });
         }
 
+        // client-side procurement method filter
+        if (methodFilter) {
+            rows = rows.filter(r => {
+                const method = String(r.canonicalMethod || r.procurementMethod || '').toUpperCase();
+                const title = String(r.title || '').toUpperCase();
+                if (methodFilter === 'RFQ') return method === 'RFQ' || method.includes('RFQ') || method.includes('DIRECT') || method.includes('CATALOG');
+                if (methodFilter === 'OPEN_TENDER') return method === 'OPEN_TENDER' || method.includes('OPEN') || title.includes('TENDER');
+                if (methodFilter === 'LIMITED_TENDER') return method === 'LIMITED_TENDER' || method.includes('LIMITED');
+                if (methodFilter === 'RATE_CONTRACT') return method === 'RATE_CONTRACT' || method.includes('RATE');
+                return true;
+            });
+        }
+
+        // client-side timeline filter
+        if (timelineFilter) {
+            const now = Date.now();
+            rows = rows.filter(r => {
+                const due = new Date(r.lastDate).getTime();
+                const daysRemaining = Math.ceil((due - now) / 86400000);
+                if (timelineFilter === '7d') return daysRemaining >= 0 && daysRemaining <= 7;
+                if (timelineFilter === '3d') return daysRemaining >= 0 && daysRemaining <= 3;
+                if (timelineFilter === 'urgent') return Boolean(r.isUrgent) || (daysRemaining >= 0 && daysRemaining <= 3);
+                return true;
+            });
+        }
+
+        // client-side location filter
+        if (location) {
+            const locLower = location.toLowerCase().trim();
+            const districtOnly = locLower.split(',')[0].trim();
+            rows = rows.filter(r => {
+                const clean = getCleanLocation(r).toLowerCase();
+                const raw = String(r.location || '').toLowerCase();
+                const orgDist = String(r.buyerOrganization?.district || '').toLowerCase();
+                return clean.includes(districtOnly) || raw.includes(districtOnly) || orgDist.includes(districtOnly);
+            });
+        }
+
         return rows;
-    }, [data, sort, sortDir, statusFilter]);
+    }, [data, sort, sortDir, statusFilter, methodFilter, timelineFilter, location]);
 
     const total = data?.total || processedRequirements.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const activeFilters = [location, statusFilter].filter(Boolean).length;
+    const activeFilters = [location, statusFilter, methodFilter, timelineFilter].filter(Boolean).length;
 
     // Reset page on filter/search change
     useEffect(() => {
         setPage(1);
-    }, [tab, query, sort, location, statusFilter, buyerOrganizationId]);
+    }, [tab, query, sort, location, statusFilter, methodFilter, timelineFilter, buyerOrganizationId]);
 
     const getRequirementHref = (req: BuyerRequirement) => {
         const sourceId = (req as any)?.requirementNumber || req?.sourceId || (req?.id ? Math.abs(req.id) : null);
@@ -540,7 +611,7 @@ export function BuyerRequirementsList({
                             <select
                                 id="req-sort"
                                 value={sort}
-                                onChange={e => setSort(e.target.value)}
+                                onChange={e => handleSortChange(e.target.value)}
                                 className="h-9 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 text-slate-700 cursor-pointer min-w-0 w-auto"
                             >
                                 {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -548,18 +619,43 @@ export function BuyerRequirementsList({
 
                             {showFilters && (
                                 <>
-                                    {/* Location */}
-                                    <div className="relative">
-                                        <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
+                                    {/* Location Dropdown */}
+                                    <div className="relative min-w-0">
+                                        <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
                                         <label htmlFor="req-location" className="sr-only">Filter by location</label>
-                                        <input
+                                        <select
                                             id="req-location"
                                             value={location}
                                             onChange={e => setLocation(e.target.value)}
-                                            placeholder="Location"
-                                            className="h-9 w-28 sm:w-32 pl-7 pr-2 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 bg-white"
-                                        />
+                                            className={cn(
+                                                "h-9 pl-7 pr-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
+                                                location ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
+                                            )}
+                                        >
+                                            <option value="">All Locations</option>
+                                            {discoveredLocations.map(loc => (
+                                                <option key={loc} value={loc}>{loc}</option>
+                                            ))}
+                                        </select>
                                     </div>
+
+                                    {/* Procurement Method Filter */}
+                                    <label htmlFor="req-method" className="sr-only">Filter by procurement method</label>
+                                    <select
+                                        id="req-method"
+                                        value={methodFilter}
+                                        onChange={e => setMethodFilter(e.target.value)}
+                                        className={cn(
+                                            "h-9 px-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
+                                            methodFilter ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
+                                        )}
+                                    >
+                                        <option value="">All Methods</option>
+                                        <option value="RFQ">RFQ</option>
+                                        <option value="OPEN_TENDER">Open Tender</option>
+                                        <option value="LIMITED_TENDER">Limited Tender</option>
+                                        <option value="RATE_CONTRACT">Rate Contract</option>
+                                    </select>
 
                                     {/* Status Filter */}
                                     <label htmlFor="req-status" className="sr-only">Filter by status</label>
@@ -569,7 +665,7 @@ export function BuyerRequirementsList({
                                         onChange={e => setStatusFilter(e.target.value)}
                                         className={cn(
                                             "h-9 px-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
-                                            statusFilter ? "border-blue-400 text-blue-700" : "border-slate-200 text-slate-700"
+                                            statusFilter ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
                                         )}
                                     >
                                         <option value="">All Status</option>
@@ -580,12 +676,34 @@ export function BuyerRequirementsList({
                                         <option value="CLOSED">Closed</option>
                                     </select>
 
+                                    {/* Timeline / Urgency Filter */}
+                                    <label htmlFor="req-timeline" className="sr-only">Filter by timeline</label>
+                                    <select
+                                        id="req-timeline"
+                                        value={timelineFilter}
+                                        onChange={e => setTimelineFilter(e.target.value)}
+                                        className={cn(
+                                            "h-9 px-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
+                                            timelineFilter ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
+                                        )}
+                                    >
+                                        <option value="">All Timelines</option>
+                                        <option value="7d">Closing Soon (≤ 7D)</option>
+                                        <option value="3d">Urgent (≤ 3D)</option>
+                                        <option value="urgent">Marked Urgent</option>
+                                    </select>
+
                                     {/* Clear filters */}
                                     {activeFilters > 0 && (
                                         <button
                                             type="button"
-                                            onClick={() => { setLocation(''); setStatusFilter(''); }}
-                                            className="h-9 px-2.5 rounded-lg border border-red-200 bg-red-50 text-[10px] font-black text-red-600 hover:bg-red-100 transition-colors uppercase tracking-wider whitespace-nowrap"
+                                            onClick={() => {
+                                                setLocation('');
+                                                setStatusFilter('');
+                                                setMethodFilter('');
+                                                setTimelineFilter('');
+                                            }}
+                                            className="h-9 px-2.5 rounded-lg border border-red-200 bg-red-50 text-[10px] font-black text-red-600 hover:bg-red-100 transition-colors uppercase tracking-wider whitespace-nowrap cursor-pointer"
                                         >
                                             Clear ({activeFilters})
                                         </button>
@@ -667,7 +785,7 @@ export function BuyerRequirementsList({
                         <p className="text-sm font-bold text-slate-800">No buyer requirements found.</p>
                         <p className="mt-1 text-xs text-slate-500">Try adjusting your active query or category filters.</p>
                         {activeFilters > 0 && (
-                            <button onClick={() => { setQuery(''); setLocation(''); setStatusFilter(''); setTab('all'); }} className="mt-3 text-xs font-black text-[#0b2447] hover:underline">
+                            <button onClick={() => { setQuery(''); setLocation(''); setStatusFilter(''); setMethodFilter(''); setTimelineFilter(''); setTab('all'); }} className="mt-3 text-xs font-black text-[#0b2447] hover:underline">
                                 Reset all filters
                             </button>
                         )}

@@ -515,9 +515,53 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
   return { asset, signedUrl, expiresInSeconds: 5 * 60 };
 };
 
+interface CachedFileContent {
+  asset: any;
+  buffer: Buffer;
+  contentType: string;
+  signedUrl: string;
+  expiresInSeconds: number;
+  timestamp: number;
+}
+const fileContentMemoryCache = new Map<number, CachedFileContent>();
+const FILE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache
+const MAX_CACHE_ENTRIES = 200;
+
 export const getFileContent = async (fileId: number, user: { id: number; role: string }, request?: { ipAddress?: string; userAgent?: string }) => {
+  const cached = fileContentMemoryCache.get(fileId);
+  if (cached && Date.now() - cached.timestamp < FILE_CACHE_TTL_MS) {
+    return {
+      asset: cached.asset,
+      signedUrl: cached.signedUrl,
+      expiresInSeconds: cached.expiresInSeconds,
+      buffer: cached.buffer,
+      contentType: cached.contentType
+    };
+  }
+
   const signed = await getSignedUrl(fileId, user, request);
   const assetObj = signed.asset as any;
+
+  const cacheAndReturn = (buffer: Buffer, contentType: string) => {
+    const result = {
+      ...signed,
+      buffer,
+      contentType
+    };
+    if (fileContentMemoryCache.size >= MAX_CACHE_ENTRIES) {
+      const firstKey = fileContentMemoryCache.keys().next().value;
+      if (firstKey !== undefined) fileContentMemoryCache.delete(firstKey);
+    }
+    fileContentMemoryCache.set(fileId, {
+      asset: result.asset,
+      buffer: result.buffer,
+      contentType: result.contentType,
+      signedUrl: result.signedUrl,
+      expiresInSeconds: result.expiresInSeconds,
+      timestamp: Date.now()
+    });
+    return result;
+  };
 
   const localCandidates = [
     path.resolve(process.cwd(), 'uploads', assetObj?.key || ''),
@@ -528,11 +572,7 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
   for (const cand of localCandidates) {
     if (cand && fs.existsSync(cand) && !fs.statSync(cand).isDirectory()) {
       const buffer = fs.readFileSync(cand);
-      return {
-        ...signed,
-        buffer,
-        contentType: assetObj?.mimeType || 'application/octet-stream'
-      };
+      return cacheAndReturn(buffer, assetObj?.mimeType || 'application/octet-stream');
     }
   }
 
