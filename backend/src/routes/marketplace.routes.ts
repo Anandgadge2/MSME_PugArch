@@ -2896,10 +2896,17 @@ router.post('/buyer/requirements', authenticate, authorize('buyer', 'admin', 'ma
 router.post('/marketplace/requirements/:id/responses', authenticate, authorize('seller'), async (req: AuthRequest, res: Response) => {
     try {
         const idToken = String(req.params.id || '').trim();
-        const tokenVariants = [
-            idToken,
-            idToken.startsWith('RFQ-') ? idToken.replace(/^RFQ-/, 'REQ-') : (idToken.startsWith('REQ-') ? idToken.replace(/^REQ-/, 'RFQ-') : idToken)
-        ].filter(Boolean);
+        // Generate comprehensive token variants across all known procurement prefixes
+        const KNOWN_PREFIXES = ['REQ', 'RFQ', 'RFP', 'TND', 'LTND', 'RC', 'DP', 'RA', 'OT', 'TENDER', 'BID', 'PRQ', 'PR'];
+        const prefixMatch = idToken.match(/^([A-Z]{2,6})-(.+)$/i);
+        const strippedSuffix = prefixMatch ? prefixMatch[2] : null;
+        const tokenVariants = [idToken];
+        if (strippedSuffix) {
+            for (const pfx of KNOWN_PREFIXES) {
+                const variant = `${pfx}-${strippedSuffix}`;
+                if (!tokenVariants.includes(variant)) tokenVariants.push(variant);
+            }
+        }
         const packetObject = (value: any) => {
             if (!value) return {};
             if (typeof value === 'object') return value;
@@ -2951,12 +2958,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
         } else if (!Number.isFinite(id) || id === 0) {
             const bid = await db.procurementBid.findFirst({
                 where: {
-                    OR: tokenVariants.flatMap(t => [
-                        { bidNumber: t },
-                        { bidNumber: `REQ-${t}` },
-                        { bidNumber: `RFQ-${t}` },
-                        { bidNumber: `RC-${t}` }
-                    ])
+                    OR: tokenVariants.map(t => ({ bidNumber: t }))
                 },
                 select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
             }).catch(() => null);
@@ -2964,15 +2966,13 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
 
             if (bidResolved) {
                 id = bidResolved;
+            } else if (bid) {
+                // Bid found but couldn't resolve to a BuyerRequirement — use bid.id directly
+                id = bid.id;
             } else {
                 const legacy = await db.requirement.findFirst({
                     where: {
-                        OR: tokenVariants.flatMap(t => [
-                            { requirementNumber: t },
-                            { requirementNumber: `REQ-${t}` },
-                            { requirementNumber: `RFQ-${t}` },
-                            { requirementNumber: `RC-${t}` }
-                        ])
+                        OR: tokenVariants.map(t => ({ requirementNumber: t }))
                     },
                     select: { id: true }
                 }).catch(() => null);
@@ -2985,7 +2985,6 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                             contractType: 'RATE_CONTRACT',
                             OR: tokenVariants.flatMap(t => [
                                 { contractNumber: t },
-                                { contractNumber: t.startsWith('RC-') ? t : `RC-${t}` },
                                 { metadata: { path: ['requirementNumber'], equals: t } }
                             ])
                         },
@@ -2995,7 +2994,31 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                     if (contractMatch) {
                         id = -contractMatch.id - 100000;
                     } else {
-                        return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
+                        // Last resort: extract trailing numeric sequence (e.g. 39952 from TND-2026-39952)
+                        // and try as a direct BuyerRequirement.id or ProcurementBid.id
+                        const numericMatch = idToken.match(/(\d+)$/);
+                        const numericId = numericMatch ? Number(numericMatch[1]) : 0;
+                        if (numericId > 0) {
+                            const directReq = await db.buyerRequirement.findUnique({ where: { id: numericId }, select: { id: true } }).catch(() => null);
+                            if (directReq) {
+                                id = directReq.id;
+                            } else {
+                                const directBid = await db.procurementBid.findUnique({
+                                    where: { id: numericId },
+                                    select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
+                                }).catch(() => null);
+                                const directResolved = await resolveFromProcurementBid(directBid);
+                                if (directResolved) {
+                                    id = directResolved;
+                                } else if (directBid) {
+                                    id = directBid.id;
+                                } else {
+                                    return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
+                                }
+                            }
+                        } else {
+                            return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
+                        }
                     }
                 }
             }
