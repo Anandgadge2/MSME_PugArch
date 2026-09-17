@@ -31,7 +31,6 @@ interface TenderDetail {
   tenderId: string;
   title: string;
   category: string;
-  subCategory?: string;
   budget: number;
   description: string;
   status: string;

@@ -1884,7 +1884,6 @@ app.get('/api/tenders/:id', authenticate, authorize('buyer', 'seller', 'admin'),
           tenderId: bid.bidNumber || `TND-${bid.id}`,
           title: bid.title || '',
           category: bid.category || '',
-          subCategory: bid.subCategory || '',
           budget: Number(bid.estimatedValue || 0),
           description: bid.description || '',
           status: bid.status === 'PUBLISHED' ? 'published' : bid.status.toLowerCase(),
@@ -4423,8 +4422,8 @@ app.get('/api/purchase-orders/summary', authenticate, authorize('buyer', 'seller
       select: { amount: true, totalValue: true, status: true }
     });
 
-    const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued'];
-    const totalSpend = orders.filter(order => order.status !== 'cancelled').reduce((sum, order) => sum + Number(order.amount || order.totalValue || 0), 0);
+    const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued', 'pending_approval'];
+    const totalSpend = orders.filter(order => !['cancelled', 'rejected'].includes(String(order.status || '').toLowerCase())).reduce((sum, order) => sum + Number(order.amount || order.totalValue || 0), 0);
     const deliveredCount = orders.filter(order => ['delivered', 'completed', 'closed'].includes(String(order.status || '').toLowerCase())).length;
     const openCount = orders.filter(order => openStatuses.includes(String(order.status || '').toLowerCase())).length;
 
@@ -4467,7 +4466,7 @@ app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admi
     }
 
     if (statusTab === 'Open' || statusTab === 'open') {
-      where.status = { in: ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued', 'GENERATED', 'ACCEPTED', 'IN_FULFILLMENT', 'INVOICE_SUBMITTED', 'ORDER_PLACED', 'ISSUED'] };
+      where.status = { in: ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued', 'pending_approval', 'GENERATED', 'ACCEPTED', 'IN_FULFILLMENT', 'INVOICE_SUBMITTED', 'ORDER_PLACED', 'ISSUED', 'PENDING_APPROVAL'] };
     } else if (statusTab === 'Delivered' || statusTab === 'delivered') {
       where.status = { in: ['delivered', 'DELIVERED', 'completed', 'COMPLETED', 'closed', 'CLOSED'] };
     } else if (statusTab === 'Cancelled' || statusTab === 'cancelled') {

@@ -645,9 +645,6 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const reqByDate  = preferReq ? (reqObj?.requiredBy || reqObj?.payload?.basics?.requiredByDate || rawBid?.technicalPacket?.basics?.requiredByDate) : (rawBid?.technicalPacket?.basics?.requiredByDate || reqObj?.requiredBy || reqObj?.payload?.basics?.requiredByDate);
   const status     = preferReq ? (reqObj?.status || rawBid?.status || 'OPEN') : (rawBid?.status || reqObj?.status || 'OPEN');
 
-  const subCategory = preferReq
-    ? (reqObj?.payload?.basics?.subCategory || reqObj?.payload?.basics?.subcategory || reqObj?.subCategory || rawBid?.technicalPacket?.basics?.subCategory || rawBid?.technicalPacket?.basics?.subcategory || '—')
-    : (rawBid?.technicalPacket?.basics?.subCategory || rawBid?.technicalPacket?.basics?.subcategory || reqObj?.payload?.basics?.subCategory || reqObj?.payload?.basics?.subcategory || '—');
   const projectDuration = preferReq
     ? (reqObj?.payload?.basics?.projectDuration || reqObj?.payload?.terms?.contractPeriod || rawBid?.technicalPacket?.basics?.projectDuration || rawBid?.technicalPacket?.terms?.contractPeriod || '—')
     : (rawBid?.technicalPacket?.basics?.projectDuration || rawBid?.technicalPacket?.terms?.contractPeriod || reqObj?.payload?.basics?.projectDuration || reqObj?.payload?.terms?.contractPeriod || '—');
@@ -1096,7 +1093,6 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       bidValidityDate={bidValDate ? fmtDate(bidValDate) : undefined}
       requiredByDate={reqByDate ? fmtDate(reqByDate, true) : undefined}
       category={category}
-      subCategory={subCategory}
       projectDuration={projectDuration}
       department={department}
       procurementMethod={method}

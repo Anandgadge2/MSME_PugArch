@@ -1501,7 +1501,6 @@ function DraftDetailView({
       technicalDate={schedule.technicalOpeningDate}
       financialDate={schedule.financialOpeningDate}
       category={categoryName}
-      subCategory={basics.subCategory || ''}
       procurementMethod={procurementLabel}
       buyingType={basics.whatAreYouBuying || basics.buyingType || 'Goods / Products'}
       deliveryLocation={d.deliveryLocation || basics.deliveryLocation || ''}

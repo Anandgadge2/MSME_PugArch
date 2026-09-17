@@ -1323,14 +1323,13 @@ function LinkedRequirementPanel({
       )}
 
       {/* ── Procurement Intent & Strategy ─────────────────────────── */}
-      {(requirement.whatAreYouBuying || requirement.subCategory || requirement.urgencyPriority || requirement.deliveryLocation) && (
+      {(requirement.whatAreYouBuying || requirement.urgencyPriority || requirement.deliveryLocation) && (
         <div className="border border-slate-200/80 rounded-3xl bg-white p-6 sm:p-7 shadow-sm">
           <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 mb-4 flex items-center gap-2">
             <div className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Procurement Intent & Strategy
           </h3>
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
             {requirement.whatAreYouBuying && <InfoRow label="What Are You Buying" value={requirement.whatAreYouBuying} />}
-            {requirement.subCategory && <InfoRow label="Sub-Category" value={requirement.subCategory} />}
             {requirement.urgencyPriority && <InfoRow label="Urgency Priority" value={requirement.urgencyPriority} />}
             {requirement.deliveryLocation && <InfoRow label="Delivery Location" value={requirement.deliveryLocation} />}
           </div>

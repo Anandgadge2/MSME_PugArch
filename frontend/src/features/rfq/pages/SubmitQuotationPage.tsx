@@ -1129,8 +1129,6 @@ export default function SubmitQuotationPage() {
             item?.category,
             rfqData?.category,
             queryData?.requirement?.category,
-            rfqData?.subCategory,
-            queryData?.requirement?.subCategory,
           ];
           for (const catCand of catCandidates) {
             const catStr = typeof catCand === 'string' ? catCand : catCand?.name;

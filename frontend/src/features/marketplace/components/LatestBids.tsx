@@ -374,7 +374,6 @@ function extractCategoryName(r: any): string {
     if (typeof r.category === 'object' && r.category?.name) return r.category.name;
     if (typeof r.category === 'string' && r.category.trim() && r.category !== 'Multi-category' && r.category !== 'General') return r.category.trim();
     if (r.categoryName) return r.categoryName;
-    if (r.subCategory) return r.subCategory;
     if (r.procurementCategory) return r.procurementCategory;
 
     // Fallback: Infer category intelligently from Title / Description keywords if missing

@@ -27,6 +27,7 @@ export type POWorkflowStatus =
   | 'generated'
   | 'order_placed'
   | 'issued'
+  | 'pending_approval'
   | 'accepted'
   | 'in_fulfillment'
   | 'delivered'
@@ -35,7 +36,8 @@ export type POWorkflowStatus =
   | 'payment_initiated'
   | 'escrow_held'
   | 'completed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'rejected';
 
 export type InvoiceWorkflowStatus =
   | 'draft'
@@ -93,10 +95,11 @@ const bidTransitions: TransitionMap<BidWorkflowStatus> = {
 };
 
 const poTransitions: TransitionMap<POWorkflowStatus> = {
-  generated: ['issued', 'accepted', 'cancelled'],
-  order_placed: ['accepted', 'cancelled'],
-  issued: ['accepted', 'cancelled'],
-  accepted: ['in_fulfillment', 'delivered', 'cancelled'],
+  pending_approval: ['issued', 'order_placed', 'accepted', 'rejected', 'cancelled'],
+  generated: ['issued', 'accepted', 'rejected', 'cancelled'],
+  order_placed: ['accepted', 'rejected', 'cancelled'],
+  issued: ['accepted', 'rejected', 'cancelled'],
+  accepted: ['in_fulfillment', 'delivered', 'rejected', 'cancelled'],
   in_fulfillment: ['delivered', 'cancelled'],
   delivered: ['inspection_accepted', 'invoice_submitted'],
   inspection_accepted: ['invoice_submitted'],
@@ -104,7 +107,8 @@ const poTransitions: TransitionMap<POWorkflowStatus> = {
   payment_initiated: ['escrow_held'],
   escrow_held: ['completed', 'cancelled'],
   completed: [],
-  cancelled: []
+  cancelled: [],
+  rejected: []
 };
 
 const invoiceTransitions: TransitionMap<InvoiceWorkflowStatus> = {
@@ -208,11 +212,13 @@ export const poStatusEnumFor = (status: POWorkflowStatus) => {
     generated: 'GENERATED',
     order_placed: 'ORDER_PLACED',
     issued: 'ISSUED',
+    pending_approval: 'GENERATED',
     accepted: 'ACCEPTED',
     in_fulfillment: 'IN_FULFILLMENT',
     delivered: 'DELIVERED',
     completed: 'CLOSED',
-    cancelled: 'CANCELLED'
+    cancelled: 'CANCELLED',
+    rejected: 'CANCELLED'
   };
   return map[status];
 };

@@ -21,7 +21,6 @@ export type ReverseAuction = {
   description?: string;
   procurementMethod?: 'REVERSE_AUCTION' | 'BID_WITH_REVERSE_AUCTION' | string | null;
   category?: string | null;
-  subCategory?: string | null;
   auctionType?: 'ENGLISH_REVERSE' | 'RANK_BASED_REVERSE' | string | null;
   auctionMode?: 'ONLINE' | string | null;
   auctionDurationMinutes?: number | null;
@@ -77,7 +76,6 @@ export type ReverseAuction = {
     // Procurement Intent
     whatAreYouBuying?: string | null;
     category?: string | null;
-    subCategory?: string | null;
     urgencyPriority?: string | null;
     deliveryLocation?: string | null;
     // Commercial & Payment Terms

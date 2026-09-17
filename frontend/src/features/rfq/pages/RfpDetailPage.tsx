@@ -349,7 +349,6 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
         financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate, true)}
         awardDate={formatDateString(tender.awardDate || schedule.awardDate || schedule.awardingDate, true)}
         category={bid.category?.name || bid.category || reqObj.category?.name || basics.category}
-        subCategory={basics.subCategory || reqObj.subCategory}
         projectDuration={terms.projectDuration || terms.contractPeriod}
         department={payload.internal?.departmentName || bid.departmentName}
         procurementMethod="Request for Proposal"

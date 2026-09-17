@@ -753,7 +753,6 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
         tenderId: bid.bidNumber,
         title: bid.title,
         category: bid.category,
-        subCategory: bid.subCategory,
         budget: Number(bid.estimatedValue || 0),
         description: bid.description,
         status: bid.status === 'PUBLISHED' ? 'published' : bid.status.toLowerCase(),
@@ -881,7 +880,7 @@ const productBody = z.object({
   hsnCode: z.string().trim().max(30).nullable().optional(),
   brand: z.string().trim().max(120).nullable().optional(),
   modelNumber: z.string().trim().max(120).nullable().optional(),
-  unitOfMeasure: z.string().trim().max(40).nullable().optional(),
+  unitOfMeasure: z.string().trim().max(120).nullable().optional(),
   price: z.coerce.number().nonnegative().nullable().optional(),
   taxRate: z.coerce.number().min(0).max(100).nullable().optional(),
   discount: z.coerce.number().min(0).max(100).nullable().optional(),
@@ -903,7 +902,7 @@ const productBody = z.object({
   specifications: z.array(z.object({
     name: z.string().trim().min(1).max(120),
     value: z.string().trim().min(1).max(500),
-    unit: z.string().trim().max(40).nullable().optional()
+    unit: z.string().trim().max(120).nullable().optional()
   })).optional()
 });
 
@@ -938,7 +937,7 @@ const serviceBody = z.object({
   specifications: z.array(z.object({
     name: z.string().trim().min(1).max(120),
     value: z.string().trim().min(1).max(500),
-    unit: z.string().trim().max(40).nullable().optional()
+    unit: z.string().trim().max(120).nullable().optional()
   })).optional()
 });
 
@@ -954,7 +953,7 @@ const requirementBody = z.object({
     itemName: z.string().trim().min(2).max(200),
     description: z.string().trim().max(2000).optional(),
     quantity: z.coerce.number().positive(),
-    unitOfMeasure: z.string().trim().min(1).max(40),
+    unitOfMeasure: z.string().trim().min(1).max(120),
     estimatedUnitPrice: z.coerce.number().nonnegative().optional(),
     specifications: z.record(z.string(), z.unknown()).optional()
   })).optional()
@@ -1060,7 +1059,7 @@ const procurementDraftBody = z.object({
     itemName: z.string().trim().max(200).optional().or(z.literal('')),
     description: z.string().trim().max(2000).optional(),
     quantity: z.coerce.number().optional(),
-    unitOfMeasure: z.string().trim().max(40).optional().or(z.literal('')),
+    unitOfMeasure: z.string().trim().max(120).optional().or(z.literal('')),
     estimatedUnitPrice: z.coerce.number().nonnegative().optional(),
     specifications: z.record(z.string(), z.unknown()).optional()
   })).optional()
@@ -1270,7 +1269,6 @@ const auctionConfigSchema = z.object({
   auctionDescription: z.string().trim().max(3000).optional(),
   procurementMethod: z.enum(['REVERSE_AUCTION', 'BID_WITH_REVERSE_AUCTION']),
   category: z.string().trim().max(160).optional(),
-  subCategory: z.string().trim().max(160).optional(),
   currency: z.string().trim().length(3).default('INR'),
   buyerOrganization: z.string().trim().max(180).optional(),
   department: z.string().trim().max(160).optional(),
@@ -1317,7 +1315,6 @@ const normalizeAuctionConfigForDraft = (draft: any) => {
     auctionDescription: raw.auctionDescription || draft.description || payload.basics?.description,
     procurementMethod: raw.procurementMethod || payload.fullProcurementMethod || draft.canonicalMethod || draft.method || draft.procurementMethod,
     category: raw.auctionCategory || raw.category || payload.basics?.category || payload.category,
-    subCategory: raw.auctionSubCategory || raw.subCategory || payload.basics?.subCategory,
     currency: raw.currency || payload.currency || payload.basics?.currency || draft.currency || 'INR',
     buyerOrganization: raw.buyerOrganization || payload.internal?.orgName,
     department: raw.department || payload.internal?.department,
@@ -1404,7 +1401,7 @@ const validateAuctionConfigForDraft = (configInput: Record<string, unknown>, met
 const rateContractItemSchema = z.object({
   itemName: z.string().trim().min(2).max(240),
   specification: z.string().trim().max(2000).optional().default(''),
-  uom: z.string().trim().min(1).max(40),
+  uom: z.string().trim().min(1).max(120),
   estimatedAnnualQuantity: z.coerce.number().positive(),
   baseRate: z.coerce.number().positive(),
   gst: z.coerce.number().min(0).max(100).default(0),
@@ -1475,7 +1472,7 @@ const normalizeRateContractConfigForDraft = (draft: any) => {
     contractTitle: raw.contractTitle || payload.basics?.title || draft.title,
     contractDescription: raw.contractDescription || payload.basics?.description || draft.description || '',
     contractCategory: raw.contractCategory || payload.basics?.category || payload.category || '',
-    contractSubCategory: raw.contractSubCategory || payload.basics?.subCategory || '',
+    contractSubCategory: raw.contractSubCategory || '',
     periodStartDate: raw.periodStartDate || raw.startDate || payload.tender?.bidStartDate,
     periodEndDate: raw.periodEndDate || raw.endDate || payload.tender?.bidClosingDate || draft.requiredBy,
     rateValidityPeriod: raw.rateValidityPeriod || 'Contract period',
@@ -1660,7 +1657,6 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
       description: config.auctionDescription || null,
       procurementMethod: config.procurementMethod,
       category: config.category || null,
-      subCategory: config.subCategory || null,
       auctionType: config.auctionType,
       auctionMode: config.auctionMode,
       auctionDurationMinutes: config.auctionDurationMinutes,
@@ -1840,7 +1836,6 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     buyerOrganizationName: internal.orgName || buyer?.organization?.organizationName || buyer?.buyerProfile?.organizationName || buyer?.name || 'Buyer organization',
     buyerType: basics.buyerType || buyer?.organization?.organizationType || 'Buyer',
     category: basics.category || requirement.category?.name || 'General procurement',
-    subCategory: basics.subCategory || null,
     bidType,
     procurementType: canonicalMethod,
     canonicalMethod,
@@ -1987,7 +1982,7 @@ const tenderBody = z.object({
   description: z.string().trim().min(5).max(5000),
   documentUrl: z.string().trim().max(1000).optional(),
   closesAt: safeCoercedDate.optional(),
-  quantityUnit: z.string().trim().max(40).optional(),
+  quantityUnit: z.string().trim().max(120).optional(),
   paymentTerms: z.string().trim().max(80).optional(),
   deliveryType: z.string().trim().max(80).optional()
 });
@@ -5100,7 +5095,11 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
     parsed = procurementDraftBody.extend({ id: z.coerce.number().int().positive().optional() }).parse(req.body);
   } catch (zodError: any) {
     console.error('[SubmitProcurement] Zod parse failed:', JSON.stringify(zodError.issues || zodError.message, null, 2));
-    throw new ApiError(400, zodError.issues?.[0]?.message || 'Invalid procurement data', 'PROCUREMENT_VALIDATION_FAILED');
+    const firstIssue = zodError.issues?.[0];
+    const fieldPath = firstIssue?.path ? firstIssue.path.filter((p: any) => typeof p === 'string' || typeof p === 'number').join('.') : '';
+    const fieldMsg = firstIssue?.message || 'Invalid procurement data';
+    const errorMsg = fieldPath ? `${fieldPath}: ${fieldMsg}` : fieldMsg;
+    throw new ApiError(400, errorMsg, 'PROCUREMENT_VALIDATION_FAILED');
   }
   try {
     validateProcurementDraftForSubmit(parsed);
@@ -5223,7 +5222,7 @@ router.post('/procurement/rate-contracts/:id/call-off-orders', authenticate, aut
     items: z.array(z.object({
       itemName: z.string().trim().min(2).max(240),
       quantity: z.coerce.number().positive(),
-      unitOfMeasure: z.string().trim().min(1).max(40),
+      unitOfMeasure: z.string().trim().min(1).max(120),
       unitPrice: z.coerce.number().positive(),
       taxRate: z.coerce.number().min(0).max(100).optional().default(0)
     })).min(1)
@@ -8002,43 +8001,110 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
   ok(res, formatPoWithOrgAddress(po));
 }));
 
-for (const [path, action, roles] of [
-  ['/purchase-orders/:id/acknowledge', 'purchase_order.acknowledged', ['seller', 'admin']],
-  ['/purchase-orders/:id/cancel', 'purchase_order.cancelled', ['buyer', 'admin']]
-] as const) {
-  router.post(path, authenticate, authorize(...roles), asyncRoute(async (req, res) => {
-    const { id } = parse(idParams, req.params);
-    await assertBuyerProcurementApproved(req);
-    const po = await db.purchaseOrder.findUnique({ where: { id } });
-    let isAllowed = false;
-    if (po) {
-      if (isAdmin(req)) isAllowed = true;
-      else if (action === 'purchase_order.cancelled' && po.buyerId === userId(req)) isAllowed = true;
-      else if (action === 'purchase_order.acknowledged') {
-        const sellerIds = [userId(req)];
-        if (req.user?.organizationId || (req.user as any)?.companyId) {
-          const orgUsers = await db.user.findMany({
-            where: {
-              OR: [
-                ...(req.user.organizationId ? [{ organizationId: req.user.organizationId }] : []),
-                ...((req.user as any)?.companyId ? [{ companyId: (req.user as any).companyId }] : [])
-              ]
-            },
-            select: { id: true }
-          });
-          orgUsers.forEach((u: any) => sellerIds.push(u.id));
-        }
-        if (sellerIds.includes(po.sellerId)) isAllowed = true;
+router.post('/purchase-orders/:id/acknowledge', authenticate, authorize('seller', 'admin', 'shg'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  await assertBuyerProcurementApproved(req);
+  const po = await db.purchaseOrder.findUnique({ where: { id } });
+  let isAllowed = false;
+  if (po) {
+    if (isAdmin(req)) isAllowed = true;
+    else {
+      const sellerIds = [userId(req)];
+      if (req.user?.organizationId || (req.user as any)?.companyId) {
+        const orgUsers = await db.user.findMany({
+          where: {
+            OR: [
+              ...(req.user.organizationId ? [{ organizationId: req.user.organizationId }] : []),
+              ...((req.user as any)?.companyId ? [{ companyId: (req.user as any).companyId }] : [])
+            ]
+          },
+          select: { id: true }
+        });
+        orgUsers.forEach((u: any) => sellerIds.push(u.id));
       }
+      if (sellerIds.includes(po.sellerId)) isAllowed = true;
     }
-    if (!po || !isAllowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-    const updated = action === 'purchase_order.acknowledged'
-      ? await fulfillmentWorkflow.acknowledgePO(actorFrom(req), id)
-      : await fulfillmentWorkflow.cancelPO(actorFrom(req), id);
-    await auditWrite(req, action, 'purchaseOrder', id);
-    ok(res, updated);
-  }));
-}
+  }
+  if (!po || !isAllowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  const updated = await fulfillmentWorkflow.acknowledgePO(actorFrom(req), id);
+  await auditWrite(req, 'purchase_order.acknowledged', 'purchaseOrder', id);
+  ok(res, updated);
+}));
+
+router.post('/purchase-orders/:id/reject', authenticate, authorize('seller', 'admin', 'shg'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  await assertBuyerProcurementApproved(req);
+  const po = await db.purchaseOrder.findUnique({ where: { id } });
+  let isAllowed = false;
+  if (po) {
+    if (isAdmin(req)) isAllowed = true;
+    else {
+      const sellerIds = [userId(req)];
+      if (req.user?.organizationId || (req.user as any)?.companyId) {
+        const orgUsers = await db.user.findMany({
+          where: {
+            OR: [
+              ...(req.user.organizationId ? [{ organizationId: req.user.organizationId }] : []),
+              ...((req.user as any)?.companyId ? [{ companyId: (req.user as any).companyId }] : [])
+            ]
+          },
+          select: { id: true }
+        });
+        orgUsers.forEach((u: any) => sellerIds.push(u.id));
+      }
+      if (sellerIds.includes(po.sellerId)) isAllowed = true;
+    }
+  }
+  if (!po || !isAllowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  const body = req.body || {};
+  const reason = (typeof body.reason === 'string' ? body.reason : typeof body.rejectionReason === 'string' ? body.rejectionReason : '')?.trim() || undefined;
+  const updated = await fulfillmentWorkflow.rejectPO(actorFrom(req), id, reason);
+  await auditWrite(req, 'purchase_order.rejected', 'purchaseOrder', id, { reason });
+  ok(res, updated);
+}));
+
+router.post('/purchase-orders/:id/cancel', authenticate, authorize('buyer', 'seller', 'admin', 'shg'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  await assertBuyerProcurementApproved(req);
+  const po = await db.purchaseOrder.findUnique({ where: { id } });
+  let isBuyerAllowed = false;
+  let isSellerAllowed = false;
+  if (po) {
+    if (isAdmin(req)) {
+      isBuyerAllowed = true;
+      isSellerAllowed = true;
+    } else {
+      if (po.buyerId === userId(req)) isBuyerAllowed = true;
+      const sellerIds = [userId(req)];
+      if (req.user?.organizationId || (req.user as any)?.companyId) {
+        const orgUsers = await db.user.findMany({
+          where: {
+            OR: [
+              ...(req.user.organizationId ? [{ organizationId: req.user.organizationId }] : []),
+              ...((req.user as any)?.companyId ? [{ companyId: (req.user as any).companyId }] : [])
+            ]
+          },
+          select: { id: true }
+        });
+        orgUsers.forEach((u: any) => sellerIds.push(u.id));
+      }
+      if (sellerIds.includes(po.sellerId)) isSellerAllowed = true;
+    }
+  }
+  if (!po || (!isBuyerAllowed && !isSellerAllowed)) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  
+  if (isSellerAllowed && !isBuyerAllowed) {
+    const body = req.body || {};
+    const reason = (typeof body.reason === 'string' ? body.reason : typeof body.rejectionReason === 'string' ? body.rejectionReason : '')?.trim() || undefined;
+    const updated = await fulfillmentWorkflow.rejectPO(actorFrom(req), id, reason);
+    await auditWrite(req, 'purchase_order.rejected', 'purchaseOrder', id, { reason });
+    return ok(res, updated);
+  }
+
+  const updated = await fulfillmentWorkflow.cancelPO(actorFrom(req), id);
+  await auditWrite(req, 'purchase_order.cancelled', 'purchaseOrder', id);
+  ok(res, updated);
+}));
 
 router.get('/purchase-orders/:id/pdf', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);

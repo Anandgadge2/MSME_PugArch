@@ -320,7 +320,6 @@ export interface MarketplaceBid {
     buyerOrganizationName: string;
     buyerType?: string;
     category: string;
-    subCategory?: string | null;
     bidType: string;
     quantity?: number | string | null;
     unit?: string | null;

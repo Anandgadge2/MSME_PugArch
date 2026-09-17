@@ -32,9 +32,10 @@ import type { PurchaseOrderDto } from '../features/shared/types';
 import { useDeliveryByPO } from '../features/delivery/hooks';
 import { PageTableSkeleton, TableSkeleton, GridCardSkeleton } from '../components/ui/skeleton';
 import { DataTable, type ColumnDef } from '../components/ui/data-table';
+import { FocusTrap } from '../components/ui/FocusTrap';
 
 const readableStatus = (value?: string) => String(value || 'generated').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
-const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued'];
+const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued', 'pending_approval'];
 const purchaseOrderStatusParam = (tab: 'Open' | 'Delivered' | 'Cancelled' | 'All') => {
   if (tab === 'Delivered') return 'delivered';
   if (tab === 'Cancelled') return 'cancelled';
@@ -343,6 +344,9 @@ export default function PurchaseOrders() {
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [confirming, setConfirming] = useState<{ action: 'acknowledge' | 'cancel'; order: PurchaseOrderDto } | null>(null);
+  const [rejectingOrder, setRejectingOrder] = useState<PurchaseOrderDto | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<string>('');
+  const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrderDto | null>(null);
   const [uploadProofOrder, setUploadProofOrder] = useState<PurchaseOrderDto | null>(null);
   const [viewProofOrder, setViewProofOrder] = useState<PurchaseOrderDto | null>(null);
@@ -645,19 +649,32 @@ export default function PurchaseOrders() {
     }
   };
 
-  const handleRejectOrder = async (order: PurchaseOrderDto) => {
-    if (!window.confirm(`Are you sure you want to REJECT purchase order ${order.poNumber || `PO-${order.id}`}?`)) return;
+  const handleRejectOrder = (order: PurchaseOrderDto) => {
+    setRejectingOrder(order);
+    setRejectionReason('');
+  };
+
+  const confirmRejectOrder = async () => {
+    if (!rejectingOrder) return;
+    setIsSubmittingReject(true);
     try {
-      const endpoint = `/api/purchase-orders/${order.id}/cancel`;
-      const updated = await postApi<PurchaseOrderDto>(endpoint, {});
-      setPagedOrders(current => current.map(o => o.id === updated.id ? { ...o, ...updated, status: 'cancelled' } : o));
-      if (viewingOrder && viewingOrder.id === order.id) {
-        setViewingOrder({ ...viewingOrder, ...updated, status: 'cancelled' });
+      const endpoint = `/api/purchase-orders/${rejectingOrder.id}/reject`;
+      const updated = await postApi<PurchaseOrderDto>(endpoint, {
+        reason: rejectionReason.trim() || undefined,
+        rejectionReason: rejectionReason.trim() || undefined
+      });
+      setPagedOrders(current => current.map(o => o.id === updated.id ? { ...o, ...updated, status: 'rejected' } : o));
+      if (viewingOrder && viewingOrder.id === rejectingOrder.id) {
+        setViewingOrder({ ...viewingOrder, ...updated, status: 'rejected' });
       }
-      toast.success(`Purchase Order ${order.poNumber || `PO-${order.id}`} REJECTED.`);
+      toast.success(`Purchase Order ${rejectingOrder.poNumber || `PO-${rejectingOrder.id}`} has been REJECTED.`);
+      setRejectingOrder(null);
+      setRejectionReason('');
       await refreshPurchaseOrders();
     } catch (err: any) {
       toast.error(err?.message || 'Unable to reject purchase order');
+    } finally {
+      setIsSubmittingReject(false);
     }
   };
 
@@ -678,7 +695,7 @@ export default function PurchaseOrders() {
 
   const renderOrderActions = (order: PurchaseOrderDto) => {
     const statusLower = String(order.status || '').toLowerCase();
-    const isIssued = statusLower === 'issued' || statusLower === 'generated' || statusLower === 'order_placed';
+    const isIssued = statusLower === 'issued' || statusLower === 'generated' || statusLower === 'order_placed' || statusLower === 'pending_approval';
     const isAccepted = statusLower === 'accepted' || statusLower === 'in_fulfillment';
     const isDelivered = statusLower === 'delivered' || statusLower === 'completed';
     const isCancelled = statusLower === 'cancelled' || statusLower === 'rejected';
@@ -1292,6 +1309,94 @@ export default function PurchaseOrders() {
               <Button onClick={completeAction} className="bg-[#12335f] text-white">Yes, continue</Button>
             </div>
           </div>
+        </div>
+      )}
+
+      {rejectingOrder && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reject-po-title"
+          aria-describedby="reject-po-desc"
+        >
+          <FocusTrap onEscape={() => !isSubmittingReject && setRejectingOrder(null)} className="w-full max-w-md">
+            <div className="w-full rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-150 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600 border border-rose-100">
+                    <XCircle className="h-4 w-4" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h3 id="reject-po-title" className="text-base font-black text-slate-900">
+                      Reject Purchase Order
+                    </h3>
+                    <p id="reject-po-desc" className="text-[11px] font-semibold text-slate-500">
+                      {rejectingOrder.poNumber || `PO #${rejectingOrder.id}`}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRejectingOrder(null)}
+                  disabled={isSubmittingReject}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                  aria-label="Close dialog"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to reject this purchase order? Once rejected, this order will be marked as rejected.
+              </p>
+
+              <div className="space-y-1.5">
+                <label htmlFor="po-rejection-reason" className="block text-xs font-bold text-slate-700">
+                  Reason for Rejection <span className="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  id="po-rejection-reason"
+                  rows={3}
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="e.g. Inability to meet delivery timeline, inventory stockout, pricing discrepancy..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100 outline-none transition-all resize-none"
+                  disabled={isSubmittingReject}
+                />
+              </div>
+
+              <div className="flex justify-end items-center gap-2.5 pt-2 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setRejectingOrder(null)}
+                  disabled={isSubmittingReject}
+                  className="h-9 px-4 text-xs font-bold rounded-xl"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={confirmRejectOrder}
+                  disabled={isSubmittingReject}
+                  className="h-9 px-4 text-xs font-black uppercase tracking-wider bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-xs flex items-center gap-1.5"
+                >
+                  {isSubmittingReject ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Rejecting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="h-3.5 w-3.5" />
+                      <span>Reject PO</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </FocusTrap>
         </div>
       )}
 
@@ -1930,7 +2035,7 @@ export default function PurchaseOrders() {
               <div className="flex items-center gap-2 shrink-0">
                 {(() => {
                   const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
-                  const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed';
+                  const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed' || viewingStatusLower === 'pending_approval';
                   const isAcceptedModal = viewingStatusLower === 'accepted' || viewingStatusLower === 'in_fulfillment';
                   return (
                     <>
@@ -2109,9 +2214,11 @@ function InfoTile({ label, value }: { label: string; value: string }) {
 function StatusPill({ status }: { status?: string }) {
   const value = String(status || 'generated').toLowerCase();
   const isAccepted = value === 'accepted';
-  const isCancelled = value === 'cancelled' || value === 'rejected';
+  const isCancelled = value === 'cancelled';
+  const isRejected = value === 'rejected';
   const isDelivered = value === 'delivered';
   const isIssued = value === 'issued' || value === 'generated' || value === 'order_placed';
+  const isPendingApproval = value === 'pending_approval';
   const isPaidOffline = value === 'paid_offline_verified';
   const isPaid = value === 'paid' || isPaidOffline;
 
@@ -2123,12 +2230,13 @@ function StatusPill({ status }: { status?: string }) {
         isPaid && !isPaidOffline && 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs',
         !isPaid && isAccepted && 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs',
         !isPaid && isDelivered && 'border-green-300 bg-green-50 text-green-800 shadow-2xs',
-        !isPaid && isCancelled && 'border-rose-300 bg-rose-50 text-rose-800 shadow-2xs',
+        !isPaid && (isCancelled || isRejected) && 'border-rose-300 bg-rose-50 text-rose-800 shadow-2xs',
         !isPaid && isIssued && 'border-sky-300 bg-sky-50 text-sky-900 shadow-2xs',
-        !isAccepted && !isDelivered && !isCancelled && !isIssued && !isPaid && 'border-slate-200 bg-slate-50 text-slate-700'
+        !isPaid && isPendingApproval && 'border-amber-300 bg-amber-50 text-amber-900 shadow-2xs',
+        !isAccepted && !isDelivered && !isCancelled && !isRejected && !isIssued && !isPaid && !isPendingApproval && 'border-slate-200 bg-slate-50 text-slate-700'
       )}
     >
-      {isPaidOffline ? 'PAID (OFFLINE)' : isAccepted ? 'ACCEPTED' : isIssued ? 'ISSUED' : readableStatus(value).toUpperCase()}
+      {isPaidOffline ? 'PAID (OFFLINE)' : isAccepted ? 'ACCEPTED' : isRejected ? 'REJECTED' : isCancelled ? 'CANCELLED' : isIssued ? 'ISSUED' : readableStatus(value).toUpperCase()}
     </span>
   );
 }

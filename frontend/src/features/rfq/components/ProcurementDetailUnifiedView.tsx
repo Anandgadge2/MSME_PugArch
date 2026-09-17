@@ -2457,7 +2457,6 @@ export interface ProcurementDetailUnifiedViewProps {
   validityDays?: number | string;
   preBidDate?: string;
   category?: string;
-  subCategory?: string;
   projectDuration?: string;
   procurementMethod?: string;
   buyingType?: string;
@@ -3175,15 +3174,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     basics.category,
     payload.categoryName
   ) || 'General Procurement';
-
-  const subCategory = firstPresent(
-    props.subCategory && props.subCategory !== '—' && props.subCategory !== 'N/A' ? props.subCategory : undefined,
-    basics.subCategory,
-    basics.subcategory,
-    basics.subCategoryName,
-    payload.subCategory,
-    payload.subcategory
-  );
 
   const publishedDateValue = (() => {
     // Determine authentic live creation/approval time
@@ -4352,7 +4342,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   <PropertyItem label="Procurement Method" value={procurementMethod} />
                   <PropertyItem label="Buying Type" value={buyingType} />
                   <PropertyItem label="Category" value={category} />
-                  <PropertyItem label="Sub Category" value={subCategory} />
                   <PropertyItem label="Delivery Location" value={deliveryLocation} />
                 </PropertyGrid>
               </DataCard>

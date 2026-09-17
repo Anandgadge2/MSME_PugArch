@@ -593,7 +593,7 @@ export function PurchaseOrderReceiptModal({
   };
 
   const viewingStatusLower = String(order.status || '').toLowerCase();
-  const isIssued = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed';
+  const isIssued = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed' || viewingStatusLower === 'pending_approval';
   const isAccepted = viewingStatusLower === 'accepted' || viewingStatusLower === 'in_fulfillment';
 
   return (

@@ -423,6 +423,8 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
   const whereConditions: any[] = Array.from(candidateTokens).map(t => ({ bidNumber: t }));
   if (parsedNum) {
     whereConditions.push({ id: parsedNum });
+    whereConditions.push({ technicalPacket: { path: ['sourceRequirementId'], equals: parsedNum } });
+    whereConditions.push({ technicalPacket: { path: ['requirementId'], equals: parsedNum } });
   }
 
   let bid = await db.procurementBid.findFirst({
@@ -434,9 +436,9 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
     logger.info({ token, bidId: bid.id, bidNumber: bid.bidNumber }, '[RESOLVE_BID] Found existing procurementBid in database');
   } else {
     logger.info({ token }, '[RESOLVE_BID] Not found in procurementBid table, searching requirement tables concurrently...');
-    const reqWhere: any[] = Array.from(candidateTokens).map(t => ({ requirementNumber: t }));
+    const legacyReqWhere: any[] = Array.from(candidateTokens).map(t => ({ requirementNumber: t }));
     if (parsedNum) {
-      reqWhere.push({ id: parsedNum });
+      legacyReqWhere.push({ id: parsedNum });
     }
 
     const qReqWhere: any[] = Array.from(candidateTokens).map(t => ({ subject: t }));
@@ -445,15 +447,15 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
     }
 
     const [buyerReqCandidate, legacyReqCandidate, qReq] = await Promise.all([
-      db.buyerRequirement.findFirst({
-        where: { OR: reqWhere },
+      parsedNum ? db.buyerRequirement.findUnique({
+        where: { id: parsedNum },
         include: { buyerOrganization: true, createdBy: true }
       }).catch(err => {
         logger.warn({ err }, '[RESOLVE_BID] Error querying buyerRequirement');
         return null;
-      }),
+      }) : Promise.resolve(null),
       db.requirement.findFirst({
-        where: { OR: reqWhere },
+        where: { OR: legacyReqWhere },
         include: { organization: true, buyer: true }
       }).catch(err => {
         logger.warn({ err }, '[RESOLVE_BID] Error querying requirement');
@@ -482,7 +484,9 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
           where: {
             OR: [
               { bidNumber: reqNumber },
-              { sourceModel: 'QUOTE_REQUEST', sourceId: reqId }
+              ...(token && token !== reqNumber ? [{ bidNumber: token }] : []),
+              { technicalPacket: { path: ['sourceRequirementId'], equals: reqId } },
+              { technicalPacket: { path: ['quoteRequestId'], equals: reqId } }
             ]
           },
           include
@@ -513,15 +517,22 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
               buyerOrganizationName: buyerOrgName || 'Buyer Organization',
               status: 'OPEN',
               lifecycleStage: 'SELLER_PARTICIPATION',
-              sourceModel: 'QUOTE_REQUEST',
-              sourceId: reqId,
               deliveryLocation: 'India',
               startDate: qReq.createdAt || new Date(),
-              endDate: new Date(Date.now() + 30 * 86400000)
+              endDate: new Date(Date.now() + 30 * 86400000),
+              technicalPacket: {
+                sourceModel: 'QUOTE_REQUEST',
+                sourceRequirementId: reqId,
+                quoteRequestId: reqId
+              }
             },
             include
           });
           logger.info({ newBidId: bid.id }, '[RESOLVE_BID] Created shadow procurementBid for QuoteRequest successfully');
+        }
+        if (bid) {
+          bid.sourceModel = 'QUOTE_REQUEST';
+          bid.sourceId = reqId;
         }
       }
 
@@ -537,7 +548,9 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
         where: {
           OR: [
             { bidNumber: reqNumber },
-            { sourceModel: 'REQUIREMENT', sourceId: reqId }
+            ...(token && token !== reqNumber ? [{ bidNumber: token }] : []),
+            { technicalPacket: { path: ['sourceRequirementId'], equals: reqId } },
+            { technicalPacket: { path: ['requirementId'], equals: reqId } }
           ]
         },
         include
@@ -554,6 +567,14 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
           validBuyerId = fallbackUser?.id;
         }
 
+        const shadowTechnicalPacket: any = {
+          ...(buyerReq.items && buyerReq.items.length > 0 ? { wizardData: { items: buyerReq.items } } : {}),
+          sourceModel: 'REQUIREMENT',
+          sourceRequirementId: reqId,
+          requirementId: reqId,
+          requirementNumber: reqNumber
+        };
+
         logger.info({ reqNumber, reqId, validBuyerId }, '[RESOLVE_BID] Creating shadow procurementBid record in DB...');
         bid = await db.procurementBid.create({
           data: {
@@ -568,16 +589,18 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
             buyerOrganizationName: buyerOrgName || 'Buyer Organization',
             status: buyerReq.status === 'APPROVED' ? 'OPEN' : (buyerReq.status || 'OPEN'),
             lifecycleStage: 'SELLER_PARTICIPATION',
-            sourceModel: 'REQUIREMENT',
-            sourceId: reqId,
             deliveryLocation: buyerReq.location || buyerReq.deliveryLocation || [buyerReq.buyerOrganization?.district, buyerReq.buyerOrganization?.state].filter(Boolean).join(', ') || 'India',
             startDate: buyerReq.createdAt || new Date(),
             endDate: buyerReq.lastDate || buyerReq.requiredBy || new Date(Date.now() + 30 * 86400000),
-            technicalPacket: buyerReq.items && buyerReq.items.length > 0 ? { wizardData: { items: buyerReq.items } } : undefined
+            technicalPacket: shadowTechnicalPacket
           },
           include
         });
         logger.info({ newBidId: bid.id }, '[RESOLVE_BID] Created shadow procurementBid successfully');
+      }
+      if (bid) {
+        bid.sourceModel = 'REQUIREMENT';
+        bid.sourceId = reqId;
       }
     }
   }
@@ -620,7 +643,14 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
 
       // Try to find existing shadow bid for this rate contract
       bid = await db.procurementBid.findFirst({
-        where: { OR: [{ bidNumber: rcBidNumber }, { bidNumber: token }, { sourceModel: 'RATE_CONTRACT', sourceId: contract.id }] },
+        where: {
+          OR: [
+            { bidNumber: rcBidNumber },
+            { bidNumber: token },
+            { technicalPacket: { path: ['sourceContractId'], equals: contract.id } },
+            { technicalPacket: { path: ['contractId'], equals: contract.id } }
+          ]
+        },
         include
       }).catch(() => null);
 
@@ -654,12 +684,15 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
             buyerOrganizationName: meta.buyerOrgName || 'Buyer Organization',
             status: 'OPEN',
             lifecycleStage: 'SELLER_PARTICIPATION',
-            sourceModel: 'RATE_CONTRACT',
-            sourceId: contract.id,
             deliveryLocation: meta.deliveryLocation || 'India',
             startDate: formatDate(contract.startDate) || new Date(),
             endDate: formatDate(contract.endDate) || new Date(Date.now() + 365 * 86400000),
-            technicalPacket: meta.items && Array.isArray(meta.items) && meta.items.length > 0 ? { wizardData: { items: meta.items } } : undefined
+            technicalPacket: {
+              ...(meta.items && Array.isArray(meta.items) && meta.items.length > 0 ? { wizardData: { items: meta.items } } : {}),
+              sourceModel: 'RATE_CONTRACT',
+              sourceContractId: contract.id,
+              contractId: contract.id
+            }
           },
           include
         }).catch((err: any) => {
@@ -670,9 +703,25 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
           }).catch(() => null);
         });
         if (bid) {
+          bid.sourceModel = 'RATE_CONTRACT';
+          bid.sourceId = contract.id;
           logger.info({ bidId: bid.id }, '[RESOLVE_BID] Created/found shadow procurementBid for Rate Contract');
         }
       }
+    }
+  }
+
+  if (bid) {
+    const packetMeta = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? (bid.technicalPacket as any) : {};
+    const linkedReqId = Number(packetMeta.sourceRequirementId || packetMeta.requirementId || packetMeta.linkedRequirementId || 0) || null;
+    const linkedContractId = Number(packetMeta.sourceContractId || packetMeta.contractId || 0) || null;
+    const linkedQuoteId = Number(packetMeta.quoteRequestId || 0) || null;
+
+    if (!bid.sourceModel) {
+      bid.sourceModel = packetMeta.sourceModel || (linkedContractId ? 'RATE_CONTRACT' : linkedQuoteId ? 'QUOTE_REQUEST' : linkedReqId ? 'REQUIREMENT' : 'PROCUREMENT_BID');
+    }
+    if (!bid.sourceId) {
+      bid.sourceId = packetMeta.sourceId || linkedReqId || linkedContractId || linkedQuoteId || bid.id;
     }
   }
 
@@ -803,7 +852,6 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     departmentName: bid.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.departmentName || null,
     consigneeDetails: bid.technicalPacket && typeof bid.technicalPacket === 'object' && (bid.technicalPacket as any).wizardData ? (bid.technicalPacket as any).wizardData : null,
     category: bid.category,
-    subCategory: bid.subCategory,
     bidType: bid.bidType,
     procurementType: bid.procurementType,
     quantity: moneyNumber(bid.quantity),
@@ -1116,7 +1164,6 @@ export const serializeTenderBidActivity = (tender: any) => {
     buyerType: profile?.organizationType || 'Private Enterprise',
     departmentName: profile?.department || 'Procurement & Stores Department',
     category: tender.category,
-    subCategory: null,
     bidType: 'Tender',
     procurementType: 'Tender Bid',
     quantity: null,
@@ -1506,7 +1553,6 @@ export const createBuyerBid = async (req: AuthRequest, body: any) => {
       buyerOrganizationName: body.buyerOrganizationName || user?.organization?.organizationName || user?.buyerProfile?.organizationName || user?.name || 'Buyer organization',
       buyerType: body.buyerType,
       category: body.category,
-      subCategory: body.subCategory,
       bidType: body.bidType,
       procurementType: body.procurementType,
       quantity: body.quantity,

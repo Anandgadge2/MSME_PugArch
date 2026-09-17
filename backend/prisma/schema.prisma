@@ -1934,7 +1934,6 @@ model Auction {
   actualClosedAt             DateTime?
   procurementMethod          String?               @default("REVERSE_AUCTION")
   category                   String?
-  subCategory                String?
   auctionType                String?               @default("ENGLISH_REVERSE")
   auctionMode                String?               @default("ONLINE")
   auctionDurationMinutes     Int?
@@ -3291,7 +3290,6 @@ model ProcurementBid {
   buyerOrganizationName String
   buyerType             String
   category              String
-  subCategory           String?
   bidType               String
   procurementType       String?
   quantity              Decimal?                      @db.Decimal(18, 3)
