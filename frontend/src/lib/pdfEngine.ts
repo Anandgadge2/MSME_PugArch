@@ -92,11 +92,25 @@ export async function loadImageAsDataUrl(url: string | null | undefined): Promis
   if (rawUrl.startsWith('data:image/')) return rawUrl;
 
   const targetUrl = resolveMediaUrl(rawUrl) || rawUrl;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
+  let authUrl = targetUrl.startsWith('/') ? `${window.location.origin}${targetUrl}` : targetUrl;
+  if (token && (authUrl.includes('/api/files/') || authUrl.includes('/api/public/files/')) && !authUrl.includes('token=')) {
+    const sep = authUrl.includes('?') ? '&' : '?';
+    authUrl = `${authUrl}${sep}token=${encodeURIComponent(token)}`;
+  }
 
   // 1. First attempt: fetch -> blob -> readAsDataURL -> draw onto canvas to guarantee standard PNG
   try {
-    const fetchUrl = targetUrl.startsWith('/') ? `${window.location.origin}${targetUrl}` : targetUrl;
-    const res = await fetch(fetchUrl, { mode: 'cors' });
+    const fetchHeaders: Record<string, string> = {};
+    if (token) {
+      fetchHeaders['Authorization'] = `Bearer ${token}`;
+    }
+    const res = await fetch(authUrl, {
+      mode: 'cors',
+      credentials: 'include',
+      headers: fetchHeaders
+    });
     if (res.ok) {
       const blob = await res.blob();
       if (blob && blob.size > 0) {
@@ -165,8 +179,7 @@ export async function loadImageAsDataUrl(url: string | null | undefined): Promis
         }
       };
       img.onerror = () => resolve(null);
-      const fallbackSrc = targetUrl.startsWith('/') ? `${window.location.origin}${targetUrl}` : targetUrl;
-      img.src = fallbackSrc;
+      img.src = authUrl;
     } catch {
       resolve(null);
     }

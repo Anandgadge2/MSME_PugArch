@@ -2861,6 +2861,37 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
   const sellerId = certification?.product?.sellerId || certification?.service?.sellerId;
   if (sellerId) return { id: Number(sellerId), role: 'seller' };
 
+  // Offline Payment Proof check
+  const offlineProof = await (db as any).offlinePaymentProof.findFirst({
+    where: {
+      OR: [
+        { receiptFileId: fileId },
+        { receiptFileUrl: { contains: `/files/${fileId}/` } }
+      ]
+    },
+    include: { purchaseOrder: true }
+  }).catch(() => null);
+  if (offlineProof) {
+    const actorId = offlineProof.uploadedByUserId || offlineProof.purchaseOrder?.buyerId || offlineProof.purchaseOrder?.sellerId;
+    if (actorId) return { id: Number(actorId), role: 'buyer' };
+  }
+
+  // Branding / Image asset fallback (stamps, signatures, onboarding images)
+  const brandingAsset = await db.fileAsset.findFirst({
+    where: {
+      id: fileId,
+      status: 'active',
+      OR: [
+        { entityType: { in: ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public', 'stamp', 'signature', 'invoice-branding'] } },
+        { entityType: { in: ['general', 'onboarding', 'registration', 'procurement_draft', 'seller_profile', 'buyer_profile'] }, mimeType: { startsWith: 'image/' } }
+      ]
+    },
+    select: { ownerId: true, ownerRole: true }
+  }).catch(() => null);
+  if (brandingAsset?.ownerId) {
+    return { id: Number(brandingAsset.ownerId), role: String(brandingAsset.ownerRole || 'seller') };
+  }
+
   return null;
 };
 
@@ -2880,6 +2911,7 @@ router.get('/public/files/:id/view', asyncRoute(async (req: AuthRequest, res) =>
   res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('ETag', etag);
 
   if (req.headers['if-none-match'] === etag) {
@@ -3031,6 +3063,7 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
   res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('ETag', etag);
 
   if (req.headers['if-none-match'] === etag) {

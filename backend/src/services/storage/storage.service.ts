@@ -214,8 +214,8 @@ const canSellerViewBid = (sellerId: number, bid: any) => {
 
 export const canAccessFileAsset = async (asset: any, user: { id: number; role: string }) => {
   if (
-    ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public'].includes(asset.entityType) ||
-    (asset.entityType === 'general' && typeof asset.mimeType === 'string' && asset.mimeType.startsWith('image/')) ||
+    ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public', 'stamp', 'signature', 'invoice-branding'].includes(asset.entityType) ||
+    (typeof asset.mimeType === 'string' && asset.mimeType.startsWith('image/') && ['general', 'onboarding', 'registration', 'procurement_draft', 'seller_profile', 'buyer_profile'].includes(asset.entityType)) ||
     await isPublicCatalogueAsset(asset.id)
   ) return true;
   if (!user || !user.id) return false;
@@ -337,6 +337,67 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
     if (grnDoc.uploadedById === user.id) return true;
     const po = (grnDoc as any).grn?.purchaseOrder;
     if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+  }
+
+  // Offline Payment Proof check (either direct receiptFileId or via URL / key)
+  const offlineProof = await (prisma as any).offlinePaymentProof.findFirst({
+    where: {
+      OR: [
+        { receiptFileId: asset.id },
+        { receiptFileUrl: { contains: `/files/${asset.id}/` } },
+        ...(asset.key ? [{ receiptFileUrl: { contains: asset.key } }] : [])
+      ]
+    },
+    include: {
+      purchaseOrder: true,
+      paymentTransaction: {
+        include: {
+          purchaseOrder: true,
+          invoice: true
+        }
+      }
+    }
+  }).catch(() => null);
+
+  if (offlineProof) {
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    if (offlineProof.uploadedByUserId === user.id) return true;
+    const po = offlineProof.purchaseOrder || offlineProof.paymentTransaction?.purchaseOrder;
+    if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+    const inv = offlineProof.paymentTransaction?.invoice;
+    if (inv && (inv.buyerId === user.id || inv.sellerId === user.id)) return true;
+    if (user.role === 'buyer' && offlineProof.buyerOrgId && (user as any).organizationId === offlineProof.buyerOrgId) return true;
+    if (user.role === 'seller' && offlineProof.sellerOrgId && (user as any).organizationId === offlineProof.sellerOrgId) return true;
+  }
+
+  // Purchase Order counterparty branding check (logos, stamps, signatures)
+  if (user?.id) {
+    const poWithBranding = await prisma.purchaseOrder.findFirst({
+      where: {
+        OR: [{ buyerId: user.id }, { sellerId: user.id }]
+      },
+      include: {
+        buyer: { select: { id: true, registrationDetails: true, organization: { select: { organizationLogoFileId: true } } } },
+        seller: { select: { id: true, registrationDetails: true, organization: { select: { organizationLogoFileId: true } } } }
+      }
+    }).catch(() => null);
+
+    if (poWithBranding) {
+      const bReg = (poWithBranding.buyer?.registrationDetails as Record<string, any>) || {};
+      const sReg = (poWithBranding.seller?.registrationDetails as Record<string, any>) || {};
+      const bLogoId = poWithBranding.buyer?.organization?.organizationLogoFileId;
+      const sLogoId = poWithBranding.seller?.organization?.organizationLogoFileId;
+
+      const keysAndUrls = [
+        bReg.logoUrl, bReg.stampUrl, bReg.signatureUrl,
+        sReg.logoUrl, sReg.stampUrl, sReg.signatureUrl
+      ].filter(Boolean);
+
+      if (bLogoId === asset.id || sLogoId === asset.id) return true;
+      if (keysAndUrls.some(u => typeof u === 'string' && (u.includes(`/files/${asset.id}/`) || (asset.key && u.includes(asset.key))))) {
+        return true;
+      }
+    }
   }
 
   if (!asset.entityId) {

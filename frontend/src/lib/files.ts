@@ -1,4 +1,4 @@
-import { api, unwrapApiData, BASE_URL } from './api';
+import { api, unwrapApiData, BASE_URL, resolveMediaUrl } from './api';
 import { getCookieValue } from './auth';
 
 export type DocumentPreviewMode = 'image' | 'pdf' | 'office' | 'google';
@@ -11,10 +11,11 @@ export type DocumentPreview = {
 
 const getAbsoluteApiUrl = (endpoint: string) => {
   if (!endpoint) return '';
-  if (endpoint.startsWith('http://') || endpoint.startsWith('https://') || endpoint.startsWith('data:')) {
-    return endpoint;
+  const resolved = resolveMediaUrl(endpoint) || endpoint;
+  if (resolved.startsWith('http://') || resolved.startsWith('https://') || resolved.startsWith('data:') || resolved.startsWith('blob:')) {
+    return resolved;
   }
-  return `${BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  return `${BASE_URL}${resolved.startsWith('/') ? '' : '/'}${resolved}`;
 };
 
 export const getDocumentPreviewMode = (url: string, contentType = '', extension = ''): DocumentPreviewMode => {
@@ -72,13 +73,20 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
     };
   }
 
-  const hasSession = Boolean((typeof window !== 'undefined' && localStorage.getItem('token')) || getCookieValue('csrfToken'));
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const hasSession = Boolean(token || getCookieValue('csrfToken'));
   const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
   const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
+
+  const authHeaders: Record<string, string> = {};
+  if (token) {
+    authHeaders['Authorization'] = `Bearer ${token}`;
+  }
 
   try {
     const res = await api.fetch(signedUrlEndpoint, {
       method: 'GET',
+      headers: authHeaders,
       skipCache: true
     });
 
@@ -86,10 +94,11 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
       const body = await res.json().catch(() => null);
       const data = unwrapApiData<any>(body);
       if (data?.signedUrl) {
+        const previewUrl = resolveMediaUrl(data.signedUrl) || data.signedUrl;
         return {
           label,
-          url: data.signedUrl,
-          mode: getDocumentPreviewMode(data.signedUrl, data.file?.mimeType || fileAsset?.mimeType || '')
+          url: previewUrl,
+          mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || '')
         };
       }
     }
@@ -100,6 +109,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
   try {
     const res = await api.fetch(viewEndpoint, {
       method: 'GET',
+      headers: authHeaders,
       skipCache: true
     });
 

@@ -34,6 +34,7 @@ import { api, readJsonResponse, resolveMediaUrl } from '../../../lib/api';
 import { cn } from '../../../lib/utils';
 import type { DocumentConfig } from '../../../lib/pdfEngine';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
+import { useAuth } from '../../../hooks/useAuth';
 
 export interface PurchaseOrderItemDto {
   id?: number;
@@ -420,8 +421,14 @@ export function PurchaseOrderReceiptModal({
     (order.buyer?.organization?.organizationLogoFileId ? `/api/files/${order.buyer.organization.organizationLogoFileId}/download` : null) ||
     null;
 
-  const topLogo = sellerLogo || buyerLogo;
-  const topOrgName = sellerOrg !== 'N/A' ? sellerOrg : (buyerOrg !== 'N/A' ? buyerOrg : 'Enterprise Procurement');
+  const { user } = useAuth();
+  const isViewingSeller = isSeller || user?.role === 'seller' || user?.role === 'shg' || (order && order.sellerId === user?.id);
+  const isViewingBuyer = isBuyer || user?.role === 'buyer' || (order && order.buyerId === user?.id);
+
+  const currentUserReg = (user?.registrationDetails as Record<string, any>) || {};
+  const lsStamp = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_stamp') : null;
+  const lsSig = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_signature') : null;
+  const lsLogo = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_logo') : null;
 
   const sellerSignature = sellerReg.signatureUrl || null;
   const sellerStamp = sellerReg.stampUrl || null;
@@ -429,14 +436,26 @@ export function PurchaseOrderReceiptModal({
   const buyerSignature = buyerReg.signatureUrl || null;
   const buyerStamp = buyerReg.stampUrl || null;
 
+  const effectiveSellerLogo = sellerLogo || (isViewingSeller ? (currentUserReg.logoUrl || lsLogo) : null);
+  const effectiveBuyerLogo = buyerLogo || (isViewingBuyer ? (currentUserReg.logoUrl || lsLogo) : null);
+
+  const effectiveSellerSignature = sellerSignature || (isViewingSeller ? (currentUserReg.signatureUrl || lsSig) : null);
+  const effectiveSellerStamp = sellerStamp || (isViewingSeller ? (currentUserReg.stampUrl || lsStamp) : null);
+
+  const effectiveBuyerSignature = buyerSignature || (isViewingBuyer ? (currentUserReg.signatureUrl || lsSig) : null);
+  const effectiveBuyerStamp = buyerStamp || (isViewingBuyer ? (currentUserReg.stampUrl || lsStamp) : null);
+
+  const topLogo = effectiveSellerLogo || effectiveBuyerLogo;
+  const topOrgName = sellerOrg !== 'N/A' ? sellerOrg : (buyerOrg !== 'N/A' ? buyerOrg : 'Enterprise Procurement');
+
   // Resolve media URLs to ensure local dev proxy & CORS compatibility
   const resolvedTopLogo = resolveMediaUrl(topLogo);
-  const resolvedSellerLogo = resolveMediaUrl(sellerLogo);
-  const resolvedBuyerLogo = resolveMediaUrl(buyerLogo);
-  const resolvedSellerSignature = resolveMediaUrl(sellerSignature);
-  const resolvedSellerStamp = resolveMediaUrl(sellerStamp);
-  const resolvedBuyerSignature = resolveMediaUrl(buyerSignature);
-  const resolvedBuyerStamp = resolveMediaUrl(buyerStamp);
+  const resolvedSellerLogo = resolveMediaUrl(effectiveSellerLogo);
+  const resolvedBuyerLogo = resolveMediaUrl(effectiveBuyerLogo);
+  const resolvedSellerSignature = resolveMediaUrl(effectiveSellerSignature);
+  const resolvedSellerStamp = resolveMediaUrl(effectiveSellerStamp);
+  const resolvedBuyerSignature = resolveMediaUrl(effectiveBuyerSignature);
+  const resolvedBuyerStamp = resolveMediaUrl(effectiveBuyerStamp);
 
   const shipVia =
     order.deliveryType ? readableStatus(order.deliveryType) : 'Standard Ground Logistics';
@@ -513,10 +532,10 @@ export function PurchaseOrderReceiptModal({
         issuerName: topOrgName,
         issuerSubtitle: 'Authorized Vendor & MSME Supplier',
         issuerLogo: topLogo,
-        sellerSignatureUrl: sellerSignature,
-        sellerStampUrl: sellerStamp,
-        buyerSignatureUrl: buyerSignature,
-        buyerStampUrl: buyerStamp,
+        sellerSignatureUrl: effectiveSellerSignature,
+        sellerStampUrl: effectiveSellerStamp,
+        buyerSignatureUrl: effectiveBuyerSignature,
+        buyerStampUrl: effectiveBuyerStamp,
         parties: [
           {
             title: 'Ship To / Buyer',
@@ -526,7 +545,7 @@ export function PurchaseOrderReceiptModal({
             email: buyerEmail,
             gstin: buyerGstin,
             pan: buyerPan,
-            logoUrl: buyerLogo,
+            logoUrl: effectiveBuyerLogo,
             details: [
               `Ship Via: ${shipVia}`,
               `Tracking: ${trackingNumber}`,
@@ -540,7 +559,7 @@ export function PurchaseOrderReceiptModal({
             email: sellerEmail,
             gstin: sellerGstin,
             pan: sellerPan,
-            logoUrl: sellerLogo,
+            logoUrl: effectiveSellerLogo,
             details: [
               `Vendor Code: ${order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}`,
             ],

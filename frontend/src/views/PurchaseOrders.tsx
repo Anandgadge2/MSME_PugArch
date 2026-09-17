@@ -6,6 +6,7 @@ import type { DocumentConfig } from '../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../features/payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../features/payments/components/PaymentReceiptViewModal';
 import { RepeatPurchaseOrderModal } from '../features/purchaseOrders/components/RepeatPurchaseOrderModal';
+import { PurchaseOrderReceiptModal } from '../features/purchaseOrders/components/PurchaseOrderReceiptModal';
 
 const moneyPdf = (val: any, currency = 'INR') => {
   const num = Number(val || 0);
@@ -116,7 +117,8 @@ const OrderActionsMenu = ({
   exportInvoicePdf,
   setConfirming,
   onUploadPaymentSlip,
-  onViewPaymentSlip
+  onViewPaymentSlip,
+  onViewReceipt
 }: any) => {
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -182,6 +184,18 @@ const OrderActionsMenu = ({
       >
         <Eye className="h-3.5 w-3.5 text-slate-500" />
         <span>View</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          onClose();
+          onViewReceipt?.(order);
+        }}
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+      >
+        <Receipt className="h-3.5 w-3.5 text-blue-600" />
+        <span>View Official PO</span>
       </button>
 
       {isSeller && isIssued && (
@@ -348,6 +362,7 @@ export default function PurchaseOrders() {
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrderDto | null>(null);
+  const [receiptModalOrder, setReceiptModalOrder] = useState<PurchaseOrderDto | null>(null);
   const [uploadProofOrder, setUploadProofOrder] = useState<PurchaseOrderDto | null>(null);
   const [viewProofOrder, setViewProofOrder] = useState<PurchaseOrderDto | null>(null);
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
@@ -734,6 +749,7 @@ export default function PurchaseOrders() {
             setConfirming={setConfirming}
             onUploadPaymentSlip={setUploadProofOrder}
             onViewPaymentSlip={setViewProofOrder}
+            onViewReceipt={setReceiptModalOrder}
           />
         )}
       </div>
@@ -856,13 +872,19 @@ export default function PurchaseOrders() {
       buyerReg.gstDetails?.responseGstin ||
       'N/A';
 
+    const currentUserReg = (user?.registrationDetails as Record<string, any>) || {};
+    const lsStamp = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_stamp') : null;
+    const lsSig = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_signature') : null;
+    const lsLogo = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_logo') : null;
+
     const sellerLogo =
       seller.organization?.profile?.logoUrl ||
       sellerReg.logoUrl ||
       seller.organization?.logoFile?.url ||
       seller.organization?.logoFile?.fileUrl ||
       (seller.organization?.organizationLogoFileId ? `/api/files/${seller.organization.organizationLogoFileId}/view` : null) ||
-      (seller.organization?.organizationLogoFileId ? `/api/files/${seller.organization.organizationLogoFileId}/download` : null);
+      (seller.organization?.organizationLogoFileId ? `/api/files/${seller.organization.organizationLogoFileId}/download` : null) ||
+      (order.sellerId === user?.id || isSeller ? (currentUserReg.logoUrl || lsLogo) : null);
 
     const buyerLogo =
       buyer.organization?.profile?.logoUrl ||
@@ -870,7 +892,24 @@ export default function PurchaseOrders() {
       buyer.organization?.logoFile?.url ||
       buyer.organization?.logoFile?.fileUrl ||
       (buyer.organization?.organizationLogoFileId ? `/api/files/${buyer.organization.organizationLogoFileId}/view` : null) ||
-      (buyer.organization?.organizationLogoFileId ? `/api/files/${buyer.organization.organizationLogoFileId}/download` : null);
+      (buyer.organization?.organizationLogoFileId ? `/api/files/${buyer.organization.organizationLogoFileId}/download` : null) ||
+      (order.buyerId === user?.id || isBuyer ? (currentUserReg.logoUrl || lsLogo) : null);
+
+    const effectiveSellerLogo = resolveMediaUrl(sellerLogo);
+    const effectiveBuyerLogo = resolveMediaUrl(buyerLogo);
+
+    const effectiveSellerSignature = resolveMediaUrl(
+      sellerReg.signatureUrl || (order.sellerId === user?.id || isSeller ? (currentUserReg.signatureUrl || lsSig) : null)
+    );
+    const effectiveSellerStamp = resolveMediaUrl(
+      sellerReg.stampUrl || (order.sellerId === user?.id || isSeller ? (currentUserReg.stampUrl || lsStamp) : null)
+    );
+    const effectiveBuyerSignature = resolveMediaUrl(
+      buyerReg.signatureUrl || (order.buyerId === user?.id || isBuyer ? (currentUserReg.signatureUrl || lsSig) : null)
+    );
+    const effectiveBuyerStamp = resolveMediaUrl(
+      buyerReg.stampUrl || (order.buyerId === user?.id || isBuyer ? (currentUserReg.stampUrl || lsStamp) : null)
+    );
 
     const config: DocumentConfig = {
       documentTitle: 'PURCHASE ORDER',
@@ -879,11 +918,11 @@ export default function PurchaseOrders() {
       status: readableStatus(order.status),
       issuerName: sellerOrg !== 'N/A' ? sellerOrg : (buyerOrgName !== 'N/A' ? buyerOrgName : 'Enterprise Procurement'),
       issuerSubtitle: 'Authorized Vendor & MSME Supplier',
-      issuerLogo: sellerLogo || buyerLogo,
-      sellerSignatureUrl: sellerReg.signatureUrl || null,
-      sellerStampUrl: sellerReg.stampUrl || null,
-      buyerSignatureUrl: buyerReg.signatureUrl || null,
-      buyerStampUrl: buyerReg.stampUrl || null,
+      issuerLogo: effectiveSellerLogo || effectiveBuyerLogo,
+      sellerSignatureUrl: effectiveSellerSignature,
+      sellerStampUrl: effectiveSellerStamp,
+      buyerSignatureUrl: effectiveBuyerSignature,
+      buyerStampUrl: effectiveBuyerStamp,
       parties: [
         {
           title: 'Ship To / Buyer',
@@ -892,7 +931,7 @@ export default function PurchaseOrders() {
           phone: buyer.mobile || buyerReg.mobile || 'N/A',
           gstin: buyerGstin,
           address: buyerAddress,
-          logoUrl: buyerLogo,
+          logoUrl: effectiveBuyerLogo,
         },
         {
           title: 'Vendor / Seller',
@@ -901,7 +940,7 @@ export default function PurchaseOrders() {
           phone: seller.mobile || sellerReg.mobile || 'N/A',
           gstin: sellerGstin,
           address: sellerAddress,
-          logoUrl: sellerLogo,
+          logoUrl: effectiveSellerLogo,
           details: [`Vendor Code: ${order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}`]
         }
       ],
@@ -1507,11 +1546,22 @@ export default function PurchaseOrders() {
                     {(() => {
                       const buyerObj = (viewingOrder.buyer as any) || {};
                       const buyerOrgDisplay = buyerObj.organization?.organizationName || buyerObj.buyerProfile?.companyName || buyerObj.registrationDetails?.businessName || viewingOrder.buyer?.name || 'MSME Portal Buyer';
+                      const buyerLogoUrl = resolveMediaUrl(
+                        buyerObj.organization?.profile?.logoUrl ||
+                        buyerObj.registrationDetails?.logoUrl ||
+                        buyerObj.organization?.logoFile?.url ||
+                        (buyerObj.organization?.organizationLogoFileId ? `/api/files/${buyerObj.organization.organizationLogoFileId}/view` : null) ||
+                        (viewingOrder.buyerId === user?.id ? (user?.registrationDetails?.logoUrl || (typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_logo') : null)) : null)
+                      );
                       return (
                         <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 font-bold text-xs">
-                            BY
-                          </div>
+                          {buyerLogoUrl ? (
+                            <img src={buyerLogoUrl} alt="Buyer Logo" className="h-9 w-9 rounded-lg object-contain border border-slate-200 bg-white p-0.5 shrink-0" />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 font-bold text-xs">
+                              BY
+                            </div>
+                          )}
                           <div className="min-w-0 flex-1">
                             <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Buyer (Requester)</span>
                             <p className="text-xs font-black text-slate-900 truncate">
@@ -1532,11 +1582,22 @@ export default function PurchaseOrders() {
                     {(() => {
                       const sellerObj = (viewingOrder.seller as any) || {};
                       const sellerOrgDisplay = sellerObj.organization?.organizationName || sellerObj.sellerProfile?.businessName || sellerObj.registrationDetails?.businessName || viewingOrder.seller?.name || viewingOrder.seller?.email || 'MSME Portal Seller';
+                      const sellerLogoUrl = resolveMediaUrl(
+                        sellerObj.organization?.profile?.logoUrl ||
+                        sellerObj.registrationDetails?.logoUrl ||
+                        sellerObj.organization?.logoFile?.url ||
+                        (sellerObj.organization?.organizationLogoFileId ? `/api/files/${sellerObj.organization.organizationLogoFileId}/view` : null) ||
+                        (viewingOrder.sellerId === user?.id ? (user?.registrationDetails?.logoUrl || (typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_logo') : null)) : null)
+                      );
                       return (
                         <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs">
-                            SL
-                          </div>
+                          {sellerLogoUrl ? (
+                            <img src={sellerLogoUrl} alt="Seller Logo" className="h-9 w-9 rounded-lg object-contain border border-slate-200 bg-white p-0.5 shrink-0" />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs">
+                              SL
+                            </div>
+                          )}
                           <div className="min-w-0 flex-1">
                             <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Seller (Provider)</span>
                             <p className="text-xs font-black text-slate-900 truncate">
@@ -2028,6 +2089,85 @@ export default function PurchaseOrders() {
                 </div>
               </div>
 
+              {/* Signatures & Stamps Card */}
+              {(() => {
+                const buyerObj = (viewingOrder.buyer as any) || {};
+                const sellerObj = (viewingOrder.seller as any) || {};
+                const bReg = (buyerObj.registrationDetails as Record<string, any>) || {};
+                const sReg = (sellerObj.registrationDetails as Record<string, any>) || {};
+                const currentUserReg = (user?.registrationDetails as Record<string, any>) || {};
+                const lsStamp = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_stamp') : null;
+                const lsSig = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_signature') : null;
+
+                const bStamp = resolveMediaUrl(bReg.stampUrl || (viewingOrder.buyerId === user?.id || isBuyer ? (currentUserReg.stampUrl || lsStamp) : null));
+                const bSig = resolveMediaUrl(bReg.signatureUrl || (viewingOrder.buyerId === user?.id || isBuyer ? (currentUserReg.signatureUrl || lsSig) : null));
+                const sStamp = resolveMediaUrl(sReg.stampUrl || (viewingOrder.sellerId === user?.id || isSeller ? (currentUserReg.stampUrl || lsStamp) : null));
+                const sSig = resolveMediaUrl(sReg.signatureUrl || (viewingOrder.sellerId === user?.id || isSeller ? (currentUserReg.signatureUrl || lsSig) : null));
+
+                const buyerOrgDisplay = buyerObj.organization?.organizationName || buyerObj.buyerProfile?.companyName || bReg.businessName || viewingOrder.buyer?.name || 'Buyer';
+                const sellerOrgDisplay = sellerObj.organization?.organizationName || sellerObj.sellerProfile?.businessName || sReg.businessName || viewingOrder.seller?.name || 'Seller';
+
+                return (
+                  <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-[#12335f]" />
+                        <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Signatures & Official Authorization</h4>
+                      </div>
+                      <span className="text-[10px] font-semibold text-slate-400">Verified MSME Seals</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Buyer Authorization */}
+                      <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex flex-col justify-between space-y-3">
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Buyer Authorization</span>
+                          <p className="text-xs font-black text-slate-900 truncate">For {buyerOrgDisplay}</p>
+                        </div>
+                        <div className="flex items-center gap-3 h-14 bg-white p-2 rounded-lg border border-slate-200/60">
+                          {bStamp ? (
+                            <img src={bStamp} alt="Buyer Stamp" className="h-10 w-10 object-contain mix-blend-multiply shrink-0" />
+                          ) : (
+                            <div className="h-10 w-10 rounded border border-dashed border-slate-300 flex items-center justify-center text-[8px] font-black text-slate-400 shrink-0 uppercase">
+                              Stamp
+                            </div>
+                          )}
+                          {bSig ? (
+                            <img src={bSig} alt="Buyer Signature" className="h-10 w-auto object-contain mix-blend-multiply" />
+                          ) : (
+                            <span className="text-[10px] font-semibold text-slate-400 italic">Signature on file</span>
+                          )}
+                        </div>
+                        <span className="text-[9px] text-slate-500 font-semibold border-t border-slate-200 pt-1 text-center block">Authorized Buyer Signatory</span>
+                      </div>
+
+                      {/* Seller Authorization */}
+                      <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex flex-col justify-between space-y-3">
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Supplier Authorization</span>
+                          <p className="text-xs font-black text-slate-900 truncate">For {sellerOrgDisplay}</p>
+                        </div>
+                        <div className="flex items-center gap-3 h-14 bg-white p-2 rounded-lg border border-slate-200/60">
+                          {sStamp ? (
+                            <img src={sStamp} alt="Seller Stamp" className="h-10 w-10 object-contain mix-blend-multiply shrink-0" />
+                          ) : (
+                            <div className="h-10 w-10 rounded border border-dashed border-slate-300 flex items-center justify-center text-[8px] font-black text-slate-400 shrink-0 uppercase">
+                              Stamp
+                            </div>
+                          )}
+                          {sSig ? (
+                            <img src={sSig} alt="Seller Signature" className="h-10 w-auto object-contain mix-blend-multiply" />
+                          ) : (
+                            <span className="text-[10px] font-semibold text-slate-400 italic">Signature on file</span>
+                          )}
+                        </div>
+                        <span className="text-[9px] text-slate-500 font-semibold border-t border-slate-200 pt-1 text-center block">Authorized Supplier Signatory</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
             </div>
 
             {/* Modal Sticky Action Footer - Single Row */}
@@ -2138,6 +2278,13 @@ export default function PurchaseOrders() {
               <div className="flex items-center gap-2 shrink-0">
                 <Button 
                   variant="outline" 
+                  onClick={() => setReceiptModalOrder(viewingOrder)} 
+                  className="h-9 text-xs font-black uppercase tracking-wider rounded-xl border-blue-200 bg-blue-50/60 text-[#12335f] hover:bg-blue-100/60 px-3.5 whitespace-nowrap"
+                >
+                  <Receipt className="mr-1.5 h-3.5 w-3.5 text-[#12335f]" /> View Official PO
+                </Button>
+                <Button 
+                  variant="outline" 
                   onClick={() => exportInvoicePdf(viewingOrder, 'download')} 
                   className="h-9 text-xs font-black uppercase tracking-wider rounded-xl border-slate-300 hover:bg-slate-50 px-3.5 whitespace-nowrap"
                 >
@@ -2163,6 +2310,23 @@ export default function PurchaseOrders() {
             setViewingOrder(null);
             reload();
           }}
+        />
+      )}
+
+      {receiptModalOrder && (
+        <PurchaseOrderReceiptModal
+          order={receiptModalOrder}
+          onClose={() => setReceiptModalOrder(null)}
+          isSeller={isSeller}
+          isBuyer={isBuyer}
+          onAccept={(o) => handleAcceptOrder(o as any)}
+          onReject={(o) => handleRejectOrder(o as any)}
+          onCreateInvoice={(o) => handleConvertToInvoice(o as any)}
+          onManageDispatch={(o) => handleOpenDelivery(o as any)}
+          onRepeatOrder={(o) => handleOpenRepeatModal(o as any)}
+          onUploadPaymentSlip={(o) => setUploadProofOrder(o as any)}
+          onViewPaymentSlip={(o) => setViewProofOrder(o as any)}
+          activeDelivery={activeDelivery}
         />
       )}
 
