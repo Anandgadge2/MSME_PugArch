@@ -109,6 +109,22 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     allowedEvaluations: ['L1 total value']
   },
   {
+    id: 'REVERSE_AUCTION',
+    title: 'Reverse Auction (e-RA)',
+    subtitle: 'Direct real-time dynamic bidding for standard items and commodities',
+    icon: Gavel,
+    accent: 'border-purple-200 bg-purple-50 text-purple-800',
+    badge: 'Dynamic Auction',
+    valueHint: 'Ideal for driving immediate competitive price compression',
+    fit: ['Commodity goods / standard specs', 'Pre-qualified vendor pool', 'Real-time dynamic price bidding'],
+    gates: ['Starting bid price', 'Minimum bid decrement', 'Extension rules'],
+    complexity: 'Medium',
+    estimatedTime: '1-3 Days',
+    buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
+    requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
+    allowedEvaluations: ['Dynamic Reverse Auction L1']
+  },
+  {
     id: 'RATE_CONTRACT',
     title: 'Rate Contract',
     subtitle: 'Establish rate schedules for recurring demands over a fixed period',
