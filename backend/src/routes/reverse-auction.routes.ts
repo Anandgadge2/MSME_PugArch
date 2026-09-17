@@ -776,7 +776,7 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
     if (!linkedBid && !linkedReq && typeof rawId === 'string') {
       linkedBid = await db.procurementBid.findFirst({ where: { bidNumber: rawId } }).catch(() => null);
       if (!linkedReq) {
-        linkedReq = await db.buyerRequirement.findFirst({ where: { requirementNumber: rawId } }).catch(() => null);
+        linkedReq = await db.requirement.findFirst({ where: { requirementNumber: rawId } }).catch(() => null);
       }
     }
 

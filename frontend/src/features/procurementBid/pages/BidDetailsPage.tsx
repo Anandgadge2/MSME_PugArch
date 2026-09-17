@@ -43,23 +43,37 @@ export default function BidDetailsPage() {
         } catch {}
       }
 
-      const [mktRes, bidRes, reqRes] = await Promise.allSettled([
-        getApi<any>(`/api/marketplace/requirements/${requestId}`),
+      // On /bids/:id routes, procurement bids are the primary resource. Prioritize bid API first!
+      const [bidRes, mktRes, reqRes] = await Promise.allSettled([
         procurementBidApi.detail(requestId),
+        getApi<any>(`/api/marketplace/requirements/${requestId}`),
         getApi<any>(`/api/requirements/${requestId}`)
       ]);
 
+      if (bidRes.status === 'fulfilled' && bidRes.value) {
+        const val: any = bidRes.value;
+        if (val && (val.id || val.bidNumber || val.title)) {
+          return val;
+        }
+      }
       if (mktRes.status === 'fulfilled' && mktRes.value) {
         const val: any = mktRes.value;
         const item = val?.requirement || val?.data || val;
-        if (item && (item.id || item.title || item.requirementNumber)) return item;
-      }
-      if (bidRes.status === 'fulfilled' && bidRes.value) {
-        return bidRes.value;
+        if (item && (item.id || item.title || item.requirementNumber)) {
+          const matches =
+            !requestId ||
+            String(item.id) === String(requestId) ||
+            String(item.requirementNumber || '').toLowerCase() === String(requestId).toLowerCase() ||
+            String(item.bidNumber || '').toLowerCase() === String(requestId).toLowerCase();
+          if (matches) return item;
+        }
       }
       if (reqRes.status === 'fulfilled' && reqRes.value) {
         const val: any = reqRes.value;
-        return val?.data || val;
+        const item = val?.data || val;
+        if (item && (item.id || item.title || item.requirementNumber)) {
+          return item;
+        }
       }
       return null;
     },

@@ -762,8 +762,9 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         isEmdRequired={rcData.isEmdRequired}
         backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rate-contracts"}
         backRouteLabel={isBuyerOrAdmin ? "My Procurements" : "Rate Contract Opportunities"}
-        submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (isRateQuotationSubmitted ? 'View Rate Proposal' : 'Submit Rate Quote')}
+        submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (isRateQuotationSubmitted ? 'Rate Quotation Submitted' : 'Submit Rate Quote')}
         onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : handleSubmitQuotation}
+        onViewQuotationClick={isRateQuotationSubmitted ? handleSubmitQuotation : undefined}
         onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
         cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Rate Contract' : 'Cancel Rate Contract'}
         clarificationKind={requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'quote-request'}

@@ -163,3 +163,74 @@ export function parseQuoteRequestItems(subject?: string, message?: string): Pars
 
   return [];
 }
+
+// Recognized standard Units of Measure
+const COMMON_UOMS = [
+  'nos', 'no', 'pcs', 'pc', 'piece', 'pieces',
+  'kg', 'kgs', 'kilogram', 'kilograms', 'gm', 'gms', 'gram', 'grams',
+  'ton', 'tons', 'tonne', 'tonnes', 'mt',
+  'meter', 'meters', 'mtr', 'mtrs', 'm', 'cm', 'mm', 'km',
+  'sqm', 'sqft', 'sqft.', 'sqmt', 'sq.m', 'sq.ft',
+  'cum', 'cu.m', 'cbm',
+  'liter', 'liters', 'litre', 'litres', 'ltr', 'ltrs', 'l', 'ml',
+  'set', 'sets', 'box', 'boxes', 'pack', 'packs', 'packet', 'packets',
+  'unit', 'units', 'lot', 'lots', 'job', 'jobs', 'pair', 'pairs',
+  'bag', 'bags', 'bundle', 'bundles', 'roll', 'rolls', 'drum', 'drums',
+  'barrel', 'barrels', 'can', 'cans', 'bottle', 'bottles', 'sheet', 'sheets',
+  'hour', 'hours', 'day', 'days', 'month', 'months', 'year', 'years'
+];
+
+/**
+ * Sanitize a Unit of Measure string.
+ * If the value is a full sentence, excessively long (>18 chars), or contains
+ * punctuation / multiple sentences, extracts a recognized unit or safely falls back to 'Nos'.
+ */
+export function sanitizeUom(raw?: any, fallback = 'Nos'): string {
+  if (raw === null || raw === undefined) return fallback;
+  const str = String(raw).trim();
+  if (!str || str === '-' || str.toLowerCase() === 'n/a') return fallback;
+
+  // If reasonably short (<= 14 chars) without sentence punctuation or excessive words
+  if (str.length <= 14 && !str.includes(';') && !str.includes(':') && str.split(/\s+/).length <= 2) {
+    return str.replace(/[,;:]+$/, '').trim() || fallback;
+  }
+
+  // Check if any recognized UOM appears as a standalone word at the start or end
+  const words = str.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  for (const word of words) {
+    if (COMMON_UOMS.includes(word)) {
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    }
+  }
+
+  // If string is longer than 18 characters and no recognized UOM was found, it's invalid data/description
+  if (str.length > 18) {
+    return fallback;
+  }
+
+  return str.slice(0, 10).trim() || fallback;
+}
+
+/**
+ * Sanitize an HSN / SAC Code.
+ * Valid Indian HSN/SAC codes are strictly 2 to 8 digits (or occasionally up to 10 alphanumeric chars).
+ * If a value is longer than 15 characters, contains spaces, sentences, or description text,
+ * it is rejected and returns '-' to prevent multi-line vertical layout blowouts.
+ */
+export function sanitizeHsn(raw?: any, fallback = '-'): string {
+  if (raw === null || raw === undefined) return fallback;
+  const str = String(raw).trim();
+  if (!str || str === '-' || str.toLowerCase() === 'n/a' || str.toLowerCase() === 'none') {
+    return fallback;
+  }
+
+  // If text contains sentences, spaces, or is longer than 15 characters, it's definitely not an HSN code
+  if (str.length > 15 || str.includes(' ') || str.includes('\n') || str.includes(';') || str.includes('.')) {
+    const match = str.match(/\b\d{4,8}\b/);
+    if (match) return match[0];
+    return fallback;
+  }
+
+  const cleaned = str.replace(/[^a-zA-Z0-9-]/g, '');
+  return cleaned.length >= 2 ? cleaned : fallback;
+}

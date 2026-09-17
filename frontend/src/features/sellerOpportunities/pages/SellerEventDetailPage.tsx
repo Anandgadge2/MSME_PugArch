@@ -208,9 +208,9 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       emdAmount={bid.emdAmount}
       isEmdRequired={bid.isEmdRequired}
       backRoute="/seller/procurement/events"
-      backRouteLabel="Bids & Tenders"
-      submitButtonLabel={isSubmitted ? 'View Proposal' : 'Submit Proposal'}
+      submitButtonLabel={isSubmitted ? 'Proposal Submitted' : 'Submit Proposal'}
       onSubmitClick={() => router.push(`/bids/${bid.id}/participate`)}
+      onViewQuotationClick={isSubmitted ? () => router.push(`/bids/${bid.id}/participate`) : undefined}
     />
   );
 }

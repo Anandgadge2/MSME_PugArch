@@ -215,7 +215,11 @@ const ALL_MENU_PATHS = [
 const isSidebarRouteActive = (targetPath: string | undefined, pathname?: string | null, currentPathWithQuery?: string) => {
   if (!targetPath || !pathname) return false;
   const [targetBase] = targetPath.split('?');
-  if (targetPath.includes('?')) return currentPathWithQuery === targetPath;
+  if (targetPath.includes('?')) {
+    if (currentPathWithQuery === targetPath) return true;
+    if (targetBase === '/seller/procurement/events' && pathname === targetBase) return true;
+    return false;
+  }
   if (targetBase === '/orders') return pathname === '/orders' || pathname === '/seller/orders' || pathname === '/buyer/orders';
 
   // Prevent parent routes (e.g. /buyer/procurement) from matching active when a distinct sub-item menu path is current

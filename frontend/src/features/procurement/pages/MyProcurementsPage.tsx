@@ -520,20 +520,22 @@ export default function MyProcurementsPage() {
       route = auctionId ? sellerRoutes.detail('REVERSE_AUCTION', auctionId) : null;
     } else if (typeLower === 'bid_tender') {
       const consolidated = getConsolidatedType(p);
+      const targetId = encodeURIComponent(p.referenceNumber || p.id);
       if (consolidated === 'OpenTender' || consolidated === 'Limited Tender') {
         route = `/tenders?tender=${p.id}`;
       } else if (consolidated === 'RFQ' || methodLower === 'rfq') {
-        route = `/bids/${p.id}?type=RFQ`;
+        route = `/bids/${targetId}?type=RFQ`;
       } else if (consolidated === 'RFP' || methodLower === 'rfp') {
-        route = `/bids/${p.id}?type=RFP`;
+        route = `/bids/${targetId}?type=RFP`;
       } else {
-        route = `/bids/${p.id}`;
+        route = `/bids/${targetId}`;
       }
     } else if (typeLower === 'requirement') {
+      const targetId = encodeURIComponent(p.referenceNumber || p.id);
       if (methodLower === 'rfp') {
-        route = `/buyer/rfp/detail?requirementId=${p.id}`;
+        route = `/buyer/rfp/detail?requirementId=${targetId}`;
       } else {
-        route = `/buyer/rfq/detail?requirementId=${p.id}`;
+        route = `/buyer/rfq/detail?requirementId=${targetId}`;
       }
     }
 

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { sellerRoutes } from '@/lib/routes';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -396,6 +396,7 @@ function CountdownTimer({ endDate }: { endDate?: string }) {
 }
 
 export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRouteType?: OpportunityType | '' }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -687,11 +688,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         } else if (method === 'RFP' || opportunityType === 'RFP') {
           href = sellerRoutes.detail('RFP', bid.id);
           detailsHref = sellerRoutes.detail('RFP', bid.id);
-          actionLabel = 'Submit Proposal';
+          actionLabel = bid.participated ? 'Track Status' : 'Submit Proposal';
         } else {
-          href = sellerRoutes.detail('RFQ', bid.id);
+          href = bid.participated ? sellerRoutes.respond('RFQ', bid.id) : sellerRoutes.detail('RFQ', bid.id);
           detailsHref = sellerRoutes.detail('RFQ', bid.id);
-          actionLabel = 'Submit Quote';
+          actionLabel = bid.participated ? 'View Quotation' : 'Submit Quote';
         }
 
         const opportunity: SellerOpportunity = {
@@ -1332,16 +1333,23 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       sortKey: 'type',
       width: 'w-[10.5%]',
       cell: (item) => (
-        <span className={cn(
-          "inline-flex items-center rounded-md px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider border whitespace-nowrap shrink-0",
-          item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
-          item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
-          item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
-          item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
-          "border-amber-200 bg-amber-50 text-amber-600"
-        )}>
-          {item.type}
-        </span>
+        <div className="flex flex-col gap-1 items-start">
+          <span className={cn(
+            "inline-flex items-center rounded-md px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider border whitespace-nowrap shrink-0",
+            item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
+            item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
+            item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
+            item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
+            "border-amber-200 bg-amber-50 text-amber-600"
+          )}>
+            {item.type}
+          </span>
+          {isParticipatedOpportunity(item) && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-emerald-800 shrink-0">
+              <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" /> Submitted
+            </span>
+          )}
+        </div>
       )
     },
     {
@@ -1516,7 +1524,17 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       cellClassName: 'text-right',
       headerClassName: 'text-right',
       cell: (item) => (
-        <div className="flex items-center justify-end whitespace-nowrap">
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          {isParticipatedOpportunity(item) && (
+            <Link
+              href={item.href}
+              className="inline-flex h-8 items-center justify-center rounded-lg bg-emerald-700 px-2.5 text-center text-xs font-bold text-white shadow-xs hover:bg-emerald-800 active:scale-95 transition-all duration-200 shrink-0"
+              title="View your submitted quotation / response"
+            >
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              <span>Quote</span>
+            </Link>
+          )}
           <Link
             href={item.detailsHref}
             className="inline-flex h-8 items-center justify-center rounded-lg bg-[#12335f] px-3 text-center text-xs font-bold text-white shadow-xs hover:bg-[#0b2445] active:scale-95 transition-all duration-200 shrink-0"
@@ -1588,6 +1606,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const typeCounts = useMemo(() => {
     const counts: Record<string, number> = {
       all: 0,
+      participated: 0,
       RFQ: 0,
       'Open Tender': 0,
       RFP: 0,
@@ -1597,6 +1616,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     };
 
     items.forEach(item => {
+      if (isParticipatedOpportunity(item)) {
+        counts.participated++;
+      }
       if (isOpenOpportunity(item, nowMs)) {
         counts.all++;
         if (item.type && counts[item.type] !== undefined) {
@@ -1626,53 +1648,45 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-black text-slate-950 tracking-tight">{headerContent.title}</h1>
-          <p className="text-xs font-semibold text-slate-500 mt-0.5">{headerContent.desc}</p>
+          <p className="text-xs text-slate-500 mt-1">{headerContent.desc}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Button
-            type="button"
             variant="outline"
+            size="sm"
             onClick={handleRefresh}
-            disabled={refreshing || loading}
-            className="h-10 rounded-xl border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-900 transition-all flex items-center shrink-0 cursor-pointer"
-            aria-label="Refresh opportunities"
+            disabled={loading}
+            className="rounded-xl border-slate-200 hover:bg-slate-50 h-9 font-bold text-xs"
           >
-            <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", (refreshing || loading) && "animate-spin")} />
-            {refreshing ? 'Refreshing...' : 'Refresh'}
+            <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", loading && "animate-spin")} />
+            Refresh
           </Button>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
+      {/* ── KPI Stat Cards ── */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          label="Live Opportunity Pool"
+          label="Live Opportunities"
           value={kpis.live}
-          subtext={
-            kpis.liveValue > 0
-              ? (kpis.confidentialLive > 0 ? `${formatCurrency(kpis.liveValue)} disclosed (${kpis.confidentialLive} sealed)` : `${formatCurrency(kpis.liveValue)} total value`)
-              : (kpis.confidentialLive > 0 ? `${kpis.confidentialLive} sealed competitive bids` : '₹0 total value')
-          }
-          icon={IndianRupee}
+          subtext="Available for quotation"
+          icon={Globe}
           tone="blue"
           active={kpiFilter === 'live'}
           onClick={() => setKpiFilter(kpiFilter === 'live' ? 'all' : 'live')}
         />
         <KpiCard
-          label="Closing in ≤7 Days"
+          label="Closing Soon (≤7d)"
           value={kpis.closingSoon}
-          subtext={
-            kpis.closingSoonValue > 0
-              ? (kpis.confidentialClosingSoon > 0 ? `${formatCurrency(kpis.closingSoonValue)} expiring soon (${kpis.confidentialClosingSoon} sealed)` : `${formatCurrency(kpis.closingSoonValue)} expiring soon`)
-              : (kpis.confidentialClosingSoon > 0 ? `${kpis.confidentialClosingSoon} sealed bids closing` : 'Expiring within 7 days')
-          }
+          subtext="Urgent response needed"
           icon={Clock}
           tone="red"
           active={kpiFilter === 'dueSoon'}
           onClick={() => setKpiFilter(kpiFilter === 'dueSoon' ? 'all' : 'dueSoon')}
         />
         <KpiCard
-          label="High-Value Tenders (≥₹25L)"
+          label="High-Value Tenders"
           value={kpis.highValueCount}
           subtext={
             kpis.highValueCount > 0
@@ -1685,13 +1699,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           onClick={() => setKpiFilter(kpiFilter === 'highValue' ? 'all' : 'highValue')}
         />
         <KpiCard
-          label="My Active Submissions"
+          label="My Submissions (Bids)"
           value={kpis.participated}
-          subtext={`${kpis.evaluation} awaiting award decision`}
+          subtext="View tracking in My Bids →"
           icon={CheckCircle2}
           tone="indigo"
-          active={kpiFilter === 'participated'}
-          onClick={() => setKpiFilter(kpiFilter === 'participated' ? 'all' : 'participated')}
+          active={false}
+          onClick={() => router.push('/seller/bids/submitted')}
         />
       </div>
 
@@ -1709,7 +1723,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               role="tab"
               aria-selected={isActive}
               onClick={() => {
-                setType(tab.typeVal);
+                setType(tab.typeVal as any);
                 setPage(1);
               }}
               className={cn(
@@ -1903,6 +1917,70 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         />
       </div>
 
+      {/* ── Active Filter Badges Bar ── */}
+      {(kpiFilter !== 'all' || status || type || category || buyerFilter || location || startDate || endDate || query) && (
+        <div className="flex flex-wrap items-center gap-2 px-1 -mt-2">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Filters:</span>
+          {kpiFilter === 'participated' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-900 shadow-xs">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Participated ({kpis.participated})</span>
+              <button
+                type="button"
+                onClick={() => setKpiFilter('all')}
+                className="ml-1 rounded-full p-0.5 text-emerald-600 hover:bg-emerald-200/60 hover:text-emerald-950 transition-colors cursor-pointer"
+                aria-label="Remove Participated filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          {kpiFilter === 'live' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black text-blue-900 shadow-xs">
+              <span>Live Opportunities ({kpis.live})</span>
+              <button type="button" onClick={() => setKpiFilter('all')} className="ml-1 rounded-full p-0.5 text-blue-600 hover:bg-blue-200/60 transition-colors cursor-pointer" aria-label="Remove Live filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {kpiFilter === 'dueSoon' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-black text-rose-900 shadow-xs">
+              <span>Closing Soon ({kpis.closingSoon})</span>
+              <button type="button" onClick={() => setKpiFilter('all')} className="ml-1 rounded-full p-0.5 text-rose-600 hover:bg-rose-200/60 transition-colors cursor-pointer" aria-label="Remove Closing Soon filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {kpiFilter === 'highValue' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-black text-purple-900 shadow-xs">
+              <span>High Value (≥₹25L) ({kpis.highValueCount})</span>
+              <button type="button" onClick={() => setKpiFilter('all')} className="ml-1 rounded-full p-0.5 text-purple-600 hover:bg-purple-200/60 transition-colors cursor-pointer" aria-label="Remove High Value filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {status && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 shadow-xs">
+              <span>Status: {status === 'PARTICIPATED' ? 'Participated' : status}</span>
+              <button type="button" onClick={() => setStatus('')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Remove Status filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {type && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 shadow-xs">
+              <span>Type: {type}</span>
+              <button type="button" onClick={() => setType('')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Remove Type filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {query && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 shadow-xs">
+              <span>Search: &quot;{query}&quot;</span>
+              <button type="button" onClick={() => setQuery('')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Remove Query filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={reset}
+            className="text-xs font-extrabold text-rose-600 hover:text-rose-800 hover:underline transition-colors ml-1 cursor-pointer"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
       {/* Main Content Area */}
       {loading ? (
         <div className="space-y-4">
@@ -1941,16 +2019,23 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                     <div className="space-y-3">
                       {/* Top row: Badges */}
                       <div className="flex items-center justify-between">
-                        <span className={cn(
-                          "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
-                          item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
-                          item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
-                          item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
-                          item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
-                          "border-amber-200 bg-amber-50 text-amber-600"
-                        )}>
-                          {item.type}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={cn(
+                            "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                            item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
+                            item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
+                            item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
+                            item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
+                            "border-amber-200 bg-amber-50 text-amber-600"
+                          )}>
+                            {item.type}
+                          </span>
+                          {isParticipatedOpportunity(item) && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800 shadow-2xs">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Participated
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Title */}

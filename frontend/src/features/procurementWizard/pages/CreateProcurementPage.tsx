@@ -6052,7 +6052,7 @@ function ScheduleStepForm({
                       <input value={item.specification} onChange={e => updateRateItem(item.id, 'specification', e.target.value)} className={inputClass} />
                     </Field>
                     <Field label="UOM" required>
-                      <input value={item.uom} onChange={e => updateRateItem(item.id, 'uom', e.target.value)} className={inputClass} />
+                      <input value={item.uom} onChange={e => updateRateItem(item.id, 'uom', e.target.value)} maxLength={20} placeholder="Nos, Kg, Sets..." className={inputClass} />
                     </Field>
                     <Field label="Estimated Annual Quantity" required>
                       <input type="number" min={0} value={item.estimatedAnnualQuantity || ''} onChange={e => updateRateItem(item.id, 'estimatedAnnualQuantity', Number(e.target.value || 0))} className={inputClass} />
@@ -6390,15 +6390,7 @@ function ScheduleStepForm({
                   </>
                 )}
 
-                {/* Follow-on auction: informational banner about SAP Ariba pattern */}
-                {!isReverseAuctionMethod(draft.type) && (
-                  <div className="sm:col-span-2 flex items-center gap-2.5 p-3 rounded-xl bg-blue-50 border border-blue-200 text-[11px] text-blue-900 font-semibold">
-                    <svg className="h-4 w-4 shrink-0 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                    <span>
-                      <strong>Follow-on Auction (SAP Ariba Pattern):</strong> The live auction start time and duration will be configured when you launch Stage 2 from the &quot;Proposals&quot; tab — after evaluating sealed bids. The auction ceiling will automatically lock to the lowest qualified bid (L1).
-                    </span>
-                  </div>
-                )}
+              
 
                 <Field label="Auction Trigger Eligibility" required>
                   <select
@@ -7344,7 +7336,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
         itemName: item.description,
         description: item.remarks || item.description || '',
         quantity: item.quantity,
-        unitOfMeasure: (item.uom || 'Nos').trim().slice(0, 120),
+        unitOfMeasure: (item.uom || 'Nos').trim().slice(0, 20),
         estimatedUnitPrice: item.estimatedRate,
         specifications: {
           itemType: 'Product',
@@ -7362,7 +7354,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
           itemName: item.name,
           description: descText,
           quantity: item.quantity,
-          unitOfMeasure: (item.unit || 'Nos').trim().slice(0, 120),
+          unitOfMeasure: (item.unit || 'Nos').trim().slice(0, 20),
           estimatedUnitPrice: Number(item.unitPrice || 0),
           specifications: {
             itemType: item.itemType || 'Product',
@@ -7505,7 +7497,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
       : draft.vendors.invitedSellers.map(supplierId => ({ supplierId })),
     itemRateSchedule: draft.rateContractConfig.itemRateSchedule.map(item => ({
       ...item,
-      uom: (item.uom || 'Nos').trim().slice(0, 120),
+      uom: (item.uom || 'Nos').trim().slice(0, 20),
       slabPricing: item.slabPricingEnabled ? item.slabPricing : []
     })),
   } : null;

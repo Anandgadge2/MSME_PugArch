@@ -3169,10 +3169,25 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                 select: { id: true, status: true, offeredPrice: true, offeredQuantity: true, deliveryTimeline: true, message: true, attachmentUrl: true, terms: true, responseData: true }
             });
 
-            // Revisions are strictly blocked unless buyer explicitly requested a revision (status REVISION_REQUESTED)
-            const isExplicitRevisionAllowed = existing?.status === 'REVISION_REQUESTED' || requirement.status === 'REVISION_REQUESTED';
+            // Revisions are allowed if buyer requested a revision OR if the procurement explicitly permits revisions before deadline
+            const reqPayload = (requirement.payload || {}) as any;
+            const isDeadlinePassed = requirement.lastDate ? new Date(requirement.lastDate).getTime() < Date.now() : false;
+            const allowsRevisions = Boolean(
+                requirement.allowRevision ||
+                reqPayload.schedule?.allowRevision ||
+                reqPayload.rules?.allowRevision ||
+                reqPayload.schedule?.rebidsAllowed
+            );
+
+            const isExplicitRevisionAllowed = existing?.status === 'REVISION_REQUESTED' || 
+                requirement.status === 'REVISION_REQUESTED' || 
+                (allowsRevisions && !isDeadlinePassed && ['SUBMITTED', 'UNDER_REVIEW'].includes(existing?.status || ''));
 
             if (existing && !isExplicitRevisionAllowed) {
+                // If an existing submitted quotation exists, treat background draft saves as a no-op returning existing record
+                if (body.status === 'DRAFT') {
+                    return existing;
+                }
                 throw new Error('REQUIREMENT_RESPONSE_EXISTS');
             }
 
@@ -3261,8 +3276,12 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
 
 router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
     try {
-        const rawToken = String(req.params.id || '');
-        const parsedNum = Number(rawToken.replace(/^(REQ-|RFQ-|RC-|RATE-|TND-)/i, '')) || Number(rawToken);
+        const rawToken = String(req.params.id || '').trim();
+        const pureNum = Number(rawToken);
+        const absNum = Math.abs(pureNum);
+        const trailingMatch = rawToken.match(/\d+/g);
+        const lastNum = trailingMatch ? Number(trailingMatch[trailingMatch.length - 1]) : 0;
+        const parsedNum = (!isNaN(pureNum) && absNum > 0) ? absNum : lastNum;
         const id = (parsedNum > 0 && parsedNum <= 2147483647) ? parsedNum : 0;
         if (!id && !rawToken) return apiResponse.error(res, 400, 'Invalid requirement ID', 'INVALID_ID');
 
@@ -3272,6 +3291,7 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
         const skip = (page - 1) * pageSize;
         const candidateNumbers = Array.from(new Set([
             rawToken,
+            rawToken.replace(/^[A-Z]{2,5}-/i, ''),
             `REQ-${id}`, `RFQ-${id}`, `RC-${id}`, `RATE-${id}`, `TND-${id}`, `TENDER-${id}`,
             `REQ_${id}`, `RFQ_${id}`, `RC_${id}`
         ].filter(Boolean) as string[]));
@@ -3279,16 +3299,16 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
 
         const [linkedBuyerReq, linkedLegacyReq, linkedBid] = await Promise.all([
             db.buyerRequirement.findFirst({
-                where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []) ] },
-                select: { id: true, requirementNumber: true, title: true, createdById: true, buyerOrganizationId: true }
+                where: candidateIds.length ? { id: { in: candidateIds } } : { id: -1 },
+                select: { id: true, title: true, createdById: true, buyerOrganizationId: true, status: true, lastDate: true }
             }).catch(() => null),
             db.requirement.findFirst({
                 where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []) ] },
-                select: { id: true, requirementNumber: true, title: true, createdById: true, organizationId: true, buyerId: true }
+                select: { id: true, requirementNumber: true, title: true, buyerId: true, organizationId: true, status: true }
             }).catch(() => null),
             db.procurementBid.findFirst({
-                where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ bidNumber: { in: candidateNumbers } }] : []), ...(candidateNumbers.length ? [{ referenceNumber: { in: candidateNumbers } }] : []) ] },
-                select: { id: true, sourceId: true, bidNumber: true, title: true, buyerId: true, createdById: true, organizationId: true }
+                where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ bidNumber: { in: candidateNumbers } }] : []) ] },
+                select: { id: true, bidNumber: true, title: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true, status: true }
             }).catch(() => null)
         ]);
 
@@ -3302,33 +3322,46 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
             const userOrgId = req.user.organizationId ? Number(req.user.organizationId) : null;
             const isOwner = (
                 (linkedBuyerReq && (linkedBuyerReq.createdById === userId || (userOrgId && linkedBuyerReq.buyerOrganizationId === userOrgId))) ||
-                (linkedLegacyReq && (linkedLegacyReq.createdById === userId || linkedLegacyReq.buyerId === userId || (userOrgId && linkedLegacyReq.organizationId === userOrgId))) ||
-                (linkedBid && (linkedBid.createdById === userId || linkedBid.buyerId === userId || (userOrgId && linkedBid.organizationId === userOrgId)))
+                (linkedLegacyReq && (linkedLegacyReq.buyerId === userId || (userOrgId && linkedLegacyReq.organizationId === userOrgId))) ||
+                (linkedBid && (linkedBid.buyerId === userId || (userOrgId && linkedBid.buyerOrganizationId === userOrgId)))
             );
             if (!isOwner) {
                 return apiResponse.error(res, 403, 'You do not have permission to view responses for this requirement.', 'FORBIDDEN');
             }
         }
 
+        const targetTitles = Array.from(new Set([linkedBuyerReq?.title, linkedLegacyReq?.title, linkedBid?.title].filter(Boolean) as string[]));
+        const targetBuyerIds = Array.from(new Set([linkedBuyerReq?.createdById, linkedLegacyReq?.buyerId, linkedBid?.buyerId].filter(Boolean) as number[]));
+        const targetBuyerOrgIds = Array.from(new Set([linkedBuyerReq?.buyerOrganizationId, linkedLegacyReq?.organizationId, linkedBid?.buyerOrganizationId].filter(Boolean) as number[]));
+
+        const matchingModernReqs = targetTitles.length > 0 ? await db.buyerRequirement.findMany({
+            where: {
+                OR: [
+                    ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []),
+                    {
+                        title: { in: targetTitles },
+                        OR: [
+                            ...(targetBuyerIds.length ? [{ createdById: { in: targetBuyerIds } }] : []),
+                            ...(targetBuyerOrgIds.length ? [{ buyerOrganizationId: { in: targetBuyerOrgIds } }] : [])
+                        ]
+                    }
+                ]
+            },
+            select: { id: true }
+        }).catch(() => []) : [];
+
         const allTargetReqIds = Array.from(new Set([
+            ...matchingModernReqs.map(r => r.id),
             linkedBuyerReq?.id,
             linkedLegacyReq?.id,
-            (linkedBid?.sourceModel === 'REQUIREMENT' || linkedBid?.sourceModel === 'BUYER_REQUIREMENT') && linkedBid?.sourceId ? Number(linkedBid.sourceId) : null,
             Number((linkedBid?.technicalPacket as any)?.sourceRequirementId || (linkedBid?.technicalPacket as any)?.requirementId || 0) || null,
-            (!linkedBid && candidateIds.length) ? candidateIds[0] : null
+            candidateIds[0]
         ].filter(Boolean) as number[]));
 
         const allTargetBidIds = Array.from(new Set([
             linkedBid?.id,
             (candidateIds.length && linkedBid) ? candidateIds[0] : null
         ].filter(Boolean) as number[]));
-
-        const allTargetReqNumbers = Array.from(new Set([
-            ...candidateNumbers,
-            linkedBuyerReq?.requirementNumber,
-            linkedLegacyReq?.requirementNumber,
-            linkedBid?.bidNumber
-        ].filter(Boolean) as string[]));
 
         const nonDraftFilter = {
             status: { not: 'DRAFT' }
@@ -3337,10 +3370,7 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
         let [responses, total] = await Promise.all([
             db.requirementResponse.findMany({
                 where: {
-                    OR: [
-                        { requirementId: { in: allTargetReqIds } },
-                        { requirement: { requirementNumber: { in: allTargetReqNumbers } } }
-                    ],
+                    requirementId: { in: allTargetReqIds },
                     ...nonDraftFilter
                 },
                 orderBy: { createdAt: 'desc' },
@@ -3350,10 +3380,7 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
             }).catch(() => []),
             db.requirementResponse.count({
                 where: {
-                    OR: [
-                        { requirementId: { in: allTargetReqIds } },
-                        { requirement: { requirementNumber: { in: allTargetReqNumbers } } }
-                    ],
+                    requirementId: { in: allTargetReqIds },
                     ...nonDraftFilter
                 }
             }).catch(() => 0)
@@ -3426,35 +3453,42 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
 
 router.post('/buyer/requirements/:id/responses/:responseId/accept', authenticate, authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
     try {
-        const id = Number(req.params.id);
+        const rawToken = String(req.params.id || '').trim();
+        const pureNum = Number(rawToken);
+        const absNum = Math.abs(pureNum);
+        const trailingMatch = rawToken.match(/\d+/g);
+        const lastNum = trailingMatch ? Number(trailingMatch[trailingMatch.length - 1]) : 0;
+        const parsedNum = (!isNaN(pureNum) && absNum > 0) ? absNum : lastNum;
+        const id = (parsedNum > 0 && parsedNum <= 2147483647) ? parsedNum : 0;
         const responseId = Number(req.params.responseId);
         
-        if (!id || id < 1 || !responseId || responseId < 1) {
+        if ((!id && !rawToken) || !responseId || responseId < 1) {
             return apiResponse.error(res, 400, 'Invalid IDs', 'INVALID_ID');
         }
 
         const isPrivileged = req.user?.role === 'admin' || req.user?.role === 'master_admin';
-        const ownershipFilters: any[] = [{ createdById: Number(req.user?.id) }];
-        if (req.user?.organizationId) ownershipFilters.push({ buyerOrganizationId: req.user.organizationId });
-
-        const requirement = await db.buyerRequirement.findFirst({
-            where: {
-                id,
-                ...(isPrivileged ? {} : { OR: ownershipFilters }),
-                status: { in: ['OPEN', 'PUBLISHED', 'CLOSED'] }
-            }
-        });
-
-        if (!requirement) {
-            return apiResponse.error(res, 404, 'Requirement not found or not in an awardable state', 'REQUIREMENT_NOT_AWARDABLE');
-        }
 
         const targetResponse = await db.requirementResponse.findFirst({
-            where: { id: responseId, requirementId: id }
+            where: { id: responseId },
+            include: { requirement: true }
         });
 
         if (!targetResponse) {
             return apiResponse.error(res, 404, 'Response not found', 'RESPONSE_NOT_FOUND');
+        }
+
+        const requirement = targetResponse.requirement;
+        if (!requirement) {
+            return apiResponse.error(res, 404, 'Requirement not found or not in an awardable state', 'REQUIREMENT_NOT_AWARDABLE');
+        }
+
+        if (!isPrivileged) {
+            const userId = Number(req.user?.id);
+            const userOrgId = req.user?.organizationId ? Number(req.user.organizationId) : null;
+            const isOwner = requirement.createdById === userId || (userOrgId && requirement.buyerOrganizationId === userOrgId);
+            if (!isOwner) {
+                return apiResponse.error(res, 403, 'You do not have permission to accept this quotation.', 'FORBIDDEN');
+            }
         }
 
         let createdPoId: number | undefined;
@@ -3467,13 +3501,13 @@ router.post('/buyer/requirements/:id/responses/:responseId/accept', authenticate
             
             // Reject all other responses
             await tx.requirementResponse.updateMany({
-                where: { requirementId: id, id: { not: responseId } },
+                where: { requirementId: targetResponse.requirementId, id: { not: responseId } },
                 data: { status: 'REJECTED' }
             });
 
             // Update requirement status to AWARDED
             await tx.buyerRequirement.update({
-                where: { id },
+                where: { id: targetResponse.requirementId },
                 data: { status: 'AWARDED' }
             });
 

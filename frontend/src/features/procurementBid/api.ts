@@ -458,8 +458,9 @@ export const normalizeBid = (raw: any): ProcurementBid => {
       })();
 
       return Boolean(
-        raw.myParticipation ||
+        raw.participated ||
         raw.hasParticipated ||
+        raw.myParticipation ||
         (currentUserId && participations.some((p: any) => {
           const sId = p.sellerId || p.sellerUserId || p.seller?.id;
           const sOrg = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId;

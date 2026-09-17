@@ -23,6 +23,7 @@ import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
+import { sanitizeUom, sanitizeHsn } from '../utils/quoteItemParser';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    UTILITY HELPERS
@@ -187,19 +188,25 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   } else if (explicitRequestId) {
     requestId = explicitRequestId;
   } else if (rawIdParam) {
-    if (pathname.includes('/buyer') || pathname.includes('/requirement')) {
+    if (String(rawIdParam).toUpperCase().startsWith('REQ-')) {
       requirementId = rawIdParam;
     } else {
       requestId = rawIdParam;
+      if (pathname.includes('/buyer') || pathname.includes('/requirement')) {
+        requirementId = rawIdParam;
+      }
     }
   } else if (pathnameId) {
-    if (pathname.includes('/buyer') || pathname.includes('/requirement')) {
+    if (String(pathnameId).toUpperCase().startsWith('REQ-')) {
       requirementId = pathnameId;
     } else {
       requestId = pathnameId;
+      if (pathname.includes('/buyer') || pathname.includes('/requirement')) {
+        requirementId = pathnameId;
+      }
     }
   } else if (initialData) {
-    if (initialData.sourceModel === 'REQUIREMENT' || initialData.requirementNumber || (!initialData.bidNumber && initialData.requirementId)) {
+    if (initialData.sourceModel === 'REQUIREMENT' || (!initialData.bidNumber && initialData.requirementId)) {
       requirementId = String(initialData.requirementId || initialData.id || '');
     } else {
       requestId = String(initialData.bidNumber || initialData.id || '');
@@ -222,15 +229,15 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     queryKey: ['rfq-detail-bid', requestId],
     queryFn:  () => procurementBidApi.detail(requestId),
     enabled:  Boolean(requestId && (!explicitReqId || requestId !== explicitReqId)),
-    initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.sourceModel === 'PROCUREMENT_BID' || initialData?.bidNumber || initialData?.requirementNumber) ? initialData : undefined,
+    initialData: Boolean(requestId) && isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.sourceModel === 'PROCUREMENT_BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
   });
 
   const { data: reqData, isLoading: reqLoading } = useQuery({
     queryKey: ['rfq-detail-req', requirementId],
     queryFn:  async () => getApi<any>(`/api/marketplace/requirements/${requirementId}`),
-    enabled:  !!requirementId,
-    initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? (initialData.requirement || initialData) : undefined,
+    enabled:  Boolean(requirementId),
+    initialData: Boolean(requirementId) && isMatchingInitial && (initialData?.sourceModel === 'REQUIREMENT' || initialData?.requirementNumber?.startsWith('REQ-')) ? (initialData.requirement || initialData) : undefined,
     staleTime: 60_000,
   });
 
@@ -255,9 +262,12 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     staleTime: 60_000,
   });
 
-  const rawBid: any = bidData || initialData;
+  const rawBid: any = bidData || (initialData?.bidNumber || initialData?.sourceModel === 'BID' ? initialData : null);
   const reqObj: any = (reqData as any)?.requirement ?? reqData;
-  const preferReq = Boolean(explicitReqId || (reqObj && !explicitRequestId));
+
+  const rawBidMatches = Boolean(rawBid && (!activeId || String(rawBid.id) === String(activeId) || String(rawBid.bidNumber || '').toLowerCase() === String(activeId).toLowerCase()));
+  const reqObjMatches = Boolean(reqObj && (!activeId || String(reqObj.id) === String(activeId) || String(reqObj.requirementNumber || '').toLowerCase() === String(activeId).toLowerCase()));
+  const preferReq = Boolean(explicitReqId ? reqObjMatches : (!rawBidMatches && reqObjMatches));
 
   const ownParticipation: any = user?.role === 'seller'
     ? (() => {
@@ -341,7 +351,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   );
 
   const { data: buyerResponsesData } = useQuery({
-    queryKey: ['rfq-buyer-responses-v2', effectiveTargetId],
+    queryKey: ['rfq-buyer-responses-v2', effectiveTargetId, targetReqId, (rawBid as any)?.id],
     queryFn: async () => {
       if (!effectiveTargetId) return [];
 
@@ -353,31 +363,35 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         if (Array.isArray(res.participations)) return res.participations;
         if (Array.isArray(res.results)) return res.results;
         if (Array.isArray(res.items)) return res.items;
-        if (Array.isArray(res.data)) return extractArray(res.data);
+        if (res.data) return extractArray(res.data);
         return [];
       };
 
-      const endpoints = [
-        `/api/buyer/requirements/${encodeURIComponent(effectiveTargetId)}/responses?pageSize=50`,
-        `/api/buyer/procurement-bids/${encodeURIComponent(effectiveTargetId)}/participants`,
-        `/api/marketplace/requirements/${encodeURIComponent(effectiveTargetId)}/responses`,
-      ];
+      const trailingDigits = effectiveTargetId.match(/\d+/g);
+      const lastNumericPart = trailingDigits ? trailingDigits[trailingDigits.length - 1] : null;
+      const rawTargetReqId = targetReqId !== undefined && targetReqId !== null ? String(targetReqId) : null;
+      const absTargetReqId = rawTargetReqId && !isNaN(Number(rawTargetReqId)) && Number(rawTargetReqId) !== 0 ? String(Math.abs(Number(rawTargetReqId))) : null;
+      const rawBidId = (rawBid as any)?.id !== undefined && (rawBid as any)?.id !== null ? String((rawBid as any)?.id) : null;
 
-      for (const ep of endpoints) {
-        try {
-          const res = await getApi<any>(ep, true);
-          const items = extractArray(res);
-          if (items.length > 0) return items;
-        } catch {}
-      }
+      const candidateTokens = Array.from(new Set([
+        effectiveTargetId,
+        rawBidId,
+        (rawBid as any)?.bidNumber,
+        rawTargetReqId,
+        absTargetReqId,
+        requirementId ? String(requirementId) : null,
+        requestId,
+        lastNumericPart
+      ].filter(Boolean) as string[]));
 
-      const numMatch = effectiveTargetId.match(/\d+/);
-      if (numMatch && numMatch[0] !== effectiveTargetId) {
-        const numericStr = numMatch[0];
-        for (const ep of [
-          `/api/buyer/requirements/${encodeURIComponent(numericStr)}/responses?pageSize=50`,
-          `/api/buyer/procurement-bids/${encodeURIComponent(numericStr)}/participants`,
-        ]) {
+      for (const token of candidateTokens) {
+        const endpoints = [
+          `/api/buyer/requirements/${encodeURIComponent(token)}/responses?pageSize=50`,
+          `/api/buyer/procurement-bids/${encodeURIComponent(token)}/participants`,
+          `/api/marketplace/requirements/${encodeURIComponent(token)}/responses`,
+        ];
+
+        for (const ep of endpoints) {
           try {
             const res = await getApi<any>(ep, true);
             const items = extractArray(res);
@@ -787,8 +801,10 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
 
     const brandPref = it.brand_preference || it.brandPreference || it.brand || it.brandName || sp.brand_preference || sp.brandPreference || sp.brand || '';
     const brandFlex = it.brand_flexible || it.brandFlexible || sp.brand_flexible || sp.brandFlexible || 'Yes';
-    const hsn = it.hsn_sac_code || it.hsn || it.hsnSacCode || sp.hsn_sac_code || sp.hsn || sp.hsnCode || '';
+    const rawHsn = it.hsn_sac_code || it.hsn || it.hsnSacCode || sp.hsn_sac_code || sp.hsn || sp.hsnCode || '';
+    const hsn = sanitizeHsn(rawHsn);
     const itemType = it.itemType || sp.itemType || 'Product';
+    const cleanUom = sanitizeUom(it.unitOfMeasure || it.unit || sp.unit || 'Nos');
 
     return {
       ...it,
@@ -802,8 +818,8 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       specification: it.specification || it.description || sp.description || sp.specification || '',
       qty: Number(it.quantity || sp.quantity || 1),
       quantity: Number(it.quantity || sp.quantity || 1),
-      unit: it.unitOfMeasure || it.unit || sp.unit || 'Nos',
-      unitOfMeasure: it.unitOfMeasure || it.unit || sp.unit || 'Nos',
+      unit: cleanUom,
+      unitOfMeasure: cleanUom,
       price: estRate,
       estimatedUnitPrice: estRate,
       unitPrice: estRate,
@@ -832,7 +848,8 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     items.push({
       id: 'item-1', name: title, desc: desc || 'Primary procurement item',
       qty: Number(rawBid?.quantity || reqObj?.quantity || 1),
-      unit: rawBid?.unit || reqObj?.unit || 'Units',
+      unit: sanitizeUom(rawBid?.unit || reqObj?.unit || 'Nos'),
+      unitOfMeasure: sanitizeUom(rawBid?.unit || reqObj?.unit || 'Nos'),
       price: value ? Number(value) : undefined,
       gst: 18, brand: '', itemFiles: [],
     });
@@ -1117,8 +1134,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       emdAmount={emdRes?.emdAmount}
       isEmdRequired={emdRes?.isEmdRequired}
       backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rfqs"}
-      submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (submitted ? 'View Quotation' : 'Submit Quotation')}
+      submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (submitted ? 'Quotation Submitted' : 'Submit Quotation')}
       onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}
+      onViewQuotationClick={submitted ? handleSubmitQuotation : undefined}
       onDownloadClick={handleDownloadPdf}
       invoiceStatus={user?.role === 'seller' && isAwarded ? { 
         exists: Boolean(invoiceStatusData?.exists), 

@@ -948,7 +948,7 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       return subStatus !== 'DRAFT' && !p.isWithdrawn;
     }).length,
     participations: canSeeParticipants ? (bid.participations || []).filter((p: any) => {
-      if (isAdmin || isBuyerOwner) return true;
+      if (options.includeParticipants || isAdmin || isBuyerOwner) return true;
       if (actorRole === 'seller') {
         const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
         // During bidding and before financial evaluation, sellers must only see their own participation
@@ -960,9 +960,79 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       return false;
     }).map((p: any) => {
       const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
-      const allowFinancial = isAdmin || isBuyerOwner || isOwn || (canSeeFinancial && financialOpenStatuses.includes(bid.status));
+      const allowFinancial = options.includeFinancial || isAdmin || isBuyerOwner || isOwn || (canSeeFinancial && financialOpenStatuses.includes(bid.status));
       return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
     }) : undefined,
+    results: canSeeParticipants ? (bid.participations || [])
+      .filter((p: any) => {
+        if (options.includeParticipants || isAdmin || isBuyerOwner) return true;
+        if (actorRole === 'seller') {
+          const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
+          if (!financialOpenStatuses.includes(bid.status)) return isOwn;
+          return true;
+        }
+        return false;
+      })
+      .map((p: any) => {
+        const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
+        const allowFinancial = options.includeFinancial || isAdmin || isBuyerOwner || isOwn || (canSeeFinancial && financialOpenStatuses.includes(bid.status));
+        return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
+      })
+      .sort((a: any, b: any) => {
+        const priceA = Number(a.totalAmount || a.quotedAmount || 0);
+        const priceB = Number(b.totalAmount || b.quotedAmount || 0);
+        if (priceA > 0 && priceB > 0 && priceA !== priceB) return priceA - priceB;
+        if (priceA > 0 && priceB <= 0) return -1;
+        if (priceB > 0 && priceA <= 0) return 1;
+        return new Date(a.submittedAt || a.createdAt || 0).getTime() - new Date(b.submittedAt || b.createdAt || 0).getTime();
+      })
+      .map((p: any, idx: number) => {
+        const quotedAmt = Number(p.totalAmount || p.quotedAmount || 0);
+        const sellerOrg = p.sellerName || p.seller?.organization?.organizationName || p.seller?.name || 'Supplier';
+        const contactPerson = p.seller?.name || p.contactPerson || p.sellerName || 'Representative';
+        return {
+          id: p.id,
+          participationId: p.id,
+          sellerId: p.sellerId,
+          sellerName: sellerOrg,
+          contactPerson: contactPerson,
+          sellerEmail: p.sellerEmail || 'Not provided',
+          sellerMobile: p.sellerMobile || 'Not listed',
+          submittedAt: p.submittedAt || p.createdAt,
+          sellerType: 'Verified Supplier',
+          offeredItem: p.offeredItemDescription || 'Procurement requirement',
+          makeBrand: p.makeBrand || 'Standard',
+          model: p.model || 'Standard',
+          technicalStatus: p.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : 'Qualified',
+          totalPrice: quotedAmt,
+          quotedAmount: quotedAmt,
+          gstPercentage: Number(p.gstPercentage || 0),
+          totalAmount: quotedAmt,
+          offeredQuantity: p.offeredQuantity || 1,
+          deliveryTimeline: p.deliveryTimeline || 'Standard',
+          documents: p.documents || [],
+          lineItems: p.lineItems || [],
+          finalRank: `L${idx + 1}`,
+          resultStatus: 'Responsive',
+          details: {
+            organizationName: sellerOrg,
+            contactPerson: contactPerson,
+            email: p.sellerEmail || '',
+            mobile: p.sellerMobile || '',
+            submittedAt: p.submittedAt || p.createdAt,
+            deliveryTimeline: p.deliveryTimeline || 'Standard',
+            complianceRemarks: p.complianceRemarks || 'Compliant',
+            rfqNotes: p.rfqNotes || p.offeredItemDescription || '',
+            terms: p.terms || '',
+            message: p.offeredItemDescription || '',
+            quotedAmount: quotedAmt,
+            totalAmount: quotedAmt,
+            offeredQuantity: p.offeredQuantity || 1,
+            lineItems: p.lineItems || [],
+            documents: p.documents || [],
+          }
+        };
+      }) : undefined,
     clarifications: (isAdmin || isBuyerOwner)
       ? bid.clarifications
       : actor?.role === 'seller'
@@ -1452,7 +1522,10 @@ export const listPublicBids = async (query: any, actor?: any) => {
       include: {
         documents: true,
         buyerOrganization: true,
-        participations: { select: { id: true } },
+        participations: {
+          where: { isWithdrawn: false },
+          select: { id: true, sellerId: true, submissionStatus: true, seller: { select: { id: true, organizationId: true } } }
+        },
         awards: true,
         invitations: { select: { sellerOrgId: true, sellerUserId: true } },
         buyer: {
@@ -1508,26 +1581,43 @@ export const listPublicBids = async (query: any, actor?: any) => {
   ]);
 
   const items = [
-    ...bids.map((bid: any) => ({
-      ...serializeBid(bid),
-      sourceModel: 'PROCUREMENT_BID',
-      sourceId: bid.id,
-      // Emit whether THIS seller was explicitly invited (relational rows or legacy
-      // technicalPacket JSON). The invitations page filters on this flag.
-      isInvited: actorInviteIds.length > 0 && (
-        (bid.invitations || []).some((inv: any) =>
-          actorInviteIds.includes(Number(inv.sellerOrgId)) || actorInviteIds.includes(Number(inv.sellerUserId))
-        ) ||
-        (() => {
-          const tp: any = bid.technicalPacket;
-          const embedded = [
-            ...(Array.isArray(tp?.vendors?.invitedSellers) ? tp.vendors.invitedSellers : []),
-            ...(Array.isArray(tp?.qualifiedVendors) ? tp.qualifiedVendors : [])
-          ].map(Number);
-          return embedded.some(v => actorInviteIds.includes(v));
-        })()
-      )
-    })),
+    ...bids.map((bid: any) => {
+      const isSeller = actor?.role === 'seller';
+      const currentActorId = actor?.id ? Number(actor.id) : null;
+      const currentOrgId = actor?.organizationId ? Number(actor.organizationId) : null;
+      const hasParticipated = isSeller && Boolean(
+        bid.participations && Array.isArray(bid.participations) && (
+          bid.participations.some((p: any) => {
+            const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+            const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || 0);
+            return (currentActorId && pSellerId === currentActorId) || (currentOrgId && pOrgId === currentOrgId);
+          })
+        )
+      );
+
+      return {
+        ...serializeBid(bid, { actor, includeParticipants: isSeller }),
+        sourceModel: 'PROCUREMENT_BID',
+        sourceId: bid.id,
+        participated: hasParticipated,
+        hasParticipated,
+        // Emit whether THIS seller was explicitly invited (relational rows or legacy
+        // technicalPacket JSON). The invitations page filters on this flag.
+        isInvited: actorInviteIds.length > 0 && (
+          (bid.invitations || []).some((inv: any) =>
+            actorInviteIds.includes(Number(inv.sellerOrgId)) || actorInviteIds.includes(Number(inv.sellerUserId))
+          ) ||
+          (() => {
+            const tp: any = bid.technicalPacket;
+            const embedded = [
+              ...(Array.isArray(tp?.vendors?.invitedSellers) ? tp.vendors.invitedSellers : []),
+              ...(Array.isArray(tp?.qualifiedVendors) ? tp.qualifiedVendors : [])
+            ].map(Number);
+            return embedded.some(v => actorInviteIds.includes(v));
+          })()
+        )
+      };
+    }),
     ...tenderBidActivities.map(serializeTenderBidActivity)
   ]
     .sort((a: any, b: any) => {

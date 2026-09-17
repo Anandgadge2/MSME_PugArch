@@ -212,8 +212,25 @@ export default function BidResultsPage() {
       let data: any = bidRes.status === 'fulfilled' ? bidRes.value : null;
 
       // If data has participations but no results, map participations to results
-      if (data && Array.isArray(data.participations) && data.participations.length > 0 && (!Array.isArray(data.results) || data.results.length === 0)) {
-        data.results = data.participations.map((r: any, idx: number) => {
+      // Helper function to map a participation/response list to standardized BidResultRow[]
+      const mapItemsToResults = (items: any[]) => {
+        // Sort items by price ascending so L1 is guaranteed to be the lowest bidder
+        const sortedItems = [...items].sort((a: any, b: any) => {
+          const ackDataA = typeof a.acknowledgement === 'string' ? (() => { try { return JSON.parse(a.acknowledgement); } catch { return {}; } })() : (a.acknowledgement && typeof a.acknowledgement === 'object' ? a.acknowledgement : {});
+          const ackDataB = typeof b.acknowledgement === 'string' ? (() => { try { return JSON.parse(b.acknowledgement); } catch { return {}; } })() : (b.acknowledgement && typeof b.acknowledgement === 'object' ? b.acknowledgement : {});
+          const respDataA = typeof a.responseData === 'string' ? (() => { try { return JSON.parse(a.responseData); } catch { return {}; } })() : (a.responseData && typeof a.responseData === 'object' ? a.responseData : {});
+          const respDataB = typeof b.responseData === 'string' ? (() => { try { return JSON.parse(b.responseData); } catch { return {}; } })() : (b.responseData && typeof b.responseData === 'object' ? b.responseData : {});
+
+          const priceA = Number(a.offeredPrice || a.quotedAmount || a.totalAmount || a.totalPrice || ackDataA.quotedAmount || ackDataA.totalAmount || respDataA.offeredPrice || respDataA.quotedAmount || respDataA.totalAmount || 0);
+          const priceB = Number(b.offeredPrice || b.quotedAmount || b.totalAmount || b.totalPrice || ackDataB.quotedAmount || ackDataB.totalAmount || respDataB.offeredPrice || respDataB.quotedAmount || respDataB.totalAmount || 0);
+
+          if (priceA > 0 && priceB > 0 && priceA !== priceB) return priceA - priceB;
+          if (priceA > 0 && priceB <= 0) return -1;
+          if (priceB > 0 && priceA <= 0) return 1;
+          return new Date(a.submittedAt || a.createdAt || 0).getTime() - new Date(b.submittedAt || b.createdAt || 0).getTime();
+        });
+
+        return sortedItems.map((r: any, idx: number) => {
           const ackData = typeof r.acknowledgement === 'string'
             ? (() => { try { return JSON.parse(r.acknowledgement); } catch { return {}; } })()
             : (r.acknowledgement && typeof r.acknowledgement === 'object' ? r.acknowledgement : {});
@@ -305,6 +322,11 @@ export default function BidResultsPage() {
             }
           };
         });
+      };
+
+      // If data has participations but no results, map participations to results
+      if (data && Array.isArray(data.participations) && data.participations.length > 0 && (!Array.isArray(data.results) || data.results.length === 0)) {
+        data.results = mapItemsToResults(data.participations);
       }
 
       // If data has no results, pick first valid non-empty response from fallbacks
@@ -315,90 +337,67 @@ export default function BidResultsPage() {
             const reqRes: any = f.value;
             const reqItems = reqRes?.responses || reqRes?.participants || reqRes?.participations || reqRes?.items || reqRes?.data || (Array.isArray(reqRes) ? reqRes : []);
             if (Array.isArray(reqItems) && reqItems.length > 0) {
-              const mappedResults = reqItems.map((r: any, idx: number) => {
-                const respData = typeof r.responseData === 'string' ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })() : (r.responseData || {});
-                const docs = normalizeQuotationDocuments({
-                  ...r,
-                  responseData: respData,
-                });
-
-                const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || respData.offeredPrice || respData.quotedAmount || respData.totalAmount || 0);
-                const sellerOrg = r.sellerOrgName
-                  || r.sellerOrganization?.organizationName
-                  || r.seller?.organization?.organizationName
-                  || r.seller?.sellerProfile?.organizationName
-                  || r.sellerProfile?.organizationName
-                  || r.companyName
-                  || r.sellerName
-                  || r.sellerUser?.name
-                  || r.seller?.name
-                  || (r.sellerUserId || r.sellerId ? `Supplier #${r.sellerUserId || r.sellerId}` : `Supplier ${idx + 1}`);
-                const contactPerson = r.contactPerson || r.sellerName || r.sellerUser?.name || r.seller?.name || 'Representative';
-
-                const lineItems = (Array.isArray(respData.lineItems) && respData.lineItems.length > 0)
-                  ? respData.lineItems
-                  : (Array.isArray(respData.lineQuotes) && respData.lineQuotes.length > 0)
-                  ? respData.lineQuotes
-                  : (Array.isArray(r.lineItems) ? r.lineItems : []);
-
-                return {
-                  id: r.id || `res-${idx}`,
-                  participationId: r.id || idx + 1,
-                  sellerName: sellerOrg,
-                  contactPerson: contactPerson,
-                  sellerEmail: r.sellerEmail || r.sellerUser?.email || r.seller?.email || 'Not provided',
-                  sellerMobile: r.sellerMobile || r.sellerUser?.mobile || r.seller?.mobile || 'Not listed',
-                  submittedAt: r.createdAt || r.submittedAt,
-                  sellerType: 'Verified Seller',
-                  offeredItem: r.message || respData.message || respData.coverNote || r.itemName || 'Procurement requirement',
-                  makeBrand: r.makeBrand || respData.makeBrand || 'Standard',
-                  model: r.model || respData.model || 'Standard',
-                  technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' || r.technicalStatus === 'QUALIFIED' ? 'Qualified' : (r.status === 'REJECTED' || r.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : 'Pending'),
-                  totalPrice: quotedAmt,
-                  quotedAmount: quotedAmt,
-                  gstPercentage: Number(r.gstPercentage || respData.gstPercentage || 0),
-                  totalAmount: quotedAmt,
-                  offeredQuantity: r.offeredQuantity || respData.offeredQuantity || r.quantity || 1,
-                  deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
-                  documents: docs,
-                  lineItems: lineItems,
-                  message: r.message || respData.message || respData.coverNote || r.offeredItemDescription || '',
-                  terms: r.terms || respData.terms || '',
-                  attachmentUrl: r.attachmentUrl || respData.attachmentUrl || '',
-                  responseData: respData,
-                  rawParticipation: r,
-                  finalRank: `L${idx + 1}`,
-                  resultStatus: 'Responsive',
-                  details: {
-                    organizationName: sellerOrg,
-                    contactPerson: contactPerson,
-                    email: r.sellerUser?.email || r.seller?.email || '',
-                    mobile: r.sellerUser?.mobile || r.seller?.mobile || '',
-                    submittedAt: r.createdAt || r.submittedAt,
-                    deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline || 'Standard',
-                    complianceRemarks: r.complianceRemarks || 'Compliant',
-                    rfqNotes: r.message || respData.message || '',
-                    terms: r.terms || respData.terms || '',
-                    message: r.message || respData.message || respData.coverNote || r.offeredItemDescription || '',
-                    attachmentUrl: r.attachmentUrl || respData.attachmentUrl || '',
-                    quotedAmount: quotedAmt,
-                    totalAmount: quotedAmt,
-                    lineItems: lineItems,
-                    documents: docs,
-                  }
-                };
-              });
-
+              const mappedResults = mapItemsToResults(reqItems);
               data = {
-                id: reqRes?.requirement?.requirementNumber || bidId,
-                title: reqRes?.requirement?.title || `Requirement ${bidId}`,
-                status: reqRes?.requirement?.status || 'OPEN',
+                ...(data || {}),
+                id: reqRes?.requirement?.requirementNumber || data?.id || bidId,
+                title: reqRes?.requirement?.title || data?.title || `Requirement ${bidId}`,
+                status: reqRes?.requirement?.status || data?.status || 'OPEN',
                 results: mappedResults,
                 participations: mappedResults
               };
               break;
             }
           }
+        }
+      }
+
+      // If still no results, probe alternative linked identifiers
+      if (!data || !Array.isArray(data.results) || data.results.length === 0) {
+        const altTokens = Array.from(new Set([
+          data?.id ? String(data.id) : null,
+          data?.sourceId ? String(data.sourceId) : null,
+          data?.bidNumber ? String(data.bidNumber) : null,
+          data?.technicalPacket?.requirementId ? String(data.technicalPacket.requirementId) : null,
+          data?.technicalPacket?.sourceRequirementId ? String(data.technicalPacket.sourceRequirementId) : null,
+        ].filter(Boolean) as string[])).filter(t => t !== String(bidId));
+
+        for (const altToken of altTokens) {
+          if (data && Array.isArray(data.results) && data.results.length > 0) break;
+          try {
+            const [altBidRes, altBuyerReqRes] = await Promise.allSettled([
+              procurementBidApi.getBidResults(altToken),
+              getApi(`/api/buyer/requirements/${encodeURIComponent(altToken)}/responses`, true)
+            ]);
+            if (altBidRes.status === 'fulfilled' && altBidRes.value) {
+              const altVal: any = altBidRes.value;
+              const altParts = Array.isArray(altVal.results) && altVal.results.length > 0
+                ? altVal.results
+                : (Array.isArray(altVal.participations) && altVal.participations.length > 0 ? altVal.participations : []);
+              if (altParts.length > 0) {
+                const mapped = Array.isArray(altVal.results) && altVal.results.length > 0 ? altVal.results : mapItemsToResults(altParts);
+                data = {
+                  ...(data || altVal),
+                  results: mapped,
+                  participations: mapped
+                };
+                break;
+              }
+            }
+            if (altBuyerReqRes.status === 'fulfilled' && altBuyerReqRes.value) {
+              const reqRes: any = altBuyerReqRes.value;
+              const reqItems = reqRes?.responses || reqRes?.participants || reqRes?.participations || reqRes?.items || reqRes?.data || (Array.isArray(reqRes) ? reqRes : []);
+              if (Array.isArray(reqItems) && reqItems.length > 0) {
+                const mapped = mapItemsToResults(reqItems);
+                data = {
+                  ...(data || {}),
+                  results: mapped,
+                  participations: mapped
+                };
+                break;
+              }
+            }
+          } catch { /* ignore fallback error */ }
         }
       }
 

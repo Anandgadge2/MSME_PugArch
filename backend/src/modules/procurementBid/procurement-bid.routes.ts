@@ -148,6 +148,24 @@ router.get('/procurement-bids', asyncRoute(async (req, res) => {
   const actor = await optionalActor(req);
   const cacheKey = `cache:procurement-bids:${actor?.id || 'anon'}:${actor?.role || 'anon'}:${JSON.stringify(req.query)}`;
   const data = await getOrSetCache(cacheKey, () => service.listPublicBids(req.query, actor), 30);
+  if (actor?.role === 'seller' && data?.items && Array.isArray(data.items) && data.items.length > 0) {
+    await enrichBidsWithResponses(data.items, Number(actor.id));
+    const currentActorId = Number(actor.id);
+    const currentOrgId = actor.organizationId ? Number(actor.organizationId) : null;
+    for (const item of data.items) {
+      if (Array.isArray(item.participations)) {
+        const hasPart = item.participations.some((p: any) => {
+          const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+          const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || 0);
+          return (currentActorId && pSellerId === currentActorId) || (currentOrgId && pOrgId === currentOrgId);
+        });
+        if (hasPart) {
+          item.participated = true;
+          item.hasParticipated = true;
+        }
+      }
+    }
+  }
   return apiResponse.success(res, data, 200, 'Bids fetched successfully');
 }));
 
@@ -389,13 +407,20 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
         rateContract.contractNumber
       ].filter(Boolean) as string[]));
 
-      const legacyResponses = (targetReqIds.length > 0 || targetReqNumbers.length > 0)
+      if (targetReqNumbers.length > 0) {
+        const matchingLegacy = await (prisma as any).requirement.findMany({
+          where: { requirementNumber: { in: targetReqNumbers } },
+          select: { id: true }
+        }).catch(() => []);
+        for (const m of matchingLegacy) {
+          if (m?.id && !targetReqIds.includes(m.id)) targetReqIds.push(m.id);
+        }
+      }
+
+      const legacyResponses = targetReqIds.length > 0
         ? await (prisma as any).requirementResponse.findMany({
             where: {
-              OR: [
-                ...(targetReqIds.length > 0 ? [{ requirementId: { in: targetReqIds } }] : []),
-                ...(targetReqNumbers.length > 0 ? [{ requirement: { requirementNumber: { in: targetReqNumbers } } }] : [])
-              ],
+              requirementId: { in: targetReqIds },
               status: { not: 'DRAFT' }
             },
             include: {
@@ -1197,8 +1222,12 @@ router.post('/procurement-bids/:bidId/participation/:participationId/submit', au
 }));
 
 router.get('/seller/procurement-bids', authenticate, requireAccountType('seller'), asyncRoute(async (req, res) => {
+  const sellerFilters: any[] = [{ sellerId: req.user!.id }];
+  if (req.user?.organizationId) {
+    sellerFilters.push({ seller: { organizationId: req.user.organizationId } });
+  }
   const rows = await (prisma as any).procurementBidParticipation.findMany({
-    where: { sellerId: req.user!.id },
+    where: { OR: sellerFilters },
     include: { bid: true, documents: true, clarifications: { include: { files: true } }, evaluations: true, awards: true },
     orderBy: { createdAt: 'desc' }
   });
@@ -1362,18 +1391,24 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
       }
     }
 
+    const candidateTitles = Array.from(new Set(bids.map(b => b.title).filter(Boolean)));
     const reqIdsArray = Array.from(targetReqIds);
     const reqNumsArray = Array.from(new Set([...targetReqNumbers, ...targetBidNumbers]));
 
     // If no candidate requirement IDs or numbers, return immediately without touching DB
-    if (reqIdsArray.length === 0 && reqNumsArray.length === 0) {
+    if (reqIdsArray.length === 0 && reqNumsArray.length === 0 && candidateTitles.length === 0) {
       return bids;
     }
 
     // Fetch ONLY the matching requirements concurrently
     const [buyerReqs, legacyReqs, quoteRequests] = await Promise.all([
       prisma.buyerRequirement.findMany({
-        where: { id: { in: reqIdsArray } },
+        where: {
+          OR: [
+            ...(reqIdsArray.length > 0 ? [{ id: { in: reqIdsArray } }] : []),
+            ...(candidateTitles.length > 0 ? [{ title: { in: candidateTitles as string[] } }] : [])
+          ]
+        },
         select: { id: true, title: true, description: true, createdById: true, buyerOrganizationId: true }
       }).catch(() => []),
       prisma.requirement.findMany({

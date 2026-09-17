@@ -43,7 +43,7 @@ import { EmdCard, EmdInfo, isEmdApplicable } from '../components/EmdCard';
 import { EmdPaymentModal } from '../components/EmdPaymentModal';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { getDocumentPreviewMode, getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
-import { parseQuoteRequestItems, cleanItemName } from '../utils/quoteItemParser';
+import { parseQuoteRequestItems, cleanItemName, sanitizeUom } from '../utils/quoteItemParser';
 import { formatDate, formatDateTime, formatTime } from '../../shared/format';
 
 const formatBytes = (bytes?: number): string => {
@@ -256,12 +256,16 @@ const findSellerParticipation = (bidData: any, user: any) => {
     ...toArray(bidData?.results),
     ...toArray(bidData?.quoteResponses)
   ];
-  return participations.find((p: any) => {
+  const found = participations.find((p: any) => {
     const sellerId = p.sellerId || p.seller?.id || p.sellerUserId;
     const orgId = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id;
     return String(sellerId || '') === String(user?.id || '') ||
       (user?.organizationId && String(orgId || '') === String(user.organizationId));
   });
+  if (found) {
+    return { ...found, _isFromUserParticipation: true };
+  }
+  return null;
 };
 
 const participationToOwnResponse = (participation: any) => {
@@ -284,8 +288,18 @@ const participationToOwnResponse = (participation: any) => {
     ? toArray(participation.lineQuotes)
     : [];
 
+  const sellerId = participation.sellerId || participation.seller?.id || participation.sellerUserId;
+  const orgId = participation.organizationId || participation.sellerOrganizationId || participation.seller?.organizationId || participation.seller?.organization?.id;
+
   return normalizeOwnResponse({
+    ...participation,
     id: participation.id,
+    sellerId,
+    sellerUserId: sellerId,
+    organizationId: orgId,
+    sellerOrganizationId: orgId,
+    seller: participation.seller,
+    _isFromUserParticipation: true,
     status: participation.status || participation.submissionStatus || 'SUBMITTED',
     submissionStatus: participation.submissionStatus || participation.status || 'SUBMITTED',
     offeredPrice: firstPresent(participation.offeredPrice, participation.quotedAmount, participation.totalAmount, responseData.offeredPrice),
@@ -310,8 +324,9 @@ const participationToOwnResponse = (participation: any) => {
 
 const isBelongingToUser = (resp: any, currentUser: any) => {
   if (!resp || !currentUser) return false;
+  if (resp._isFromUserParticipation) return true;
   const sellerId = resp.sellerId || resp.seller?.id || resp.sellerUserId || resp.userId;
-  const orgId = resp.organizationId || resp.sellerOrganizationId || resp.seller?.organizationId;
+  const orgId = resp.organizationId || resp.sellerOrganizationId || resp.seller?.organizationId || resp.seller?.organization?.id;
   return (currentUser.id && String(sellerId || '') === String(currentUser.id)) ||
     (currentUser.organizationId && String(orgId || '') === String(currentUser.organizationId));
 };
@@ -368,6 +383,7 @@ export default function SubmitQuotationPage() {
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+  const autoSaveTimerRef = useRef<any>(null);
 
   type TabKey = 'quotation-details' | 'message-documents' | 'item-wise-pricing' | 'requested-documents' | 'submit-action';
   const [activeTab, setActiveTab] = useState<TabKey>('quotation-details');
@@ -895,9 +911,15 @@ export default function SubmitQuotationPage() {
   // Use the canonical token from fetched data; RFQ bid numbers are resolved server-side.
   const resolvedId = isMarketplaceQuoteFlow ? (conversationId || rfqData?.conversationId) : (rfqData?.id || requirementId);
 
+  // Submission and read-only states
+  const isSubmittedQuote = submitted || isFinalSubmittedResponse(ownResponse);
+  const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
+  const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
+  const isReadOnly = isClosed || isDeadlinePassed || isSubmittedQuote;
+
   // Save draft to database
   const saveDraft = useCallback(async () => {
-    if (!resolvedId || isMarketplaceQuoteFlow) return;
+    if (!resolvedId || isMarketplaceQuoteFlow || isReadOnly || isSubmittedQuote || submitted || submitting) return;
     try {
       const payload: any = {
         offeredPrice: offeredPrice ? Number(offeredPrice) : undefined,
@@ -921,15 +943,14 @@ export default function SubmitQuotationPage() {
       toast.success('Draft saved successfully');
       setTimeout(() => setDraftSaved(false), 2000);
     } catch (err: any) {
+      if (err?.message?.includes('already submitted') || err?.code === 'REQUIREMENT_RESPONSE_EXISTS' || err?.status === 409) {
+        setSubmitted(true);
+        return;
+      }
       console.warn('Failed to save draft to server', err);
       toast.error(err?.message || 'Failed to save draft to server');
     }
-  }, [resolvedId, isMarketplaceQuoteFlow, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
-
-  const isSubmittedQuote = submitted || isFinalSubmittedResponse(ownResponse);
-  const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
-  const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
-  const isReadOnly = isClosed || isDeadlinePassed || isSubmittedQuote;
+  }, [resolvedId, isMarketplaceQuoteFlow, isReadOnly, isSubmittedQuote, submitted, submitting, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
 
   const procurementTypeBadgeLabel = isMarketplaceQuoteFlow ? 'Product Quotation'
     : isLimitedTender ? 'Limited Tender'
@@ -967,17 +988,31 @@ export default function SubmitQuotationPage() {
 
   // Auto-save on field changes (debounced at 5 seconds)
   React.useEffect(() => {
-    if (!resolvedId || isReadOnly || !rfqData) return;
+    if (!resolvedId || isReadOnly || isSubmittedQuote || submitted || submitting || !rfqData) {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      return;
+    }
     const hasDynamicInput = docUploads.some(doc => doc.status === 'done') || lineQuotes.some(line => line.unitPrice !== '');
     if (!offeredPrice && !offeredQuantity && !deliveryTimeline && !terms && !message && !uploadState && !hasDynamicInput) {
       return;
     }
 
-    const timer = setTimeout(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    autoSaveTimerRef.current = setTimeout(() => {
       saveDraft();
     }, 5000);
-    return () => clearTimeout(timer);
-  }, [offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes, resolvedId, rfqData, saveDraft, ownResponse]);
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes, resolvedId, rfqData, saveDraft, ownResponse, isReadOnly, isSubmittedQuote, submitted, submitting]);
 
   const orgName = rfqData?.buyerOrganization?.organizationName || 'Buyer';
   const subject = rfqData?.title || 'Sourcing Requirement';
@@ -1147,11 +1182,17 @@ export default function SubmitQuotationPage() {
           finalName = `Item #${idx + 1}`;
         }
 
+        const hasDistinctDesc = Boolean(
+          cleanedDesc &&
+          cleanedDesc.toLowerCase().trim() !== finalName.toLowerCase().trim() &&
+          !finalName.toLowerCase().trim().includes(cleanedDesc.toLowerCase().trim())
+        );
+
         return {
           itemName: finalName,
           quantity: item?.quantity || item?.qty || item?.count || item?.estimatedAnnualQuantity || item?.annualQuantity || item?.estimatedRateQuantity || rfqData?.quantity || 1,
-          unitOfMeasure: item?.unitOfMeasure || item?.unit || item?.uom || item?.unitType || item?.uomName || specs?.unit || rfqData?.unit || 'Nos',
-          description: cleanedDesc !== finalName ? cleanedDesc : '',
+          unitOfMeasure: sanitizeUom(item?.unitOfMeasure || item?.unit || item?.uom || item?.unitType || item?.uomName || specs?.unit || rfqData?.unit || 'Nos'),
+          description: hasDistinctDesc ? cleanedDesc : '',
         };
       });
     } else if (rfqData || queryData?.requirement) {
@@ -1186,12 +1227,18 @@ export default function SubmitQuotationPage() {
         finalTitle = 'Requirement Item';
       }
 
+      const hasDistinctReqDesc = Boolean(
+        cleanedReqDesc &&
+        cleanedReqDesc.toLowerCase().trim() !== finalTitle.toLowerCase().trim() &&
+        !finalTitle.toLowerCase().trim().includes(cleanedReqDesc.toLowerCase().trim())
+      );
+
       parsedList = [
         {
           itemName: finalTitle,
           quantity: rfqData?.quantity || queryData?.requirement?.quantity || 1,
-          unitOfMeasure: rfqData?.unit || queryData?.requirement?.unit || 'Nos',
-          description: cleanedReqDesc !== finalTitle ? cleanedReqDesc : '',
+          unitOfMeasure: sanitizeUom(rfqData?.unit || queryData?.requirement?.unit || 'Nos'),
+          description: hasDistinctReqDesc ? cleanedReqDesc : '',
         }
       ];
     }
@@ -1426,7 +1473,7 @@ export default function SubmitQuotationPage() {
         return {
           itemName: resolvedName,
           quantity: line?.quantity != null ? line.quantity : (matchingBuyerItem?.quantity != null ? matchingBuyerItem.quantity : 1),
-          unitOfMeasure: line?.unitOfMeasure || line?.unit || line?.uom || matchingBuyerItem?.unitOfMeasure || 'Nos',
+          unitOfMeasure: sanitizeUom(line?.unitOfMeasure || line?.unit || line?.uom || matchingBuyerItem?.unitOfMeasure || 'Nos'),
           unitPrice: rawUnitPrice !== '' && rawUnitPrice != null ? String(rawUnitPrice) : '',
           gstPercent: line?.gstPercent != null ? String(line?.gstPercent) : (line?.gstPercentage != null ? String(line?.gstPercentage) : '18'),
           makeBrand: line?.makeBrand || line?.brand || '',
@@ -1442,7 +1489,7 @@ export default function SubmitQuotationPage() {
             restored.push({
               itemName: buyerItem.itemName,
               quantity: buyerItem.quantity != null ? buyerItem.quantity : 1,
-              unitOfMeasure: buyerItem.unitOfMeasure || 'Nos',
+              unitOfMeasure: sanitizeUom(buyerItem.unitOfMeasure || 'Nos'),
               unitPrice: '',
               gstPercent: '18',
               makeBrand: '',
@@ -1457,7 +1504,7 @@ export default function SubmitQuotationPage() {
       setLineQuotes(itemsList.map(item => ({
         itemName: item.itemName,
         quantity: item.quantity != null ? item.quantity : 1,
-        unitOfMeasure: item.unitOfMeasure || 'Nos',
+        unitOfMeasure: sanitizeUom(item.unitOfMeasure || 'Nos'),
         unitPrice: '',
         gstPercent: '18',
         makeBrand: '',
@@ -1789,8 +1836,11 @@ export default function SubmitQuotationPage() {
 
   const handleSubmit = async () => {
     if (isSubmittedQuote) {
-      toast.error('You have already submitted your quotation for this procurement.');
       return;
+    }
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
     }
     // EMD check commented out as requested
     // if (isEmdActive && !isEmdPaid) {
@@ -1847,6 +1897,8 @@ export default function SubmitQuotationPage() {
           } catch {}
         });
       }
+      queryClient.invalidateQueries({ queryKey: ['marketplace-requirement-quotation'] });
+      queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
       queryClient.invalidateQueries({ queryKey: ['rfq-detail-submit'] });
       queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
       queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
@@ -1857,6 +1909,8 @@ export default function SubmitQuotationPage() {
     } catch (err: any) {
       if (err?.message?.includes('already submitted') || err?.code === 'REQUIREMENT_RESPONSE_EXISTS' || err?.status === 409) {
         setSubmitted(true);
+        queryClient.invalidateQueries({ queryKey: ['marketplace-requirement-quotation'] });
+        queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
         queryClient.invalidateQueries({ queryKey: ['rfq-detail-submit'] });
         queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
         toast.info('You have already submitted your quotation for this procurement.');
@@ -2636,8 +2690,8 @@ export default function SubmitQuotationPage() {
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <th scope="col" className="px-3.5 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-12 text-center">#</th>
-                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider">ITEM DESCRIPTION</th>
-                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right">QTY / UNIT</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider min-w-[260px]">ITEM DESCRIPTION</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-44">QTY / UNIT</th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">UNIT PRICE (₹)</th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-24">GST %</th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-36">MAKE / BRAND</th>
@@ -2649,30 +2703,49 @@ export default function SubmitQuotationPage() {
                       const price = Number(line.unitPrice);
                       const hasPrice = line.unitPrice !== '' && Number.isFinite(price) && price >= 0;
                       const lineTotal = hasPrice ? price * (Number(line.quantity) || 0) * (1 + (Number(line.gstPercent) || 0) / 100) : 0;
+                      const cleanUom = sanitizeUom(line.unitOfMeasure);
                       return (
                         <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
                           <td className="px-3.5 py-3 text-center text-xs font-bold text-slate-400 align-middle">
                             {idx + 1}
                           </td>
-                          <td className="px-4 py-3 text-xs font-bold text-slate-900 align-middle">
+                          <td className="px-4 py-3 text-xs font-bold text-slate-900 align-middle max-w-md">
                             {isReadOnly ? (
-                              <div className="space-y-0.5">
-                                <span className="text-xs font-bold text-slate-900 leading-snug block">
+                              <div className="space-y-0.5 min-w-0">
+                                <span className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 break-words block" title={line.itemName || `Item #${idx + 1}`}>
                                   {line.itemName || `Item #${idx + 1}`}
                                 </span>
-                                {(line.remarks || (idx < itemsList.length && itemsList[idx]?.description)) && (
-                                  <p className="text-[10.5px] font-normal text-slate-500 leading-tight">
-                                    {line.remarks || itemsList[idx]?.description}
-                                  </p>
-                                )}
+                                {(() => {
+                                  const subDesc = line.remarks || (idx < itemsList.length ? itemsList[idx]?.description : '');
+                                  const isDupe = subDesc && line.itemName && (
+                                    subDesc.toLowerCase().trim() === line.itemName.toLowerCase().trim() ||
+                                    line.itemName.toLowerCase().trim().includes(subDesc.toLowerCase().trim())
+                                  );
+                                  return subDesc && !isDupe ? (
+                                    <p className="text-[10.5px] font-normal text-slate-500 leading-tight line-clamp-2 break-words" title={subDesc}>
+                                      {subDesc}
+                                    </p>
+                                  ) : null;
+                                })()}
                               </div>
                             ) : idx < itemsList.length ? (
-                              <>
-                                <span className="text-xs font-bold text-slate-900 block">{line.itemName}</span>
-                                {itemsList[idx]?.description && (
-                                  <p className="mt-0.5 text-[10px] font-medium text-slate-500 line-clamp-1">{itemsList[idx].description}</p>
-                                )}
-                              </>
+                              <div className="space-y-0.5 min-w-0">
+                                <span className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 break-words block" title={line.itemName}>
+                                  {line.itemName}
+                                </span>
+                                {(() => {
+                                  const subDesc = itemsList[idx]?.description;
+                                  const isDupe = subDesc && line.itemName && (
+                                    subDesc.toLowerCase().trim() === line.itemName.toLowerCase().trim() ||
+                                    line.itemName.toLowerCase().trim().includes(subDesc.toLowerCase().trim())
+                                  );
+                                  return subDesc && !isDupe ? (
+                                    <p className="text-[10px] font-medium text-slate-500 line-clamp-1 break-words" title={subDesc}>
+                                      {subDesc}
+                                    </p>
+                                  ) : null;
+                                })()}
+                              </div>
                             ) : (
                               <div className="flex items-center gap-2">
                                 <input
@@ -2697,16 +2770,16 @@ export default function SubmitQuotationPage() {
                           </td>
                           <td className="px-4 py-2.5 text-right align-middle">
                             {isReadOnly ? (
-                              <div className="flex items-center justify-end gap-1">
+                              <div className="flex items-center justify-end gap-1.5 min-w-0">
                                 <span className="text-xs font-bold text-slate-900 tabular-nums">
                                   {Number(line.quantity || 0).toLocaleString('en-IN')}
                                 </span>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">
-                                  {line.unitOfMeasure || 'Nos'}
+                                <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[70px] shrink" title={line.unitOfMeasure || 'Nos'}>
+                                  {cleanUom}
                                 </span>
                               </div>
                             ) : (
-                              <div className="flex items-center justify-end gap-1.5">
+                              <div className="flex items-center justify-end gap-1.5 min-w-0">
                                 <input
                                   type="number"
                                   min="0"
@@ -2715,10 +2788,10 @@ export default function SubmitQuotationPage() {
                                   onChange={e => updateLineQuote(idx, { quantity: e.target.value })}
                                   aria-label={`Quantity for ${line.itemName || 'item ' + (idx + 1)}`}
                                   placeholder="1"
-                                  className="h-8 w-24 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                  className="h-8 w-20 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
                                 />
-                                <span className="text-[10px] font-bold text-slate-500 uppercase shrink-0 min-w-[28px] text-left">
-                                  {line.unitOfMeasure || 'Nos'}
+                                <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[65px] text-left shrink" title={line.unitOfMeasure || 'Nos'}>
+                                  {cleanUom}
                                 </span>
                               </div>
                             )}
@@ -3146,21 +3219,23 @@ export default function SubmitQuotationPage() {
                 <span>Previous: Item-Wise Quotation</span>
               </Button>
               <div className="flex items-center gap-2.5 ml-auto">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={saveDraft}
-                  disabled={submitting || isReadOnly}
-                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
-                >
-                  Save Draft
-                </Button>
+                {!isSubmittedQuote && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={saveDraft}
+                    disabled={submitting || isReadOnly}
+                    className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Save Draft
+                  </Button>
+                )}
                 <Button
                   type="button"
                   onClick={() => { setActiveTab('submit-action'); scrollToSection('submit-action'); }}
                   className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
                 >
-                  <span>Next: Declaration & Submit</span>
+                  <span>{isSubmittedQuote ? 'Next: Submission Status' : 'Next: Declaration & Submit'}</span>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -3181,7 +3256,9 @@ export default function SubmitQuotationPage() {
                 {isSubmittedQuote ? 'Submission Status' : 'Declaration & Submit'}
               </h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Review your complete quotation summary and declare accuracy before submitting.
+                {isSubmittedQuote
+                  ? 'Your quotation has been successfully submitted and is locked for buyer review.'
+                  : 'Review your complete quotation summary and declare accuracy before submitting.'}
               </p>
             </div>
 

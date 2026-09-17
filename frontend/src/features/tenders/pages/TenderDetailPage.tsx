@@ -270,6 +270,10 @@ export default function TenderDetailPage() {
   const orgName = tender.buyer?.buyerProfile?.organizationName || tender.buyer?.name || 'N/A';
 
   const handleParticipate = () => {
+    if (user?.role === 'buyer' || user?.role === 'admin') {
+      router.push(`/bids/${tender.id || tenderRef}/results`);
+      return;
+    }
     router.push(`/bids/${tender.id}/participate`);
   };
 
@@ -364,6 +368,20 @@ export default function TenderDetailPage() {
     required: true,
   }));
 
+  const tenderParticipations = (tender as any).participations || (tender as any).responses || [];
+  const ownParticipation = tenderParticipations.find((p: any) =>
+    user?.id && (
+      Number(p.sellerId || p.sellerUserId) === Number(user.id) ||
+      Number(p.seller?.id || p.sellerUser?.id) === Number(user.id) ||
+      (user.organizationId && Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id) === Number(user.organizationId))
+    )
+  );
+  const hasSubmittedProposal = Boolean(
+    (tender as any).hasParticipated ||
+    (tender as any).hasSubmittedProposal ||
+    ownParticipation
+  );
+
   return (
     <ProcurementDetailUnifiedView
       procurementType={tender.category?.includes('LIMITED') || tender.visibility === 'LIMITED' ? 'LIMITED_TENDER' : 'OPEN_TENDER'}
@@ -412,8 +430,12 @@ export default function TenderDetailPage() {
       isEmdRequired={Boolean(tender.emdAmount && tender.emdAmount > 0)}
       backRoute={user?.role === 'seller' ? '/seller/opportunities' : '/buyer/tenders'}
       backRouteLabel="Tender Opportunities"
-      submitButtonLabel="Submit Tender Proposal"
-      onSubmitClick={handleParticipate}
+      participations={tenderParticipations}
+      hasSubmittedProposal={hasSubmittedProposal}
+      ownParticipation={ownParticipation}
+      submitButtonLabel={user?.role === 'buyer' || user?.role === 'admin' ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Tender Proposal Submitted' : 'Submit Tender Proposal')}
+      onSubmitClick={user?.role === 'buyer' || user?.role === 'admin' ? () => router.push(`/bids/${tender.id || tenderRef}/results`) : handleParticipate}
+      onViewQuotationClick={hasSubmittedProposal ? handleParticipate : undefined}
     />
   );
 }

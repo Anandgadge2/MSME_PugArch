@@ -392,8 +392,9 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
         isEmdRequired={bid.isEmdRequired ?? reqObj.isEmdRequired ?? basics.isEmdRequired}
         backRoute={isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities'}
         backRouteLabel={isBuyerOrAdmin ? 'My Procurements' : 'Opportunities'}
-        submitButtonLabel={isBuyerOrAdmin ? undefined : (hasSubmittedProposal ? 'View Proposal' : 'Submit Proposal')}
+        submitButtonLabel={isBuyerOrAdmin ? undefined : (hasSubmittedProposal ? 'Proposal Submitted' : 'Submit Proposal')}
         onSubmitClick={isBuyerOrAdmin ? undefined : handleSubmitProposal}
+        onViewQuotationClick={hasSubmittedProposal ? handleSubmitProposal : undefined}
         onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
         cancelButtonLabel={rawStatus === 'DRAFT' || rawStatus === 'SUBMITTED' ? 'Withdraw Request' : 'Cancel RFP'}
         clarificationKind={requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'quote-request'}

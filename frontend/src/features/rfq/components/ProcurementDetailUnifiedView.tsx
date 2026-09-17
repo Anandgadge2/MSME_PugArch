@@ -67,6 +67,7 @@ import SellerLiveAuctionBanner from '../../reverseAuctions/components/SellerLive
 import SellerAuctionPlannedBanner from '../../reverseAuctions/components/SellerAuctionPlannedBanner';
 import { reverseAuctionApi } from '../../reverseAuctions/api';
 import { formatDate, formatDateTime, cleanDeliveryAddress } from '../../shared/format';
+import { sanitizeUom, sanitizeHsn } from '../utils/quoteItemParser';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
 type Tone = 'slate' | 'emerald' | 'rose' | 'amber' | 'sky' | 'indigo' | 'violet';
@@ -1838,7 +1839,7 @@ function LineItemsTable({
     {
       key: 'type',
       header: 'Type',
-      width: 'w-24',
+      width: 'w-20',
       cell: (item) => {
         const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
         const rawType = firstPresent(item.itemType, item.type, item.categoryType, sp.itemType, sp.type, sp.categoryType);
@@ -1859,6 +1860,7 @@ function LineItemsTable({
     {
       key: 'name',
       header: 'Item / Service Name',
+      width: 'w-[28%]',
       cell: (item, idx) => {
         const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
         const rawName = firstPresent(item.name, item.itemName, item.title, item.productName, item.materialName, item.serviceName, sp.itemName, sp.name, sp.title);
@@ -1866,12 +1868,17 @@ function LineItemsTable({
         const name = !isGeneric
           ? String(rawName)
           : (defaultSubject && !/^item\s*#?\d+$/i.test(defaultSubject) ? defaultSubject : `Item #${idx + 1}`);
-        return <div className="font-bold text-slate-900 text-xs">{formatPrimitiveValue(name)}</div>;
+        return (
+          <div className="font-bold text-slate-900 text-xs line-clamp-2 break-words max-w-[320px]" title={String(name)}>
+            {formatPrimitiveValue(name)}
+          </div>
+        );
       },
     },
     {
       key: 'spec',
       header: 'Specifications / Scope',
+      width: 'w-[24%]',
       cell: (item) => {
         const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
         const rawSpec = firstPresent(
@@ -1882,11 +1889,22 @@ function LineItemsTable({
           item.description, item.desc, item.details, item.scopeOfWork,
           item.scope, item.remarks, item.requirements, item.particulars, sp.particulars
         );
+        const rawName = firstPresent(item.name, item.itemName, item.title, item.productName, item.materialName, item.serviceName, sp.itemName, sp.name, sp.title);
+        const isSameAsName = Boolean(
+          rawSpec && rawName && (
+            String(rawSpec).trim().toLowerCase() === String(rawName).trim().toLowerCase() ||
+            String(rawName).trim().toLowerCase().includes(String(rawSpec).trim().toLowerCase())
+          )
+        );
         return (
-          <div className="text-slate-600 font-normal max-w-[240px]">
-            <span className="line-clamp-2 text-[11px]" title={rawSpec ? String(rawSpec) : undefined}>
-              {rawSpec ? formatPrimitiveValue(rawSpec) : <span className="text-slate-400 italic">No description</span>}
-            </span>
+          <div className="text-slate-600 font-normal max-w-[280px]">
+            {rawSpec && !isSameAsName ? (
+              <span className="line-clamp-2 text-[11px] break-words block" title={String(rawSpec)}>
+                {formatPrimitiveValue(rawSpec)}
+              </span>
+            ) : (
+              <span className="text-slate-400 italic text-[11px]">As per item scope</span>
+            )}
           </div>
         );
       },
@@ -1894,17 +1912,20 @@ function LineItemsTable({
     {
       key: 'qty',
       header: 'Qty & UOM',
-      width: 'w-28',
+      width: 'w-24',
       align: 'center',
       cell: (item) => {
         const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
         const rawQty = firstPresent(item.quantity, item.qty, item.targetQty, item.requiredQty, item.quantityRequired, item.itemQuantity, item.count, item.unitCount, item.numberOfUnits, sp.quantity, sp.qty);
         const unit = firstPresent(item.unit, item.uom, item.unitOfMeasure, item.unitType, item.measuringUnit, sp.unit, sp.uom, sp.unitOfMeasure) || 'NOS.';
+        const cleanUom = sanitizeUom(unit);
         const qtyDisplay = (rawQty !== undefined && rawQty !== null && rawQty !== '' && rawQty !== '-') ? String(rawQty) : (unit ? '1' : '-');
         return (
-          <div className="whitespace-nowrap">
-            <span className="font-bold text-slate-900">{qtyDisplay}</span>{' '}
-            <span className="text-[9.5px] font-bold text-slate-500 uppercase">{unit}</span>
+          <div className="flex items-center justify-center gap-1 min-w-0 max-w-full">
+            <span className="font-bold text-slate-900 tabular-nums shrink-0">{qtyDisplay}</span>{' '}
+            <span className="text-[9.5px] font-bold text-slate-500 uppercase truncate max-w-[65px] shrink" title={unit ? String(unit) : undefined}>
+              {cleanUom}
+            </span>
           </div>
         );
       },
@@ -1912,7 +1933,7 @@ function LineItemsTable({
     {
       key: 'rate',
       header: 'Est. Unit Rate',
-      width: 'w-28',
+      width: 'w-24',
       align: 'right',
       cell: (item) => {
         if (!shouldShowCost) {
@@ -1935,27 +1956,29 @@ function LineItemsTable({
     {
       key: 'hsn',
       header: 'HSN / SAC',
-      width: 'w-24',
+      width: 'w-20',
       align: 'center',
       cell: (item) => {
         const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
         const rawHsn = firstPresent(item.hsn_sac_code, item.hsnSacCode, item.hsnSac, item.hsn, item.hsnCode, item.sac, item.sacCode, sp.hsn_sac_code, sp.hsnSacCode, sp.hsnSac, sp.hsn, sp.hsnCode, sp.sac, sp.sacCode);
-        return <span className="font-mono text-[10.5px] font-medium text-slate-600">{rawHsn ? String(rawHsn) : '-'}</span>;
+        const cleanHsnCode = sanitizeHsn(rawHsn);
+        return <span className="font-mono text-[10.5px] font-medium text-slate-600 truncate max-w-[80px] block" title={cleanHsnCode !== '-' ? cleanHsnCode : undefined}>{cleanHsnCode}</span>;
       },
     },
     {
       key: 'brand',
       header: 'Brand & Policy',
-      width: 'w-32',
+      width: 'w-28',
       cell: (item) => {
         const sp = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
         const itemBrand = firstPresent(item.brand_preference, item.brandPreference, item.preferredBrand, item.brand, item.brandName, item.make, item.manufacturer, item.makeModel, item.model, item.brandRequirement, sp.brand_preference, sp.brandPreference, sp.preferredBrand, sp.brand, sp.brandName, sp.make, sp.manufacturer, sp.brandRequirement);
         const itemPolicy = firstPresent(item.brand_flexible, item.brandFlexible, item.isBrandFlexible, sp.brand_flexible, sp.brandFlexible, sp.isBrandFlexible, item.brandPolicy, item.policy, item.brandRule, sp.brandPolicy, sp.policy);
         const isLocked = itemPolicy === 'No' || itemPolicy === false || String(itemPolicy).toLowerCase() === 'no' || String(itemPolicy).toLowerCase() === 'lock' || String(itemPolicy).toLowerCase() === 'locked' || String(itemPolicy).toLowerCase() === 'strict';
-        const brandDisplayName = itemBrand && String(itemBrand).trim() && String(itemBrand).trim() !== '-' ? String(itemBrand).trim() : 'Any Brand';
+        const brandStr = itemBrand && String(itemBrand).trim() && String(itemBrand).trim() !== '-' ? String(itemBrand).trim() : 'Any Brand';
+        const brandDisplayName = brandStr.length > 30 ? (brandStr.slice(0, 25) + '...') : brandStr;
         return (
-          <div>
-            <div className="text-slate-800 text-[11px] font-semibold truncate max-w-[130px]" title={brandDisplayName}>{brandDisplayName}</div>
+          <div className="min-w-0">
+            <div className="text-slate-800 text-[11px] font-semibold truncate max-w-[110px]" title={brandStr}>{brandDisplayName}</div>
             <div className="mt-0.5">
               {isLocked ? (
                 <span className="inline-flex items-center text-[8.5px] font-bold uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">Lock</span>
@@ -2494,6 +2517,8 @@ export interface ProcurementDetailUnifiedViewProps {
   cancelButtonLabel?: string;
   submitButtonLabel?: string;
   onSubmitClick?: () => void;
+  onViewQuotationClick?: () => void;
+  isSubmitDisabled?: boolean;
   onDownloadClick?: () => void;
   /** Override the ClarificationPanel kind (defaults to 'quote-request' for RFQ/RFP, 'requirement' for Rate Contract/Limited Tender) */
   clarificationKind?: 'quote-request' | 'requirement';
@@ -2659,7 +2684,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         if (Array.isArray(res.participations)) return res.participations;
         if (Array.isArray(res.results)) return res.results;
         if (Array.isArray(res.items)) return res.items;
-        if (Array.isArray(res.data)) return extractArray(res.data);
+        if (res.data) return extractArray(res.data);
         return [];
       };
 
@@ -2714,9 +2739,12 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
       const trailingDigits = String(targetId).match(/\d+/g);
       const lastNumericPart = trailingDigits ? trailingDigits[trailingDigits.length - 1] : null;
+      const rawPropId = props.id !== undefined && props.id !== null ? String(props.id) : null;
+      const absPropId = rawPropId && !isNaN(Number(rawPropId)) && Number(rawPropId) !== 0 ? String(Math.abs(Number(rawPropId))) : null;
       const idsToTry = Array.from(new Set([
         targetId,
-        props.id ? String(props.id) : null,
+        rawPropId,
+        absPropId,
         props.requirementNumber ? String(props.requirementNumber) : null,
         props.displayId && props.displayId !== 'N/A' && props.displayId !== '—' ? String(props.displayId) : null,
         lastNumericPart
@@ -3919,8 +3947,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   ];
 
   const defaultSubmitBtnLabel = props.hasSubmittedProposal
-    ? (props.procurementType === 'RFQ' ? 'View Quotation' : 'View Proposal')
-    : (props.procurementType === 'RFQ' ? 'Submit Quotation' : 'Submit Proposal');
+    ? (props.procurementType === 'RFQ' ? 'Quotation Submitted' : (props.procurementType === 'RATE_CONTRACT' ? 'Rate Quotation Submitted' : 'Proposal Submitted'))
+    : (props.procurementType === 'RFQ' ? 'Submit Quotation' : (props.procurementType === 'RATE_CONTRACT' ? 'Submit Rate Quote' : 'Submit Proposal'));
 
   const handleDefaultPdfDownload = async () => {
     try {
@@ -4274,7 +4302,37 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   {props.cancelButtonLabel || 'Cancel Procurement'}
                 </Button>
               )}
-              {props.onSubmitClick && (
+              {!isBuyerOrAdmin && (props.hasSubmittedProposal || props.isSubmitDisabled) && (
+                <>
+                  {(props.onViewQuotationClick || props.onSubmitClick) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={props.onViewQuotationClick || props.onSubmitClick}
+                      className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
+                    >
+                      <Eye className="h-3.5 w-3.5 text-slate-600" />
+                      <span>{isRfqType ? 'View Quotation' : (props.procurementType === 'RATE_CONTRACT' ? 'View Rate Proposal' : 'View Proposal')}</span>
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled
+                    aria-disabled="true"
+                    className="h-8 px-3.5 bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>
+                      {props.submitButtonLabel && props.submitButtonLabel.toLowerCase().includes('submitted')
+                        ? props.submitButtonLabel
+                        : (isRfqType ? 'Quotation Submitted' : (props.procurementType === 'RATE_CONTRACT' ? 'Rate Quotation Submitted' : 'Proposal Submitted'))}
+                    </span>
+                  </Button>
+                </>
+              )}
+              {props.onSubmitClick && (isBuyerOrAdmin || (!props.hasSubmittedProposal && !props.isSubmitDisabled)) && (
                 <Button
                   type="button"
                   size="sm"
@@ -4891,65 +4949,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         {/* EMD Payment Modal commented out */}
       </div>
 
-      {/* Sticky Bottom Action Dock for B2B Power-Users */}
-      <div className="sticky bottom-0 z-40 border-t border-slate-200/80 bg-white/95 p-2.5 sm:p-3 shadow-lg backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4">
-          <div className="flex items-center gap-4 text-xs font-semibold text-slate-700">
-            <div>
-              <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Estimated Value</span>
-              {shouldShowEstimatedCost ? (
-                <span className="text-xs sm:text-sm font-bold text-slate-900">{formatMoney(props.estimatedValue)}</span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-700">
-                  <span>Confidential</span>
-                  <Lock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
-                </span>
-              )}
-            </div>
-            {((closingDateFormatted && closingDateFormatted !== 'N/A') || props.deadlineDate) && (
-              <div className="hidden sm:block border-l border-slate-200 pl-4">
-                <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider block leading-none mb-0.5">Closing Date & Time</span>
-                <span className="text-xs font-semibold text-slate-800">
-                  {closingDateFormatted && closingDateFormatted !== 'N/A'
-                    ? closingDateFormatted
-                    : formatDateString(props.deadlineDate, true, 'endOfDay')}
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {(props.status === 'DRAFT' || props.status === 'Draft') && props.onSubmitClick ? (
-              <Button
-                type="button"
-                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
-                onClick={props.onSubmitClick}
-              >
-                {props.submitButtonLabel || 'Continue Draft'}
-                <ArrowRight className="h-3 w-3 ml-0.5" />
-              </Button>
-            ) : isBuyerOrAdmin ? (
-              <Button
-                type="button"
-                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
-                onClick={() => router.push(`/bids/${displayIdStr || targetId}/results`)}
-              >
-                {props.submitButtonLabel && !props.submitButtonLabel.toLowerCase().includes('submit') ? props.submitButtonLabel : 'View Evaluation & Results'}
-                <ArrowRight className="h-3 w-3 ml-0.5" />
-              </Button>
-            ) : props.onSubmitClick ? (
-              <Button
-                type="button"
-                className="bg-[#0b2447] text-white hover:bg-[#12335f] text-xs font-bold px-4 h-8 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer"
-                onClick={props.onSubmitClick}
-              >
-                {props.submitButtonLabel || 'Submit Proposal'}
-                <ArrowRight className="h-3 w-3 ml-0.5" />
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </div>
     </div>
     </BuyerSideContext.Provider>
   );
@@ -4987,8 +4986,8 @@ const reviewLineItemsColumns: ColumnDef<any>[] = [
     cell: (item) => {
       const q = Number(item.quantity ?? item.qty ?? 1);
       return (
-        <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200">
-          {q} <span className="text-[9px] font-semibold text-slate-500 uppercase">{item.unitOfMeasure || item.unit || 'Nos'}</span>
+        <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200 inline-flex items-center gap-1">
+          <span>{q}</span> <span className="text-[9px] font-semibold text-slate-500 uppercase truncate max-w-[60px]" title={item.unitOfMeasure || item.unit || 'Nos'}>{sanitizeUom(item.unitOfMeasure || item.unit || 'Nos')}</span>
         </span>
       );
     },

@@ -163,6 +163,22 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
 
   const participationsList = bid.participations || reqObj.participations || reqObj.responses || [];
 
+  const ownParticipation = participationsList.find((p: any) =>
+    currentUser?.id && (
+      Number(p.sellerId || p.sellerUserId) === Number(currentUser.id) ||
+      Number(p.seller?.id || p.sellerUser?.id) === Number(currentUser.id) ||
+      (currentUser.organizationId && Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id) === Number(currentUser.organizationId))
+    )
+  );
+
+  const hasSubmittedProposal = Boolean(
+    bid.hasParticipated ||
+    bid.hasSubmittedProposal ||
+    reqObj.hasParticipated ||
+    reqObj.myParticipation ||
+    ownParticipation
+  );
+
   const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
   const statusUpper = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
   const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
@@ -313,12 +329,15 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
         }
         participations={participationsList}
         participantsCount={bid.participantsCount ?? participationsList.length}
+        hasSubmittedProposal={hasSubmittedProposal}
+        ownParticipation={ownParticipation}
         emdAmount={bid.emdAmount || reqObj.emdAmount || basics.emdAmount}
         isEmdRequired={bid.isEmdRequired ?? reqObj.isEmdRequired ?? basics.isEmdRequired}
         backRoute={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "/buyer/my-procurements" : "/seller/opportunities"}
         backRouteLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "My Procurements" : "Opportunities"}
-        submitButtonLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? 'View Evaluation & Results' : 'Submit Tender Proposal'}
+        submitButtonLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Tender Proposal Submitted' : 'Submit Tender Proposal')}
         onSubmitClick={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal}
+        onViewQuotationClick={hasSubmittedProposal ? handleSubmitProposal : undefined}
         onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
         cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Tender' : 'Cancel Tender'}
       />
